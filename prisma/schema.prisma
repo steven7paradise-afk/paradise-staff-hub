@@ -1,0 +1,276 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  RESPONSABILE
+  DIPENDENTE
+}
+
+enum DeviceStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum AttendanceType {
+  ENTRATA
+  PAUSA
+  RIENTRO
+  USCITA
+}
+
+enum LeaveType {
+  FERIE
+  PERMESSO
+  RIPOSO
+  MALATTIA
+  ALTRO
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+model User {
+  id                String           @id @default(cuid())
+  name              String
+  email             String           @unique
+  password_hash     String
+  role              UserRole         @default(DIPENDENTE)
+  sede_id           String?
+  pin_hash          String?
+  pin_lookup        String?          @unique
+  birth_date        DateTime?
+  fiscal_code       String?
+  contract_start    DateTime?
+  contract_end      DateTime?
+  photo_url         String?
+  active            Boolean          @default(true)
+  created_at        DateTime         @default(now())
+  location          Location?        @relation(fields: [sede_id], references: [id])
+  attendance_logs   AttendanceLog[]
+  leave_requests    LeaveRequest[]   @relation("UserLeaveRequests")
+  approvals         LeaveRequest[]   @relation("LeaveApprover")
+  documents         Document[]       @relation("UserDocuments")
+  uploadedDocuments Document[]       @relation("DocumentUploader")
+  notifications     Notification[]
+  schedule_entries  ScheduleEntry[]
+  work_hour_records WorkHourRecord[]
+
+  @@map("users")
+}
+
+model Location {
+  id               String          @id @default(cuid())
+  name             String
+  address          String?
+  phone            String?
+  opening_time     String?
+  closing_time     String?
+  active           Boolean         @default(true)
+  users            User[]
+  devices          Device[]
+  attendance_logs  AttendanceLog[]
+  schedule_entries ScheduleEntry[]
+  schedule_categories ScheduleCategory[]
+
+  @@map("locations")
+}
+
+model ScheduleCategory {
+  id         String          @id @default(cuid())
+  name       String
+  code       String
+  location_id String?
+  color      String
+  text_color String          @default("#1F1F1F")
+  start_time String?
+  end_time   String?
+  paid_hours Float?
+  active     Boolean         @default(true)
+  created_at DateTime        @default(now())
+  entries    ScheduleEntry[]
+  location   Location?       @relation(fields: [location_id], references: [id])
+
+  @@unique([code, location_id])
+  @@map("schedule_categories")
+}
+
+model ScheduleEntry {
+  id          String           @id @default(cuid())
+  user_id     String
+  location_id String?
+  category_id String
+  date        DateTime
+  note        String?
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+  user        User             @relation(fields: [user_id], references: [id])
+  location    Location?        @relation(fields: [location_id], references: [id])
+  category    ScheduleCategory @relation(fields: [category_id], references: [id])
+
+  @@unique([user_id, date])
+  @@index([date])
+  @@index([location_id, date])
+  @@map("schedule_entries")
+}
+
+model WorkHourRecord {
+  id              String   @id @default(cuid())
+  user_id         String
+  date            DateTime
+  hours           Float    @default(0)
+  note            String?
+  paid_break      Boolean  @default(false)
+  manual_override Boolean  @default(false)
+  updated_by      String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  user            User     @relation(fields: [user_id], references: [id])
+
+  @@unique([user_id, date])
+  @@index([date])
+  @@map("work_hour_records")
+}
+
+model Device {
+  id                    String          @id @default(cuid())
+  device_id             String          @unique
+  device_name           String
+  location_id           String
+  status                DeviceStatus    @default(ACTIVE)
+  enrollment_token_hash String?
+  access_token_hash     String?
+  registered_ip         String?
+  enrollment_expires_at DateTime?
+  activated_at          DateTime?
+  archived_at           DateTime?
+  last_used_at          DateTime?
+  created_at            DateTime        @default(now())
+  location              Location        @relation(fields: [location_id], references: [id])
+  attendance_logs       AttendanceLog[]
+
+  @@map("devices")
+}
+
+model AttendanceLog {
+  id          String         @id @default(cuid())
+  user_id     String
+  location_id String
+  device_id   String
+  type        AttendanceType
+  timestamp   DateTime       @default(now())
+  date        DateTime
+  time        String
+  ip_address  String?
+  note        String?
+  created_at  DateTime       @default(now())
+  user        User           @relation(fields: [user_id], references: [id])
+  location    Location       @relation(fields: [location_id], references: [id])
+  device      Device         @relation(fields: [device_id], references: [id])
+
+  @@index([user_id, date])
+  @@index([location_id, date])
+  @@map("attendance_logs")
+}
+
+model LeaveRequest {
+  id          String        @id @default(cuid())
+  user_id     String
+  type        LeaveType
+  start_date  DateTime
+  end_date    DateTime
+  reason      String?
+  status      RequestStatus @default(PENDING)
+  approved_by String?
+  created_at  DateTime      @default(now())
+  user        User          @relation("UserLeaveRequests", fields: [user_id], references: [id])
+  approver    User?         @relation("LeaveApprover", fields: [approved_by], references: [id])
+
+  @@map("leave_requests")
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  user_id     String
+  title       String
+  file_url    String
+  storage_path String?
+  type        String
+  month       Int?
+  year        Int?
+  uploaded_by String
+  created_at  DateTime @default(now())
+  user        User     @relation("UserDocuments", fields: [user_id], references: [id])
+  uploader    User     @relation("DocumentUploader", fields: [uploaded_by], references: [id])
+
+  @@map("documents")
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  user_id    String
+  title      String
+  message    String
+  type       String
+  read       Boolean  @default(false)
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id])
+
+  @@map("notifications")
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+
+  @@map("settings")
+}
+
+model BrandingSetting {
+  id               String  @id @default(cuid())
+  primary_color    String  @default("#FFA8DD")
+  secondary_color  String  @default("#FFD6EA")
+  background_color String  @default("#F7E9EF")
+  sidebar_color    String  @default("#FFFFFF")
+  button_color     String  @default("#FFA8DD")
+  card_color       String  @default("#FFFFFF")
+  text_color       String  @default("#1F1F1F")
+  gradient_color   String  @default("#E8C98B")
+  logo_url         String?
+
+  @@map("branding_settings")
+}
+
+model EmailSetting {
+  id                String  @id @default(cuid())
+  provider          String
+  sender_email      String
+  sender_name       String
+  api_key_encrypted String?
+  active            Boolean @default(false)
+
+  @@map("email_settings")
+}
+
+model GoogleSheetSetting {
+  id             String    @id @default(cuid())
+  spreadsheet_id String
+  sheet_name     String    @default("Timbrature")
+  active         Boolean   @default(false)
+  last_sync_at   DateTime?
+
+  @@map("google_sheet_settings")
+}

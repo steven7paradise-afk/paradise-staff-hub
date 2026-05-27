@@ -1,0 +1,10 @@
+node_modules
+.next
+.netlify
+.env
+.env*.local
+*.log
+.DS_Store
+prisma/*.db
+prisma/import_staff_officiale.sql
+APP STAFF/
