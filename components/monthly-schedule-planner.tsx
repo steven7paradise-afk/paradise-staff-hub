@@ -107,7 +107,7 @@ function formatHours(totalMinutes: number) {
 
 function categoryAllowsTimeEdit(category?: ScheduleCategory) {
   if (!category) return false;
-  return Boolean(category.editableTime);
+  return Boolean(category.editableTime) || category.code === "P" || category.code === "PE";
 }
 
 export function MonthlySchedulePlanner({

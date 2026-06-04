@@ -2,9 +2,9 @@ import { LeaveType, type PrismaClient } from "@prisma/client";
 
 const leaveTypeCategory: Record<LeaveType, { code: string; name: string; color: string; text_color: string }> = {
   FERIE: { code: "F", name: "Ferie", color: "#F4CCCC", text_color: "#5E1F1F" },
-  PERMESSO: { code: "PE", name: "Permesso", color: "#D9EAD3", text_color: "#23451F" },
+  PERMESSO: { code: "P", name: "Permesso", color: "#D9EAD3", text_color: "#23451F" },
   RIPOSO: { code: "R", name: "Riposo", color: "#FFF2CC", text_color: "#4A3900" },
-  MALATTIA: { code: "ML", name: "Malattia", color: "#E00000", text_color: "#FFFFFF" },
+  MALATTIA: { code: "M", name: "Malattia", color: "#E00000", text_color: "#FFFFFF" },
   ALTRO: { code: "A", name: "Altro", color: "#EADCF8", text_color: "#33213F" },
 };
 
@@ -50,16 +50,16 @@ export async function syncApprovedLeaveToSchedule(
     ? await prisma.scheduleCategory.update({
         where: { id: existingCategory.id },
         data: {
-          name: categorySeed.name,
-          color: categorySeed.color,
-          text_color: categorySeed.text_color,
           active: true,
-          location_id: leaveRequest.user.sede_id,
         },
       })
     : await prisma.scheduleCategory.create({
         data: {
-          ...categorySeed,
+          code: categorySeed.code,
+          name: categorySeed.name,
+          color: categorySeed.color,
+          text_color: categorySeed.text_color,
+          active: true,
           location_id: leaveRequest.user.sede_id,
         },
       });
@@ -80,6 +80,8 @@ export async function syncApprovedLeaveToSchedule(
         update: {
           category_id: category.id,
           location_id: leaveRequest.user.sede_id,
+          start_time: leaveRequest.start_time,
+          end_time: leaveRequest.end_time,
           note,
         },
         create: {
@@ -87,6 +89,8 @@ export async function syncApprovedLeaveToSchedule(
           location_id: leaveRequest.user.sede_id,
           category_id: category.id,
           date,
+          start_time: leaveRequest.start_time,
+          end_time: leaveRequest.end_time,
           note,
         },
       }),
