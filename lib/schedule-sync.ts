@@ -40,20 +40,46 @@ export async function syncApprovedLeaveToSchedule(
   }
 
   const categorySeed = leaveTypeCategory[leaveRequest.type];
-  const existingCategory = await prisma.scheduleCategory.findFirst({
+  const allCategories = await prisma.scheduleCategory.findMany({
     where: {
-      code: categorySeed.code,
       location_id: leaveRequest.user.sede_id,
     },
   });
-  const category = existingCategory
-    ? await prisma.scheduleCategory.update({
-        where: { id: existingCategory.id },
+
+  let matchingCategory = null;
+  const type = leaveRequest.type; // FERIE, PERMESSO, RIPOSO, MALATTIA, ALTRO
+
+  if (type === "FERIE") {
+    matchingCategory = allCategories.find((c) => c.code === "F" || c.code === "FE" || c.name.toLowerCase().includes("ferie"));
+  } else if (type === "PERMESSO") {
+    matchingCategory = allCategories.find((c) => c.code === "P" || c.code === "PE" || c.name.toLowerCase().includes("permesso"));
+  } else if (type === "RIPOSO") {
+    matchingCategory = allCategories.find((c) => c.code === "R" || c.code === "RI" || c.code === "R3" || c.name.toLowerCase().includes("riposo"));
+  } else if (type === "MALATTIA") {
+    matchingCategory = allCategories.find((c) => c.code === "M" || c.code === "MA" || c.code === "ML" || c.name.toLowerCase().includes("malattia"));
+  } else {
+    matchingCategory = allCategories.find((c) => c.code === "A" || c.name.toLowerCase().includes("altro"));
+  }
+
+  let category;
+  if (matchingCategory) {
+    category = await prisma.scheduleCategory.update({
+      where: { id: matchingCategory.id },
+      data: {
+        active: true,
+      },
+    });
+  } else {
+    const existingCode = allCategories.find((c) => c.code === categorySeed.code);
+    if (existingCode) {
+      category = await prisma.scheduleCategory.update({
+        where: { id: existingCode.id },
         data: {
           active: true,
         },
-      })
-    : await prisma.scheduleCategory.create({
+      });
+    } else {
+      category = await prisma.scheduleCategory.create({
         data: {
           code: categorySeed.code,
           name: categorySeed.name,
@@ -63,6 +89,8 @@ export async function syncApprovedLeaveToSchedule(
           location_id: leaveRequest.user.sede_id,
         },
       });
+    }
+  }
 
   const days = daysBetweenInclusive(leaveRequest.start_date, leaveRequest.end_date);
   const timeNote = leaveRequest.start_time && leaveRequest.end_time ? ` (${leaveRequest.start_time}-${leaveRequest.end_time})` : "";
