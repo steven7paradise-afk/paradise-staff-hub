@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
   const birthDate = data.birthDate ? new Date(String(data.birthDate)) : null;
   const contractStart = data.contractStart ? new Date(String(data.contractStart)) : null;
   const contractEnd = data.contractEnd ? new Date(String(data.contractEnd)) : null;
+  const whatsappPhone = data.whatsappPhone ? String(data.whatsappPhone).trim() : null;
 
   if (!name || !email || password.length < 8 || !/^\d{4,6}$/.test(pin)) {
     return NextResponse.json({ error: "Nome, email, password valida e PIN da 4 a 6 numeri sono obbligatori." }, { status: 400 });
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
       contract_start: contractStart,
       contract_end: contractEnd,
       photo_url: data.photoUrl ? String(data.photoUrl).trim() : null,
+      whatsapp_phone: whatsappPhone,
       active: data.active !== false,
     },
   });

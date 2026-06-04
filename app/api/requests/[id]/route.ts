@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { RequestStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
+import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
+import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { syncApprovedLeaveToSchedule } from "@/lib/schedule-sync";
 
@@ -49,19 +51,35 @@ export async function PATCH(
     scheduleSync = await syncApprovedLeaveToSchedule(prisma, leaveRequest.id, session.user.id);
   }
 
-  const template = emailTemplates.leaveRequestDecision(status);
+  // Always update Google Calendar status sync (both to update details or delete if rejected)
+  let calendarSync = null;
+  try {
+    calendarSync = await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
+  } catch (error) {
+    calendarSync = {
+      skipped: true,
+      reason: error instanceof Error ? error.message : "Google Calendar non sincronizzato",
+    };
+  }
+
+  const template = emailTemplates.leaveRequestDecision(
+    leaveRequest.user.name,
+    status,
+    leaveRequest.type,
+    leaveRequest.start_date,
+    leaveRequest.end_date
+  );
   await Promise.all([
     sendEmail({ to: leaveRequest.user.email, ...template }),
-    prisma.notification.create({
-      data: {
+    createNotification({
         user_id: leaveRequest.user_id,
         title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
-        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
+        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
         type: "RICHIESTA",
+        action_url: "/requests",
         read: false,
-      },
     }),
   ]);
 
-  return NextResponse.json({ leaveRequest, scheduleSync });
+  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });
 }

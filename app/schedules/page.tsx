@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SchedulesPage() {
   const session = await auth();
-  const [employees, locations, categories, entries] = await Promise.all([
+  const [employees, locations, categories, entries, workerOverrides] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
@@ -28,6 +28,7 @@ export default async function SchedulesPage() {
         },
       },
     }),
+    prisma.scheduleWorkerOverride.findMany(),
   ]);
 
   return (
@@ -56,14 +57,23 @@ export default async function SchedulesPage() {
           textColor: category.text_color,
           startTime: category.start_time ?? undefined,
           endTime: category.end_time ?? undefined,
+          editableTime: category.editable_time,
           locationId: category.location_id,
         }))}
         entries={entries.map((entry) => ({
           userId: entry.user_id,
+          locationId: entry.location_id,
           categoryId: entry.category_id,
           date: entry.date.toISOString(),
+          startTime: entry.start_time ?? undefined,
+          endTime: entry.end_time ?? undefined,
+        }))}
+        savedExtraWorkers={workerOverrides.map((override) => ({
+          locationId: override.location_id,
+          userId: override.user_id,
         }))}
         canManageCategories={session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN"}
+        canEditPlanning={session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN"}
       />
     </AppShell>
   );

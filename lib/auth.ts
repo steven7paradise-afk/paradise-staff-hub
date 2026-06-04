@@ -5,7 +5,26 @@ import { prisma } from "@/lib/prisma";
 import { canAccess, type Role } from "@/lib/roles";
 
 export const authConfig = {
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 60 * 60 * 24 * 180,
+    updateAge: 60 * 60 * 24,
+  },
+  jwt: {
+    maxAge: 60 * 60 * 24 * 180,
+  },
+  cookies: {
+    sessionToken: {
+      name: `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 60 * 60 * 24 * 180,
+      },
+    },
+  },
   pages: { signIn: "/login" },
   providers: [
     Credentials({

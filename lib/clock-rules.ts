@@ -22,3 +22,9 @@ export function applyEntranceRounding(timestamp: Date, minutes: number) {
   const interval = minutes * 60 * 1000;
   return new Date(Math.ceil(timestamp.getTime() / interval) * interval);
 }
+
+export function applyExitRounding(timestamp: Date, minutes: number) {
+  if (!minutes) return timestamp;
+  const interval = minutes * 60 * 1000;
+  return new Date(Math.floor(timestamp.getTime() / interval) * interval);
+}

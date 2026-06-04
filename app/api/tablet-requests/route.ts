@@ -3,6 +3,7 @@ import { LeaveType } from "@prisma/client";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { identifyWorkerByPin } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
+import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
 
 export async function POST(request: NextRequest) {
@@ -27,7 +28,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Dispositivo non autorizzato alla richiesta" }, { status: 403 });
   }
 
-  const recognized = await identifyWorkerByPin(pin, device.location_id);
+  const isOffice = device.location.name.toLowerCase().includes("ufficio");
+  const recognized = await identifyWorkerByPin(pin, device.location_id, isOffice);
   if (!recognized) {
     return NextResponse.json({ error: "Codice personale non valido" }, { status: 401 });
   }
@@ -48,8 +50,20 @@ export async function POST(request: NextRequest) {
     select: { email: true },
   });
 
-  const template = emailTemplates.leaveRequestReceived(user.name);
+  const template = emailTemplates.leaveRequestReceived(
+    user.name,
+    type,
+    startDate,
+    endDate,
+    reason
+  );
   await Promise.allSettled(admins.map((admin) => sendEmail({ to: admin.email, ...template })));
+
+  try {
+    await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
+  } catch (error) {
+    console.error("Failed to sync tablet request to Google Calendar:", error);
+  }
 
   return NextResponse.json({ id: leaveRequest.id, status: leaveRequest.status });
 }

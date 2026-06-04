@@ -56,6 +56,9 @@ model User {
   contract_start    DateTime?
   contract_end      DateTime?
   photo_url         String?
+  whatsapp_phone    String?
+  google_calendar_sync Boolean          @default(false)
+  google_calendar_id   String?
   active            Boolean          @default(true)
   created_at        DateTime         @default(now())
   location          Location?        @relation(fields: [sede_id], references: [id])
@@ -66,7 +69,13 @@ model User {
   uploadedDocuments Document[]       @relation("DocumentUploader")
   notifications     Notification[]
   schedule_entries  ScheduleEntry[]
+  schedule_overrides ScheduleWorkerOverride[]
+  assigned_tasks    StaffTask[]      @relation("AssignedTasks")
+  created_tasks     StaffTask[]      @relation("CreatedTasks")
+  task_comments     StaffTaskComment[]
   work_hour_records WorkHourRecord[]
+  created_service_forms ServiceForm[] @relation("CreatedServiceForms")
+  service_form_responses ServiceFormResponse[]
 
   @@map("users")
 }
@@ -84,6 +93,9 @@ model Location {
   attendance_logs  AttendanceLog[]
   schedule_entries ScheduleEntry[]
   schedule_categories ScheduleCategory[]
+  schedule_overrides ScheduleWorkerOverride[]
+  staff_tasks        StaffTask[]
+  service_form_responses ServiceFormResponse[]
 
   @@map("locations")
 }
@@ -97,6 +109,7 @@ model ScheduleCategory {
   text_color String          @default("#1F1F1F")
   start_time String?
   end_time   String?
+  editable_time Boolean        @default(false)
   paid_hours Float?
   active     Boolean         @default(true)
   created_at DateTime        @default(now())
@@ -113,6 +126,8 @@ model ScheduleEntry {
   location_id String?
   category_id String
   date        DateTime
+  start_time  String?
+  end_time    String?
   note        String?
   created_at  DateTime         @default(now())
   updated_at  DateTime         @updatedAt
@@ -124,6 +139,74 @@ model ScheduleEntry {
   @@index([date])
   @@index([location_id, date])
   @@map("schedule_entries")
+}
+
+model ScheduleWorkerOverride {
+  id          String   @id @default(cuid())
+  location_id String
+  user_id     String
+  created_at  DateTime @default(now())
+  location    Location @relation(fields: [location_id], references: [id])
+  user        User     @relation(fields: [user_id], references: [id])
+
+  @@unique([location_id, user_id])
+  @@index([location_id])
+  @@index([user_id])
+  @@map("schedule_worker_overrides")
+}
+
+model StaffTask {
+  id             String    @id @default(cuid())
+  title          String
+  description    String
+  status         String    @default("NEW")
+  priority       String    @default("MEDIA")
+  category       String    @default("Operativa")
+  checklist      Json?
+  attachment_name String?
+  attachment_url String?
+  photo_url      String?
+  link_url       String?
+  notes          String?
+  timer_seconds  Int       @default(0)
+  completion_note String?
+  completion_files Json?
+  completion_links Json?
+  evaluation String?
+  evaluated_by_id String?
+  evaluated_at DateTime?
+  location_id    String
+  assigned_to_id String
+  created_by_id  String
+  due_date       DateTime?
+  started_at     DateTime?
+  completed_at   DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  location       Location  @relation(fields: [location_id], references: [id])
+  assigned_to    User      @relation("AssignedTasks", fields: [assigned_to_id], references: [id])
+  created_by     User      @relation("CreatedTasks", fields: [created_by_id], references: [id])
+  comments       StaffTaskComment[]
+
+  @@index([location_id])
+  @@index([assigned_to_id])
+  @@index([status])
+  @@map("staff_tasks")
+}
+
+model StaffTaskComment {
+  id         String    @id @default(cuid())
+  task_id    String
+  user_id    String
+  message    String
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  task       StaffTask @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [user_id], references: [id])
+
+  @@index([task_id])
+  @@index([user_id])
+  @@map("staff_task_comments")
 }
 
 model WorkHourRecord {
@@ -191,9 +274,12 @@ model LeaveRequest {
   type        LeaveType
   start_date  DateTime
   end_date    DateTime
+  start_time  String?
+  end_time    String?
   reason      String?
   status      RequestStatus @default(PENDING)
   approved_by String?
+  google_calendar_event_id String?
   created_at  DateTime      @default(now())
   user        User          @relation("UserLeaveRequests", fields: [user_id], references: [id])
   approver    User?         @relation("LeaveApprover", fields: [approved_by], references: [id])
@@ -224,11 +310,62 @@ model Notification {
   title      String
   message    String
   type       String
+  page       Int      @default(1)
+  action_url String?
   read       Boolean  @default(false)
   created_at DateTime @default(now())
   user       User     @relation(fields: [user_id], references: [id])
 
   @@map("notifications")
+}
+
+model ServiceForm {
+  id                   String                @id @default(cuid())
+  name                 String
+  description          String?
+  category             String                @default("Generale")
+  icon                 String                @default("FORM")
+  active               Boolean               @default(true)
+  allowed_roles        Json?
+  allowed_location_ids Json?
+  fields               Json
+  notify_roles         Json?
+  notify_user_ids      Json?
+  created_by_id        String?
+  created_at           DateTime              @default(now())
+  updated_at           DateTime              @updatedAt
+  created_by           User?                 @relation("CreatedServiceForms", fields: [created_by_id], references: [id])
+  responses            ServiceFormResponse[]
+
+  @@index([active])
+  @@map("service_forms")
+}
+
+model ServiceFormResponse {
+  id                 String      @id @default(cuid())
+  form_id            String
+  user_id            String
+  user_role          String
+  user_location_id   String?
+  user_location_name String?
+  answers            Json
+  status             String      @default("NEW")
+  priority           String?
+  assigned_to_id     String?
+  internal_notes     Json?
+  comments           Json?
+  activity_log       Json?
+  created_at         DateTime    @default(now())
+  updated_at         DateTime    @updatedAt
+  form               ServiceForm @relation(fields: [form_id], references: [id], onDelete: Cascade)
+  user               User        @relation(fields: [user_id], references: [id])
+  location           Location?   @relation(fields: [user_location_id], references: [id])
+
+  @@index([form_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([user_location_id])
+  @@map("service_form_responses")
 }
 
 model Setting {
@@ -249,6 +386,15 @@ model BrandingSetting {
   card_color       String  @default("#FFFFFF")
   text_color       String  @default("#1F1F1F")
   gradient_color   String  @default("#E8C98B")
+  dark_background_color String @default("#121114")
+  dark_sidebar_color    String @default("#1B1A1F")
+  dark_card_color       String @default("#201F24")
+  dark_text_color       String @default("#F8F3F6")
+  dark_button_color     String @default("#F4A3C4")
+  sidebar_text_color    String @default("#1F1F1F")
+  sidebar_icon_color    String @default("#1F1F1F")
+  dark_sidebar_text_color String @default("#F8F3F6")
+  dark_sidebar_icon_color String @default("#F8F3F6")
   logo_url         String?
 
   @@map("branding_settings")

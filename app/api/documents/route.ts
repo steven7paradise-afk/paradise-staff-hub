@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateDocument } from "@/lib/supabase-storage";
 
@@ -38,9 +39,7 @@ export async function POST(request: NextRequest) {
         storage_path: storagePath,
       },
     });
-    await prisma.notification.create({
-      data: { user_id: userId, title: "Nuovo documento disponibile", message: `${title} e disponibile nella sezione Documenti.`, type: "DOCUMENTO", read: false },
-    });
+    await createNotification({ user_id: userId, title: "Nuovo documento disponibile", message: `${title} e disponibile nella sezione Documenti.`, type: "DOCUMENTO", action_url: "/documents", read: false });
     return NextResponse.json(document);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Caricamento non riuscito." }, { status: 503 });

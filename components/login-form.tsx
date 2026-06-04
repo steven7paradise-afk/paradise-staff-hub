@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 
 export function LoginForm() {
@@ -9,6 +11,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,7 +35,9 @@ export function LoginForm() {
       return;
     }
 
-    window.location.href = result?.url ?? callbackUrl;
+    router.prefetch(result?.url ?? callbackUrl);
+    router.replace(result?.url ?? callbackUrl);
+    router.refresh();
   }
 
   return (
@@ -59,14 +64,26 @@ export function LoginForm() {
         required
       />
       {error ? (
-        <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-          {error}
-        </p>
+        <div className="rounded-2xl border border-red-200 bg-red-50/70 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400 animate-pulse-danger flex items-center gap-2">
+          <AlertCircle className="size-4 shrink-0 animate-bounce" />
+          <span>{error}</span>
+        </div>
       ) : null}
-      <Button className="w-full" type="submit" disabled={loading}>
-        {loading ? "Accesso in corso..." : "Entra nel pannello"}
+      <Button 
+        className="w-full transition active:scale-[0.97]" 
+        type="submit" 
+        disabled={loading}
+      >
+        {loading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="size-4 animate-spin" />
+            Accesso in corso...
+          </span>
+        ) : (
+          "Entra nel pannello"
+        )}
       </Button>
-      <p className="text-center text-xs text-black/45">
+      <p className="text-center text-xs text-black/45 dark:text-white/40">
         Inserisci la tua email completa e la password personale, non il PIN tablet.
       </p>
     </form>

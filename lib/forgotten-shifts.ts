@@ -1,4 +1,5 @@
 import { emailTemplates, sendEmail } from "@/lib/email";
+import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 function localDay(date: Date) {
@@ -55,12 +56,10 @@ export async function closeForgottenShifts(now = new Date()) {
       where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN"] } },
       select: { id: true, email: true },
     });
-    await prisma.notification.createMany({
-      data: [
-        { user_id: log.user_id, title: "Timbratura uscita automatica", message: `Il turno del ${day} e stato chiuso automaticamente alle 22:00 per uscita mancante.`, type: "TIMBRATURA" },
-        ...admins.map((admin) => ({ user_id: admin.id, title: "Uscita dimenticata", message: `${log.user.name} non ha timbrato l'uscita: turno chiuso alle 22:00.`, type: "TIMBRATURA" })),
-      ],
-    });
+    await createNotifications([
+        { user_id: log.user_id, title: "Timbratura uscita automatica", message: `Il turno del ${day} e stato chiuso automaticamente alle 22:00 per uscita mancante.`, type: "TIMBRATURA", action_url: "/dashboard" },
+        ...admins.map((admin) => ({ user_id: admin.id, title: "Uscita dimenticata", message: `${log.user.name} non ha timbrato l'uscita: turno chiuso alle 22:00.`, type: "TIMBRATURA", action_url: "/attendance" })),
+    ]);
     const template = emailTemplates.missingClock(day);
     await Promise.allSettled([sendEmail({ to: log.user.email, ...template }), ...admins.map((admin) => sendEmail({ to: admin.email, ...template }))]);
   }

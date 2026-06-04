@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       text_color: String(data.textColor ?? "#1F1F1F"),
       start_time: data.startTime ? String(data.startTime) : null,
       end_time: data.endTime ? String(data.endTime) : null,
+      editable_time: Boolean(data.editableTime),
       active: true,
       location_id: locationId,
   };
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     textColor: category.text_color,
     startTime: category.start_time ?? undefined,
     endTime: category.end_time ?? undefined,
+    editableTime: category.editable_time,
     locationId: category.location_id,
   });
 }

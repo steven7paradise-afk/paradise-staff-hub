@@ -65,7 +65,8 @@ export async function syncApprovedLeaveToSchedule(
       });
 
   const days = daysBetweenInclusive(leaveRequest.start_date, leaveRequest.end_date);
-  const note = `Richiesta ${categorySeed.name.toLowerCase()} approvata da ${approverId}`;
+  const timeNote = leaveRequest.start_time && leaveRequest.end_time ? ` (${leaveRequest.start_time}-${leaveRequest.end_time})` : "";
+  const note = `Richiesta ${categorySeed.name.toLowerCase()}${timeNote} approvata da ${approverId}`;
 
   await prisma.$transaction(
     days.map((date) =>

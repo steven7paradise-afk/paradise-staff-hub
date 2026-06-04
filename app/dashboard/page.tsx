@@ -4,8 +4,10 @@ import type { AttendanceType, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { EmployeeLiveSummary } from "@/components/employee-live-summary";
+import { InstantLink } from "@/components/instant-link";
 import { LiveAttendance } from "@/components/live-attendance";
 import { LiveTeamStatus } from "@/components/live-team-status";
+import { SalonDayCalendar } from "@/components/salon-day-calendar";
 import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
@@ -171,7 +173,9 @@ export default async function DashboardPage() {
           take: 8,
         })
       : Promise.resolve([]),
-    role !== "DIPENDENTE"
+    role === "DIPENDENTE" && currentUser.sede_id
+      ? prisma.setting.findMany({ where: { key: clockRuleKey(currentUser.sede_id) } })
+      : role !== "DIPENDENTE"
       ? prisma.setting.findMany({ where: { key: { startsWith: "clock_rule:" } } })
       : Promise.resolve([]),
   ]);
@@ -192,8 +196,8 @@ export default async function DashboardPage() {
       prisma.attendanceLog.findMany({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
     ]);
     todayShift = todayEntry;
-    nextShift = futureEntries.find((entry) => Boolean(entry.category.start_time && entry.category.end_time)) ?? null;
-    colleaguesToday = todaySalonEntries.filter((entry) => Boolean(entry.category.start_time && entry.category.end_time)).length;
+    nextShift = futureEntries.find((entry) => Boolean((entry.start_time ?? entry.category.start_time) && (entry.end_time ?? entry.category.end_time))) ?? null;
+    colleaguesToday = todaySalonEntries.filter((entry) => Boolean((entry.start_time ?? entry.category.start_time) && (entry.end_time ?? entry.category.end_time))).length;
     pendingPersonalRequests = openRequests;
     unreadCommunications = unread;
     personalTodayLogs = todayLogs;
@@ -252,44 +256,53 @@ export default async function DashboardPage() {
 
   return (
     <AppShell title={role === "DIPENDENTE" ? `Ciao, ${currentUser.name.split(" ")[0]}` : "Dashboard"} subtitle={subtitle} role={role}>
-      {role !== "DIPENDENTE" ? <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metrics.map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <Card key={metric.label}>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-black/50">{metric.label}</p>
-                <Icon className="size-5 text-paradise-noir/55" />
-              </div>
-              <p className="mt-5 text-3xl font-semibold">{metric.value}</p>
-              <p className="mt-2 text-xs text-black/45">{metric.trend}</p>
-            </Card>
-          );
-        })}
-      </section> : null}
+      {role !== "DIPENDENTE" ? (
+        <section 
+          className="flex gap-3 overflow-x-auto pb-3 snap-x md:grid md:gap-4 md:grid-cols-2 xl:grid-cols-4 md:pb-0 animate-fade-in-up opacity-0" 
+          style={{ animationFillMode: "forwards" }}
+        >
+          {metrics.map((metric) => {
+            const Icon = metric.icon;
+            return (
+              <Card 
+                key={metric.label} 
+                className="p-4 md:p-6 min-w-[170px] shrink-0 snap-start flex-1 md:min-w-0"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs md:text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">{metric.label}</p>
+                  <Icon className="size-4 md:size-5 text-paradise-noir/55 dark:text-white/55" />
+                </div>
+                <p className="mt-4 md:mt-5 text-2xl md:text-3xl font-bold tracking-tight text-[color:var(--text)]">{metric.value}</p>
+                <p className="mt-2 text-[10px] md:text-xs text-black/45 dark:text-white/45">{metric.trend}</p>
+              </Card>
+            );
+          })}
+        </section>
+      ) : null}
 
       {role === "DIPENDENTE" ? (
-        <section className="min-w-0 grid gap-5">
+        <section className="min-w-0 grid gap-5 animate-fade-in-up opacity-0" style={{ animationFillMode: "forwards" }}>
           <EmployeeLiveSummary
             plannedTime={shiftTime(todayShift)}
             shiftName={todayShift?.category.name ?? "Nessun turno assegnato"}
             pendingRequests={pendingPersonalRequests}
             colleaguesToday={colleaguesToday}
             initialLogs={personalTodayLogs.map((log) => ({ type: log.type, timestamp: log.timestamp.toISOString(), time: log.time }))}
+            breakDurationMinutes={parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(currentUser.sede_id ?? ""))?.value).breakDurationMinutes}
           />
-          <div className="grid gap-5 xl:grid-cols-3">
+          <div className="grid gap-5 xl:grid-cols-3 animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <Card>
               <PanelHeader title="Il mio prossimo turno" href="/my-shifts" />
               {nextShift ? (
-                <div className="mt-4 flex gap-4 rounded-2xl border border-black/5 bg-paradise-nude p-4">
-                  <div className="min-w-14 rounded-xl bg-white p-2 text-center">
-                    <p className="text-xs font-semibold uppercase text-black/45">{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(nextShift.date)}</p>
+                <div className="mt-4 flex gap-4 rounded-2xl border border-black/5 bg-paradise-nude dark:bg-white/5 p-4 transition-all duration-300 hover:scale-[1.01]">
+                  <div className="min-w-14 rounded-xl bg-white dark:bg-white/10 p-2 text-center shadow-sm">
+                    <p className="text-xs font-bold uppercase text-black/45 dark:text-white/40">{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(nextShift.date)}</p>
                     <p className="text-2xl font-semibold">{nextShift.date.getDate()}</p>
                   </div>
                   <div>
-                    <p className="font-semibold">{shiftTime(nextShift)}</p>
-                    <p className="mt-1 text-sm text-black/55">{nextShift.category.name}</p>
-                    <p className="mt-1 text-xs text-black/45">{currentUser.location?.name ?? "Salone"}</p>
+                    <p className="font-semibold text-sm">{shiftTime(nextShift)}</p>
+                    <p className="mt-1 text-xs text-black/55 dark:text-white/50">{nextShift.category.name}</p>
+                    <p className="mt-1 text-[11px] text-black/45 dark:text-white/40">{currentUser.location?.name ?? "Salone"}</p>
                   </div>
                 </div>
               ) : <EmptyText text="Nessun prossimo turno programmato." />}
@@ -303,16 +316,17 @@ export default async function DashboardPage() {
               <div className="mt-3"><RequestList role={role} requests={recentRequests.slice(0, 2)} /></div>
             </Card>
           </div>
-          <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
+          <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr] animate-fade-in-up [animation-delay:200ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <Card>
               <PanelHeader title="Il mio profilo" href="/profile" />
               <div className="mt-4 flex items-center gap-3">
-                <div className="grid size-14 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-xl font-semibold">
+                <div className="relative grid size-14 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-xl font-bold shadow-soft">
                   {currentUser.photo_url ? <img src={currentUser.photo_url} alt={currentUser.name} className="size-full object-cover" /> : currentUser.name.slice(0, 1)}
+                  <span className="absolute -right-0.5 top-0 size-3 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse-green" />
                 </div>
                 <div>
-                  <p className="font-semibold">{currentUser.name}</p>
-                  <p className="text-xs text-black/50">{currentUser.location?.name ?? "Nessun salone"}</p>
+                  <p className="font-semibold text-sm">{currentUser.name}</p>
+                  <p className="text-xs text-black/50 dark:text-white/50">{currentUser.location?.name ?? "Nessun salone"}</p>
                 </div>
               </div>
               <div className="mt-4 grid gap-2 text-sm">
@@ -325,32 +339,47 @@ export default async function DashboardPage() {
               <div className="mt-3"><PersonalDocuments documents={personalDocuments.slice(0, 3)} /></div>
             </Card>
           </div>
-          <Card id="calendario">
+          <Card id="calendario" className="animate-fade-in-up [animation-delay:300ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">I miei turni e ore lavorate</h2>
               <Badge tone="gold">{new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(month)}</Badge>
             </div>
             <EmployeeScheduleMonth month={month} rows={personalHourDays} />
-            <Link href="/my-shifts" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#B85B68]">
+            <Link href="/my-shifts" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#B85B68] transition hover:translate-x-1 duration-200">
               Apri dettaglio turni e timbrature <ArrowRight className="size-4" />
             </Link>
           </Card>
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden animate-fade-in-up [animation-delay:400ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Turni del mio salone</h2>
               <Badge tone="green">{currentUser.location?.name ?? "Sede"}</Badge>
             </div>
+            <SalonDayCalendar
+              month={month.toISOString()}
+              entries={salonSchedule.map((entry) => ({
+                id: entry.id,
+                userId: entry.user_id,
+                userName: entry.user.name,
+                date: entry.date.toISOString(),
+                categoryName: entry.category.name,
+                categoryCode: entry.category.code,
+                color: entry.category.color,
+                textColor: entry.category.text_color,
+                startTime: entry.start_time ?? entry.category.start_time,
+                endTime: entry.end_time ?? entry.category.end_time,
+              }))}
+            />
             <SalonScheduleTable month={month} workers={salonWorkers} entries={salonSchedule} currentUserId={currentUser.id} />
           </Card>
         </section>
       ) : null}
 
       {role === "RESPONSABILE" ? (
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr] animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
           <Card>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Andamento turno sede</h2>
-              <Link href="/schedules" className="text-sm font-semibold text-black/55">Modifica orario</Link>
+              <Link href="/schedules" className="text-sm font-semibold text-black/55 hover:text-paradise-pink">Modifica orario</Link>
             </div>
             <LiveTeamStatus initialWorkers={liveTeamWorkers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", breakDurationMinutes: parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes, lastLog: worker.attendance_logs[0] ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() } : null }))} />
           </Card>
@@ -366,20 +395,20 @@ export default async function DashboardPage() {
       ) : null}
 
       {role === "ADMIN" || role === "SUPER_ADMIN" ? (
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr] animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
           <Card>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Personale per sede</h2>
-              <Link href="/locations" className="text-sm font-semibold text-black/55">Apri saloni</Link>
+              <Link href="/locations" className="text-sm font-semibold text-black/55 hover:text-paradise-pink">Apri saloni</Link>
             </div>
             <div className="space-y-3">
               {locationsOverview.map((location) => (
-                <Link key={location.id} href={`/locations?salon=${location.id}`} className="block rounded-2xl bg-paradise-nude/60 p-4 transition hover:bg-paradise-nude">
+                <Link key={location.id} href={`/locations?salon=${location.id}`} className="block rounded-2xl bg-paradise-nude/60 p-4 transition duration-300 hover:bg-paradise-nude hover:scale-[1.01] hover:shadow-sm">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold">{location.name}</p>
+                    <p className="font-semibold text-sm">{location.name}</p>
                     <Badge tone="gold">{location.users.length} attivi</Badge>
                   </div>
-                  <p className="mt-2 text-sm text-black/50">{location.users.map((user) => user.name).join(", ") || "Nessun lavoratore assegnato"}</p>
+                  <p className="mt-2 text-xs text-black/50 dark:text-white/40">{location.users.map((user) => user.name).join(", ") || "Nessun lavoratore assegnato"}</p>
                 </Link>
               ))}
             </div>
@@ -399,7 +428,7 @@ export default async function DashboardPage() {
       ) : null}
 
       {role !== "DIPENDENTE" ? (
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr] animate-fade-in-up [animation-delay:200ms] opacity-0" style={{ animationFillMode: "forwards" }}>
           <Card>
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-semibold">{attendanceTitle}</h2>
@@ -430,8 +459,10 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 function shiftTime(shift: ScheduleWithCategory | null) {
-  if (!shift?.category.start_time || !shift.category.end_time) return "--:-- - --:--";
-  return `${shift.category.start_time} - ${shift.category.end_time}`;
+  const startTime = shift?.start_time ?? shift?.category.start_time;
+  const endTime = shift?.end_time ?? shift?.category.end_time;
+  if (!startTime || !endTime) return "--:-- - --:--";
+  return `${startTime} - ${endTime}`;
 }
 
 function PortalMetric({ icon: Icon, label, value, hint, href, className = "", featured = false }: { icon: typeof Activity; label: string; value: string; hint: string; href?: string; className?: string; featured?: boolean }) {
@@ -446,7 +477,7 @@ function PortalMetric({ icon: Icon, label, value, hint, href, className = "", fe
       <p className="mt-1 text-xs text-black/50">{hint}</p>
     </Card>
   );
-  return href ? <Link className={className} href={href}>{content}</Link> : <div className={className}>{content}</div>;
+  return href ? <InstantLink className={className} href={href} activeClassName="">{content}</InstantLink> : <div className={className}>{content}</div>;
 }
 
 function CompactStatus({ icon: Icon, label, value, hint, href, className = "" }: { icon: typeof Activity; label: string; value: string; hint: string; href?: string; className?: string }) {
@@ -462,14 +493,14 @@ function CompactStatus({ icon: Icon, label, value, hint, href, className = "" }:
       {href ? <ArrowRight className="ml-auto size-4 text-black/30" /> : null}
     </div>
   );
-  return href ? <Link href={href} className={className}>{content}</Link> : <div className={className}>{content}</div>;
+  return href ? <InstantLink href={href} className={className} activeClassName="">{content}</InstantLink> : <div className={className}>{content}</div>;
 }
 
 function PanelHeader({ title, href }: { title: string; href: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-3">
       <h2 className="font-semibold">{title}</h2>
-      <Link href={href} className="text-xs font-semibold text-[#B85B68]">Vedi tutto</Link>
+      <InstantLink href={href} className="rounded-full px-2 py-1 text-xs font-semibold text-[#B85B68]" activeClassName="">Vedi tutto</InstantLink>
     </div>
   );
 }
@@ -521,7 +552,9 @@ function EmployeeScheduleMonth({ month, rows }: { month: Date; rows: PersonalDay
           <div key={row.date.toISOString()} className="flex items-center justify-between rounded-xl border border-black/5 bg-white p-3">
             <div>
               <p className="text-sm font-semibold">{new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short" }).format(row.date)}</p>
-              <p className="text-xs text-black/50">{row.schedule?.category.name ?? "Timbratura"} {row.schedule?.category.start_time ? `${row.schedule.category.start_time}-${row.schedule.category.end_time}` : ""}</p>
+              <p className="text-xs text-black/50">
+                {row.schedule?.category.name ?? "Timbratura"} {(row.schedule?.start_time ?? row.schedule?.category.start_time) ? `${row.schedule?.start_time ?? row.schedule?.category.start_time}-${row.schedule?.end_time ?? row.schedule?.category.end_time}` : ""}
+              </p>
             </div>
             <p className="text-sm font-semibold">{row.workedHours || row.plannedHours} h</p>
           </div>
@@ -585,11 +618,11 @@ function SalonScheduleTable({ month, workers, entries, currentUserId }: { month:
       </div>
       <div className="space-y-2 sm:hidden">
         {workers.map((worker) => {
-          const shifts = days.map((day) => entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`)).filter((entry) => entry?.category.start_time && entry.category.end_time);
-          const absences = days.map((day) => entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`)).filter((entry) => entry && !entry.category.start_time);
+          const shifts = days.map((day) => entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`)).filter((entry) => (entry?.start_time ?? entry?.category.start_time) && (entry?.end_time ?? entry?.category.end_time));
+          const absences = days.map((day) => entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`)).filter((entry) => entry && !(entry.start_time ?? entry.category.start_time));
           const scheduledHours = shifts.reduce((total, entry) => {
             if (!entry) return total;
-            return total + (entry.category.paid_hours ?? categoryDuration(entry.category.start_time, entry.category.end_time));
+            return total + (entry.category.paid_hours ?? categoryDuration(entry.start_time ?? entry.category.start_time, entry.end_time ?? entry.category.end_time));
           }, 0);
           return (
             <div key={worker.id} className={worker.id === currentUserId ? "rounded-xl border border-[#e8b1bf] bg-paradise-softPink/30 p-3" : "rounded-xl border border-black/5 bg-white p-3"}>
@@ -627,7 +660,7 @@ function SalonScheduleTable({ month, workers, entries, currentUserId }: { month:
                   {days.map((day) => {
                     const entry = entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`);
                     const code = entry?.category.code.toUpperCase() ?? "";
-                    if (entry?.category.start_time && entry.category.end_time) scheduledHours += entry.category.paid_hours ?? categoryDuration(entry.category.start_time, entry.category.end_time);
+                    if ((entry?.start_time ?? entry?.category.start_time) && (entry?.end_time ?? entry?.category.end_time)) scheduledHours += entry.category.paid_hours ?? categoryDuration(entry.start_time ?? entry.category.start_time, entry.end_time ?? entry.category.end_time);
                     return (
                       <td key={day.toISOString()} className="h-8 border-r border-t border-black/5 text-center text-xs font-bold" style={entry ? { backgroundColor: entry.category.color, color: entry.category.text_color } : undefined}>
                         {code}

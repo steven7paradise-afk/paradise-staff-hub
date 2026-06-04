@@ -48,6 +48,7 @@ export function WorkHoursManager({
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [query, setQuery] = useState("");
+  const [locationFilter, setLocationFilter] = useState("Tutti i saloni");
   const [selectedWorkerId, setSelectedWorkerId] = useState(workers[0]?.id ?? "");
   const [records, setRecords] = useState<Record<string, Omit<WorkRecord, "userId" | "date">>>({});
   const [loadingRecords, setLoadingRecords] = useState(true);
@@ -55,7 +56,12 @@ export function WorkHoursManager({
   const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState("");
 
-  const filteredWorkers = workers.filter((worker) => `${worker.name} ${worker.email} ${worker.location}`.toLowerCase().includes(query.toLowerCase()));
+  const locationOptions = useMemo(() => ["Tutti i saloni", ...Array.from(new Set(workers.map((worker) => worker.location))).sort((a, b) => a.localeCompare(b, "it"))], [workers]);
+  const filteredWorkers = workers.filter((worker) => {
+    const matchesLocation = locationFilter === "Tutti i saloni" || worker.location === locationFilter;
+    const matchesQuery = `${worker.name} ${worker.email} ${worker.location}`.toLowerCase().includes(query.toLowerCase());
+    return matchesLocation && matchesQuery;
+  });
   const selectedWorker = workers.find((worker) => worker.id === selectedWorkerId);
   const days = useMemo(() => daysInMonth(year, month), [year, month]);
   const totalHours = days.reduce((total, day) => total + (records[`${selectedWorkerId}-${dateKey(day)}`]?.hours ?? 0), 0);
@@ -94,6 +100,12 @@ export function WorkHoursManager({
       active = false;
     };
   }, [year, month]);
+
+  useEffect(() => {
+    if (filteredWorkers.length > 0 && !filteredWorkers.some((worker) => worker.id === selectedWorkerId)) {
+      setSelectedWorkerId(filteredWorkers[0].id);
+    }
+  }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
     return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null };
@@ -148,45 +160,88 @@ export function WorkHoursManager({
       const { default: jsPDF } = await import("jspdf");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 14;
-      const rowHeight = 7;
+      const rowHeight = 6;
+      const tableWidth = pageWidth - margin * 2;
+      const monthLabel = `${monthNames[month]} ${year}`;
+
+      function drawHeader(worker: Worker, workerTotal: number) {
+        pdf.setFillColor(31, 31, 31);
+        pdf.rect(0, 0, pageWidth, 36, "F");
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(18);
+        pdf.text("PARADISE BEAUTY", margin, 15);
+        pdf.setFontSize(9);
+        pdf.setFont("helvetica", "normal");
+        pdf.text("Conteggio mensile ore staff", margin, 22);
+
+        pdf.setFillColor(255, 214, 234);
+        pdf.roundedRect(pageWidth - margin - 34, 9, 34, 16, 4, 4, "F");
+        pdf.setTextColor(31, 31, 31);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(15);
+        pdf.text(`${workerTotal.toFixed(2).replace(".00", "")} h`, pageWidth - margin - 28, 19);
+
+        pdf.setTextColor(31, 31, 31);
+        pdf.setFontSize(15);
+        pdf.text(worker.name.toUpperCase(), margin, 46);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9);
+        pdf.setTextColor(110, 110, 110);
+        pdf.text(`${worker.email}  |  ${worker.location}  |  ${monthLabel}`, margin, 53);
+        pdf.text("Pausa non retribuita gia esclusa, salvo quando marcata come pagata.", margin, 59);
+      }
+
+      function drawTableHead(y: number) {
+        pdf.setFillColor(247, 233, 239);
+        pdf.rect(margin, y, tableWidth, rowHeight, "F");
+        pdf.setDrawColor(225, 213, 218);
+        pdf.rect(margin, y, tableWidth, rowHeight);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.8);
+        pdf.setTextColor(31, 31, 31);
+        pdf.text("Giorno", margin + 3, y + 4.2);
+        pdf.text("Timbratura", margin + 42, y + 4.2);
+        pdf.text("Ore", margin + 84, y + 4.2);
+        pdf.text("Note", margin + 106, y + 4.2);
+      }
 
       pdfWorkers.forEach((worker, workerIndex) => {
         if (workerIndex > 0) pdf.addPage();
         const workerTotal = days.reduce((total, day) => total + (records[`${worker.id}-${dateKey(day)}`]?.hours ?? 0), 0);
-
-        pdf.setFillColor(255, 214, 234);
-        pdf.rect(margin, 16, 24, 12, "F");
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(16);
-        pdf.text("Paradise Beauty", margin, 38);
-        pdf.setFontSize(11);
-        pdf.text(`Giorni lavorati dello staff ${worker.name.toUpperCase()}`, margin, 48);
-        pdf.setFont("helvetica", "normal");
-        pdf.text(`${monthNames[month]} ${year} - Totale ore: ${workerTotal}`, margin, 55);
-
-        let y = 64;
-        pdf.setFont("helvetica", "bold");
-        pdf.setFillColor(255, 214, 234);
-        pdf.rect(margin, y, pageWidth - margin * 2, rowHeight, "F");
-        pdf.text("Giorno", margin + 2, y + 5);
-        pdf.text("Ore lavorate", margin + 72, y + 5);
-        pdf.text("Note", margin + 118, y + 5);
+        drawHeader(worker, workerTotal);
+        let y = 66;
+        drawTableHead(y);
         y += rowHeight;
 
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(9);
+        pdf.setFontSize(7.5);
         days.forEach((day) => {
           const record = records[`${worker.id}-${dateKey(day)}`] ?? emptyRecord();
-          pdf.rect(margin, y, pageWidth - margin * 2, rowHeight);
-          pdf.text(new Intl.DateTimeFormat("it-IT").format(day), margin + 2, y + 5);
-          pdf.text(String(record.hours), margin + 72, y + 5);
-          pdf.text(record.note || "", margin + 118, y + 5);
-          y += rowHeight;
-          if (y > 282) {
+          if (y > pageHeight - 18) {
             pdf.addPage();
-            y = 20;
+            y = 16;
+            drawTableHead(y);
+            y += rowHeight;
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(7.5);
           }
+          const rowFill = day.getUTCDay() === 0 || day.getUTCDay() === 6 ? 252 : 255;
+          pdf.setFillColor(rowFill, rowFill, rowFill);
+          pdf.rect(margin, y, tableWidth, rowHeight, "F");
+          pdf.setDrawColor(232, 224, 228);
+          pdf.rect(margin, y, tableWidth, rowHeight);
+          pdf.setTextColor(31, 31, 31);
+          pdf.text(new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day), margin + 3, y + 4.2);
+          pdf.text(record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "-", margin + 42, y + 4.2);
+          pdf.setFont("helvetica", "bold");
+          pdf.text(`${record.hours.toFixed(2).replace(".00", "")} h`, margin + 84, y + 4.2);
+          pdf.setFont("helvetica", "normal");
+          const noteLines = pdf.splitTextToSize(record.note || "", tableWidth - 110);
+          pdf.text(noteLines[0] ?? "", margin + 106, y + 4.2);
+          y += rowHeight;
         });
       });
 
@@ -197,7 +252,8 @@ export function WorkHoursManager({
   }
 
   async function exportAllPdf() {
-    await exportPdf(workers, `Ore-staff-${monthNames[month]}-${year}.pdf`);
+    const scope = locationFilter === "Tutti i saloni" ? workers : workers.filter((worker) => worker.location === locationFilter);
+    await exportPdf(scope, `Ore-staff-${locationFilter.replaceAll(" ", "-")}-${monthNames[month]}-${year}.pdf`);
   }
 
   async function exportSelectedPdf() {
@@ -211,6 +267,15 @@ export function WorkHoursManager({
       <Card className="p-0">
         <div className="border-b border-black/5 p-5">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">Personale</p>
+          <select
+            className="mt-4 min-h-11 w-full rounded-2xl border border-black/10 bg-white/80 px-3 text-sm font-semibold outline-none focus:border-paradise-pink"
+            value={locationFilter}
+            onChange={(event) => setLocationFilter(event.target.value)}
+          >
+            {locationOptions.map((location) => (
+              <option key={location} value={location}>{location}</option>
+            ))}
+          </select>
           <div className="mt-4 flex items-center gap-2 rounded-2xl border border-black/10 bg-white/70 px-3">
             <Search className="size-4 text-black/40" />
             <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder="Cerca lavoratore..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -265,7 +330,7 @@ export function WorkHoursManager({
             </Button>
             <Button onClick={exportAllPdf} disabled={exporting || workers.length === 0}>
               <Download className="size-4" />
-              {exporting ? "Creo PDF..." : "PDF tutti"}
+              {exporting ? "Creo PDF..." : locationFilter === "Tutti i saloni" ? "PDF tutti" : "PDF salone"}
             </Button>
           </div>
         </div>

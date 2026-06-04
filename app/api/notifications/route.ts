@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 const senderRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -14,6 +15,8 @@ export async function POST(request: NextRequest) {
   const title = String(payload.title ?? "").trim();
   const message = String(payload.message ?? "").trim();
   const type = String(payload.type ?? "COMUNICAZIONE").trim() || "COMUNICAZIONE";
+  const actionUrl = payload.actionUrl ? String(payload.actionUrl) : "/notifications";
+  const page = Math.min(3, Math.max(1, Number(payload.page ?? 1) || 1));
   const target = String(payload.target ?? "all");
   const targetId = String(payload.targetId ?? "");
 
@@ -35,15 +38,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nessun destinatario trovato." }, { status: 400 });
   }
 
-  await prisma.notification.createMany({
-    data: users.map((user) => ({
+  await createNotifications(
+    users.map((user) => ({
       user_id: user.id,
       title,
       message,
       type,
+      page,
+      action_url: actionUrl,
       read: false,
     })),
-  });
+  );
 
   return NextResponse.json({ sent: users.length });
 }

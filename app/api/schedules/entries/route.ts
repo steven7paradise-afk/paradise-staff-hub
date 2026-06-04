@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const planningRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const planningRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function normalizeTime(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const time = String(value);
+  return timePattern.test(time) ? time : undefined;
+}
 
 export async function PUT(request: NextRequest) {
   const session = await auth();
@@ -13,18 +20,32 @@ export async function PUT(request: NextRequest) {
   const data = await request.json();
   const userId = String(data.userId ?? "");
   const categoryId = data.categoryId ? String(data.categoryId) : null;
+  const locationId = data.locationId ? String(data.locationId) : null;
+  const startTime = normalizeTime(data.startTime);
+  const endTime = normalizeTime(data.endTime);
   const date = new Date(String(data.date ?? ""));
-  if (!userId || Number.isNaN(date.valueOf())) {
+  if (!userId || !locationId || Number.isNaN(date.valueOf())) {
     return NextResponse.json({ error: "Cella planning non valida." }, { status: 400 });
+  }
+  if (startTime === undefined || endTime === undefined || Boolean(startTime) !== Boolean(endTime)) {
+    return NextResponse.json({ error: "Inserisci ora inizio e fine nel formato corretto." }, { status: 400 });
+  }
+  if (startTime && endTime && endTime <= startTime) {
+    return NextResponse.json({ error: "L'ora fine deve essere dopo l'ora inizio." }, { status: 400 });
   }
 
   const worker = await prisma.user.findUnique({ where: { id: userId } });
-  if (!worker || (session.user.role === "RESPONSABILE" && worker.sede_id !== session.user.sedeId)) {
+  if (!worker || (session.user.role === "RESPONSABILE" && locationId !== session.user.sedeId)) {
     return NextResponse.json({ error: "Personale non disponibile per questa sede." }, { status: 403 });
   }
 
+  const location = await prisma.location.findUnique({ where: { id: locationId } });
+  if (!location?.active) {
+    return NextResponse.json({ error: "Salone non valido." }, { status: 400 });
+  }
+
   if (!categoryId) {
-    await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date } });
+    await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date, location_id: locationId } });
     return NextResponse.json({ removed: true });
   }
 
@@ -32,14 +53,14 @@ export async function PUT(request: NextRequest) {
   if (!category?.active) {
     return NextResponse.json({ error: "Categoria non valida." }, { status: 400 });
   }
-  if (category.location_id && category.location_id !== worker.sede_id) {
+  if (category.location_id && category.location_id !== locationId) {
     return NextResponse.json({ error: "Questa categoria appartiene a un altro salone." }, { status: 400 });
   }
 
   const entry = await prisma.scheduleEntry.upsert({
     where: { user_id_date: { user_id: userId, date } },
-    update: { category_id: categoryId, location_id: worker.sede_id },
-    create: { user_id: userId, category_id: categoryId, location_id: worker.sede_id, date },
+    update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
+    create: { user_id: userId, category_id: categoryId, location_id: locationId, date, start_time: startTime, end_time: endTime },
   });
   return NextResponse.json(entry);
 }

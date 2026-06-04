@@ -37,6 +37,9 @@ GOOGLE_SHEET_ID=
 EMAIL_PROVIDER=
 EMAIL_API_KEY=
 EMAIL_FROM=
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+NEXT_PUBLIC_APP_URL=https://paradise-staff-hub.netlify.app
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_PROFILE_BUCKET=profile-images
@@ -121,6 +124,22 @@ EMAIL_PROVIDER=resend
 EMAIL_API_KEY=
 EMAIL_FROM="Paradise Beauty HR <hr@paradisebeauty.it>"
 ```
+
+## Configurazione WhatsApp
+
+Le notifiche interne possono inviare anche un messaggio WhatsApp al numero impostato sul profilo del dipendente.
+
+1. Crea una app Meta con WhatsApp Cloud API.
+2. Copia il `Phone Number ID` e genera un access token.
+3. Su Netlify imposta:
+
+```env
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+NEXT_PUBLIC_APP_URL=https://paradise-staff-hub.netlify.app
+```
+
+Nel profilo dipendente inserisci il numero in formato internazionale, per esempio `+393331234567`.
 
 ## Configurazione Supabase Storage
 

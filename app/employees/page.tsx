@@ -34,6 +34,7 @@ export default async function EmployeesPage() {
           contractStart: employee.contract_start?.toISOString().slice(0, 10) ?? "",
           contractEnd: employee.contract_end?.toISOString().slice(0, 10) ?? "",
           photoUrl: employee.photo_url ?? "",
+          whatsappPhone: employee.whatsapp_phone ?? "",
         }))}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
       />

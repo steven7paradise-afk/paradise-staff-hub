@@ -11,7 +11,7 @@ type Category = {
   paid_hours: number | null;
 };
 
-type ScheduleRow = { date: Date; category: Category };
+type ScheduleRow = { date: Date; start_time?: string | null; end_time?: string | null; category: Category };
 type ClockLog = { date: Date; type: AttendanceType; timestamp: Date };
 type StoredHours = { date: Date; hours: number; paid_break: boolean; manual_override: boolean; note: string | null };
 
@@ -42,9 +42,11 @@ function durationHours(start: string | null, end: string | null) {
   return Math.max(0, (endHour * 60 + endMinute - startHour * 60 - startMinute) / 60);
 }
 
-export function plannedHours(category?: Category) {
-  if (!category?.start_time || !category.end_time) return 0;
-  return roundedHours(category.paid_hours ?? durationHours(category.start_time, category.end_time));
+export function plannedHours(schedule?: ScheduleRow) {
+  const startTime = schedule?.start_time ?? schedule?.category.start_time;
+  const endTime = schedule?.end_time ?? schedule?.category.end_time;
+  if (!startTime || !endTime) return 0;
+  return roundedHours(schedule?.category.paid_hours ?? durationHours(startTime, endTime));
 }
 
 export function monthlyPersonalHours(year: number, month: number, schedules: ScheduleRow[], logs: ClockLog[], records: StoredHours[]) {
@@ -70,7 +72,7 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
     return {
       date,
       schedule,
-      plannedHours: plannedHours(schedule?.category),
+      plannedHours: plannedHours(schedule),
       workedHours: roundedHours(record?.manual_override ? record.hours : automaticHours),
       grossHours: clock.grossHours,
       breakHours: clock.breakHours,

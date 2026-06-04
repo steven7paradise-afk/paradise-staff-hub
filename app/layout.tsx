@@ -8,7 +8,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icons/paradise-icon.svg",
-    apple: "/icons/paradise-icon.svg",
+    shortcut: "/icons/paradise-icon.svg",
+    apple: "/favicon.png",
   },
   appleWebApp: {
     capable: true,

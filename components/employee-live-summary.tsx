@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { ArrowRight, CalendarDays, Coffee, FileCheck2, Users, type LucideIcon } from "lucide-react";
+import { InstantLink } from "@/components/instant-link";
 import { Card } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
 type TodayLog = {
   id?: string;
@@ -18,6 +19,7 @@ type ShiftSummaryProps = {
   pendingRequests: number;
   colleaguesToday: number;
   initialLogs: TodayLog[];
+  breakDurationMinutes: number;
 };
 
 function formatElapsed(milliseconds: number) {
@@ -62,18 +64,22 @@ function totals(logs: TodayLog[], now: number) {
   if (pauseStart !== null) paused += Math.max(0, now - pauseStart);
 
   const lastType = logs[logs.length - 1]?.type;
+  const activePauseStart = pauseStart;
   return {
     worked,
     paused,
+    activePauseElapsed: activePauseStart === null ? 0 : Math.max(0, now - activePauseStart),
     isWorking: lastType === "ENTRATA" || lastType === "RIENTRO",
     isPaused: lastType === "PAUSA",
   };
 }
 
-export function EmployeeLiveSummary({ plannedTime, shiftName, pendingRequests, colleaguesToday, initialLogs }: ShiftSummaryProps) {
+export function EmployeeLiveSummary({ plannedTime, shiftName, pendingRequests, colleaguesToday, initialLogs, breakDurationMinutes }: ShiftSummaryProps) {
   const [logs, setLogs] = useState(initialLogs);
   const [now, setNow] = useState(Date.now());
   const clock = useMemo(() => totals(logs, now), [logs, now]);
+  const pauseLimitMs = breakDurationMinutes * 60_000;
+  const pauseOverLimit = clock.isPaused && clock.activePauseElapsed > pauseLimitMs;
 
   useEffect(() => {
     let mounted = true;
@@ -91,45 +97,84 @@ export function EmployeeLiveSummary({ plannedTime, shiftName, pendingRequests, c
 
   return (
     <div className="grid gap-3 md:grid-cols-[1.45fr_1fr] xl:grid-cols-[1.35fr_1fr_1fr]">
-      <Link className="md:row-span-2 xl:row-span-1" href="/my-shifts">
-        <Card className="h-full p-5 sm:p-6">
+      <InstantLink className="rounded-[24px] md:row-span-2 xl:row-span-1" href="/my-shifts" activeClassName="">
+        <Card className={`h-full p-5 sm:p-6 transition-all duration-500 ${
+          clock.isWorking 
+            ? "border-emerald-300 dark:border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.12)] animate-pulse-green bg-emerald-50/5 dark:bg-emerald-950/5" 
+            : clock.isPaused 
+              ? "border-amber-300 dark:border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.12)] animate-pulse-gold bg-amber-50/5 dark:bg-amber-950/5" 
+              : "hover:border-black/10 dark:hover:border-white/20"
+        }`}>
           <div className="flex items-start justify-between gap-2">
-            <CalendarDays className="size-6 text-[#B85B68]" />
-            <ArrowRight className="size-4 text-black/35" />
+            <CalendarDays className={`size-6 transition-transform duration-500 ${clock.isWorking ? "text-emerald-500 scale-105" : clock.isPaused ? "text-amber-500" : "text-[#B85B68]"}`} />
+            <ArrowRight className="size-4 text-black/35 dark:text-white/35 transition-transform duration-300 group-hover:translate-x-0.5" />
           </div>
-          <p className="mt-4 text-xs font-medium text-black/50">Ore lavorate oggi</p>
-          <p className="mt-1 tabular-nums text-3xl font-semibold sm:text-4xl">{formatElapsed(clock.worked)}</p>
-          <p className="mt-2 text-xs text-black/50">Turno previsto: {plannedTime} - {shiftName}</p>
-          <p className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${clock.isWorking ? "bg-emerald-100 text-emerald-800" : clock.isPaused ? "bg-amber-100 text-amber-800" : "bg-black/5 text-black/50"}`}>
+          <p className="mt-4 text-xs font-semibold text-black/50 dark:text-white/50 uppercase tracking-wider">Ore lavorate oggi</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="tabular-nums text-3xl font-bold sm:text-4xl tracking-tight text-[color:var(--text)]">{formatElapsed(clock.worked)}</p>
+            {clock.isWorking && (
+              <span className="size-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            )}
+          </div>
+          <p className="mt-2 text-xs text-black/50 dark:text-white/50">Turno previsto: <span className="font-semibold">{plannedTime}</span> - {shiftName}</p>
+          <p className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold shadow-sm ${
+            clock.isWorking 
+              ? "bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-900" 
+              : clock.isPaused 
+                ? "bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-900" 
+                : "bg-black/5 text-black/50 border border-black/5 dark:bg-white/5 dark:text-white/40 dark:border-white/5"
+          }`}>
+            <span className={`size-1.5 rounded-full ${clock.isWorking ? "bg-emerald-500" : clock.isPaused ? "bg-amber-500" : "bg-black/40 dark:bg-white/40"}`} />
             {clock.isWorking ? "In turno" : clock.isPaused ? "In pausa" : "Fuori turno"}
           </p>
         </Card>
-      </Link>
+      </InstantLink>
       <CompactLiveStatus icon={FileCheck2} label="Richieste" value={String(pendingRequests)} hint="in attesa" href="/requests" />
       <CompactLiveStatus
         icon={Coffee}
         label="Pausa"
         value={clock.isPaused || clock.paused > 0 ? formatElapsed(clock.paused) : "--:--:--"}
-        hint={clock.isPaused ? "in corso" : clock.paused > 0 ? "totale oggi" : "non iniziata"}
+        hint={pauseOverLimit ? "oltre limite" : clock.isPaused ? "in corso" : clock.paused > 0 ? "totale oggi" : "non iniziata"}
         active={clock.isPaused}
+        danger={pauseOverLimit}
       />
       <CompactLiveStatus className="xl:hidden" icon={Users} label="Colleghi oggi" value={String(colleaguesToday)} hint="in servizio" />
     </div>
   );
 }
 
-function CompactLiveStatus({ icon: Icon, label, value, hint, href, className = "", active = false }: { icon: LucideIcon; label: string; value: string; hint: string; href?: string; className?: string; active?: boolean }) {
+function CompactLiveStatus({ icon: Icon, label, value, hint, href, className = "", active = false, danger = false }: { icon: LucideIcon; label: string; value: string; hint: string; href?: string; className?: string; active?: boolean; danger?: boolean }) {
   const content = (
-    <div className={`flex h-full items-center gap-3 rounded-2xl border px-4 py-3 ${active ? "border-amber-200 bg-amber-50" : "border-black/5 bg-white"}`}>
-      <div className={`grid size-10 shrink-0 place-items-center rounded-xl ${active ? "bg-amber-100" : "bg-paradise-nude"}`}>
-        <Icon className={`size-5 ${active ? "text-amber-700" : "text-[#B85B68]"}`} />
+    <div className={`flex h-full items-center gap-4 rounded-[20px] border px-4 py-3.5 transition-all duration-300 ${
+      danger 
+        ? "border-red-300 bg-red-50/70 shadow-[0_0_15px_rgba(239,68,68,0.15)] animate-pulse-danger dark:border-red-900/60 dark:bg-red-950/15" 
+        : active 
+          ? "border-amber-300 bg-amber-50/70 shadow-[0_0_15px_rgba(245,158,11,0.1)] dark:border-amber-900/60 dark:bg-amber-950/15" 
+          : "border-black/5 bg-white/95 dark:border-white/10 dark:bg-[color:var(--card)]/80 hover:border-black/10 dark:hover:border-white/20 hover:shadow-sm"
+    }`}>
+      <div className={`grid size-10 shrink-0 place-items-center rounded-xl transition-transform duration-300 ${
+        danger 
+          ? "bg-red-100 dark:bg-red-900/30" 
+          : active 
+            ? "bg-amber-100 dark:bg-amber-900/30" 
+            : "bg-paradise-nude dark:bg-white/5"
+      }`}>
+        <Icon className={`size-5 transition-transform duration-300 ${danger ? "text-red-600 animate-bounce" : active ? "text-amber-600 animate-pulse" : "text-[#B85B68]"}`} />
       </div>
-      <div className="min-w-0">
-        <p className="text-xs text-black/45">{label}</p>
-        <p className="tabular-nums text-lg font-semibold leading-tight">{value} <span className="text-xs font-normal text-black/45">{hint}</span></p>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-black/45 dark:text-white/45 uppercase tracking-wide">{label}</p>
+        <p className={`tabular-nums text-lg font-bold leading-tight text-[color:var(--text)] ${danger ? "text-red-700 dark:text-red-400" : ""}`}>
+          {value} <span className={`text-xs font-medium lowercase ${danger ? "text-red-600 dark:text-red-400" : "text-black/45 dark:text-white/45"}`}>{hint}</span>
+        </p>
       </div>
-      {href ? <ArrowRight className="ml-auto size-4 text-black/30" /> : null}
+      {href ? <ArrowRight className="ml-auto size-4 text-black/35 dark:text-white/35 transition-transform duration-300 group-hover:translate-x-0.5" /> : null}
     </div>
   );
-  return href ? <Link href={href} className={className}>{content}</Link> : <div className={className}>{content}</div>;
+  return href ? (
+    <InstantLink href={href} className={cn("group rounded-[20px] transition-all duration-300 hover:-translate-y-0.5", className)} activeClassName="">
+      {content}
+    </InstantLink>
+  ) : (
+    <div className={cn("transition-all duration-300", className)}>{content}</div>
+  );
 }

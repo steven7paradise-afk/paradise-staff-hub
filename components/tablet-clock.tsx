@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { ArrowRight, CalendarDays, CheckCircle2, Coffee, Delete, LogIn, LogOut, MapPin, RefreshCw, Send, ShieldCheck, TriangleAlert, UserRound, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowRight, CalendarDays, CheckCircle2, Coffee, Delete, LogIn, LogOut, MapPin, RefreshCw, Send, ShieldCheck, TriangleAlert, UserRound, Volume2, VolumeX, X, Sun, Clock, HeartPulse, Calendar } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
+import { cn } from "@/lib/utils";
 
 const clockActions = [
   { type: "ENTRATA", label: "Entrata", icon: LogIn, dark: true },
@@ -21,7 +22,7 @@ const requestTypes = [
 
 type ClockStatus = "OUT" | "IN" | "BREAK";
 type TabletDevice = { id: string; name: string; locationName: string };
-type IdentifiedWorker = { id: string; name: string; status: ClockStatus };
+type IdentifiedWorker = { id: string; name: string; status: ClockStatus; photoUrl?: string | null };
 
 const statusLabels: Record<ClockStatus, string> = { OUT: "Non entrato", IN: "In turno", BREAK: "In pausa" };
 const allowedActionsByStatus: Record<ClockStatus, string[]> = {
@@ -67,7 +68,25 @@ function Keypad({ pin, setPin }: { pin: string; setPin: (pin: string) => void })
   );
 }
 
-export function TabletClock({ device, branding }: { device: TabletDevice | null; branding?: BrandingTheme }) {
+type TabletBranding = {
+  logo_url: string;
+  background_color: string;
+  card_color: string;
+  text_color: string;
+  accent_color: string;
+  soft_color: string;
+  button_color: string;
+};
+
+export function TabletClock({
+  device,
+  branding,
+  tabletBranding,
+}: {
+  device: TabletDevice | null;
+  branding?: BrandingTheme;
+  tabletBranding?: TabletBranding | null;
+}) {
   const [now, setNow] = useState(new Date());
   const [pin, setPinValue] = useState("");
   const [worker, setWorker] = useState<IdentifiedWorker | null>(null);
@@ -86,12 +105,12 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
 
   const visibleActions = worker ? clockActions.filter((action) => allowedActionsByStatus[worker.status].includes(action.type)) : [];
   const tabletStyle = {
-    "--tablet-bg": branding?.background_color ?? "#fbf7f2",
-    "--tablet-card": branding?.card_color ?? "#ffffff",
-    "--tablet-text": branding?.text_color ?? "#171717",
-    "--tablet-accent": branding?.gradient_color ?? "#a77a49",
-    "--tablet-soft": branding?.secondary_color ?? "#f8ddd7",
-    "--tablet-dark": branding?.text_color ?? "#1c1c1c",
+    "--tablet-bg": tabletBranding?.background_color || branding?.background_color || "#fbf7f2",
+    "--tablet-card": tabletBranding?.card_color || branding?.card_color || "#ffffff",
+    "--tablet-text": tabletBranding?.text_color || branding?.text_color || "#171717",
+    "--tablet-accent": tabletBranding?.accent_color || branding?.gradient_color || "#a77a49",
+    "--tablet-soft": tabletBranding?.soft_color || branding?.secondary_color || "#f8ddd7",
+    "--tablet-dark": tabletBranding?.button_color || branding?.text_color || "#1c1c1c",
   } as CSSProperties;
 
   useEffect(() => {
@@ -102,6 +121,43 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
   useEffect(() => {
     setSoundEnabled(window.localStorage.getItem("paradise-tablet-sound") !== "off");
   }, []);
+
+  useEffect(() => {
+    if (worker || requestOpen) return;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "SELECT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        if (pin.length < 6) {
+          updatePin(pin + e.key);
+        }
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        updatePin(pin.slice(0, -1));
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        updatePin("");
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (/^\d{4,6}$/.test(pin)) {
+          void identifyPin(pin);
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [worker, requestOpen, pin, device, identifying]);
 
   function sound(kind: "tap" | "success" | "error", force = false) {
     if (!soundEnabled && !force) return;
@@ -162,7 +218,7 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
         sound("error");
         return;
       }
-      setWorker({ id: data.employeeId, name: data.employeeName, status: data.status });
+      setWorker({ id: data.employeeId, name: data.employeeName, status: data.status, photoUrl: data.employeePhotoUrl });
       setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
       showFeedback("success", `${data.employeeName} riconosciuta. Scegli l'azione.`);
       sound("success");
@@ -277,21 +333,22 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
     const Icon = action.icon;
     return (
       <button
-        className={`flex min-h-32 flex-col items-center justify-center rounded-2xl border border-black/10 px-4 shadow-[0_12px_36px_rgba(0,0,0,0.10)] active:scale-[0.99] lg:min-h-[190px] ${action.dark ? "bg-[color:var(--tablet-dark)] text-white" : "bg-[color:var(--tablet-card)]/72"}`}
+        className={`flex min-h-24 md:min-h-32 landscape:min-h-[130px] lg:min-h-[180px] flex-col items-center justify-center rounded-2xl border border-black/10 px-4 shadow-[0_12px_36px_rgba(0,0,0,0.10)] active:scale-[0.99] ${action.dark ? "bg-[color:var(--tablet-dark)] text-white" : "bg-[color:var(--tablet-card)]/72"}`}
         disabled={loading !== null}
         onClick={() => clock(action.type)}
       >
-        <Icon className="size-9 text-[color:var(--tablet-accent)] lg:size-12" strokeWidth={1.4} />
-        <p className="mt-3 text-sm uppercase tracking-[0.2em] lg:mt-5 lg:text-lg">{loading === action.type ? "Invio" : action.label}</p>
+        <Icon className="size-7 md:size-9 landscape:size-8 lg:size-12 text-[color:var(--tablet-accent)]" strokeWidth={1.4} />
+        <p className="mt-2 text-xs md:text-sm uppercase tracking-[0.25em] landscape:mt-3 lg:mt-5 lg:text-lg">{loading === action.type ? "Invio" : action.label}</p>
       </button>
     );
   }
 
   function BrandClock({ compact = false }: { compact?: boolean }) {
+    const logoToUse = tabletBranding?.logo_url || branding?.logo_url || null;
     return (
       <div className="text-center">
         <div className={`mx-auto grid place-items-center overflow-hidden ${compact ? "size-24" : "size-36 lg:size-44"}`}>
-          {branding?.logo_url ? <img src={branding.logo_url} alt="Paradise Beauty" className="size-full object-contain" /> : <p className={`${compact ? "text-8xl" : "text-[140px]"} font-serif italic leading-none text-[color:var(--tablet-accent)]`}>P</p>}
+          {logoToUse ? <img src={logoToUse} alt="Paradise Beauty" className="size-full object-contain" /> : <p className={`${compact ? "text-8xl" : "text-[140px]"} font-serif italic leading-none text-[color:var(--tablet-accent)]`}>P</p>}
         </div>
         <p className={`font-serif leading-none tracking-tight ${compact ? "mt-3 text-6xl" : "mt-2 text-7xl lg:text-[112px]"}`}>{formatClock(now)}</p>
         <p className="mt-2 text-base text-black/62 lg:text-lg">{formatDay(now)}</p>
@@ -300,8 +357,8 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
   }
 
   return (
-    <main className="h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
-      <div className="relative flex h-full flex-col overflow-hidden rounded-[26px] border-[10px] border-black bg-[color:var(--tablet-card)] px-4 py-4 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:px-7 sm:py-6 xl:border-[16px]">
+    <main className="min-h-[100svh] overflow-y-auto bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
+      <div className="relative flex min-h-[calc(100svh-1rem)] sm:min-h-[calc(100svh-2rem)] flex-col rounded-[26px] border-[10px] border-black bg-[color:var(--tablet-card)] px-4 py-4 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:px-7 sm:py-6 xl:border-[16px]">
         <header className="relative z-10 flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="grid size-10 place-items-center rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/70"><MapPin className="size-4 text-[color:var(--tablet-accent)]" /></div>
@@ -342,7 +399,7 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
         </header>
 
         {!worker ? (
-          <section className="relative z-10 mx-auto grid min-h-0 w-full max-w-[1200px] flex-1 items-center gap-8 py-3 lg:grid-cols-[440px_1fr]">
+          <section className="relative z-10 mx-auto grid min-h-0 w-full max-w-[1200px] flex-1 items-center gap-8 py-3 md:grid-cols-[440px_1fr] landscape:grid-cols-[440px_1fr]">
             <div className="mx-auto w-full max-w-[440px]">
               {feedback ? (
                 <div className={`mb-3 flex min-h-12 items-center justify-center gap-3 rounded-2xl border px-4 text-sm font-bold shadow-sm ${
@@ -364,17 +421,17 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
                 <Send className="size-4 text-[color:var(--tablet-accent)]" /> {identifying ? "Lettura..." : "Invia PIN"}
               </button>
             </div>
-            <div className="hidden lg:block">
+            <div className="hidden md:block landscape:block">
               <BrandClock />
             </div>
           </section>
         ) : (
-          <section className="relative z-10 mx-auto grid min-h-0 w-full max-w-[1250px] flex-1 items-center gap-8 py-3 lg:grid-cols-[minmax(460px,1fr)_390px]">
+          <section className="relative z-10 mx-auto grid min-h-0 w-full max-w-[1250px] flex-1 items-center gap-8 py-3 md:grid-cols-[minmax(320px,1fr)_320px] landscape:grid-cols-[minmax(320px,1fr)_320px] lg:grid-cols-[minmax(460px,1fr)_390px]">
             <div className="grid grid-cols-2 gap-4">
               {visibleActions.map((action) => <ActionCard key={action.type} action={action} />)}
-              <div className="col-span-2 flex min-h-20 items-center justify-between rounded-2xl border border-black/10 bg-[color:var(--tablet-card)]/58 px-6">
+              <div className="col-span-2 flex min-h-16 md:min-h-20 items-center justify-between rounded-2xl border border-black/10 bg-[color:var(--tablet-card)]/58 px-6">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--tablet-accent)]">Stato turno</p>
-                <p className="text-xl font-semibold">{statusLabels[worker.status]}</p>
+                <p className="text-base md:text-xl font-semibold">{statusLabels[worker.status]}</p>
               </div>
             </div>
             <div>
@@ -387,6 +444,19 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
                   <span>{feedback.text}</span>
                 </div>
               ) : null}
+              
+              <div className="mt-4 flex flex-col items-center">
+                {worker.photoUrl ? (
+                  <div className="relative size-24 overflow-hidden rounded-full border-4 border-[color:var(--tablet-accent)] shadow-md">
+                    <img src={worker.photoUrl} alt={worker.name} className="size-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="flex size-24 items-center justify-center rounded-full border-4 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)] text-2xl font-black uppercase tracking-wider text-[color:var(--tablet-accent)] shadow-md">
+                    {worker.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                  </div>
+                )}
+              </div>
+
               <p className="mt-3 text-center text-lg font-semibold">{worker.name}</p>
               <button
                 className="mt-3 flex h-14 w-full items-center justify-between rounded-2xl bg-[color:var(--tablet-soft)] px-5 text-left shadow-sm"
@@ -427,25 +497,95 @@ export function TabletClock({ device, branding }: { device: TabletDevice | null;
               <div className="mb-5 flex items-start justify-between">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Richiesta firmata</p>
-                  <h2 className="mt-2 text-2xl font-semibold">Ferie, permessi o riposo</h2>
-                  <p className="mt-2 text-sm text-black/55">{worker.name}</p>
+                  <h2 className="mt-2 text-2xl font-semibold">Richiesta Ferie & Permessi</h2>
+                  <p className="mt-2 text-sm text-black/55">Operatore: <strong>{worker.name}</strong></p>
                 </div>
-                <button className="grid size-10 place-items-center rounded-xl border border-black/10" onClick={() => setRequestOpen(false)}><X className="size-5" /></button>
+                <button className="grid size-10 place-items-center rounded-xl border border-black/10 hover:bg-black/5 active:scale-95 transition" onClick={() => setRequestOpen(false)}><X className="size-5" /></button>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <select className="h-14 rounded-2xl border border-[#eadfd6] bg-white px-4" value={requestType} onChange={(event) => setRequestType(event.target.value)}>
-                  {requestTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-                <input className="h-14 rounded-2xl border border-[#eadfd6] px-4" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Motivo (opzionale)" />
-                <input className="h-14 rounded-2xl border border-[#eadfd6] px-4" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-                <input className="h-14 rounded-2xl border border-[#eadfd6] px-4" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-                <div className="rounded-2xl bg-[#f8ddd7] p-4 text-sm text-black/65 sm:col-span-2">
-                  <UserRound className="mb-2 size-5 text-[#a77a49]" />
-                  La richiesta e confermata dal codice personale inserito e comparira nel planning dopo l'approvazione Admin.
+                
+                {/* Clickable Card Selection Grid */}
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:col-span-2">
+                  {[
+                    { value: "FERIE", label: "Ferie", icon: Sun, color: "border-pink-500 bg-pink-50 text-pink-700 dark:bg-pink-950/80 dark:text-pink-300 ring-pink-500/20" },
+                    { value: "PERMESSO", label: "Permesso", icon: Clock, color: "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 ring-amber-500/20" },
+                    { value: "RIPOSO", label: "Riposo", icon: Coffee, color: "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/80 dark:text-teal-300 ring-teal-500/20" },
+                    { value: "MALATTIA", label: "Malattia", icon: HeartPulse, color: "border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 ring-rose-500/20" },
+                  ].map((card) => {
+                    const Icon = card.icon;
+                    const isSelected = requestType === card.value;
+                    return (
+                      <button
+                        key={card.value}
+                        type="button"
+                        onClick={() => { sound("tap"); setRequestType(card.value); }}
+                        className={cn(
+                          "flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition-all duration-300 active:scale-[0.97]",
+                          isSelected 
+                            ? `${card.color} border-2 shadow-sm ring-4` 
+                            : "border-black/10 bg-white hover:border-black/25 dark:border-white/10 dark:bg-white/5"
+                        )}
+                      >
+                        <Icon className={cn("size-6", isSelected ? "animate-pulse" : "text-black/40 dark:text-white/40")} />
+                        <span className="text-xs font-bold uppercase tracking-wider">{card.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {/* Reason Input */}
+                <div className="sm:col-span-2">
+                  <input 
+                    className="h-14 w-full rounded-2xl border border-[#eadfd6] px-4 bg-white text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
+                    value={reason} 
+                    onChange={(event) => setReason(event.target.value)} 
+                    placeholder="Motivo della richiesta (opzionale)" 
+                  />
+                </div>
+
+                {/* Date Ranges with Leading Calendar Icon */}
+                <div className="relative flex items-center">
+                  <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
+                  <input 
+                    className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
+                    type="date" 
+                    value={startDate} 
+                    onChange={(event) => setStartDate(event.target.value)} 
+                  />
+                </div>
+
+                <div className="relative flex items-center">
+                  <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
+                  <input 
+                    className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
+                    type="date" 
+                    value={endDate} 
+                    onChange={(event) => setEndDate(event.target.value)} 
+                  />
+                </div>
+
+                {/* Certified Digital Signature Badge */}
+                <div className="rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/[0.03] p-4 text-sm sm:col-span-2 shadow-inner">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-700 font-bold uppercase tracking-wider text-xs">
+                      <ShieldCheck className="size-6 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-emerald-800 dark:text-emerald-300">Richiesta Firmata con PIN Personale</p>
+                      <p className="text-xs text-black/60 dark:text-white/60">
+                        La presente richiesta è firmata digitalmente ed autenticata dall'operatore <strong className="text-black dark:text-white">{worker.name}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 border-t border-emerald-500/10 pt-2 flex items-center justify-between text-[10px] text-black/40 dark:text-white/40 font-mono">
+                    <span>AUTENTICAZIONE PIN: CERTIFICATA</span>
+                    <span>METODO: DIRETTO DA TAB-CLOCK</span>
+                  </div>
+                </div>
+
               </div>
-              <button className="mt-5 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#1c1c1c] text-sm font-semibold uppercase tracking-[0.14em] text-white" onClick={sendLeaveRequest}>
-                <Send className="size-5 text-[#c9a06a]" /> Invia richiesta
+              <button className="mt-5 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[color:var(--tablet-dark)] text-sm font-semibold uppercase tracking-[0.14em] text-white active:scale-95 transition" onClick={sendLeaveRequest}>
+                <Send className="size-5 text-[color:var(--tablet-accent)]" /> Invia richiesta
               </button>
               <p className="mt-3 text-center text-sm font-medium text-black/58">{requestMessage}</p>
             </section>

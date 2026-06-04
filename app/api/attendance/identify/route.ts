@@ -22,9 +22,10 @@ export async function POST(request: NextRequest) {
   if (!device) {
     return NextResponse.json({ error: "Dispositivo non autorizzato alla timbratura" }, { status: 403 });
   }
-  const worker = await identifyWorkerByPin(pin, device.location_id);
+  const isOffice = device.location.name.toLowerCase().includes("ufficio");
+  const worker = await identifyWorkerByPin(pin, device.location_id, isOffice);
   if (!worker) {
-    return NextResponse.json({ error: "Codice personale non riconosciuto in questo salone." }, { status: 401 });
+    return NextResponse.json({ error: isOffice ? "Codice personale non riconosciuto." : "Codice personale non riconosciuto in questo salone." }, { status: 401 });
   }
   const latestLog = await prisma.attendanceLog.findFirst({
     where: { user_id: worker.id },
@@ -34,6 +35,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     employeeId: worker.id,
     employeeName: worker.name,
+    employeePhotoUrl: (worker as any).photo_url || null,
     status: latestLog ? statusByLastClock[latestLog.type] : "OUT",
   });
 }

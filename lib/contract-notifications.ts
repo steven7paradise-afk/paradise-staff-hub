@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
 
 function daysUntil(date: Date) {
   const today = new Date();
@@ -36,9 +37,7 @@ export async function ensureContractExpiryNotifications() {
         where: { user_id: recipient.id, title, message },
       });
       if (!existing) {
-        await prisma.notification.create({
-          data: { user_id: recipient.id, title, message, type: "CONTRACT_EXPIRY" },
-        });
+        await createNotification({ user_id: recipient.id, title, message, type: "CONTRACT_EXPIRY", action_url: "/employees" });
       }
     }
   }

@@ -8,6 +8,14 @@ export async function proxy(request: NextRequest) {
     pathname === "/login" ||
     pathname === "/tablet-clock" ||
     pathname === "/tablet-clock/activate" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js" ||
+    pathname === "/favicon.png" ||
+    pathname === "/logo.png" ||
+    pathname === "/icon-192.png" ||
+    pathname === "/icon-512.png" ||
+    pathname === "/login-banner.jpg" ||
+    pathname.startsWith("/icons/") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/devices/activate") ||
     pathname.startsWith("/api/attendance/clock") ||
@@ -43,5 +51,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|favicon.png|logo.png|icon-192.png|icon-512.png|login-banner.jpg|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };
