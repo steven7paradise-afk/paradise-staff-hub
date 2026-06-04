@@ -108,7 +108,23 @@ function formatHours(totalMinutes: number) {
 function categoryAllowsTimeEdit(category?: ScheduleCategory) {
   if (!category) return false;
   const nameLower = category.name.toLowerCase();
-  return Boolean(category.editableTime) || category.code === "P" || category.code === "PE" || nameLower.includes("permesso");
+  const codeUpper = category.code.toUpperCase();
+  return (
+    Boolean(category.editableTime) ||
+    codeUpper === "P" ||
+    codeUpper === "PE" ||
+    codeUpper === "F" ||
+    codeUpper === "FE" ||
+    codeUpper === "M" ||
+    codeUpper === "MA" ||
+    codeUpper === "ML" ||
+    codeUpper === "A" ||
+    nameLower.includes("permesso") ||
+    nameLower.includes("ferie") ||
+    nameLower.includes("malattia") ||
+    nameLower.includes("assenza") ||
+    nameLower.includes("altro")
+  );
 }
 
 export function MonthlySchedulePlanner({
