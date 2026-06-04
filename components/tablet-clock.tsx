@@ -101,6 +101,10 @@ export function TabletClock({
   const [startDate, setStartDate] = useState("2026-06-10");
   const [endDate, setEndDate] = useState("2026-06-10");
   const [reason, setReason] = useState("");
+  const [startHour, setStartHour] = useState("");
+  const [startMinute, setStartMinute] = useState("");
+  const [endHour, setEndHour] = useState("");
+  const [endMinute, setEndMinute] = useState("");
   const [requestMessage, setRequestMessage] = useState("Il PIN gia inserito conferma questa richiesta come firma.");
 
   const visibleActions = worker ? clockActions.filter((action) => allowedActionsByStatus[worker.status].includes(action.type)) : [];
@@ -295,11 +299,13 @@ export function TabletClock({
   async function sendLeaveRequest() {
     if (!worker || !device) return;
     setRequestMessage("Invio richiesta in corso...");
+    const finalStartTime = startHour ? `${startHour}:${startMinute || "00"}` : "";
+    const finalEndTime = endHour ? `${endHour}:${endMinute || "00"}` : "";
     try {
       const response = await fetch("/api/tablet-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-device-id": device.id },
-        body: JSON.stringify({ pin, type: requestType, startDate, endDate, reason }),
+        body: JSON.stringify({ pin, type: requestType, startDate, endDate, reason, startTime: finalStartTime, endTime: finalEndTime }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -308,8 +314,12 @@ export function TabletClock({
         sound("error");
         return;
       }
-      setRequestOpen(false);
+       setRequestOpen(false);
       setReason("");
+      setStartHour("");
+      setStartMinute("");
+      setEndHour("");
+      setEndMinute("");
       finishPrivateOperation("Richiesta inviata e firmata con codice personale.");
     } catch {
       setRequestMessage("Connessione non disponibile. Richiesta non inviata.");
@@ -543,25 +553,85 @@ export function TabletClock({
                   />
                 </div>
 
-                {/* Date Ranges with Leading Calendar Icon */}
-                <div className="relative flex items-center">
-                  <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
-                  <input 
-                    className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
-                    type="date" 
-                    value={startDate} 
-                    onChange={(event) => setStartDate(event.target.value)} 
-                  />
-                </div>
+                {/* Date & Time Selection Section */}
+                <div className="sm:col-span-2 grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">Da data</span>
+                    <div className="relative flex items-center">
+                      <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
+                      <input 
+                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
+                        type="date" 
+                        value={startDate} 
+                        onChange={(event) => setStartDate(event.target.value)} 
+                      />
+                    </div>
+                  </div>
 
-                <div className="relative flex items-center">
-                  <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
-                  <input 
-                    className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
-                    type="date" 
-                    value={endDate} 
-                    onChange={(event) => setEndDate(event.target.value)} 
-                  />
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">A data</span>
+                    <div className="relative flex items-center">
+                      <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
+                      <input 
+                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
+                        type="date" 
+                        value={endDate} 
+                        onChange={(event) => setEndDate(event.target.value)} 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">Ora inizio (opzionale)</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select 
+                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
+                        value={startHour}
+                        onChange={(e) => setStartHour(e.target.value)}
+                      >
+                        <option value="">Ora</option>
+                        {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                      <select 
+                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
+                        value={startMinute}
+                        onChange={(e) => setStartMinute(e.target.value)}
+                      >
+                        <option value="">Min</option>
+                        {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">Ora fine (opzionale)</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select 
+                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
+                        value={endHour}
+                        onChange={(e) => setEndHour(e.target.value)}
+                      >
+                        <option value="">Ora</option>
+                        {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                      <select 
+                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
+                        value={endMinute}
+                        onChange={(e) => setEndMinute(e.target.value)}
+                      >
+                        <option value="">Min</option>
+                        {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Certified Digital Signature Badge */}

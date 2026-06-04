@@ -14,9 +14,19 @@ export async function POST(request: NextRequest) {
   const startDate = new Date(String(payload.startDate));
   const endDate = new Date(String(payload.endDate));
   const reason = payload.reason ? String(payload.reason) : null;
+  const startTime = payload.startTime ? String(payload.startTime) : null;
+  const endTime = payload.endTime ? String(payload.endTime) : null;
 
   if (!deviceId || !/^\d{4,6}$/.test(pin)) {
     return NextResponse.json({ error: "Dispositivo o codice personale mancanti" }, { status: 400 });
+  }
+
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if ((startTime || endTime) && (!startTime || !endTime || !timePattern.test(startTime) || !timePattern.test(endTime))) {
+    return NextResponse.json({ error: "Inserisci ora e minuti nel formato corretto." }, { status: 400 });
+  }
+  if (startDate.getTime() === endDate.getTime() && startTime && endTime && endTime <= startTime) {
+    return NextResponse.json({ error: "L'orario finale deve essere dopo l'orario iniziale." }, { status: 400 });
   }
 
   if (!Object.values(LeaveType).includes(type) || Number.isNaN(startDate.valueOf()) || Number.isNaN(endDate.valueOf()) || endDate < startDate) {
@@ -41,6 +51,8 @@ export async function POST(request: NextRequest) {
       type,
       start_date: startDate,
       end_date: endDate,
+      start_time: startTime,
+      end_time: endTime,
       reason,
     },
   });
