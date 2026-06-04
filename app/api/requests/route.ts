@@ -46,25 +46,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Lavoratore non valido." }, { status: 400 });
   }
 
-  const leaveRequest = await prisma.leaveRequest.create({
-    data: {
-      user_id: requestedUserId,
-      type,
-      start_date: startDate,
-      end_date: endDate,
-      start_time: startTime,
-      end_time: endTime,
-      reason: payload.reason ? String(payload.reason) : null,
-      status: managementRoles.has(session.user.role) && payload.approveNow === true ? "APPROVED" : "PENDING",
-      approved_by: managementRoles.has(session.user.role) && payload.approveNow === true ? session.user.id : null,
-    },
-    include: { user: true },
-  });
-
+  let leaveRequest;
   let scheduleSync: { syncedDays: number; categoryCode: string } | null = null;
-  if (leaveRequest.status === "APPROVED") {
-    const { syncApprovedLeaveToSchedule } = await import("@/lib/schedule-sync");
-    scheduleSync = await syncApprovedLeaveToSchedule(prisma, leaveRequest.id, session.user.id);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const created = await tx.leaveRequest.create({
+        data: {
+          user_id: requestedUserId,
+          type,
+          start_date: startDate,
+          end_date: endDate,
+          start_time: startTime,
+          end_time: endTime,
+          reason: payload.reason ? String(payload.reason) : null,
+          status: managementRoles.has(session.user.role) && payload.approveNow === true ? "APPROVED" : "PENDING",
+          approved_by: managementRoles.has(session.user.role) && payload.approveNow === true ? session.user.id : null,
+        },
+        include: { user: true },
+      });
+
+      let syncResult = null;
+      if (created.status === "APPROVED") {
+        const { syncApprovedLeaveToSchedule } = await import("@/lib/schedule-sync");
+        syncResult = await syncApprovedLeaveToSchedule(tx, created.id, session.user.id);
+      }
+
+      return { created, syncResult };
+    });
+
+    leaveRequest = result.created;
+    scheduleSync = result.syncResult;
+  } catch (error) {
+    console.error("Errore durante la creazione e sincronizzazione della richiesta:", error);
+    return NextResponse.json(
+      { error: "Errore durante il salvataggio o la sincronizzazione nel planning." },
+      { status: 500 }
+    );
   }
 
   // Always sync to Google Calendar on creation (whether PENDING or APPROVED)
@@ -78,20 +96,49 @@ export async function POST(request: NextRequest) {
     };
   }
 
-  const admins = await prisma.user.findMany({
-    where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN"] } },
-    select: { email: true },
-  });
-
+  // Handle Notifications & Emails
   if (leaveRequest.status === "PENDING") {
-    const template = emailTemplates.leaveRequestReceived(
-      leaveRequest.user.name,
-      leaveRequest.type,
-      leaveRequest.start_date,
-      leaveRequest.end_date,
-      leaveRequest.reason
-    );
-    await Promise.allSettled(admins.map((admin) => sendEmail({ to: admin.email, ...template })));
+    try {
+      const admins = await prisma.user.findMany({
+        where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+        select: { email: true },
+      });
+      const template = emailTemplates.leaveRequestReceived(
+        leaveRequest.user.name,
+        leaveRequest.type,
+        leaveRequest.start_date,
+        leaveRequest.end_date,
+        leaveRequest.reason
+      );
+      await Promise.allSettled(admins.map((admin) => sendEmail({ to: admin.email, ...template })));
+    } catch (error) {
+      console.error("Errore durante l'invio delle notifiche e-mail per nuova richiesta agli amministratori:", error);
+    }
+  } else if (leaveRequest.status === "APPROVED") {
+    // If approved immediately by management on creation, notify the employee immediately
+    try {
+      const template = emailTemplates.leaveRequestDecision(
+        leaveRequest.user.name,
+        "APPROVED",
+        leaveRequest.type,
+        leaveRequest.start_date,
+        leaveRequest.end_date
+      );
+      const { createNotification } = await import("@/lib/notifications");
+      await Promise.allSettled([
+        sendEmail({ to: leaveRequest.user.email, ...template }),
+        createNotification({
+          user_id: leaveRequest.user_id,
+          title: `Richiesta approvata`,
+          message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: approvata dall'amministrazione.`,
+          type: "RICHIESTA",
+          action_url: "/requests",
+          read: false,
+        }),
+      ]);
+    } catch (error) {
+      console.error("Errore durante l'invio delle notifiche e-mail per richiesta approvata al lavoratore:", error);
+    }
   }
 
   return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });

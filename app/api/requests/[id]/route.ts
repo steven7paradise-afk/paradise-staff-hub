@@ -37,18 +37,36 @@ export async function PATCH(
     return NextResponse.json({ error: "Richiesta fuori dalla propria sede" }, { status: 403 });
   }
 
-  const leaveRequest = await prisma.leaveRequest.update({
-    where: { id },
-    data: {
-      status,
-      approved_by: status === "APPROVED" ? session.user.id : null,
-    },
-    include: { user: true },
-  });
-
+  let leaveRequest;
   let scheduleSync: { syncedDays: number; categoryCode: string } | null = null;
-  if (status === "APPROVED") {
-    scheduleSync = await syncApprovedLeaveToSchedule(prisma, leaveRequest.id, session.user.id);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.leaveRequest.update({
+        where: { id },
+        data: {
+          status,
+          approved_by: status === "APPROVED" ? session.user.id : null,
+        },
+        include: { user: true },
+      });
+
+      let syncResult = null;
+      if (status === "APPROVED") {
+        syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
+      }
+
+      return { updated, syncResult };
+    });
+
+    leaveRequest = result.updated;
+    scheduleSync = result.syncResult;
+  } catch (error) {
+    console.error("Errore durante l'aggiornamento e la sincronizzazione della richiesta:", error);
+    return NextResponse.json(
+      { error: "Errore durante il salvataggio dello stato o la sincronizzazione nel planning." },
+      { status: 500 }
+    );
   }
 
   // Always update Google Calendar status sync (both to update details or delete if rejected)
@@ -69,17 +87,27 @@ export async function PATCH(
     leaveRequest.start_date,
     leaveRequest.end_date
   );
-  await Promise.all([
-    sendEmail({ to: leaveRequest.user.email, ...template }),
-    createNotification({
-        user_id: leaveRequest.user_id,
-        title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
-        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
-        type: "RICHIESTA",
-        action_url: "/requests",
-        read: false,
-    }),
-  ]);
+
+  // Send email (non-blocking, failure won't rollback or crash HTTP response)
+  try {
+    await sendEmail({ to: leaveRequest.user.email, ...template });
+  } catch (error) {
+    console.error("Errore nell'invio dell'email per la decisione sulla richiesta:", error);
+  }
+
+  // Create notification in database and trigger push/WhatsApp (non-blocking)
+  try {
+    await createNotification({
+      user_id: leaveRequest.user_id,
+      title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
+      message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
+      type: "RICHIESTA",
+      action_url: "/requests",
+      read: false,
+    });
+  } catch (error) {
+    console.error("Errore nella creazione della notifica in database:", error);
+  }
 
   return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });
 }

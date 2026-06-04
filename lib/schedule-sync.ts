@@ -1,4 +1,4 @@
-import { LeaveType, type PrismaClient } from "@prisma/client";
+import { LeaveType, type PrismaClient, type ScheduleCategory } from "@prisma/client";
 
 const leaveTypeCategory: Record<LeaveType, { code: string; name: string; color: string; text_color: string }> = {
   FERIE: { code: "F", name: "Ferie", color: "#F4CCCC", text_color: "#5E1F1F" },
@@ -9,7 +9,7 @@ const leaveTypeCategory: Record<LeaveType, { code: string; name: string; color: 
 };
 
 function atStartOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
 function daysBetweenInclusive(startDate: Date, endDate: Date) {
@@ -19,14 +19,14 @@ function daysBetweenInclusive(startDate: Date, endDate: Date) {
 
   while (cursor <= end) {
     days.push(new Date(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return days;
 }
 
 export async function syncApprovedLeaveToSchedule(
-  prisma: PrismaClient,
+  prisma: any,
   leaveRequestId: string,
   approverId: string,
 ) {
@@ -39,12 +39,12 @@ export async function syncApprovedLeaveToSchedule(
     throw new Error("Richiesta non trovata");
   }
 
-  const categorySeed = leaveTypeCategory[leaveRequest.type];
-  const allCategories = await prisma.scheduleCategory.findMany({
+  const categorySeed = leaveTypeCategory[leaveRequest.type as LeaveType];
+  const allCategories = (await prisma.scheduleCategory.findMany({
     where: {
       location_id: leaveRequest.user.sede_id,
     },
-  });
+  })) as ScheduleCategory[];
 
   let matchingCategory = null;
   const type = leaveRequest.type; // FERIE, PERMESSO, RIPOSO, MALATTIA, ALTRO
