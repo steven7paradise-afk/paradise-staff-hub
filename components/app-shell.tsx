@@ -27,6 +27,7 @@ import { SidebarFrame } from "@/components/sidebar-frame";
 import { TopControls } from "@/components/top-controls";
 import { NotificationWatcher } from "@/components/notification-watcher";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
+import pkg from "@/package.json";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
@@ -195,7 +196,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         </div>
         <footer className="mt-16 border-t border-black/5 dark:border-white/5 pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-black/35 dark:text-white/35">
           <span suppressHydrationWarning>© {new Date().getFullYear()} Paradise Beauty. Tutti i diritti riservati.</span>
-          <span className="font-medium">Staff Hub v1.0.0</span>
+          <span className="font-medium">Staff Hub v{pkg.version}</span>
         </footer>
       </main>
   );
