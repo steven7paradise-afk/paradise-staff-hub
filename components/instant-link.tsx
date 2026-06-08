@@ -12,6 +12,7 @@ type InstantLinkProps = {
   activeClassName?: string;
   loadingClassName?: string;
   "aria-label"?: string;
+  title?: string;
 };
 
 export function InstantLink({

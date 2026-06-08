@@ -88,7 +88,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const aside = (
       <aside className="z-30 w-full max-w-full border-b border-black/5 bg-[color:var(--sidebar)] px-4 py-3 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:border-b-0 xl:border-r xl:px-5 xl:py-4">
         <div className="shrink-0 flex items-center justify-between xl:block">
-          <Link href="/dashboard" className="sidebar-brand group flex items-center gap-3">
+          <Link href="/dashboard" className="sidebar-brand group flex items-center gap-3" title="Paradise Staff Hub">
             <div className="grid size-11 place-items-center overflow-hidden rounded-2xl text-lg font-bold text-white shadow-soft transition-all duration-300 group-hover:scale-105 group-hover:shadow-luxury bg-transparent">
               <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="size-full object-contain dark:invert" />
             </div>
@@ -148,6 +148,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               <InstantLink
                 key={item.href}
                 href={item.href}
+                title={item.label}
                 className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
                 activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
               >
