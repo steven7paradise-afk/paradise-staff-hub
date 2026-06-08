@@ -3,6 +3,34 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateClockHours } from "@/lib/work-hours";
 
+function categoryDuration(start: string | null, end: string | null) {
+  if (!start || !end) return 0;
+  const [startHours, startMinutes] = start.split(":").map(Number);
+  const [endHours, endMinutes] = end.split(":").map(Number);
+  return Math.max(0, (endHours * 60 + endMinutes - startHours * 60 - startMinutes) / 60);
+}
+
+function isWorkCategory(category: { code: string; name: string }) {
+  const code = category.code.toUpperCase();
+  const name = category.name.toLowerCase();
+  if (
+    code === "R" || code === "RI" || code === "R3" ||
+    code === "F" || code === "FE" ||
+    code === "P" || code === "PE" ||
+    code === "M" || code === "MA" || code === "ML" ||
+    code === "A" || code === "AI" || code === "NL" || code === "ND" ||
+    name.includes("riposo") ||
+    name.includes("ferie") ||
+    name.includes("permesso") ||
+    name.includes("malattia") ||
+    name.includes("assenza") ||
+    name.includes("non lavora")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
@@ -19,12 +47,16 @@ export async function GET(request: NextRequest) {
 
   const start = new Date(Date.UTC(year, month, 1));
   const end = new Date(Date.UTC(year, month + 1, 1));
-  const [records, logs] = await Promise.all([
+  const [records, logs, scheduleEntries] = await Promise.all([
     prisma.workHourRecord.findMany({ where: { date: { gte: start, lt: end } } }),
     prisma.attendanceLog.findMany({
       where: { date: { gte: start, lt: end }, user: { role: { not: "SUPER_ADMIN" } } },
       select: { user_id: true, date: true, type: true, timestamp: true },
       orderBy: { timestamp: "asc" },
+    }),
+    prisma.scheduleEntry.findMany({
+      where: { date: { gte: start, lt: end }, user: { role: { not: "SUPER_ADMIN" } } },
+      include: { category: true },
     }),
   ]);
 
@@ -34,13 +66,26 @@ export async function GET(request: NextRequest) {
     clockGroups.set(key, [...(clockGroups.get(key) ?? []), log]);
   });
 
+  const scheduleGroups = new Map<string, typeof scheduleEntries[0]>();
+  scheduleEntries.forEach((entry) => {
+    const key = `${entry.user_id}-${entry.date.toISOString().slice(0, 10)}`;
+    scheduleGroups.set(key, entry);
+  });
+
   const stored = new Map(records.map((record) => [`${record.user_id}-${record.date.toISOString().slice(0, 10)}`, record]));
-  const keys = new Set([...clockGroups.keys(), ...stored.keys()]);
+  const keys = new Set([...clockGroups.keys(), ...stored.keys(), ...scheduleGroups.keys()]);
   const rows = Array.from(keys).map((key) => {
     const record = stored.get(key);
     const clock = calculateClockHours(clockGroups.get(key) ?? []);
     const paidBreak = record?.paid_break ?? false;
     const automaticHours = paidBreak ? clock.grossHours : clock.netHours;
+
+    const schedule = scheduleGroups.get(key);
+    let scheduledHours = 0;
+    if (schedule && isWorkCategory(schedule.category)) {
+      scheduledHours = schedule.category.paid_hours ?? categoryDuration(schedule.start_time ?? schedule.category.start_time, schedule.end_time ?? schedule.category.end_time);
+    }
+
     return {
       key,
       userId: key.split("-").slice(0, -3).join("-"),
@@ -49,6 +94,7 @@ export async function GET(request: NextRequest) {
       note: record?.note ?? "",
       paidBreak,
       manualOverride: record?.manual_override ?? false,
+      scheduledHours,
       ...clock,
     };
   });
@@ -97,5 +143,14 @@ export async function PUT(request: NextRequest) {
     create: { user_id: userId, date, hours: manualOverride ? hours : computedHours, note: note || null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
   });
 
-  return NextResponse.json({ ...record, ...clock, hours: record.hours });
+  return NextResponse.json({
+    id: record.id,
+    userId: record.user_id,
+    date: record.date,
+    hours: record.hours,
+    note: record.note ?? "",
+    paidBreak: record.paid_break,
+    manualOverride: record.manual_override,
+    ...clock,
+  });
 }

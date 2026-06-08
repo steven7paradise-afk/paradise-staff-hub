@@ -190,7 +190,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             {dateLabel}
           </div>
         </header> : null}
-        {children}
+        <div className="flex-1">
+          {children}
+        </div>
+        <footer className="mt-16 border-t border-black/5 dark:border-white/5 pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-black/35 dark:text-white/35">
+          <span suppressHydrationWarning>© {new Date().getFullYear()} Paradise Beauty. Tutti i diritti riservati.</span>
+          <span className="font-medium">Staff Hub v1.0.0</span>
+        </footer>
       </main>
   );
  

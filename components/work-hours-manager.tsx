@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, Save, Search, UserRound } from "lucide-react";
+import { CalendarDays, Download, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award } from "lucide-react";
 import { Badge, Button, Card, Field } from "@/components/ui";
 
 type Worker = {
@@ -24,6 +24,7 @@ type WorkRecord = {
   netHours: number;
   firstEntry: string | null;
   lastExit: string | null;
+  scheduledHours: number;
 };
 
 const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
@@ -50,7 +51,7 @@ export function WorkHoursManager({
   const [query, setQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState("Tutti i saloni");
   const [selectedWorkerId, setSelectedWorkerId] = useState(workers[0]?.id ?? "");
-  const [records, setRecords] = useState<Record<string, Omit<WorkRecord, "userId" | "date">>>({});
+  const [records, setRecords] = useState<Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }>>({});
   const [loadingRecords, setLoadingRecords] = useState(true);
   const [savingKey, setSavingKey] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -64,7 +65,45 @@ export function WorkHoursManager({
   });
   const selectedWorker = workers.find((worker) => worker.id === selectedWorkerId);
   const days = useMemo(() => daysInMonth(year, month), [year, month]);
-  const totalHours = days.reduce((total, day) => total + (records[`${selectedWorkerId}-${dateKey(day)}`]?.hours ?? 0), 0);
+
+  // Calculate statistics (Worked, Due, Missing, Overtime)
+  const stats = useMemo(() => {
+    let worked = 0;
+    let due = 0;
+    let missing = 0;
+    let overtime = 0;
+
+    days.forEach((day) => {
+      const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+      const record = records[recordKey];
+      const hours = record?.hours ?? 0;
+      const scheduled = record?.scheduledHours ?? 0;
+
+      worked += hours;
+      due += scheduled;
+
+      if (scheduled > 0) {
+        if (hours > scheduled) {
+          overtime += (hours - scheduled);
+        } else {
+          missing += (scheduled - hours);
+        }
+      } else {
+        if (hours > 0) {
+          overtime += hours;
+        }
+      }
+    });
+
+    return {
+      worked,
+      due,
+      missing,
+      overtime,
+    };
+  }, [days, records, selectedWorkerId]);
+
+  const totalHours = stats.worked;
 
   useEffect(() => {
     let active = true;
@@ -78,8 +117,8 @@ export function WorkHoursManager({
         setLoadingRecords(false);
         return;
       }
-      const map: Record<string, Omit<WorkRecord, "userId" | "date">> = {};
-      (data as WorkRecord[]).forEach((record) => {
+      const map: Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }> = {};
+      (data as (WorkRecord & { scheduledHours?: number })[]).forEach((record) => {
         map[`${record.userId}-${record.date.slice(0, 10)}`] = {
           hours: record.hours,
           note: record.note,
@@ -90,6 +129,7 @@ export function WorkHoursManager({
           netHours: record.netHours,
           firstEntry: record.firstEntry,
           lastExit: record.lastExit,
+          scheduledHours: record.scheduledHours ?? 0,
         };
       });
       setRecords(map);
@@ -108,18 +148,38 @@ export function WorkHoursManager({
   }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
-    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null };
+    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0 };
   }
 
   function updateLocal(day: Date, key: "hours" | "note" | "paidBreak" | "manualOverride", value: string | boolean) {
     const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
-    setRecords((current) => ({
-      ...current,
-      [recordKey]: {
-        ...(current[recordKey] ?? emptyRecord()),
-        [key]: key === "hours" ? Number(value) : value,
-      },
-    }));
+    setRecords((current) => {
+      const rec = current[recordKey] ?? emptyRecord();
+      const updatedPaidBreak = key === "paidBreak" ? Boolean(value) : rec.paidBreak;
+      const updatedManualOverride = key === "manualOverride" ? Boolean(value) : rec.manualOverride;
+      
+      let updatedHours = rec.hours;
+      if (key === "hours") {
+        updatedHours = Number(value);
+      } else if (key === "paidBreak") {
+        if (!updatedManualOverride) {
+          updatedHours = updatedPaidBreak ? rec.grossHours : rec.netHours;
+        }
+      } else if (key === "manualOverride") {
+        if (!updatedManualOverride) {
+          updatedHours = rec.paidBreak ? rec.grossHours : rec.netHours;
+        }
+      }
+
+      return {
+        ...current,
+        [recordKey]: {
+          ...rec,
+          [key]: key === "hours" ? Number(value) : value,
+          hours: updatedHours,
+        },
+      };
+    });
   }
 
   async function saveDay(day: Date) {
@@ -148,6 +208,8 @@ export function WorkHoursManager({
         netHours: data.netHours,
         firstEntry: data.firstEntry,
         lastExit: data.lastExit,
+        paidBreak: data.paidBreak,
+        manualOverride: data.manualOverride,
       },
     }));
     setMessage("Ore aggiornate.");
@@ -264,11 +326,11 @@ export function WorkHoursManager({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
-      <Card className="p-0">
-        <div className="border-b border-black/5 p-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">Personale</p>
+      <Card className="p-0 border border-black/5 bg-white/80 dark:bg-neutral-900/80 shadow-md backdrop-blur-md">
+        <div className="border-b border-black/5 dark:border-white/5 p-5">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Personale</p>
           <select
-            className="mt-4 min-h-11 w-full rounded-2xl border border-black/10 bg-white/80 px-3 text-sm font-semibold outline-none focus:border-paradise-pink"
+            className="mt-4 min-h-11 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-800/80 px-3 text-sm font-semibold outline-none focus:border-paradise-pink"
             value={locationFilter}
             onChange={(event) => setLocationFilter(event.target.value)}
           >
@@ -276,27 +338,29 @@ export function WorkHoursManager({
               <option key={location} value={location}>{location}</option>
             ))}
           </select>
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-black/10 bg-white/70 px-3">
-            <Search className="size-4 text-black/40" />
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-800/70 px-3">
+            <Search className="size-4 text-black/40 dark:text-white/40" />
             <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder="Cerca lavoratore..." value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
         </div>
         <div className="max-h-[620px] overflow-y-auto p-3">
-          {filteredWorkers.length === 0 ? <p className="p-4 text-sm text-black/45">Nessun lavoratore presente.</p> : null}
+          {filteredWorkers.length === 0 ? <p className="p-4 text-sm text-black/45 dark:text-white/45">Nessun lavoratore presente.</p> : null}
           {filteredWorkers.map((worker) => (
             <button
               key={worker.id}
-              className={`mb-2 w-full rounded-2xl border p-4 text-left transition ${selectedWorkerId === worker.id ? "border-black bg-paradise-softPink/55 shadow-sm" : "border-black/5 bg-white/60 hover:bg-white"}`}
+              className={`mb-2 w-full rounded-2xl border p-4 text-left transition ${selectedWorkerId === worker.id ? "border-paradise-pink bg-paradise-softPink/30 dark:bg-paradise-pink/10 shadow-sm" : "border-black/5 dark:border-white/5 bg-white/60 dark:bg-neutral-850/60 hover:bg-white dark:hover:bg-neutral-800"}`}
               onClick={() => setSelectedWorkerId(worker.id)}
             >
               <div className="flex items-start gap-3">
-                <div className="grid size-10 place-items-center rounded-2xl bg-paradise-noir text-white">
+                <div className="grid size-10 place-items-center rounded-2xl bg-paradise-noir dark:bg-white text-white dark:text-paradise-noir shadow-sm">
                   <UserRound className="size-4" />
                 </div>
                 <div>
-                  <p className="font-semibold">{worker.name}</p>
-                  <p className="text-xs text-black/45">{worker.location}</p>
-                  <Badge tone={worker.active ? "green" : "dark"}>{worker.active ? "Attivo" : "Disattivato"}</Badge>
+                  <p className="font-semibold text-sm">{worker.name}</p>
+                  <p className="text-xs text-black/45 dark:text-white/45">{worker.location}</p>
+                  <div className="mt-1.5">
+                    <Badge tone={worker.active ? "green" : "dark"}>{worker.active ? "Attivo" : "Disattivato"}</Badge>
+                  </div>
                 </div>
               </div>
             </button>
@@ -304,82 +368,166 @@ export function WorkHoursManager({
         </div>
       </Card>
 
-      <Card className="p-0">
-        <div className="border-b border-black/5 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+      <Card className="p-0 border border-black/5 bg-white/90 dark:bg-neutral-900/95 shadow-lg backdrop-blur-md overflow-hidden">
+        {/* Header con Info Lavoratore */}
+        <div className="border-b border-black/5 dark:border-white/5 p-6 bg-gradient-to-r from-paradise-softPink/15 via-transparent to-transparent">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">Conteggio mensile</p>
-              <h2 className="mt-2 text-2xl font-semibold">{selectedWorker?.name ?? "Seleziona lavoratore"}</h2>
-              <p className="mt-1 text-sm text-black/50">{selectedWorker?.email}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-paradise-pink dark:text-paradise-pink/80">Gestione Ore Lavorate</p>
+              <h2 className="mt-1.5 text-2xl font-bold tracking-tight">{selectedWorker?.name ?? "Seleziona lavoratore"}</h2>
+              <p className="text-xs text-black/45 dark:text-white/45">{selectedWorker?.email} &bull; {selectedWorker?.location}</p>
             </div>
-            <div className="rounded-3xl bg-paradise-noir px-6 py-4 text-white">
-              <p className="text-3xl font-semibold">{totalHours}</p>
-              <p className="text-xs uppercase tracking-[0.16em] text-white/50">ore totali</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="soft" className="h-10 text-xs px-4" onClick={exportSelectedPdf} disabled={exporting || !selectedWorker}>
+                <Download className="size-3.5" />
+                PDF Lavoratore
+              </Button>
+              <Button className="h-10 text-xs px-4" onClick={exportAllPdf} disabled={exporting || workers.length === 0}>
+                <Download className="size-3.5" />
+                {exporting ? "Generando..." : locationFilter === "Tutti i saloni" ? "PDF Tutti Saloni" : "PDF Salone"}
+              </Button>
             </div>
           </div>
+
+          {/* Selezione Mese e Anno */}
           <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_120px]">
-            <select className="min-h-12 rounded-2xl border border-black/10 bg-white/80 px-4 text-sm font-semibold" value={month} onChange={(event) => setMonth(Number(event.target.value))}>
+            <select
+              className="min-h-11 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-neutral-800 px-4 text-sm font-semibold outline-none focus:border-paradise-pink"
+              value={month}
+              onChange={(event) => setMonth(Number(event.target.value))}
+            >
               {monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}
             </select>
-            <Field type="number" value={year} onChange={(event) => setYear(Number(event.target.value))} />
+            <Field
+              type="number"
+              className="min-h-11 rounded-2xl"
+              value={year}
+              onChange={(event) => setYear(Number(event.target.value))}
+            />
           </div>
-          <div className="mt-3 flex flex-wrap justify-end gap-2">
-            <Button variant="soft" onClick={exportSelectedPdf} disabled={exporting || !selectedWorker}>
-              <Download className="size-4" />
-              PDF lavoratore
-            </Button>
-            <Button onClick={exportAllPdf} disabled={exporting || workers.length === 0}>
-              <Download className="size-4" />
-              {exporting ? "Creo PDF..." : locationFilter === "Tutti i saloni" ? "PDF tutti" : "PDF salone"}
-            </Button>
+
+          {/* Griglia Statistiche di Lusso (Worked, Due, Missing, Overtime) */}
+          <div className="mt-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
+            {/* Ore Lavorate */}
+            <div className="p-4 rounded-[20px] bg-neutral-50 dark:bg-neutral-800/40 border border-black/5 dark:border-white/5 flex flex-col justify-between transition hover:shadow-luxury">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/40">Ore Lavorate</p>
+                <Clock className="size-3.5 text-paradise-pink" />
+              </div>
+              <p className="mt-3 text-2xl font-bold tracking-tight text-paradise-pink">{stats.worked.toFixed(2).replace(".00", "")} h</p>
+              <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ore totali registrate</p>
+            </div>
+
+            {/* Ore Dovute */}
+            <div className="p-4 rounded-[20px] bg-neutral-50 dark:bg-neutral-800/40 border border-black/5 dark:border-white/5 flex flex-col justify-between transition hover:shadow-luxury">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/40">Ore Dovute</p>
+                <CalendarCheck className="size-3.5 text-amber-600 dark:text-paradise-gold" />
+              </div>
+              <p className="mt-3 text-2xl font-bold tracking-tight text-amber-600 dark:text-paradise-gold">{stats.due.toFixed(2).replace(".00", "")} h</p>
+              <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Pianificate da contratto</p>
+            </div>
+
+            {/* Ore Mancanti */}
+            <div className={`p-4 rounded-[20px] border flex flex-col justify-between transition hover:shadow-luxury ${stats.missing > 0 ? "bg-rose-500/5 border-rose-500/10" : "bg-neutral-50 dark:bg-neutral-800/40 border-black/5 dark:border-white/5"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/40">Ore Mancanti</p>
+                <ShieldAlert className={`size-3.5 ${stats.missing > 0 ? "text-rose-500" : "text-black/35"}`} />
+              </div>
+              <p className={`mt-3 text-2xl font-bold tracking-tight ${stats.missing > 0 ? "text-rose-500" : "text-neutral-500"}`}>{stats.missing.toFixed(2).replace(".00", "")} h</p>
+              <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Da completare</p>
+            </div>
+
+            {/* Straordinari */}
+            <div className={`p-4 rounded-[20px] border flex flex-col justify-between transition hover:shadow-luxury ${stats.overtime > 0 ? "bg-emerald-500/5 border-emerald-500/10" : "bg-neutral-50 dark:bg-neutral-800/40 border-black/5 dark:border-white/5"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/40">Straordinari</p>
+                <Award className={`size-3.5 ${stats.overtime > 0 ? "text-emerald-500" : "text-black/35"}`} />
+              </div>
+              <p className={`mt-3 text-2xl font-bold tracking-tight ${stats.overtime > 0 ? "text-emerald-500" : "text-neutral-500"}`}>{stats.overtime.toFixed(2).replace(".00", "")} h</p>
+              <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ore extra non dovute</p>
+            </div>
           </div>
         </div>
 
+        {/* Tabella timbrature */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1040px] border-collapse text-sm">
             <thead>
-              <tr className="bg-paradise-softPink/55 text-left">
-                <th className="px-4 py-3">Giorno</th>
-                <th className="px-4 py-3">Timbratura</th>
-                <th className="px-4 py-3">Ore lavorate</th>
-                <th className="px-4 py-3">Pausa</th>
-                <th className="px-4 py-3">Correzione</th>
-                <th className="px-4 py-3">Note</th>
-                <th className="px-4 py-3 text-right">Azione</th>
+              <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-black/5 dark:border-white/5 text-left">
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Giorno</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Timbratura</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Dovute</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Lavorate</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Pausa</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Correzione</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Note</th>
+                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50 text-right">Azione</th>
               </tr>
             </thead>
             <tbody>
               {days.map((day) => {
                 const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
                 const record = records[recordKey] ?? emptyRecord();
+                const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
                 return (
-                  <tr key={recordKey} className="border-t border-black/5">
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-2 font-semibold"><CalendarDays className="size-4 text-black/35" /> {new Intl.DateTimeFormat("it-IT").format(day)}</span>
+                  <tr key={recordKey} className={`border-b border-black/5 dark:border-white/5 transition-colors hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 ${isWeekend ? "bg-paradise-nude/10 dark:bg-neutral-800/10" : ""}`}>
+                    <td className="px-5 py-3.5">
+                      <span className="inline-flex items-center gap-2 font-semibold"><CalendarDays className="size-4 text-black/35 dark:text-white/35" /> {new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-black/55">
+                    <td className="px-5 py-3.5 text-xs text-black/55 dark:text-white/55">
                       {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
                     </td>
-                    <td className="px-4 py-3">
-                      <input className="h-10 w-24 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03]" disabled={!record.manualOverride} type="number" min="0" max="24" step="0.01" value={record.hours} onChange={(event) => updateLocal(day, "hours", event.target.value)} />
+                    <td className="px-5 py-3.5 font-medium text-black/60 dark:text-white/60">
+                      {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h` : "-"}
                     </td>
-                    <td className="px-4 py-3">
-                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-medium">
-                        <input type="checkbox" checked={record.paidBreak} onChange={(event) => updateLocal(day, "paidBreak", event.target.checked)} />
+                    <td className="px-5 py-3.5">
+                      <input
+                        className="h-9 w-20 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3.5 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
+                        disabled={!record.manualOverride}
+                        type="number"
+                        min="0"
+                        max="24"
+                        step="0.01"
+                        value={record.hours}
+                        onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                      />
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
+                          checked={record.paidBreak}
+                          onChange={(event) => updateLocal(day, "paidBreak", event.target.checked)}
+                        />
                         Pagata {record.breakHours ? `(${record.breakHours} h)` : ""}
                       </label>
                     </td>
-                    <td className="px-4 py-3">
-                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-medium">
-                        <input type="checkbox" checked={record.manualOverride} onChange={(event) => updateLocal(day, "manualOverride", event.target.checked)} />
+                    <td className="px-5 py-3.5">
+                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
+                          checked={record.manualOverride}
+                          onChange={(event) => updateLocal(day, "manualOverride", event.target.checked)}
+                        />
                         Manuale
                       </label>
                     </td>
-                    <td className="px-4 py-3">
-                      <input className="h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-paradise-pink" value={record.note} onChange={(event) => updateLocal(day, "note", event.target.value)} placeholder="Riposo, festivo, malattia..." />
+                    <td className="px-5 py-3.5">
+                      <input
+                        className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink"
+                        value={record.note}
+                        onChange={(event) => updateLocal(day, "note", event.target.value)}
+                        placeholder="Riposo, festivo, malattia..."
+                      />
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button variant="soft" onClick={() => saveDay(day)} disabled={!selectedWorkerId || savingKey === recordKey}><Save className="size-4" /> {savingKey === recordKey ? "Salvo" : "Salva"}</Button>
+                    <td className="px-5 py-3.5 text-right">
+                      <Button variant="soft" className="h-9 text-xs px-3" onClick={() => saveDay(day)} disabled={!selectedWorkerId || savingKey === recordKey}>
+                        <Save className="size-3.5" />
+                        {savingKey === recordKey ? "Salvo" : "Salva"}
+                      </Button>
                     </td>
                   </tr>
                 );
@@ -387,9 +535,19 @@ export function WorkHoursManager({
             </tbody>
           </table>
         </div>
-        {loadingRecords ? <p className="m-5 rounded-2xl bg-paradise-nude px-4 py-3 text-sm font-semibold">Calcolo ore dalle timbrature in corso...</p> : null}
-        {message ? <p className="m-5 rounded-2xl bg-paradise-nude px-4 py-3 text-sm font-semibold">{message}</p> : null}
+
+        {loadingRecords ? (
+          <div className="m-5 p-4 rounded-2xl bg-paradise-nude dark:bg-neutral-800 text-sm font-semibold animate-pulse">
+            Calcolo ore dalle timbrature in corso...
+          </div>
+        ) : null}
+        {message ? (
+          <div className="m-5 p-4 rounded-2xl bg-paradise-nude dark:bg-neutral-800 text-sm font-semibold text-[#B85B68] dark:text-paradise-pink">
+            {message}
+          </div>
+        ) : null}
       </Card>
     </div>
   );
 }
+
