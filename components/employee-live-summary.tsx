@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CalendarDays, Coffee, FileCheck2, Users, type LucideIcon } from "lucide-react";
+import { ArrowRight, CalendarDays, Coffee, Users, type LucideIcon } from "lucide-react";
 import { InstantLink } from "@/components/instant-link";
 import { Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ type ShiftSummaryProps = {
   colleaguesToday: number;
   initialLogs: TodayLog[];
   breakDurationMinutes: number;
+  startTime?: string | null;
+  assignedHours?: number;
 };
 
 function formatElapsed(milliseconds: number) {
@@ -74,12 +76,19 @@ function totals(logs: TodayLog[], now: number) {
   };
 }
 
-export function EmployeeLiveSummary({ plannedTime, shiftName, pendingRequests, colleaguesToday, initialLogs, breakDurationMinutes }: ShiftSummaryProps) {
+export function EmployeeLiveSummary({
+  plannedTime,
+  shiftName,
+  pendingRequests,
+  colleaguesToday,
+  initialLogs,
+  breakDurationMinutes,
+  startTime,
+  assignedHours,
+}: ShiftSummaryProps) {
   const [logs, setLogs] = useState(initialLogs);
   const [now, setNow] = useState(Date.now());
   const clock = useMemo(() => totals(logs, now), [logs, now]);
-  const pauseLimitMs = breakDurationMinutes * 60_000;
-  const pauseOverLimit = clock.isPaused && clock.activePauseElapsed > pauseLimitMs;
 
   useEffect(() => {
     let mounted = true;
@@ -129,16 +138,21 @@ export function EmployeeLiveSummary({ plannedTime, shiftName, pendingRequests, c
           </p>
         </Card>
       </InstantLink>
-      <CompactLiveStatus icon={FileCheck2} label="Richieste" value={String(pendingRequests)} hint="in attesa" href="/requests" />
       <CompactLiveStatus
         icon={Coffee}
         label="Pausa"
-        value={clock.isPaused || clock.paused > 0 ? formatElapsed(clock.paused) : "--:--:--"}
-        hint={pauseOverLimit ? "oltre limite" : clock.isPaused ? "in corso" : clock.paused > 0 ? "totale oggi" : "non iniziata"}
+        value={formatElapsed(clock.paused)}
+        hint="totale oggi"
+        href="/my-shifts"
         active={clock.isPaused}
-        danger={pauseOverLimit}
       />
-      <CompactLiveStatus className="xl:hidden" icon={Users} label="Colleghi oggi" value={String(colleaguesToday)} hint="in servizio" />
+      <CompactLiveStatus
+        icon={Users}
+        label="Colleghi in servizio"
+        value={String(colleaguesToday)}
+        hint="oggi"
+        href="#colleghi"
+      />
     </div>
   );
 }

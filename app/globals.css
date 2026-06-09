@@ -13,6 +13,11 @@
   --gradient: #e8c98b;
 }
 
+.paradise-theme-root {
+  color: var(--text);
+  background-color: var(--background);
+}
+
 .dark {
   --background: var(--dark-background);
   --sidebar: var(--dark-sidebar);
@@ -65,84 +70,204 @@ textarea {
     justify-content: center;
   }
 
+  .sidebar-collapsed aside {
+    background: transparent !important;
+    border-right: none !important;
+  }
+
   .sidebar-collapsed .sidebar-nav-link {
-    justify-content: center;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 2.75rem !important; /* 44px */
+    height: 2.75rem !important; /* 44px */
+    border-radius: 9999px !important; /* Perfectly round circle */
+    padding: 0 !important;
+    margin: 0.375rem auto !important;
+    border: none !important;
+    background: transparent;
+    color: var(--sidebar-text) !important;
+    transition: all 0.25s ease-in-out !important;
+  }
+
+  .dark .sidebar-collapsed .sidebar-nav-link {
+    color: var(--dark-sidebar-text) !important;
   }
 
   .sidebar-collapsed .sidebar-nav-link svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+    margin: 0 !important;
+    color: currentColor !important;
+  }
+
+  .sidebar-collapsed .sidebar-nav-link:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    transform: scale(1.05) !important;
+  }
+
+  .dark .sidebar-collapsed .sidebar-nav-link:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .sidebar-collapsed .sidebar-nav-link.active {
+    background: var(--button) !important;
+    color: var(--text) !important;
+    box-shadow: 0 4px 12px rgba(255, 168, 221, 0.35) !important;
+  }
+
+  .dark .sidebar-collapsed .sidebar-nav-link.active {
+    background: var(--button) !important;
+    color: #1F1F1F !important;
+    box-shadow: 0 4px 12px rgba(244, 163, 196, 0.2) !important;
   }
 
   .sidebar-collapsed .sidebar-logout {
-    padding-left: 0;
-    padding-right: 0;
-    justify-content: center;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    border-radius: 9999px !important;
+    padding: 0 !important;
+    margin: 1.25rem auto 0 auto !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--sidebar-text) !important;
+    transition: all 0.25s ease-in-out !important;
+  }
+
+  .dark .sidebar-collapsed .sidebar-logout {
+    color: var(--dark-sidebar-text) !important;
+  }
+
+  .sidebar-collapsed .sidebar-logout:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #ef4444 !important; /* red hover on exit */
+    transform: scale(1.05) !important;
+  }
+
+  .dark .sidebar-collapsed .sidebar-logout:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #ef4444 !important;
   }
 
   .sidebar-collapsed .sidebar-logout svg {
-    margin-left: 0;
-    margin-right: 0;
+    width: 1.15rem !important;
+    height: 1.15rem !important;
+    margin: 0 !important;
   }
 }
 
 @media print {
-  body {
-    background: white !important;
-  }
-
+  /* Hide aside menu, headers, footers and all no-print elements */
   aside,
   header,
-  .no-print {
+  footer,
+  .no-print,
+  button,
+  select,
+  input,
+  .sidebar-role,
+  .top-controls {
     display: none !important;
   }
 
-  main {
+  /* Reset layout margins/paddings and position the table top-left */
+  html, body, .paradise-theme-root, main {
+    background: white !important;
+    color: black !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
     padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Reset grid wrappers and margins */
+  .min-h-screen, .xl\:p-5, .xl\:pl-3, .p-5, .pl-3 {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .ml-\[88px\], .ml-\[280px\], .xl\:ml-\[88px\], .xl\:ml-\[280px\] {
+    margin-left: 0 !important;
   }
 
   .print-surface {
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  .print-surface * {
+    visibility: visible !important;
   }
 
   .schedule-scroll {
     overflow: visible !important;
+    width: 100% !important;
   }
 
   .schedule-table {
     min-width: 0 !important;
     width: 100% !important;
+    table-layout: fixed !important; /* Uniform column distribution */
+  }
+
+  .schedule-table th,
+  .schedule-table td {
+    border: 1px solid rgba(0, 0, 0, 0.2) !important;
     font-size: 8px !important;
+    padding: 3px 1px !important;
+  }
+
+  .schedule-table th.worker-head,
+  .schedule-table th.worker-cell {
+    width: 15% !important;
+    max-width: 15% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .schedule-table th.day-head,
+  .schedule-table td.schedule-cell {
+    width: 2.6% !important; /* Equally share the remaining space */
   }
 
   .schedule-title {
-    font-size: 22px !important;
-    padding: 2px 0 !important;
+    background: #1F1F1F !important;
+    color: white !important;
+    padding: 10px 16px !important;
+    font-size: 18px !important;
   }
 
-  .worker-cell,
-  .worker-head {
-    width: 92px !important;
+  .schedule-title h2 {
+    color: white !important;
+    font-size: 20px !important;
   }
 
-  .schedule-cell,
-  .day-head {
-    height: 18px !important;
-    padding: 0 !important;
-  }
-
-  .legend {
-    padding: 8px !important;
+  /* Force background colors to print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   @page {
     size: A4 landscape;
-    margin: 8mm;
+    margin: 4mm;
   }
 }
 
@@ -266,4 +391,21 @@ textarea {
 
 .login-banner-motion {
   animation: login-banner-drift 14s ease-in-out infinite;
+}
+
+/* Kiosk mode styling to hide duplicate navigations, headers and footers */
+.kiosk-mode header,
+.kiosk-mode footer,
+.kiosk-mode .top-controls,
+.kiosk-mode aside,
+.kiosk-mode nav {
+  display: none !important;
+}
+
+.kiosk-mode main {
+  padding-bottom: 2rem !important;
+}
+
+.kiosk-mode .kiosk-hidden-action {
+  display: none !important;
 }

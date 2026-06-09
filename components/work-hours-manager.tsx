@@ -330,17 +330,17 @@ export function WorkHoursManager({
         <div className="border-b border-black/5 dark:border-white/5 p-5">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Personale</p>
           <select
-            className="mt-4 min-h-11 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-800/80 px-3 text-sm font-semibold outline-none focus:border-paradise-pink"
+            className="mt-4 min-h-11 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-800/80 px-3 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white"
             value={locationFilter}
             onChange={(event) => setLocationFilter(event.target.value)}
           >
             {locationOptions.map((location) => (
-              <option key={location} value={location}>{location}</option>
+              <option key={location} value={location} className="dark:bg-[#201F24] dark:text-white">{location}</option>
             ))}
           </select>
           <div className="mt-4 flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-800/70 px-3">
             <Search className="size-4 text-black/40 dark:text-white/40" />
-            <input className="h-11 flex-1 bg-transparent text-sm outline-none" placeholder="Cerca lavoratore..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input className="h-11 flex-1 bg-transparent text-sm outline-none dark:text-white" placeholder="Cerca lavoratore..." value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
         </div>
         <div className="max-h-[620px] overflow-y-auto p-3">
@@ -392,11 +392,11 @@ export function WorkHoursManager({
           {/* Selezione Mese e Anno */}
           <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_120px]">
             <select
-              className="min-h-11 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-neutral-800 px-4 text-sm font-semibold outline-none focus:border-paradise-pink"
+              className="min-h-11 rounded-2xl border border-black/10 dark:border-white/10 bg-white/90 dark:bg-neutral-800 px-4 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white"
               value={month}
               onChange={(event) => setMonth(Number(event.target.value))}
             >
-              {monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}
+              {monthNames.map((name, index) => <option key={name} value={index} className="dark:bg-[#201F24] dark:text-white">{name}</option>)}
             </select>
             <Field
               type="number"
@@ -483,7 +483,7 @@ export function WorkHoursManager({
                     </td>
                     <td className="px-5 py-3.5">
                       <input
-                        className="h-9 w-20 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3.5 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
+                        className="h-9 w-20 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3.5 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
                         disabled={!record.manualOverride}
                         type="number"
                         min="0"
@@ -494,7 +494,7 @@ export function WorkHoursManager({
                       />
                     </td>
                     <td className="px-5 py-3.5">
-                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer">
+                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
                         <input
                           type="checkbox"
                           className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
@@ -505,7 +505,7 @@ export function WorkHoursManager({
                       </label>
                     </td>
                     <td className="px-5 py-3.5">
-                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer">
+                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
                         <input
                           type="checkbox"
                           className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
@@ -517,7 +517,7 @@ export function WorkHoursManager({
                     </td>
                     <td className="px-5 py-3.5">
                       <input
-                        className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink"
+                        className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
                         value={record.note}
                         onChange={(event) => updateLocal(day, "note", event.target.value)}
                         placeholder="Riposo, festivo, malattia..."
@@ -535,14 +535,14 @@ export function WorkHoursManager({
             </tbody>
           </table>
         </div>
-
+ 
         {loadingRecords ? (
-          <div className="m-5 p-4 rounded-2xl bg-paradise-nude dark:bg-neutral-800 text-sm font-semibold animate-pulse">
+          <div className="m-5 p-4 rounded-2xl bg-paradise-nude dark:bg-neutral-850 text-sm font-semibold animate-pulse dark:text-white">
             Calcolo ore dalle timbrature in corso...
           </div>
         ) : null}
         {message ? (
-          <div className="m-5 p-4 rounded-2xl bg-paradise-nude dark:bg-neutral-800 text-sm font-semibold text-[#B85B68] dark:text-paradise-pink">
+          <div className="m-5 p-4 rounded-2xl bg-paradise-nude dark:bg-neutral-850 text-sm font-semibold text-[#B85B68] dark:text-paradise-pink">
             {message}
           </div>
         ) : null}

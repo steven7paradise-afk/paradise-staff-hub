@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { ArrowRight, CalendarDays, CheckCircle2, Coffee, Delete, LogIn, LogOut, MapPin, RefreshCw, Send, ShieldCheck, TriangleAlert, UserRound, Volume2, VolumeX, X, Sun, Clock, HeartPulse, Calendar } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
 import { cn } from "@/lib/utils";
+import { signIn } from "next-auth/react";
 
 const clockActions = [
   { type: "ENTRATA", label: "Entrata", icon: LogIn, dark: true },
@@ -90,6 +91,14 @@ export function TabletClock({
   const [now, setNow] = useState(new Date());
   const [pin, setPinValue] = useState("");
   const [worker, setWorker] = useState<IdentifiedWorker | null>(null);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.top && window !== window.top) {
+      window.top.location.href = "/tablet-clock";
+    }
+  }, []);
   const [message, setMessage] = useState("Inserisci il tuo codice personale");
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
@@ -296,6 +305,47 @@ export function TabletClock({
     }
   }
 
+  async function goToDashboard() {
+    if (!worker || !/^\d{4,6}$/.test(pin) || !device) return;
+    setLoading("DASHBOARD");
+    try {
+      const response = await signIn("credentials", {
+        pin,
+        redirect: false,
+      });
+      if (response?.error) {
+        showFeedback("error", "Impossibile accedere alla dashboard.");
+        sound("error");
+        return;
+      }
+      sound("success");
+      setIframeLoading(true);
+      setShowDashboard(true);
+    } catch {
+      showFeedback("error", "Errore durante l'accesso.");
+      sound("error");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function handleKioskLogout() {
+    setLoading("LOGOUT");
+    try {
+      const { signOut: nextAuthSignOut } = await import("next-auth/react");
+      await nextAuthSignOut({ redirect: false });
+      setWorker(null);
+      setPinValue("");
+      setFeedback(null);
+      setMessage("Inserisci il tuo codice personale");
+      setShowDashboard(false);
+    } catch (error) {
+      console.error("Errore durante il logout:", error);
+    } finally {
+      setLoading(null);
+    }
+  }
+
   async function sendLeaveRequest() {
     if (!worker || !device) return;
     setRequestMessage("Invio richiesta in corso...");
@@ -363,6 +413,59 @@ export function TabletClock({
         <p className={`font-serif leading-none tracking-tight ${compact ? "mt-3 text-6xl" : "mt-2 text-7xl lg:text-[112px]"}`}>{formatClock(now)}</p>
         <p className="mt-2 text-base text-black/62 lg:text-lg">{formatDay(now)}</p>
       </div>
+    );
+  }
+
+  if (showDashboard) {
+    return (
+      <main className="h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
+        <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col rounded-[26px] border-[10px] border-black bg-[color:var(--tablet-card)] shadow-[0_20px_70px_rgba(0,0,0,0.2)] xl:border-[16px] overflow-hidden">
+          {/* Header del Dashboard Kiosk */}
+          <div className="flex items-center justify-between border-b border-black/10 px-6 py-4 bg-[color:var(--tablet-card)] shadow-sm">
+            <div className="flex items-center gap-3">
+              {worker?.photoUrl ? (
+                <div className="relative size-10 overflow-hidden rounded-full border-2 border-[color:var(--tablet-accent)] shadow-sm">
+                  <img src={worker.photoUrl} alt="" className="size-full object-cover" />
+                </div>
+              ) : (
+                <div className="flex size-10 items-center justify-center rounded-full border-2 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)] text-sm font-black uppercase tracking-wider text-[color:var(--tablet-accent)] shadow-sm">
+                  {worker?.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--tablet-accent)]">Area Riservata</p>
+                <p className="text-sm font-bold tracking-tight text-[color:var(--tablet-text)]">{worker?.name}</p>
+              </div>
+            </div>
+            
+            <button
+              className="flex h-11 items-center gap-2 rounded-xl bg-red-600 px-5 text-xs font-bold uppercase tracking-[0.15em] text-white shadow-md shadow-red-600/10 hover:bg-red-700 active:scale-[0.98] transition-all duration-200"
+              onClick={handleKioskLogout}
+              disabled={loading === "LOGOUT"}
+            >
+              <LogOut className="size-4" /> <span>{loading === "LOGOUT" ? "Uscita..." : "Esci"}</span>
+            </button>
+          </div>
+          
+          {/* Iframe del Dashboard */}
+          <div className="flex-1 w-full bg-[#fbf7f2] relative">
+            {iframeLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#fbf7f2] z-50">
+                <div className="text-center">
+                  <div className="mx-auto size-12 border-4 border-[color:var(--tablet-accent)] border-t-transparent rounded-full animate-spin"></div>
+                  <p className="mt-4 text-sm font-semibold text-black/60 uppercase tracking-widest">Caricamento Dashboard...</p>
+                </div>
+              </div>
+            )}
+            <iframe
+              id="kiosk-dashboard-iframe"
+              src="/dashboard"
+              className="size-full border-0"
+              onLoad={() => setIframeLoading(false)}
+            />
+          </div>
+        </div>
+      </main>
     );
   }
 
@@ -468,18 +571,20 @@ export function TabletClock({
               </div>
 
               <p className="mt-3 text-center text-lg font-semibold">{worker.name}</p>
+              {/* Le richieste ferie sono state disabilitate su tablet */}
               <button
-                className="mt-3 flex h-14 w-full items-center justify-between rounded-2xl bg-[color:var(--tablet-soft)] px-5 text-left shadow-sm"
-                onClick={() => { setRequestMessage("Il PIN gia inserito conferma questa richiesta come firma."); setRequestOpen(true); }}
+                className="mt-3 flex h-14 w-full items-center justify-between rounded-2xl bg-[color:var(--tablet-soft)] px-5 text-left shadow-sm active:scale-[0.98] transition-transform duration-200"
+                onClick={goToDashboard}
+                disabled={loading !== null}
               >
                 <div className="flex items-center gap-3">
-                  <CalendarDays className="size-6 text-[color:var(--tablet-accent)]" />
+                  <UserRound className="size-6 text-[color:var(--tablet-accent)]" />
                   <div>
-                    <p className="text-sm uppercase tracking-[0.14em]">Ferie / Permessi</p>
-                    <p className="text-xs text-black/55">Invia richiesta firmata</p>
+                    <p className="text-sm uppercase tracking-[0.14em] font-bold text-[color:var(--tablet-text)]">Vedi Dashboard</p>
+                    <p className="text-xs text-black/55">Accedi al tuo profilo privato</p>
                   </div>
                 </div>
-                <ArrowRight className="size-5" />
+                <ArrowRight className="size-5 text-[color:var(--tablet-accent)]" />
               </button>
               <button
                 className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white/60 text-sm font-semibold"
@@ -501,166 +606,7 @@ export function TabletClock({
           <span>Sincronizzazione: <strong>{formatClockWithSeconds(now)}</strong></span>
         </footer>
 
-        {requestOpen && worker ? (
-          <div className="absolute inset-0 z-30 grid place-items-center overflow-y-auto bg-[color:var(--tablet-bg)]/92 p-4 backdrop-blur-xl">
-            <section className="w-full max-w-3xl rounded-[28px] border border-black/10 bg-[color:var(--tablet-card)]/92 p-5 shadow-xl sm:p-7">
-              <div className="mb-5 flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Richiesta firmata</p>
-                  <h2 className="mt-2 text-2xl font-semibold">Richiesta Ferie & Permessi</h2>
-                  <p className="mt-2 text-sm text-black/55">Operatore: <strong>{worker.name}</strong></p>
-                </div>
-                <button className="grid size-10 place-items-center rounded-xl border border-black/10 hover:bg-black/5 active:scale-95 transition" onClick={() => setRequestOpen(false)}><X className="size-5" /></button>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                
-                {/* Clickable Card Selection Grid */}
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:col-span-2">
-                  {[
-                    { value: "FERIE", label: "Ferie", icon: Sun, color: "border-pink-500 bg-pink-50 text-pink-700 dark:bg-pink-950/80 dark:text-pink-300 ring-pink-500/20" },
-                    { value: "PERMESSO", label: "Permesso", icon: Clock, color: "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 ring-amber-500/20" },
-                    { value: "RIPOSO", label: "Riposo", icon: Coffee, color: "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/80 dark:text-teal-300 ring-teal-500/20" },
-                    { value: "MALATTIA", label: "Malattia", icon: HeartPulse, color: "border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 ring-rose-500/20" },
-                  ].map((card) => {
-                    const Icon = card.icon;
-                    const isSelected = requestType === card.value;
-                    return (
-                      <button
-                        key={card.value}
-                        type="button"
-                        onClick={() => { sound("tap"); setRequestType(card.value); }}
-                        className={cn(
-                          "flex flex-col items-center justify-center gap-2 rounded-2xl border p-4 text-center transition-all duration-300 active:scale-[0.97]",
-                          isSelected 
-                            ? `${card.color} border-2 shadow-sm ring-4` 
-                            : "border-black/10 bg-white hover:border-black/25 dark:border-white/10 dark:bg-white/5"
-                        )}
-                      >
-                        <Icon className={cn("size-6", isSelected ? "animate-pulse" : "text-black/40 dark:text-white/40")} />
-                        <span className="text-xs font-bold uppercase tracking-wider">{card.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Reason Input */}
-                <div className="sm:col-span-2">
-                  <input 
-                    className="h-14 w-full rounded-2xl border border-[#eadfd6] px-4 bg-white text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
-                    value={reason} 
-                    onChange={(event) => setReason(event.target.value)} 
-                    placeholder="Motivo della richiesta (opzionale)" 
-                  />
-                </div>
-
-                {/* Date & Time Selection Section */}
-                <div className="sm:col-span-2 grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">Da data</span>
-                    <div className="relative flex items-center">
-                      <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
-                      <input 
-                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
-                        type="date" 
-                        value={startDate} 
-                        onChange={(event) => setStartDate(event.target.value)} 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">A data</span>
-                    <div className="relative flex items-center">
-                      <Calendar className="absolute left-4 size-5 text-black/40 pointer-events-none" />
-                      <input 
-                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white pl-12 pr-4 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none" 
-                        type="date" 
-                        value={endDate} 
-                        onChange={(event) => setEndDate(event.target.value)} 
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">Ora inizio (opzionale)</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <select 
-                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
-                        value={startHour}
-                        onChange={(e) => setStartHour(e.target.value)}
-                      >
-                        <option value="">Ora</option>
-                        {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
-                          <option key={h} value={h}>{h}</option>
-                        ))}
-                      </select>
-                      <select 
-                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
-                        value={startMinute}
-                        onChange={(e) => setStartMinute(e.target.value)}
-                      >
-                        <option value="">Min</option>
-                        {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-black/45 pl-1">Ora fine (opzionale)</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <select 
-                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
-                        value={endHour}
-                        onChange={(e) => setEndHour(e.target.value)}
-                      >
-                        <option value="">Ora</option>
-                        {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0")).map(h => (
-                          <option key={h} value={h}>{h}</option>
-                        ))}
-                      </select>
-                      <select 
-                        className="h-14 w-full rounded-2xl border border-[#eadfd6] bg-white px-3 text-sm focus:ring-2 focus:ring-[color:var(--tablet-accent)] outline-none"
-                        value={endMinute}
-                        onChange={(e) => setEndMinute(e.target.value)}
-                      >
-                        <option value="">Min</option>
-                        {Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0")).map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Certified Digital Signature Badge */}
-                <div className="rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/[0.03] p-4 text-sm sm:col-span-2 shadow-inner">
-                  <div className="flex items-center gap-3">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-700 font-bold uppercase tracking-wider text-xs">
-                      <ShieldCheck className="size-6 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-emerald-800 dark:text-emerald-300">Richiesta Firmata con PIN Personale</p>
-                      <p className="text-xs text-black/60 dark:text-white/60">
-                        La presente richiesta è firmata digitalmente ed autenticata dall'operatore <strong className="text-black dark:text-white">{worker.name}</strong>.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3 border-t border-emerald-500/10 pt-2 flex items-center justify-between text-[10px] text-black/40 dark:text-white/40 font-mono">
-                    <span>AUTENTICAZIONE PIN: CERTIFICATA</span>
-                    <span>METODO: DIRETTO DA TAB-CLOCK</span>
-                  </div>
-                </div>
-
-              </div>
-              <button className="mt-5 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[color:var(--tablet-dark)] text-sm font-semibold uppercase tracking-[0.14em] text-white active:scale-95 transition" onClick={sendLeaveRequest}>
-                <Send className="size-5 text-[color:var(--tablet-accent)]" /> Invia richiesta
-              </button>
-              <p className="mt-3 text-center text-sm font-medium text-black/58">{requestMessage}</p>
-            </section>
-          </div>
-        ) : null}
+        {/* Modal disabilitata */}
       </div>
     </main>
   );

@@ -3,6 +3,7 @@ import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { canAccess, type Role } from "@/lib/roles";
+import { pinLookup } from "@/lib/pin";
 
 export const authConfig = {
   session: {
@@ -31,8 +32,26 @@ export const authConfig = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        pin: { label: "PIN", type: "password" },
       },
       async authorize(credentials) {
+        const pin = String(credentials?.pin ?? "").trim();
+        if (pin) {
+          if (!/^\d{4,6}$/.test(pin)) return null;
+          const lookup = pinLookup(pin);
+          const user = await prisma.user.findUnique({
+            where: { pin_lookup: lookup },
+          });
+          if (!user?.active) return null;
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            sedeId: user.sede_id,
+          };
+        }
+
         const email = String(credentials?.email ?? "").trim().toLowerCase();
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;

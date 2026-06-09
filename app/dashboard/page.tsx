@@ -12,7 +12,6 @@ import { EmployeeLiveSummary } from "@/components/employee-live-summary";
 import { InstantLink } from "@/components/instant-link";
 import { LiveAttendance } from "@/components/live-attendance";
 import { LiveTeamStatus } from "@/components/live-team-status";
-import { SalonDayCalendar } from "@/components/salon-day-calendar";
 import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
@@ -115,6 +114,12 @@ export default async function DashboardPage() {
   let pendingPersonalRequests = 0;
   let unreadCommunications = 0;
   let personalTodayLogs: Array<{ type: AttendanceType; timestamp: Date; time: string }> = [];
+  let personalFutureEntries: ScheduleWithCategory[] = [];
+  let breakDurationMinutes = 0;
+  let next7Days: Date[] = [];
+  let todayShiftStartTime: string | null = null;
+  let todayShiftAssignedHours = 0;
+  let todaySalonWorkers: any[] = [];
 
   const [personalSchedule, personalMonthLogs, personalHourRecords, salonSchedule, salonWorkers, personalDocuments, personalNotifications, liveTeamWorkers, activeAbsences, locationsOverview, contractDeadlines, liveClockSettings] = await Promise.all([
     role === "DIPENDENTE"
@@ -190,13 +195,16 @@ export default async function DashboardPage() {
     : [];
 
   if (role === "DIPENDENTE") {
-    const today = romeDate();
-    const tomorrow = new Date(today);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const today = statusToday;
+    const tomorrow = statusTomorrow;
     const [todayEntry, futureEntries, todaySalonEntries, openRequests, unread, todayLogs] = await Promise.all([
       prisma.scheduleEntry.findFirst({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, include: { category: true } }),
       prisma.scheduleEntry.findMany({ where: { user_id: currentUser.id, date: { gte: tomorrow } }, include: { category: true }, orderBy: { date: "asc" }, take: 24 }),
-      prisma.scheduleEntry.findMany({ where: { location_id: currentUser.sede_id ?? undefined, date: { gte: today, lt: tomorrow } }, include: { category: true } }),
+      prisma.scheduleEntry.findMany({ 
+        where: { location_id: currentUser.sede_id ?? undefined, date: { gte: today, lt: tomorrow } }, 
+        include: { user: true, category: true },
+        orderBy: { user: { name: "asc" } }
+      }),
       prisma.leaveRequest.count({ where: { user_id: currentUser.id, status: "PENDING" } }),
       prisma.notification.count({ where: { user_id: currentUser.id, read: false, type: "COMUNICAZIONE" } }),
       prisma.attendanceLog.findMany({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
@@ -207,6 +215,36 @@ export default async function DashboardPage() {
     pendingPersonalRequests = openRequests;
     unreadCommunications = unread;
     personalTodayLogs = todayLogs;
+    personalFutureEntries = futureEntries;
+    
+    // Sort so current user is first, followed by working colleagues, then resting/absent colleagues
+    todaySalonWorkers = [...todaySalonEntries].sort((a, b) => {
+      if (a.user_id === currentUser.id) return -1;
+      if (b.user_id === currentUser.id) return 1;
+      
+      const hasShiftA = !!(a.start_time ?? a.category.start_time) && !!(a.end_time ?? a.category.end_time);
+      const hasShiftB = !!(b.start_time ?? b.category.start_time) && !!(b.end_time ?? b.category.end_time);
+      
+      if (hasShiftA && !hasShiftB) return -1;
+      if (!hasShiftA && hasShiftB) return 1;
+      
+      return a.user.name.localeCompare(b.user.name);
+    });
+    
+    breakDurationMinutes = parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(currentUser.sede_id ?? ""))?.value).breakDurationMinutes;
+    
+    // Calcola orario e ore assegnate per oggi
+    todayShiftStartTime = todayShift?.start_time ?? todayShift?.category.start_time ?? null;
+    const todayShiftEndTime = todayShift?.end_time ?? todayShift?.category.end_time ?? null;
+    const todayShiftDuration = todayShiftStartTime && todayShiftEndTime ? categoryDuration(todayShiftStartTime, todayShiftEndTime) : 0;
+    todayShiftAssignedHours = todayShift ? (todayShift.category.paid_hours ?? Math.max(0, todayShiftDuration - breakDurationMinutes / 60)) : 0;
+    
+    next7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(statusToday);
+      d.setDate(d.getDate() + i);
+      return d;
+    });
+
     subtitle = `Ecco cosa c'è di importante oggi${currentUser.location ? ` in ${currentUser.location.name}` : ""}.`;
     attendanceTitle = "Le mie timbrature";
     requestsTitle = "Le mie richieste";
@@ -306,9 +344,31 @@ export default async function DashboardPage() {
             pendingRequests={pendingPersonalRequests}
             colleaguesToday={colleaguesToday}
             initialLogs={personalTodayLogs.map((log) => ({ type: log.type, timestamp: log.timestamp.toISOString(), time: log.time }))}
-            breakDurationMinutes={parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(currentUser.sede_id ?? ""))?.value).breakDurationMinutes}
+            breakDurationMinutes={breakDurationMinutes}
+            startTime={todayShiftStartTime}
+            assignedHours={todayShiftAssignedHours}
           />
           <div className="grid gap-5 xl:grid-cols-3 animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
+            <Card>
+              <PanelHeader title="Il mio turno di oggi" href="/my-shifts" icon={CalendarDays} />
+              {todayShift ? (
+                <div className="mt-4 flex gap-4 rounded-2xl border border-black/5 bg-paradise-nude dark:bg-white/5 p-4 transition-all duration-300 hover:scale-[1.01]">
+                  <div className="min-w-14 rounded-xl bg-white dark:bg-white/10 p-2 text-center shadow-sm">
+                    <p className="text-xs font-bold uppercase text-black/45 dark:text-white/40">{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(todayShift.date)}</p>
+                    <p className="text-2xl font-semibold">{todayShift.date.getDate()}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">{shiftTime(todayShift)}</p>
+                    <p className="mt-1 text-xs text-black/55 dark:text-white/50">{todayShift.category.name}</p>
+                    <p className="mt-1 text-[11px] text-black/45 dark:text-white/40">{currentUser.location?.name ?? "Salone"}</p>
+                  </div>
+                </div>
+              ) : <EmptyText text="Nessun turno programmato per oggi." />}
+            </Card>
+            <Card>
+              <PanelHeader title="Timbrature di oggi" href="/my-shifts" icon={Clock3} />
+              <TodayClockList logs={personalTodayLogs} />
+            </Card>
             <Card>
               <PanelHeader title="Il mio prossimo turno" href="/my-shifts" icon={CalendarDays} />
               {nextShift ? (
@@ -325,14 +385,6 @@ export default async function DashboardPage() {
                 </div>
               ) : <EmptyText text="Nessun prossimo turno programmato." />}
             </Card>
-            <Card>
-              <PanelHeader title="Timbrature di oggi" href="/my-shifts" icon={Clock3} />
-              <TodayClockList logs={personalTodayLogs} />
-            </Card>
-            <Card>
-              <PanelHeader title="Le mie richieste" href="/requests" icon={ShieldCheck} />
-              <div className="mt-3"><RequestList role={role} requests={recentRequests.slice(0, 2)} /></div>
-            </Card>
           </div>
           <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr] animate-fade-in-up [animation-delay:200ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <Card>
@@ -348,6 +400,8 @@ export default async function DashboardPage() {
                 </div>
               </div>
               <div className="mt-4 grid gap-2 text-sm">
+                <Info label="Email" value={currentUser.email} />
+                <Info label="Telefono" value={currentUser.whatsapp_phone ?? "Non impostato"} />
                 <Info label="Codice fiscale" value={currentUser.fiscal_code ?? "Non impostato"} />
                 <Info label="Contratto fino al" value={formatDate(currentUser.contract_end)} />
               </div>
@@ -359,35 +413,160 @@ export default async function DashboardPage() {
           </div>
           <Card id="calendario" className="animate-fade-in-up [animation-delay:300ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">I miei turni e ore lavorate</h2>
-              <Badge tone="gold">{new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(month)}</Badge>
+              <div>
+                <h2 className="text-lg font-bold text-paradise-noir">I miei prossimi orari e turni</h2>
+                <p className="text-xs text-black/55 dark:text-white/40">Visualizzazione dei tuoi orari pianificati per i prossimi 7 giorni</p>
+              </div>
+              <Badge tone="pink">7 Giorni</Badge>
             </div>
-            <EmployeeScheduleMonth month={month} rows={personalHourDays} />
+            
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
+              {next7Days.map((date) => {
+                const isToday = date.toDateString() === statusToday.toDateString();
+                const key = date.toISOString().slice(0, 10);
+                
+                // Trova l'entry corrispondente
+                const entry = isToday 
+                  ? todayShift 
+                  : personalFutureEntries.find(e => e.date.toISOString().slice(0, 10) === key);
+                  
+                const hasShift = entry && (entry.start_time ?? entry.category.start_time) && (entry.end_time ?? entry.category.end_time);
+                
+                const startTime = entry?.start_time ?? entry?.category.start_time;
+                const endTime = entry?.end_time ?? entry?.category.end_time;
+                const duration = startTime && endTime ? categoryDuration(startTime, endTime) : 0;
+                const paidHours = entry ? (entry.category.paid_hours ?? Math.max(0, duration - breakDurationMinutes / 60)) : 0;
+                
+                return (
+                  <div 
+                    key={key} 
+                    className={cn(
+                      "flex flex-col justify-between rounded-2xl border p-3.5 transition-all duration-300",
+                      isToday 
+                        ? "border-[#e8b1bf] bg-paradise-softPink/10 dark:bg-white/10 shadow-sm"
+                        : "border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-black/10 dark:hover:border-white/20"
+                    )}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/45">
+                          {new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date)}
+                        </span>
+                        {isToday && (
+                          <span className="rounded-full bg-paradise-pink px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white">
+                            Oggi
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-lg font-bold tracking-tight text-[color:var(--text)]">
+                        {date.getDate()} {new Intl.DateTimeFormat("it-IT", { month: "short" }).format(date)}
+                      </p>
+                      
+                      {hasShift ? (
+                        <div className="mt-3">
+                          <span 
+                            className="inline-block rounded-lg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-sm"
+                            style={{ 
+                              backgroundColor: entry.category.color ? entry.category.color + '20' : 'rgba(255,168,221,0.2)',
+                              color: entry.category.text_color || '#B85B68'
+                            }}
+                          >
+                            {entry.category.name}
+                          </span>
+                          <p className="mt-2 text-sm font-extrabold tracking-tight text-neutral-800 dark:text-white">
+                            {startTime} - {endTime}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-3">
+                          <span className="inline-block rounded-lg bg-neutral-100 dark:bg-white/5 border border-neutral-200/50 px-2 py-0.5 text-[10px] font-bold text-neutral-400 dark:text-white/40 uppercase tracking-wider">
+                            Riposo
+                          </span>
+                          <p className="mt-2 text-sm font-medium text-black/35">—</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {hasShift && paidHours > 0 && (
+                      <div className="mt-4 border-t border-black/5 dark:border-white/10 pt-2 text-[10px] text-black/45 dark:text-white/40">
+                        Ore ass.: <strong className="text-black/70 dark:text-white/80">{paidHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</strong>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
             <Link href="/my-shifts" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#B85B68] transition hover:translate-x-1 duration-200">
-              Apri dettaglio turni e timbrature <ArrowRight className="size-4" />
+              Apri dettaglio mensile turni e timbrature <ArrowRight className="size-4" />
             </Link>
           </Card>
-          <Card className="overflow-hidden animate-fade-in-up [animation-delay:400ms] opacity-0" style={{ animationFillMode: "forwards" }}>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold">Turni del mio salone</h2>
-              <Badge tone="green">{currentUser.location?.name ?? "Sede"}</Badge>
+          <Card id="colleghi" className="overflow-hidden animate-fade-in-up [animation-delay:400ms] opacity-0" style={{ animationFillMode: "forwards" }}>
+            <div className="mb-4 flex items-center justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <Users className="size-5 text-[#B85B68] dark:text-paradise-pink" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Colleghi in servizio oggi</h2>
+              </div>
+              <Badge tone="green">{currentUser.location?.name ?? "Salone"}</Badge>
             </div>
-            <SalonDayCalendar
-              month={month.toISOString()}
-              entries={salonSchedule.map((entry) => ({
-                id: entry.id,
-                userId: entry.user_id,
-                userName: entry.user.name,
-                date: entry.date.toISOString(),
-                categoryName: entry.category.name,
-                categoryCode: entry.category.code,
-                color: entry.category.color,
-                textColor: entry.category.text_color,
-                startTime: entry.start_time ?? entry.category.start_time,
-                endTime: entry.end_time ?? entry.category.end_time,
-              }))}
-            />
-            <SalonScheduleTable month={month} workers={salonWorkers} entries={salonSchedule} currentUserId={currentUser.id} />
+            
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mt-4">
+              {todaySalonWorkers.length === 0 ? (
+                <p className="col-span-full text-sm text-black/50 dark:text-white/45 py-3 text-center">Nessun collega pianificato per oggi.</p>
+              ) : (
+                todaySalonWorkers.map((entry) => {
+                  const startTime = entry.start_time ?? entry.category.start_time;
+                  const endTime = entry.end_time ?? entry.category.end_time;
+                  const hasShift = !!(startTime && endTime);
+                  
+                  return (
+                    <div 
+                      key={entry.id} 
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl border p-3.5 transition-all duration-300",
+                        entry.user_id === currentUser.id 
+                          ? "border-[#e8b1bf] bg-paradise-softPink/10 dark:bg-white/10 shadow-sm"
+                          : "border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-black/10 dark:hover:border-white/20",
+                        !hasShift && "opacity-60"
+                      )}
+                    >
+                      <div className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-paradise-softPink font-bold text-xs shadow-sm">
+                        {entry.user.photo_url ? (
+                          <img src={entry.user.photo_url} alt={entry.user.name} className="size-full object-cover" />
+                        ) : (
+                          entry.user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
+                        )}
+                        {entry.user_id === currentUser.id && (
+                          <span className="absolute -right-0.5 top-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                        )}
+                      </div>
+                      
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm truncate text-[color:var(--text)]">
+                          {entry.user_id === currentUser.id ? `${entry.user.name} (Tu)` : entry.user.name}
+                        </p>
+                        <p className="text-xs font-medium text-black/45 dark:text-white/40 mt-0.5">
+                          {hasShift ? `${startTime} - ${endTime}` : (entry.category?.name || "Riposo")}
+                        </p>
+                      </div>
+                      
+                      {entry.category && (
+                        <span 
+                          className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0"
+                          style={{ 
+                            backgroundColor: entry.category.color ? entry.category.color + '15' : 'rgba(255, 168, 221, 0.15)',
+                            color: entry.category.text_color || '#B85B68',
+                            border: `1px solid ${entry.category.color ? entry.category.color + '30' : 'rgba(255, 168, 221, 0.3)'}`
+                          }}
+                        >
+                          {entry.category.code}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </Card>
         </section>
       ) : null}
@@ -639,96 +818,11 @@ function PersonalDocuments({ documents }: { documents: PersonalDocument[] }) {
   );
 }
 
-function SalonScheduleTable({ month, workers, entries, currentUserId }: { month: Date; workers: WorkerRow[]; entries: ScheduleWithUserCategory[]; currentUserId: string }) {
-  const days = monthDays(month);
-  const entriesByWorkerDay = new Map(entries.map((entry) => [`${entry.user_id}-${entry.date.toISOString().slice(0, 10)}`, entry]));
-
-  return (
-    <div className="min-w-0">
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Legend label="Presente" code="" color="#FFFFFF" />
-        <Legend label="Riposo" code="R" color="#BCE8C8" />
-        <Legend label="Ferie" code="F" color="#B9D7F3" />
-        <Legend label="Malattia" code="M" color="#F3B5BB" />
-        <Legend label="Permesso" code="P" color="#F6E4A6" />
-        <Legend label="Chiusura" code="C" color="#D5C7F2" />
-      </div>
-      <div className="space-y-2 sm:hidden">
-        {workers.map((worker) => {
-          const shifts = days.map((day) => entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`)).filter((entry) => (entry?.start_time ?? entry?.category.start_time) && (entry?.end_time ?? entry?.category.end_time));
-          const absences = days.map((day) => entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`)).filter((entry) => entry && !(entry.start_time ?? entry.category.start_time));
-          const scheduledHours = shifts.reduce((total, entry) => {
-            if (!entry) return total;
-            return total + (entry.category.paid_hours ?? categoryDuration(entry.start_time ?? entry.category.start_time, entry.end_time ?? entry.category.end_time));
-          }, 0);
-          return (
-            <div key={worker.id} className={worker.id === currentUserId ? "rounded-xl border border-[#e8b1bf] bg-paradise-softPink/30 p-3" : "rounded-xl border border-black/5 dark:border-white/5 bg-white dark:bg-white/5 p-3"}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-[color:var(--text)]">{worker.id === currentUserId ? `${worker.name} (tu)` : worker.name}</p>
-                <p className="text-sm font-semibold text-[color:var(--text)]">{scheduledHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</p>
-              </div>
-              <p className="mt-1 text-xs text-black/50 dark:text-white/45">{shifts.length} turni programmati{absences.length ? ` - ${absences.length} assenze/riposi` : ""}</p>
-            </div>
-          );
-        })}
-      </div>
-      <div className="schedule-scroll hidden max-w-full overflow-x-auto rounded-2xl border border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/5 lg:block">
-        <table className="min-w-[1040px] w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-paradise-nude/70 dark:bg-white/5">
-              <th className="sticky left-0 z-10 w-36 border-r border-black/5 dark:border-white/10 bg-paradise-nude/95 dark:bg-neutral-900 px-3 py-3 text-left">Staff</th>
-              {days.map((day) => (
-                <th key={day.toISOString()} className="w-8 border-r border-black/5 dark:border-white/10 px-1 py-2 text-center">
-                  <span className="block font-semibold text-[color:var(--text)]">{day.getDate()}</span>
-                  <span className="block text-[10px] uppercase text-black/45 dark:text-white/40">{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(day).slice(0, 1)}</span>
-                </th>
-              ))}
-              <th className="w-16 px-2 py-2 text-center text-[color:var(--text)]">Ore</th>
-            </tr>
-          </thead>
-          <tbody>
-            {workers.map((worker) => {
-              let scheduledHours = 0;
-              return (
-                <tr key={worker.id} className={worker.id === currentUserId ? "bg-paradise-softPink/25 dark:bg-white/10" : undefined}>
-                  <th className="sticky left-0 z-10 border-r border-t border-black/5 dark:border-white/10 bg-white dark:bg-neutral-900 px-3 py-2 text-left font-semibold text-[color:var(--text)]">
-                    {worker.id === currentUserId ? `${worker.name} (tu)` : worker.name}
-                  </th>
-                  {days.map((day) => {
-                    const entry = entriesByWorkerDay.get(`${worker.id}-${day.toISOString().slice(0, 10)}`);
-                    const code = entry?.category.code.toUpperCase() ?? "";
-                    if ((entry?.start_time ?? entry?.category.start_time) && (entry?.end_time ?? entry?.category.end_time)) scheduledHours += entry.category.paid_hours ?? categoryDuration(entry.start_time ?? entry.category.start_time, entry.end_time ?? entry.category.end_time);
-                    return (
-                      <td key={day.toISOString()} className="h-8 border-r border-t border-black/5 dark:border-white/10 text-center text-xs font-bold" style={entry ? { backgroundColor: entry.category.color, color: entry.category.text_color } : undefined}>
-                        {code}
-                      </td>
-                    );
-                  })}
-                  <td className="border-t border-black/5 dark:border-white/10 px-2 text-center font-semibold text-[color:var(--text)]">{scheduledHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function categoryDuration(start: string | null, end: string | null) {
   if (!start || !end) return 0;
   const [startHours, startMinutes] = start.split(":").map(Number);
   const [endHours, endMinutes] = end.split(":").map(Number);
   return Math.max(0, (endHours * 60 + endMinutes - startHours * 60 - startMinutes) / 60);
-}
-
-function Legend({ label, code, color }: { label: string; code: string; color: string }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1 text-xs font-semibold text-[color:var(--text)]">
-      <span className="grid size-5 place-items-center rounded-md border border-black/5 dark:border-white/5 text-[10px]" style={{ backgroundColor: color }}>{code}</span>
-      {label}
-    </span>
-  );
 }
 
 function QuickActionsPanel({ role }: { role: Role }) {
@@ -841,11 +935,15 @@ function QuickActionsPanel({ role }: { role: Role }) {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
         {actions.map((act) => {
           const Icon = act.icon;
+          const isRequestAction = act.href === "/requests";
           return (
             <Link 
               key={act.label} 
               href={act.href} 
-              className="flex flex-col p-4 rounded-xl border border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-paradise-pink/40 hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-sm"
+              className={cn(
+                "flex flex-col p-4 rounded-xl border border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-paradise-pink/40 hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-sm",
+                isRequestAction && "kiosk-hidden-action"
+              )}
             >
               <div className="grid size-9 place-items-center rounded-lg bg-paradise-softPink dark:bg-white/10 text-[#B85B68] dark:text-paradise-pink group-hover:scale-105 transition-transform duration-300">
                 <Icon className="size-5" />

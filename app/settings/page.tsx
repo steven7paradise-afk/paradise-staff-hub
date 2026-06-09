@@ -39,9 +39,9 @@ export default async function SettingsPage() {
           return (
             <Link key={setting.href} href={setting.href}>
               <Card className="h-full transition hover:-translate-y-0.5 hover:shadow-luxury">
-                <Icon className="size-6 text-paradise-noir/70" />
+                <Icon className="size-6 text-paradise-noir/70 dark:text-white/70" />
                 <h2 className="mt-5 text-xl font-semibold">{setting.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-black/55">{setting.text}</p>
+                <p className="mt-2 text-sm leading-6 text-black/55 dark:text-white/55">{setting.text}</p>
               </Card>
             </Link>
           );

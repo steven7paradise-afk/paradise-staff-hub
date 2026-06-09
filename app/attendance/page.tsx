@@ -48,17 +48,17 @@ export default async function AttendancePage() {
         />
       ) : null}
       {session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN" ? <Card className="overflow-hidden p-0">
-        {logs.length === 0 ? <p className="p-5 text-sm text-black/50">Nessuna timbratura registrata.</p> : null}
+        {logs.length === 0 ? <p className="p-5 text-sm text-black/50 dark:text-white/50">Nessuna timbratura registrata.</p> : null}
         {logs.map((log) => (
-          <div key={log.id} className="grid gap-4 border-b border-black/5 p-5 last:border-b-0 md:grid-cols-[1fr_0.7fr_0.7fr_0.7fr_1fr]">
+          <div key={log.id} className="grid gap-4 border-b border-black/5 dark:border-white/5 p-5 last:border-b-0 md:grid-cols-[1fr_0.7fr_0.7fr_0.7fr_1fr]">
             <div>
               <p className="font-semibold">{log.user.name}</p>
-              <p className="text-sm text-black/50">{log.location.name}</p>
+              <p className="text-sm text-black/50 dark:text-white/50">{log.location.name}</p>
             </div>
             <Badge>{typeLabels[log.type]}</Badge>
             <p className="text-sm">{new Intl.DateTimeFormat("it-IT").format(log.date)}</p>
             <p className="text-sm">{log.time}</p>
-            <p className="text-sm text-black/50">{log.device.device_name}</p>
+            <p className="text-sm text-black/50 dark:text-white/50">{log.device.device_name}</p>
           </div>
         ))}
       </Card> : null}

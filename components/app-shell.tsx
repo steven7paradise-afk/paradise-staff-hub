@@ -89,7 +89,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       <aside className="z-30 w-full max-w-full border-b border-black/5 bg-[color:var(--sidebar)] px-4 py-3 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:border-b-0 xl:border-r xl:px-5 xl:py-4">
         <div className="shrink-0 flex items-center justify-between xl:block">
           <Link href="/dashboard" className="sidebar-brand group flex items-center gap-3" title="Paradise Staff Hub">
-            <div className="grid size-11 place-items-center overflow-hidden rounded-2xl text-lg font-bold text-white shadow-soft transition-all duration-300 group-hover:scale-105 group-hover:shadow-luxury bg-transparent">
+            <div className="grid size-11 place-items-center overflow-hidden rounded-full text-lg font-bold text-white shadow-soft transition-all duration-300 group-hover:scale-105 group-hover:shadow-luxury bg-transparent">
               <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="size-full object-contain dark:invert" />
             </div>
             <div className="sidebar-label">
@@ -170,7 +170,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   );
  
   const main = (
-      <main className={cn("w-full min-w-0 max-w-full overflow-x-hidden bg-[color:var(--background)] px-4 py-5 sm:px-6 xl:px-10 xl:py-8", currentRole === "DIPENDENTE" && "pb-28 xl:pb-8")}>
+      <main className={cn("w-full min-w-0 max-w-full overflow-x-hidden bg-transparent px-4 py-5 sm:px-6 xl:px-10 xl:py-8", currentRole === "DIPENDENTE" && "pb-28 xl:pb-8")}>
         <div className="mb-5 hidden justify-end xl:flex">
           <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ?? null} />
         </div>

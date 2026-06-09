@@ -183,6 +183,10 @@ export function MonthlySchedulePlanner({
     editableTime: false,
   });
 
+  const [bulkWorkerId, setBulkWorkerId] = useState("all");
+  const [bulkDaysMode, setBulkDaysMode] = useState("mon-sat");
+  const [bulkOverwriteMode, setBulkOverwriteMode] = useState("empty");
+
   const days = daysInMonth(year, month);
   const monthDays = useMemo(() => Array.from({ length: days }, (_, index) => index + 1), [days]);
   const selectedLocation = locations.find((location) => location.id === selectedLocationId);
@@ -432,6 +436,155 @@ export function MonthlySchedulePlanner({
     setAssignments(createAssignmentsFromEntries(entries, nextYear, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
+  async function applyBulkAssignment() {
+    if (!canEditPlanning) return;
+    if (!activeCategoryId || !activeCategory) {
+      setPlannerMessage("Seleziona una categoria da applicare dal pannello 'Categorie e orari'.");
+      return;
+    }
+
+    const payload: any[] = [];
+    const updatedAssignments = { ...assignments };
+    const targets = bulkWorkerId === "all" ? activeWorkers : activeWorkers.filter((w) => w.id === bulkWorkerId);
+
+    for (const day of monthDays) {
+      const date = new Date(year, month, day);
+      const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+      let matchDay = false;
+      if (bulkDaysMode === "all") matchDay = true;
+      else if (bulkDaysMode === "mon-sat" && dayOfWeek !== 0) matchDay = true;
+      else if (bulkDaysMode === "mon-fri" && dayOfWeek >= 1 && dayOfWeek <= 5) matchDay = true;
+
+      if (!matchDay) continue;
+
+      for (const worker of targets) {
+        const key = assignmentKey(worker.id, day);
+        const current = assignments[key];
+
+        if (bulkOverwriteMode === "empty" && current) {
+          continue;
+        }
+
+        // Evita di sovrascrivere impegni in altri saloni
+        if (current?.locationId && current.locationId !== selectedLocationId) {
+          continue;
+        }
+
+        const dateUtc = new Date(Date.UTC(year, month, day));
+        payload.push({
+          userId: worker.id,
+          locationId: selectedLocationId,
+          categoryId: activeCategory.id,
+          date: dateUtc.toISOString(),
+          startTime: activeCategory.startTime ?? null,
+          endTime: activeCategory.endTime ?? null,
+        });
+
+        updatedAssignments[key] = {
+          categoryId: activeCategory.id,
+          startTime: activeCategory.startTime ?? null,
+          endTime: activeCategory.endTime ?? null,
+          locationId: selectedLocationId,
+        };
+      }
+    }
+
+    if (payload.length === 0) {
+      setPlannerMessage("Nessuna cella modificata secondo i filtri selezionati.");
+      return;
+    }
+
+    setPlannerMessage("Salvataggio di massa in corso...");
+    try {
+      const response = await fetch("/api/schedules/entries", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setPlannerMessage(data.error ?? "Errore durante il salvataggio di massa.");
+        return;
+      }
+
+      setAssignments(updatedAssignments);
+      setPlannerMessage(`Salvati con successo ${payload.length} turni.`);
+    } catch (e) {
+      setPlannerMessage("Errore di connessione.");
+    }
+  }
+
+  async function clearBulkAssignment() {
+    if (!canEditPlanning) return;
+    const confirmed = window.confirm("Sei sicuro di voler svuotare le celle selezionate nel mese per il personale indicato?");
+    if (!confirmed) return;
+
+    const payload: any[] = [];
+    const updatedAssignments = { ...assignments };
+    const targets = bulkWorkerId === "all" ? activeWorkers : activeWorkers.filter((w) => w.id === bulkWorkerId);
+
+    for (const day of monthDays) {
+      const date = new Date(year, month, day);
+      const dayOfWeek = date.getDay();
+
+      let matchDay = false;
+      if (bulkDaysMode === "all") matchDay = true;
+      else if (bulkDaysMode === "mon-sat" && dayOfWeek !== 0) matchDay = true;
+      else if (bulkDaysMode === "mon-fri" && dayOfWeek >= 1 && dayOfWeek <= 5) matchDay = true;
+
+      if (!matchDay) continue;
+
+      for (const worker of targets) {
+        const key = assignmentKey(worker.id, day);
+        const current = assignments[key];
+
+        if (!current) continue;
+
+        // Evita di svuotare impegni in altri saloni
+        if (current.locationId && current.locationId !== selectedLocationId) {
+          continue;
+        }
+
+        const dateUtc = new Date(Date.UTC(year, month, day));
+        payload.push({
+          userId: worker.id,
+          locationId: selectedLocationId,
+          categoryId: null,
+          date: dateUtc.toISOString(),
+        });
+
+        delete updatedAssignments[key];
+      }
+    }
+
+    if (payload.length === 0) {
+      setPlannerMessage("Nessun turno da eliminare secondo i filtri selezionati.");
+      return;
+    }
+
+    setPlannerMessage("Eliminazione di massa in corso...");
+    try {
+      const response = await fetch("/api/schedules/entries", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setPlannerMessage(data.error ?? "Errore durante l'eliminazione di massa.");
+        return;
+      }
+
+      setAssignments(updatedAssignments);
+      setPlannerMessage(`Svuotate con successo ${payload.length} celle.`);
+    } catch (e) {
+      setPlannerMessage("Errore di connessione.");
+    }
+  }
+
   async function downloadPdf() {
     if (!tableRef.current || exporting) return;
     setExporting(true);
@@ -582,30 +735,96 @@ export function MonthlySchedulePlanner({
                 })}
               </div>
             ) : null}
+            {canEditPlanning && (
+              <div className="mt-5 border-t border-black/5 pt-5">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-black/45 mb-3">Assegnazione Rapida (Massa)</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
+                  <label className="space-y-2">
+                    <span className="text-xs text-black/45">Dipendente</span>
+                    <select
+                      className="min-h-10 w-full rounded-2xl border border-black/10 bg-white px-3 text-xs font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                      value={bulkWorkerId}
+                      onChange={(e) => setBulkWorkerId(e.target.value)}
+                    >
+                      <option value="all">Tutti i dipendenti</option>
+                      {activeWorkers.map((worker) => (
+                        <option key={worker.id} value={worker.id}>
+                          {worker.name.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  
+                  <label className="space-y-2">
+                    <span className="text-xs text-black/45">Giorni</span>
+                    <select
+                      className="min-h-10 w-full rounded-2xl border border-black/10 bg-white px-3 text-xs font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                      value={bulkDaysMode}
+                      onChange={(e) => setBulkDaysMode(e.target.value)}
+                    >
+                      <option value="mon-sat">Dal Lunedì al Sabato</option>
+                      <option value="mon-fri">Dal Lunedì al Venerdì</option>
+                      <option value="all">Tutti i giorni (incluso Domenica)</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-xs text-black/45">Celle</span>
+                    <select
+                      className="min-h-10 w-full rounded-2xl border border-black/10 bg-white px-3 text-xs font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                      value={bulkOverwriteMode}
+                      onChange={(e) => setBulkOverwriteMode(e.target.value)}
+                    >
+                      <option value="empty">Solo celle vuote</option>
+                      <option value="overwrite">Tutte (sovrascrivi esistenti)</option>
+                    </select>
+                  </label>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={applyBulkAssignment}
+                      className="min-h-10 flex-1 rounded-2xl bg-paradise-pink text-black hover:bg-paradise-pink/80 px-4 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      type="button"
+                    >
+                      <Sparkles className="size-3.5 animate-pulse-soft" />
+                      Applica
+                    </button>
+                    <button
+                      onClick={clearBulkAssignment}
+                      className="min-h-10 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-black dark:text-white hover:bg-neutral-200 dark:hover:bg-neutral-700 px-3 text-xs font-bold transition flex items-center justify-center"
+                      type="button"
+                      title="Svuota celle nel mese"
+                    >
+                      Svuota
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
 
         {canManageCategories ? <Card className="p-6">
           <div className="mb-4">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">Configurazione</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Configurazione</p>
             <h2 className="mt-2 text-xl font-semibold">Nuova categoria / orario</h2>
-            <p className="mt-2 text-sm text-black/50">Sara salvata solo per {selectedLocation?.name ?? "il salone selezionato"}.</p>
+            <p className="mt-2 text-sm text-black/50 dark:text-white/50">Sara salvata solo per {selectedLocation?.name ?? "il salone selezionato"}.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field placeholder="Nome es. Apertura" value={newCategory.name} onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })} />
             <Field placeholder="Codice es. A" value={newCategory.code} onChange={(event) => setNewCategory({ ...newCategory, code: event.target.value })} />
             <Field type="time" value={newCategory.startTime} onChange={(event) => setNewCategory({ ...newCategory, startTime: event.target.value })} />
             <Field type="time" value={newCategory.endTime} onChange={(event) => setNewCategory({ ...newCategory, endTime: event.target.value })} />
-            <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-3">
+            <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-neutral-800 px-3">
               <span className="text-xs font-semibold">Sfondo</span>
               <input type="color" value={newCategory.color} onChange={(event) => setNewCategory({ ...newCategory, color: event.target.value })} />
             </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-3">
+            <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-neutral-800 px-3">
               <span className="text-xs font-semibold">Testo</span>
               <input type="color" value={newCategory.textColor} onChange={(event) => setNewCategory({ ...newCategory, textColor: event.target.value })} />
             </label>
           </div>
-          <label className="mt-3 flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm font-semibold">
+          <label className="mt-3 flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-neutral-800 px-4 py-3 text-sm font-semibold">
             <input
               type="checkbox"
               checked={newCategory.editableTime}
@@ -619,10 +838,10 @@ export function MonthlySchedulePlanner({
           </Button>
         </Card> : null}
       </div>
-      {plannerMessage ? <p className="no-print rounded-2xl bg-paradise-nude px-4 py-3 text-sm font-medium">{plannerMessage}</p> : null}
-
-      <div ref={tableRef} className="print-surface overflow-hidden rounded-[26px] border border-black/10 bg-white shadow-soft">
-        <div className="schedule-title border-b border-black/10 bg-paradise-noir px-6 py-5 text-white">
+      {plannerMessage ? <p className="no-print rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm font-medium dark:text-white">{plannerMessage}</p> : null}
+ 
+      <div ref={tableRef} className="print-surface overflow-hidden rounded-[26px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-soft">
+        <div className="schedule-title border-b border-black/10 dark:border-white/10 bg-paradise-noir px-6 py-5 text-white">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/45">Turnistica staff</p>
@@ -635,22 +854,22 @@ export function MonthlySchedulePlanner({
           </div>
         </div>
         <div className="schedule-scroll overflow-x-auto">
-          <table className="schedule-table w-full min-w-[1180px] border-collapse bg-white text-black">
+          <table className="schedule-table w-full min-w-[1180px] border-collapse bg-white dark:bg-neutral-900 text-black dark:text-white">
             <thead>
-              <tr className="bg-[#f8f2f5]">
-                <th className="worker-head sticky left-0 z-20 w-[220px] max-w-[220px] border border-black/10 bg-[#f8f2f5] px-3 py-3 text-left text-sm font-bold">Staff</th>
-                <th className="border border-black/10 bg-[#f8f2f5] px-2 py-3 text-center text-sm font-bold">Ore</th>
+              <tr className="bg-[#f8f2f5] dark:bg-neutral-800">
+                <th className="worker-head sticky left-0 z-20 w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 px-3 py-3 text-left text-sm font-bold">Staff</th>
+                <th className="border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 px-2 py-3 text-center text-sm font-bold">Ore</th>
                 {monthDays.map((day) => (
-                  <th key={day} className="day-head border border-black/10 bg-[#f8f2f5] text-sm font-semibold">
+                  <th key={day} className="day-head border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 text-sm font-semibold">
                     {day}
                   </th>
                 ))}
               </tr>
-              <tr className="bg-white">
-                <th className="worker-head sticky left-0 z-20 w-[220px] max-w-[220px] border border-black/10 bg-white" />
-                <th className="border border-black/10 bg-white text-[10px] font-bold uppercase text-black/45">tot.</th>
+              <tr className="bg-white dark:bg-neutral-900">
+                <th className="worker-head sticky left-0 z-20 w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900" />
+                <th className="border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-[10px] font-bold uppercase text-black/45 dark:text-white/45">tot.</th>
                 {monthDays.map((day) => (
-                  <th key={day} className="day-head border border-black/10 bg-white text-xs font-bold text-black/50">
+                  <th key={day} className="day-head border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-xs font-bold text-black/50 dark:text-white/50">
                     {weekdayShort[new Date(year, month, day).getDay()]}
                   </th>
                 ))}
@@ -659,28 +878,28 @@ export function MonthlySchedulePlanner({
             <tbody>
               {activeWorkers.length === 0 ? (
                 <tr>
-                  <td colSpan={days + 2} className="px-6 py-10 text-center text-sm text-black/45">
+                  <td colSpan={days + 2} className="px-6 py-10 text-center text-sm text-black/45 dark:text-white/45">
                     Nessun dipendente attivo in questo salone. Crea un salone attivo e assegna il personale da Dipendenti.
                   </td>
                 </tr>
               ) : null}
               {activeWorkers.map((worker) => (
                 <tr key={worker.id}>
-                  <th className="worker-cell sticky left-0 z-10 w-[220px] max-w-[220px] truncate border border-black/10 bg-white px-3 py-2 text-left text-sm font-semibold" title={worker.name}>
+                  <th className="worker-cell sticky left-0 z-10 w-[220px] max-w-[220px] truncate border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 px-3 py-2 text-left text-sm font-semibold" title={worker.name}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate">{worker.name.toUpperCase()}</span>
                       <a
                         href={`/schedules/card?userId=${worker.id}&month=${month + 1}&year=${year}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-black/35 hover:text-paradise-pink transition-colors p-1 rounded hover:bg-black/[0.03]"
+                        className="text-black/35 dark:text-white/35 hover:text-paradise-pink transition-colors p-1 rounded hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
                         title="Genera cartolina turni"
                       >
                         <Share2 className="size-3.5" />
                       </a>
                     </div>
                   </th>
-                  <td className="border border-black/10 bg-[#fbfaf9] px-2 text-center text-sm font-black">{formatHours(workerTotalMinutes(worker.id))}</td>
+                  <td className="border border-black/10 dark:border-white/10 bg-[#fbfaf9] dark:bg-neutral-800 px-2 text-center text-sm font-black">{formatHours(workerTotalMinutes(worker.id))}</td>
                   {monthDays.map((day) => {
                     const assignment = assignments[assignmentKey(worker.id, day)];
                     const category = categories.find((item) => item.id === assignment?.categoryId);
@@ -689,7 +908,7 @@ export function MonthlySchedulePlanner({
                     return (
                       <td
                         key={`${worker.id}-${day}`}
-                        className={`schedule-cell h-8 border border-black/10 text-center text-[10px] font-bold transition ${canEditPlanning ? "cursor-pointer hover:ring-2 hover:ring-paradise-pink/60" : ""}`}
+                        className={`schedule-cell h-8 border border-black/10 dark:border-white/10 text-center text-[10px] font-bold transition ${canEditPlanning ? "cursor-pointer hover:ring-2 hover:ring-paradise-pink/60" : ""}`}
                         style={{
                           backgroundColor: category?.color ?? "#FFFFFF",
                           color: category?.textColor ?? "#1F1F1F",
@@ -706,10 +925,10 @@ export function MonthlySchedulePlanner({
             </tbody>
           </table>
         </div>
-        <div className="legend flex flex-wrap gap-3 border-t border-black/10 bg-[#fbfaf9] p-4">
+        <div className="legend flex flex-wrap gap-3 border-t border-black/10 dark:border-white/10 bg-[#fbfaf9] dark:bg-neutral-800 p-4">
           {visibleCategories.map((category) => (
-            <div key={category.id} className="flex items-center gap-2 text-xs font-semibold text-black">
-              <span className="size-4 rounded border border-black/20" style={{ backgroundColor: category.color }} />
+            <div key={category.id} className="flex items-center gap-2 text-xs font-semibold text-black dark:text-white">
+              <span className="size-4 rounded border border-black/20 dark:border-white/20" style={{ backgroundColor: category.color }} />
               {category.code} - {category.name}
               {category.startTime && category.endTime ? ` (${category.startTime}-${category.endTime})` : ""}
             </div>
@@ -718,17 +937,17 @@ export function MonthlySchedulePlanner({
       </div>
 
       {cellEditor ? (
-        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[28px] border border-black/10 bg-white p-6 shadow-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/40">Modifica cella</p>
-            <h3 className="mt-2 text-2xl font-semibold">
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/35 dark:bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 p-6 shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/40 dark:text-white/40">Modifica cella</p>
+            <h3 className="mt-2 text-2xl font-semibold dark:text-white">
               {employees.find((worker) => worker.id === cellEditor.workerId)?.name ?? "Lavoratore"} · {cellEditor.day} {monthNames[month].toLowerCase()}
             </h3>
             <div className="mt-5 space-y-4">
               <label className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Categoria</span>
+                <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45 dark:text-white/45">Categoria</span>
                 <select
-                  className="min-h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                  className="min-h-12 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:text-white"
                   value={cellEditor.categoryId}
                   disabled={editorIsExternalCommitment}
                   onChange={(event) => {
@@ -746,12 +965,12 @@ export function MonthlySchedulePlanner({
                   }}
                 >
                   {editorCategory && !visibleCategories.some((category) => category.id === editorCategory.id) ? (
-                    <option value={editorCategory.id}>
+                    <option value={editorCategory.id} className="dark:bg-[#201F24] dark:text-white">
                       {editorCategory.code} - {editorCategory.name} (altro salone)
                     </option>
                   ) : null}
                   {visibleCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
+                    <option key={category.id} value={category.id} className="dark:bg-[#201F24] dark:text-white">
                       {category.code} - {category.name}
                     </option>
                   ))}
@@ -759,7 +978,7 @@ export function MonthlySchedulePlanner({
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Inizio</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45 dark:text-white/45">Inizio</span>
                   <Field
                     type="time"
                     value={cellEditor.startTime}
@@ -768,7 +987,7 @@ export function MonthlySchedulePlanner({
                   />
                 </label>
                 <label className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Fine</span>
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45 dark:text-white/45">Fine</span>
                   <Field
                     type="time"
                     value={cellEditor.endTime}
@@ -778,11 +997,11 @@ export function MonthlySchedulePlanner({
                 </label>
               </div>
               {editorIsExternalCommitment ? (
-                <p className="text-xs font-medium text-black/45">Questo e un impegno gia presente in un altro salone. Serve per non creare doppio turno.</p>
+                <p className="text-xs font-medium text-black/45 dark:text-white/45">Questo e un impegno gia presente in un altro salone. Serve per non creare doppio turno.</p>
               ) : !editorCanChangeTime ? (
-                <p className="text-xs font-medium text-black/45">Questa categoria usa sempre l'orario fisso. Attiva la modifica orario quando crei una categoria nuova.</p>
+                <p className="text-xs font-medium text-black/45 dark:text-white/45">Questa categoria usa sempre l'orario fisso. Attiva la modifica orario quando crei una categoria nuova.</p>
               ) : null}
-              <p className="rounded-2xl bg-paradise-nude px-4 py-3 text-sm text-black/60">
+              <p className="rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm text-black/60 dark:text-white/60">
                 Ore cella: <strong>{formatHours(minutesBetween(cellEditor.startTime, cellEditor.endTime))}</strong>
               </p>
             </div>

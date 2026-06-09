@@ -18,6 +18,56 @@ export async function PUT(request: NextRequest) {
   }
 
   const data = await request.json();
+
+  if (Array.isArray(data)) {
+    try {
+      // Validazione preliminare dei campi principali
+      for (const item of data) {
+        const userId = String(item.userId ?? "");
+        const locationId = item.locationId ? String(item.locationId) : null;
+        const date = new Date(String(item.date ?? ""));
+        const startTime = normalizeTime(item.startTime);
+        const endTime = normalizeTime(item.endTime);
+
+        if (!userId || !locationId || Number.isNaN(date.valueOf())) {
+          return NextResponse.json({ error: "Dati turni non validi." }, { status: 400 });
+        }
+        if (startTime === undefined || endTime === undefined || Boolean(startTime) !== Boolean(endTime)) {
+          return NextResponse.json({ error: "Formato ora inizio/fine non valido." }, { status: 400 });
+        }
+        if (startTime && endTime && endTime <= startTime) {
+          return NextResponse.json({ error: "L'ora fine deve essere successiva all'ora inizio." }, { status: 400 });
+        }
+      }
+
+      const operations = data.map((item) => {
+        const userId = String(item.userId ?? "");
+        const categoryId = item.categoryId ? String(item.categoryId) : null;
+        const locationId = item.locationId ? String(item.locationId) : null;
+        const startTime = normalizeTime(item.startTime);
+        const endTime = normalizeTime(item.endTime);
+        const date = new Date(String(item.date ?? ""));
+
+        if (!categoryId) {
+          return prisma.scheduleEntry.deleteMany({
+            where: { user_id: userId, date, location_id: locationId },
+          });
+        }
+
+        return prisma.scheduleEntry.upsert({
+          where: { user_id_date: { user_id: userId, date } },
+          update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
+          create: { user_id: userId, category_id: categoryId, location_id: locationId, date, start_time: startTime, end_time: endTime },
+        });
+      });
+
+      await prisma.$transaction(operations);
+      return NextResponse.json({ success: true, count: data.length });
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message ?? "Errore nel salvataggio di massa." }, { status: 500 });
+    }
+  }
+
   const userId = String(data.userId ?? "");
   const categoryId = data.categoryId ? String(data.categoryId) : null;
   const locationId = data.locationId ? String(data.locationId) : null;
