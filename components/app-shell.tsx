@@ -156,7 +156,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                 className="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200"
                 activeClassName="bg-white/15 text-white font-extrabold border-l-4 border-white pl-3"
               >
-                <DynamicIcon name={item.iconName} className="size-4.5 text-white/80 shrink-0" />
+                <DynamicIcon name={item.iconName} className="size-5 text-white/80 shrink-0" />
                 <span>{item.label}</span>
               </InstantLink>
             ))}

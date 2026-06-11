@@ -278,7 +278,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           {/* Card 1: Ore previste */}
           <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-paradise-gold/20 text-[#9E7A3B] shadow-sm">
-              <CalendarClock className="size-5.5" />
+              <CalendarClock className="size-5" />
             </div>
             <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Ore previste
@@ -294,7 +294,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           {/* Card 2: Giorni lavorati */}
           <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-sm">
-              <CalendarCheck className="size-5.5" />
+              <CalendarCheck className="size-5" />
             </div>
             <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Giorni lavorati
@@ -310,7 +310,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           {/* Card 3: Assenze / ritardi */}
           <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#C66170]/10 text-[#C66170] shadow-sm">
-              <ShieldCheck className="size-5.5" />
+              <ShieldCheck className="size-5" />
             </div>
             <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Assenze / Ritardi
@@ -326,7 +326,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           {/* Card 4: Pause */}
           <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 shadow-sm">
-              <Coffee className="size-5.5" />
+              <Coffee className="size-5" />
             </div>
             <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Pause

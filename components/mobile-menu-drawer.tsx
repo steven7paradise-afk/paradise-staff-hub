@@ -150,7 +150,7 @@ export function MobileMenuDrawer({
           {/* User Profile Header (mockup styled) */}
           <div className="flex items-center justify-between pb-6 border-b border-white/10">
             <div className="flex items-center gap-3.5">
-              <div className="size-13 rounded-full overflow-hidden border-2 border-white/20 bg-white/10 shadow-sm shrink-0">
+              <div className="size-12 rounded-full overflow-hidden border-2 border-white/20 bg-white/10 shadow-sm shrink-0">
                 {userPhoto ? (
                   <img src={userPhoto} alt={userName} className="size-full object-cover select-none pointer-events-none" />
                 ) : (
@@ -170,7 +170,7 @@ export function MobileMenuDrawer({
               className="grid size-9 place-items-center rounded-xl bg-white/10 border border-white/10 text-white transition active:scale-95 hover:bg-white/20"
               aria-label="Chiudi menu"
             >
-              <X className="size-4.5" />
+              <X className="size-5" />
             </button>
           </div>
 
