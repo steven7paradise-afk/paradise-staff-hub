@@ -24,6 +24,8 @@ export default async function NotificationsPage() {
     <AppShell title="Comunicazioni" role={role}>
       <NotificationManager
         role={role}
+        currentUserId={session.user.id}
+        currentUserName={session.user.name ?? ""}
         notifications={notifications.map((notification) => ({
           id: notification.id,
           title: notification.title,

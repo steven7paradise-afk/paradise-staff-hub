@@ -26,6 +26,7 @@ import {
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { ResponseDetailModal } from "@/components/response-detail-modal";
 
 type NotificationItem = {
   id: string;
@@ -88,13 +89,18 @@ export function NotificationManager({
   notifications,
   recipients,
   locations,
+  currentUserId = "",
+  currentUserName = "",
 }: {
   role: Role;
   notifications: NotificationItem[];
   recipients: Recipient[];
   locations: LocationOption[];
+  currentUserId?: string;
+  currentUserName?: string;
 }) {
   const canSend = role === "ADMIN" || role === "SUPER_ADMIN" || role === "RESPONSABILE";
+  const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(role === "RESPONSABILE" ? "location" : "all");
   const [targetId, setTargetId] = useState(locations[0]?.id ?? recipients[0]?.id ?? "");
@@ -161,6 +167,13 @@ export function NotificationManager({
   async function openNotification(notification: NotificationItem) {
     await markRead(notification);
     const href = notification.actionUrl ?? (notification.type === "RICHIESTA" ? "/requests" : notification.type === "DOCUMENTO" ? "/documents" : notification.type === "TIMBRATURA" ? "/attendance" : "");
+    if (href && href.startsWith("/service-forms/responses/")) {
+      const responseId = href.split("/").pop();
+      if (responseId) {
+        setSelectedResponseIdForModal(responseId);
+        return;
+      }
+    }
     if (!href || href === "/notifications" || notification.type === "COMUNICAZIONE") {
       setSelected({ ...notification, read: true });
       return;
@@ -403,6 +416,17 @@ export function NotificationManager({
           </Card>
         </div>
       ) : null}
+
+      {selectedResponseIdForModal && (
+        <ResponseDetailModal
+          responseId={selectedResponseIdForModal}
+          isOpen={true}
+          onClose={() => setSelectedResponseIdForModal(null)}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          currentUserRole={role}
+        />
+      )}
     </>
   );
 }
