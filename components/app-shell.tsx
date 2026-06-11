@@ -125,18 +125,38 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           {/* Hamburger Drawer */}
           <MobileMenuDrawer
             logoUrl={branding.logo_url}
+            userName={currentUser?.name ?? session?.user?.name ?? ""}
+            userPhoto={currentUser?.photo_url ?? null}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
-            logoutButton={<LogoutButton />}
+            logoutButton={
+              <LogoutButton className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/20 active:scale-95 shadow-sm" />
+            }
           >
-            {(currentRole === "DIPENDENTE" ? items : baseItems).map((item) => (
+            {(currentRole === "DIPENDENTE"
+              ? [
+                  { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
+                  { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
+                  { href: "/dashboard", label: "Timbrature", iconName: "Clock3" },
+                  ...(servicePageNum === 2
+                    ? [{ href: "/tasks", label: "TASK", iconName: "CheckSquare" }]
+                    : []),
+                  ...(servicePageNum === 3 || hasFormsAccess
+                    ? [{ href: "/service-forms", label: "Moduli", iconName: "ClipboardList" }]
+                    : []),
+                  ...(servicePageNum === 1
+                    ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
+                    : []),
+                ]
+              : baseItems
+            ).map((item) => (
               <InstantLink
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-200"
-                activeClassName="bg-paradise-softPink/60 text-[#C66170] font-bold dark:bg-white/20 dark:text-white"
+                className="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200"
+                activeClassName="bg-white/15 text-white font-extrabold border-l-4 border-white pl-3"
               >
-                <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)]" />
+                <DynamicIcon name={item.iconName} className="size-4.5 text-white/80 shrink-0" />
                 <span>{item.label}</span>
               </InstantLink>
             ))}
@@ -286,30 +306,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       </main>
   );
  
-  const mobileNav = currentRole === "DIPENDENTE" ? (
-        <nav className="fixed inset-x-4 bottom-4 z-40 flex justify-around rounded-3xl border border-black/5 bg-white/80 px-2 py-2.5 shadow-luxury backdrop-blur-lg dark:border-white/10 dark:bg-black/75 xl:hidden">
-          {mobileItems.map((item) => {
-            return (
-              <InstantLink
-                key={item.href}
-                href={item.href}
-                className="relative flex min-w-14 flex-col items-center gap-1 rounded-2xl px-2 py-1.5 text-[10px] font-semibold text-black/65 transition-all duration-300 active:scale-95 dark:text-white/70"
-                activeClassName="bg-paradise-softPink/60 text-paradise-noir shadow-[0_0_12px_rgba(255,214,234,0.4)] dark:bg-white/20 dark:text-white"
-              >
-                <div className="relative">
-                  <DynamicIcon name={item.iconName} className="size-5 transition-transform duration-300 hover:scale-110" />
-                  {item.href === "/notifications" && unreadNotifications > 0 ? (
-                    <span className="absolute -right-3 -top-2 min-w-4 rounded-full bg-[#C66170] px-1 text-center text-[10px] font-bold leading-4 text-white shadow-[0_0_6px_rgba(198,97,112,0.4)] animate-pulse-soft">
-                      {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                    </span>
-                  ) : null}
-                </div>
-                {item.label}
-              </InstantLink>
-            );
-          })}
-        </nav>
-      ) : null;
+  const mobileNav = null;
 
   return (
     <SidebarFrame

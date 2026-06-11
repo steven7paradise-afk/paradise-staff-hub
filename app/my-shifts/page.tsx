@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Coffee, Timer, Sparkles, Share2 } from "lucide-react";
+import { CalendarDays, CalendarClock, CalendarCheck, ChevronLeft, ChevronRight, Clock3, Coffee, Timer, Sparkles, Share2, ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card } from "@/components/ui";
@@ -276,11 +276,11 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         {/* Horizontal metrics row */}
         <div className="flex overflow-x-auto gap-3 pb-3 mt-4 -mx-4 px-4 scrollbar-hide">
           {/* Card 1: Ore previste */}
-          <div className="min-w-[130px] flex-1 rounded-2xl border border-amber-500/10 bg-white p-4.5 shadow-sm">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-[#9E7A3B]">
-              <CalendarDays className="size-5" />
+          <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-paradise-gold/20 text-[#9E7A3B] shadow-sm">
+              <CalendarClock className="size-5.5" />
             </div>
-            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-3.5">
+            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Ore previste
             </p>
             <p className="text-base font-extrabold text-paradise-noir mt-0.5">
@@ -292,13 +292,11 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           </div>
 
           {/* Card 2: Giorni lavorati */}
-          <div className="min-w-[130px] flex-1 rounded-2xl border border-emerald-500/10 bg-white p-4.5 shadow-sm">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
-              <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+          <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-sm">
+              <CalendarCheck className="size-5.5" />
             </div>
-            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-3.5">
+            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Giorni lavorati
             </p>
             <p className="text-base font-extrabold text-paradise-noir mt-0.5">
@@ -310,13 +308,11 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           </div>
 
           {/* Card 3: Assenze / ritardi */}
-          <div className="min-w-[130px] flex-1 rounded-2xl border border-[#C66170]/10 bg-white p-4.5 shadow-sm">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#C66170]/10 text-[#C66170]">
-              <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
+          <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#C66170]/10 text-[#C66170] shadow-sm">
+              <ShieldCheck className="size-5.5" />
             </div>
-            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-3.5">
+            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Assenze / Ritardi
             </p>
             <p className="text-base font-extrabold text-paradise-noir mt-0.5">
@@ -328,11 +324,11 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           </div>
 
           {/* Card 4: Pause */}
-          <div className="min-w-[130px] flex-1 rounded-2xl border border-purple-500/10 bg-white p-4.5 shadow-sm">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600">
-              <Coffee className="size-5" />
+          <div className="min-w-[135px] flex-1 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 shadow-sm">
+              <Coffee className="size-5.5" />
             </div>
-            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-3.5">
+            <p className="text-[9px] font-bold text-black/35 uppercase tracking-wider mt-4">
               Pause
             </p>
             <p className="text-base font-extrabold text-paradise-noir mt-0.5">
@@ -348,25 +344,27 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         <CurrentlyAtWork activeClockInTime={activeClockInTime} />
 
         {/* Weekly strip calendar */}
-        <div className="rounded-[24px] border border-black/5 bg-white pt-5 pb-6 px-4.5 shadow-soft">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-extrabold text-paradise-noir tracking-tight">Questa settimana</h3>
-            <div className="flex items-center gap-1">
-              <Link
-                href={`/my-shifts?month=${month + 1}&year=${year}&weekOffset=${weekOffset - 1}`}
-                className="grid size-7 place-items-center rounded-lg border border-black/5 bg-neutral-50 hover:bg-neutral-100 transition active:scale-95"
-              >
-                <ChevronLeft className="size-3.5 text-black/60" />
-              </Link>
-              <Link
-                href={`/my-shifts?month=${month + 1}&year=${year}&weekOffset=${weekOffset + 1}`}
-                className="grid size-7 place-items-center rounded-lg border border-black/5 bg-neutral-50 hover:bg-neutral-100 transition active:scale-95"
-              >
-                <ChevronRight className="size-3.5 text-black/60" />
-              </Link>
-            </div>
+        {/* Title and Chevrons (Outside the card, aligned with it) */}
+        <div className="flex items-center justify-between mb-2.5 px-0">
+          <h3 className="text-xs font-extrabold text-paradise-noir uppercase tracking-wider">Questa settimana</h3>
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={`/my-shifts?month=${month + 1}&year=${year}&weekOffset=${weekOffset - 1}`}
+              className="grid size-7 place-items-center rounded-lg border border-black/5 bg-white hover:bg-neutral-50 transition active:scale-95 shadow-sm"
+            >
+              <ChevronLeft className="size-3.5 text-black/60" />
+            </Link>
+            <Link
+              href={`/my-shifts?month=${month + 1}&year=${year}&weekOffset=${weekOffset + 1}`}
+              className="grid size-7 place-items-center rounded-lg border border-black/5 bg-white hover:bg-neutral-50 transition active:scale-95 shadow-sm"
+            >
+              <ChevronRight className="size-3.5 text-black/60" />
+            </Link>
           </div>
+        </div>
 
+        {/* Weekly strip calendar Card */}
+        <div className="rounded-[24px] border border-black/5 bg-white pt-5 pb-6 px-4.5 shadow-soft">
           <div className="grid grid-cols-7 gap-1 text-center">
             {weekDaysData.map(({ date, plannedHours, workedHours, schedule }) => {
               const isToday = date.toDateString() === today.toDateString();
