@@ -7,7 +7,31 @@ import { InstantLink } from "@/components/instant-link";
 import type { Role } from "@/lib/roles";
 
 type LocationOption = { id: string; name: string };
-type ServicePageSetting = { locationId: string; page: number };
+type ServicePageSetting = { locationId: string; page: number; customName?: string; customIcon?: string };
+
+const availableIcons = [
+  { value: "FilePenLine", label: "Penna (Note)" },
+  { value: "CheckSquare", label: "Check (Task)" },
+  { value: "ClipboardList", label: "Clipboard (Form)" },
+  { value: "CalendarDays", label: "Calendario" },
+  { value: "Users", label: "Utenti/Team" },
+  { value: "Building2", label: "Salone" },
+  { value: "Smartphone", label: "Tablet" },
+  { value: "ShieldCheck", label: "Ferie/Richieste" },
+  { value: "FileText", label: "Documenti" },
+  { value: "Calculator", label: "Calcolatrice" },
+  { value: "LayoutDashboard", label: "Dashboard" },
+  { value: "Settings", label: "Ingranaggio" },
+  { value: "Bell", label: "Campanella" },
+  { value: "Mail", label: "Busta" },
+  { value: "Palette", label: "Tavolozza" },
+  { value: "Star", label: "Stella" },
+  { value: "Coffee", label: "Caffè" },
+  { value: "ShoppingBag", label: "Busta spesa" },
+  { value: "Utensils", label: "Posate" },
+  { value: "Package", label: "Pacco" },
+  { value: "Folder", label: "Cartella" },
+];
 
 const pageInfo = {
   1: { title: "NOTE", text: "Note operative", href: "/service-notes", icon: FilePenLine },
@@ -31,22 +55,29 @@ export function SalonServicePages({
   initialSettings: ServicePageSetting[];
 }) {
   const canManage = role === "SUPER_ADMIN" || role === "ADMIN";
-  const [settings, setSettings] = useState<Record<string, number>>(
-    initialSettings.reduce<Record<string, number>>((accumulator, setting) => {
-      accumulator[setting.locationId] = normalizePage(setting.page);
+  const [settings, setSettings] = useState<Record<string, { page: number; customName: string; customIcon: string }>>(
+    initialSettings.reduce<Record<string, { page: number; customName: string; customIcon: string }>>((accumulator, setting) => {
+      accumulator[setting.locationId] = {
+        page: normalizePage(setting.page),
+        customName: setting.customName || "",
+        customIcon: setting.customIcon || "",
+      };
       return accumulator;
     }, {}),
   );
   const activeLocation = locations.find((location) => location.id === currentLocationId) ?? locations[0];
-  const activePage = normalizePage(activeLocation ? settings[activeLocation.id] : 1);
+  const activePage = normalizePage(activeLocation ? settings[activeLocation.id]?.page : 1);
   const servicePages = Object.entries(pageInfo).map(([page, info]) => ({ page: Number(page), ...info }));
 
-  async function save(locationId: string, page: number) {
-    setSettings((current) => ({ ...current, [locationId]: page }));
+  async function save(locationId: string, page: number, customName: string, customIcon: string) {
+    setSettings((current) => ({
+      ...current,
+      [locationId]: { page, customName, customIcon },
+    }));
     await fetch("/api/settings/service-pages", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ locationId, page }),
+      body: JSON.stringify({ locationId, page, customName, customIcon }),
     });
   }
 
@@ -61,16 +92,46 @@ export function SalonServicePages({
             </div>
             <Badge tone="gold">{locations.length} saloni</Badge>
           </div>
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             {locations.map((location) => (
-              <label key={location.id} className="grid gap-3 rounded-2xl border border-black/5 bg-[#FBF7F9] p-4">
-                <span className="text-sm font-semibold leading-5">{location.name}</span>
-                <Select value={normalizePage(settings[location.id])} onChange={(event) => save(location.id, Number(event.target.value))}>
-                  <option value={1}>NOTE</option>
-                  <option value={2}>TASK</option>
-                  <option value={3}>FORMS</option>
-                </Select>
-              </label>
+              <div key={location.id} className="grid gap-3 rounded-2xl border border-black/5 bg-[#FBF7F9] p-4">
+                <span className="text-sm font-semibold leading-5 border-b border-black/5 pb-2">{location.name}</span>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-xs text-black/45 block mb-1">Pagina principale</span>
+                    <Select 
+                      value={settings[location.id]?.page ?? 1} 
+                      onChange={(event) => save(location.id, Number(event.target.value), settings[location.id]?.customName ?? "", settings[location.id]?.customIcon ?? "")}
+                    >
+                      <option value={1}>NOTE</option>
+                      <option value={2}>TASK</option>
+                      <option value={3}>FORMS</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <span className="text-xs text-black/45 block mb-1">Nome personalizzato</span>
+                    <input 
+                      type="text" 
+                      value={settings[location.id]?.customName ?? ""}
+                      placeholder="es. Corsisti"
+                      onChange={(event) => save(location.id, settings[location.id]?.page ?? 1, event.target.value, settings[location.id]?.customIcon ?? "")}
+                      className="min-h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm outline-none transition placeholder:text-black/35 focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs text-black/45 block mb-1">Icona personalizzata</span>
+                    <Select 
+                      value={settings[location.id]?.customIcon ?? ""}
+                      onChange={(event) => save(location.id, settings[location.id]?.page ?? 1, settings[location.id]?.customName ?? "", event.target.value)}
+                    >
+                      <option value="">Default della pagina</option>
+                      {availableIcons.map((ico) => (
+                        <option key={ico.value} value={ico.value}>{ico.label}</option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </Card>

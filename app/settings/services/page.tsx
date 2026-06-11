@@ -24,10 +24,25 @@ export default async function ServiceSettingsPage() {
         role={role}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
         currentLocationId={locations[0]?.id ?? null}
-        initialSettings={serviceSettings.map((setting) => ({
-          locationId: setting.key.replace("service_page:", ""),
-          page: Number(setting.value) || 1,
-        }))}
+        initialSettings={serviceSettings.map((setting) => {
+          let page = 1;
+          let customName = "";
+          let customIcon = "";
+          if (setting.value && typeof setting.value === "object" && !Array.isArray(setting.value)) {
+            const valObj = setting.value as any;
+            page = Number(valObj.page) || 1;
+            customName = String(valObj.customName || "");
+            customIcon = String(valObj.customIcon || "");
+          } else {
+            page = Number(setting.value) || 1;
+          }
+          return {
+            locationId: setting.key.replace("service_page:", ""),
+            page,
+            customName,
+            customIcon,
+          };
+        })}
       />
     </AppShell>
   );

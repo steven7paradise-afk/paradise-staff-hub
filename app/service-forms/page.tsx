@@ -12,7 +12,7 @@ export default async function ServiceFormsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
-  await requireServicePageAccess(role, session.user.sedeId, 3);
+  await requireServicePageAccess(role, session.user.sedeId, 3, session.user.id);
 
   const locationId = session.user.sedeId;
 
@@ -33,11 +33,8 @@ export default async function ServiceFormsPage() {
     return roleMatch && locationMatch;
   });
 
-  // Fetch responses (active/non-archived) that this employee can see (their own, their salon's, or those they are notified about)
+  // Fetch all responses that this employee can see (their own, their salon's, or those they are notified about, including archived ones where nominated)
   const responses = await prisma.serviceFormResponse.findMany({
-    where: {
-      status: { not: "ARCHIVED" },
-    },
     include: {
       user: true,
       form: true,
@@ -46,19 +43,27 @@ export default async function ServiceFormsPage() {
   });
 
   const allowedResponses = responses.filter((r) => {
+    const notifyUserIds = r.form?.notify_user_ids as string[] | null;
+    const notifyRoles = r.form?.notify_roles as string[] | null;
+
+    const isUserNotified = notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(session.user.id);
+    const isRoleNotified = notifyRoles && Array.isArray(notifyRoles) && notifyRoles.includes(role);
+    const isNominated = isUserNotified || isRoleNotified;
+
+    if (r.status === "ARCHIVED") {
+      // For archived ones: only see own submission or where explicitly nominated
+      return r.user_id === session.user.id || isNominated;
+    }
+
+    // For active ones:
     // 1. Own submission
     if (r.user_id === session.user.id) return true;
     
     // 2. Same salon
     if (locationId && r.user_location_id === locationId) return true;
     
-    // 3. User explicitly notified
-    const notifyUserIds = r.form?.notify_user_ids as string[] | null;
-    if (notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(session.user.id)) return true;
-
-    // 4. Role notified
-    const notifyRoles = r.form?.notify_roles as string[] | null;
-    if (notifyRoles && Array.isArray(notifyRoles) && notifyRoles.includes(role)) return true;
+    // 3. Nominated
+    if (isNominated) return true;
 
     return false;
   });

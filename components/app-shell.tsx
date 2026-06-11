@@ -41,14 +41,60 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
     ? await prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } })
     : null;
-  const servicePage = servicePages[normalizeServicePage(String(serviceSetting?.value ?? 1))];
-  const selectedServiceItem = { href: servicePage.href, label: servicePage.label, iconName: servicePage.iconName, roles: ["DIPENDENTE"] as Role[] };
+
+  let servicePageNum = 1;
+  let customLabel = "";
+  let customIcon = "";
+
+  if (serviceSetting?.value) {
+    if (typeof serviceSetting.value === "object" && serviceSetting.value !== null && !Array.isArray(serviceSetting.value)) {
+      const valObj = serviceSetting.value as any;
+      servicePageNum = Number(valObj.page) || 1;
+      customLabel = String(valObj.customName || "");
+      customIcon = String(valObj.customIcon || "");
+    } else {
+      servicePageNum = Number(serviceSetting.value) || 1;
+    }
+  }
+
+  const servicePage = servicePages[normalizeServicePage(servicePageNum)];
+  const selectedServiceItem = {
+    href: servicePage.href,
+    label: customLabel || servicePage.label,
+    iconName: customIcon || servicePage.iconName,
+    roles: ["DIPENDENTE"] as Role[]
+  };
+
+  const hasFormsAccess = currentRole === "DIPENDENTE" && session?.user?.id
+    ? (await prisma.serviceForm.findMany({
+        where: { active: true },
+        select: { notify_user_ids: true, notify_roles: true }
+      })).some((form) => {
+        const notifyUserIds = form.notify_user_ids as string[] | null;
+        const notifyRoles = form.notify_roles as string[] | null;
+        return (
+          (notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(session.user.id)) ||
+          (notifyRoles && Array.isArray(notifyRoles) && notifyRoles.includes(currentRole))
+        );
+      })
+    : false;
+
+  const showFormsLinkSeparately = hasFormsAccess && servicePageNum !== 3;
+
+  const formsLinkItem = {
+    href: "/service-forms",
+    label: "Moduli",
+    iconName: "ClipboardList",
+    roles: ["DIPENDENTE"] as Role[]
+  };
+
   const baseItems = visibleForRole(nav, currentRole);
   const salonGroupItems = currentRole === "DIPENDENTE" ? [] : baseItems.filter((item) => salonGroupRoutes.has(item.href));
   const items = currentRole === "DIPENDENTE"
     ? [
         ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks"),
         selectedServiceItem,
+        ...(showFormsLinkSeparately ? [formsLinkItem] : []),
       ]
     : baseItems.filter((item) => !salonGroupRoutes.has(item.href));
   const unreadNotifications = session?.user?.id
