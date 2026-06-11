@@ -119,7 +119,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     : [];
 
   const aside = (
-      <aside className="z-30 w-full max-w-full border-b-0 border-transparent bg-transparent px-4 py-3 xl:border-r xl:border-black/5 xl:bg-[color:var(--sidebar)] xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden">
+      <aside className="z-30 w-full max-w-full border-b-0 border-transparent bg-[color:var(--background)] px-4 py-3 xl:border-r xl:border-black/5 xl:bg-[color:var(--sidebar)] xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden">
         {/* Mobile Header (xl:hidden) */}
         <div className="relative flex xl:hidden items-center justify-between w-full">
           {/* Hamburger Drawer */}
