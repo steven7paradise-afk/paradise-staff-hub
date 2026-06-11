@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ChevronsLeft, ChevronsRight, Home } from "lucide-react";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SidebarFrame({
@@ -17,21 +16,12 @@ export function SidebarFrame({
   style: React.CSSProperties;
 }) {
   const [collapsed, setCollapsed] = useState(true);
-  const [isKiosk, setIsKiosk] = useState(false);
-  const [showHomeButton, setShowHomeButton] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && window.self !== window.top) {
-      setIsKiosk(true);
-      if (window.location.pathname !== "/dashboard") {
-        setShowHomeButton(true);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const isTablet = typeof document !== "undefined" && document.cookie.includes("paradise_tablet_access");
-    if (!isTablet) return;
+    const hasTabletCookie = typeof document !== "undefined" && document.cookie.includes("paradise_tablet_access");
+    setIsTablet(hasTabletCookie);
+    if (!hasTabletCookie) return;
 
     let timeoutId: number;
 
@@ -54,37 +44,12 @@ export function SidebarFrame({
     };
   }, []);
 
-  if (isKiosk) {
-    return (
-      <div 
-        className="paradise-theme-root min-h-screen bg-[color:var(--background)] xl:h-screen xl:overflow-hidden kiosk-mode" 
-        style={style}
-      >
-        <div className="h-screen flex flex-col overflow-hidden">
-          <div className="bg-transparent flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto luxury-scroll min-w-0">
-              {main}
-            </div>
-          </div>
-        </div>
-        {showHomeButton && (
-          <Link
-            href="/dashboard"
-            className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-gradient-to-tr from-paradise-pink to-[#ffa8dd] text-paradise-noir shadow-luxury hover:scale-105 active:scale-95 transition-all duration-300 border border-white/50"
-            title="Torna alla Dashboard"
-          >
-            <Home className="size-6" />
-          </Link>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div
       className={cn(
         "paradise-theme-root min-h-screen bg-[color:var(--background)] xl:h-screen xl:overflow-hidden",
-        collapsed && "sidebar-collapsed"
+        collapsed && "sidebar-collapsed",
+        isTablet && "tablet-mode"
       )}
       style={style}
     >

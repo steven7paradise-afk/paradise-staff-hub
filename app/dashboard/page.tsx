@@ -78,11 +78,22 @@ function mondayOffset(date: Date) {
 
 export default async function DashboardPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  if (!session?.user?.id || !session.user.role) redirect("/login");
 
-  const role = session.user.role as Role;
-  const currentUser = await prisma.user.findUnique({ where: { id: session.user.id }, include: { location: true } });
-  if (!currentUser) redirect("/login");
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: { location: true },
+  });
+  if (!currentUser?.active) redirect("/login");
+
+  const role: Role = currentUser.role;
+
+  const dateLabel = new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/Rome",
+  }).format(new Date());
 
   const { start, end, month, nextMonth } = dayRange();
   const statusToday = romeDate();
@@ -299,42 +310,108 @@ export default async function DashboardPage() {
   }
 
   return (
-    <AppShell title={role === "DIPENDENTE" ? `Ciao, ${currentUser.name.split(" ")[0]}` : "Dashboard"} subtitle={subtitle} role={role}>
-      {role !== "DIPENDENTE" ? (
-        <section 
-          className="flex gap-3 overflow-x-auto pb-3 snap-x md:grid md:gap-4 md:grid-cols-2 xl:grid-cols-4 md:pb-0 animate-fade-in-up opacity-0 mb-6" 
-          style={{ animationFillMode: "forwards" }}
-        >
-          {metrics.map((metric, idx) => {
-            const Icon = metric.icon;
-            const borderColors = [
-              "border-l-4 border-l-paradise-pink",
-              "border-l-4 border-l-[#d4af37]",
-              "border-l-4 border-l-emerald-500",
-              "border-l-4 border-l-[#C66170]"
-            ];
-            const borderColor = borderColors[idx % borderColors.length];
-            return (
-              <Card 
-                key={metric.label} 
-                className={cn("p-4 md:p-6 min-w-[170px] shrink-0 snap-start flex-1 md:min-w-0 border border-black/5 dark:border-white/10 shadow-sm", borderColor)}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-xs md:text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">{metric.label}</p>
-                  <div className="grid size-8 place-items-center rounded-lg bg-paradise-softPink/40 dark:bg-white/5 text-[#B85B68] dark:text-paradise-pink">
-                    <Icon className="size-4.5" />
+    <AppShell 
+      title={role === "DIPENDENTE" ? `Ciao, ${currentUser.name.split(" ")[0]}` : "Dashboard"} 
+      subtitle={subtitle} 
+      role={role}
+      hideHeader={role === "DIPENDENTE"}
+    >
+      {/* Profile Banner (Replaces standard header for DIPENDENTE) */}
+      {role === "DIPENDENTE" ? (
+        <div className="relative overflow-hidden rounded-3xl border border-black/5 bg-white/70 dark:bg-white/5 dark:border-white/10 p-5 md:p-6 shadow-sm backdrop-blur-md flex flex-col md:flex-row items-center md:items-start justify-between gap-5 transition-all duration-300 hover:shadow-luxury mb-6">
+          <div className="absolute top-0 right-0 -z-10 translate-x-12 -translate-y-12 size-40 rounded-full bg-paradise-softPink/20 dark:bg-white/5 blur-3xl" />
+          
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 w-full md:w-auto">
+            {/* User Photo */}
+            <div className="relative shrink-0">
+              <div className="relative grid size-20 md:size-24 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-3xl font-extrabold shadow-luxury ring-4 ring-white dark:ring-white/10">
+                {currentUser.photo_url ? (
+                  <img src={currentUser.photo_url} alt={currentUser.name} className="size-full object-cover" />
+                ) : (
+                  currentUser.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
+                )}
+              </div>
+              <span className="absolute bottom-1 right-1 size-4 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-neutral-900 animate-pulse-green" />
+            </div>
+
+            {/* User details */}
+            <div className="min-w-0 flex-1 text-center sm:text-left flex flex-col justify-center h-full pt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 justify-center sm:justify-start">
+                <h2 className="text-2xl font-bold tracking-tight text-[color:var(--text)]">
+                  {currentUser.name}
+                </h2>
+                {currentUser.location && (
+                  <div className="inline-flex self-center sm:self-auto items-center gap-1.5 rounded-full bg-paradise-softPink/60 dark:bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-[#B85B68] dark:text-paradise-pink">
+                    <Building2 className="size-3" />
+                    {currentUser.location.name}
                   </div>
+                )}
+              </div>
+              
+              {/* Contact Information & details */}
+              <div className="mt-3.5 flex flex-wrap justify-center sm:justify-start gap-x-6 gap-y-2 text-sm text-black/60 dark:text-white/60">
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  <span className="text-black/30 dark:text-white/30 font-medium">Email:</span>
+                  <span className="font-semibold text-black/80 dark:text-white/80">{currentUser.email}</span>
                 </div>
-                <p className="mt-4 md:mt-5 text-2xl md:text-3xl font-bold tracking-tight text-[color:var(--text)]">{metric.value}</p>
-                <p className="mt-2 text-[10px] md:text-xs text-black/45 dark:text-white/45">{metric.trend}</p>
-              </Card>
-            );
-          })}
-        </section>
+                <div className="flex items-center gap-2 justify-center sm:justify-start">
+                  <span className="text-black/30 dark:text-white/30 font-medium">Telefono:</span>
+                  <span className="font-semibold text-black/80 dark:text-white/80">{currentUser.whatsapp_phone ?? "Non impostato"}</span>
+                </div>
+                {currentUser.fiscal_code && (
+                  <div className="flex items-center gap-2 justify-center sm:justify-start">
+                    <span className="text-black/30 dark:text-white/30 font-medium">CF:</span>
+                    <span className="font-semibold text-black/80 dark:text-white/80 uppercase">{currentUser.fiscal_code}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Date Badge */}
+          <div className="shrink-0 rounded-full border border-black/5 bg-white dark:border-white/10 dark:bg-white/10 px-4 py-2 text-sm shadow-sm font-medium text-black/75 dark:text-white/80 self-center md:self-start">
+            {dateLabel}
+          </div>
+        </div>
       ) : null}
 
-      {/* Quick Actions Panel */}
-      <QuickActionsPanel role={role} />
+      {role !== "DIPENDENTE" ? (
+        <>
+          <section 
+            className="flex gap-3 overflow-x-auto pb-3 snap-x md:grid md:gap-4 md:grid-cols-2 xl:grid-cols-4 md:pb-0 animate-fade-in-up opacity-0 mb-6" 
+            style={{ animationFillMode: "forwards" }}
+          >
+            {metrics.map((metric, idx) => {
+              const Icon = metric.icon;
+              const borderColors = [
+                "border-l-4 border-l-paradise-pink",
+                "border-l-4 border-l-[#d4af37]",
+                "border-l-4 border-l-emerald-500",
+                "border-l-4 border-l-[#C66170]"
+              ];
+              const borderColor = borderColors[idx % borderColors.length];
+              return (
+                <Card 
+                  key={metric.label} 
+                  className={cn("p-4 md:p-6 min-w-[170px] shrink-0 snap-start flex-1 md:min-w-0 border border-black/5 dark:border-white/10 shadow-sm", borderColor)}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs md:text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">{metric.label}</p>
+                    <div className="grid size-8 place-items-center rounded-lg bg-paradise-softPink/40 dark:bg-white/5 text-[#B85B68] dark:text-paradise-pink">
+                      <Icon className="size-4.5" />
+                    </div>
+                  </div>
+                  <p className="mt-4 md:mt-5 text-2xl md:text-3xl font-bold tracking-tight text-[color:var(--text)]">{metric.value}</p>
+                  <p className="mt-2 text-[10px] md:text-xs text-black/45 dark:text-white/45">{metric.trend}</p>
+                </Card>
+              );
+            })}
+          </section>
+
+          {/* Quick Actions Panel for non-DIPENDENTE */}
+          <QuickActionsPanel role={role} />
+        </>
+      ) : null}
 
       {role === "DIPENDENTE" ? (
         <section className="min-w-0 grid gap-5 animate-fade-in-up opacity-0" style={{ animationFillMode: "forwards" }}>
@@ -348,6 +425,9 @@ export default async function DashboardPage() {
             startTime={todayShiftStartTime}
             assignedHours={todayShiftAssignedHours}
           />
+          
+          {/* Quick Actions Panel for DIPENDENTE */}
+          <QuickActionsPanel role={role} />
           <div className="grid gap-5 xl:grid-cols-3 animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <Card>
               <PanelHeader title="Il mio turno di oggi" href="/my-shifts" icon={CalendarDays} />
@@ -386,26 +466,7 @@ export default async function DashboardPage() {
               ) : <EmptyText text="Nessun prossimo turno programmato." />}
             </Card>
           </div>
-          <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr] animate-fade-in-up [animation-delay:200ms] opacity-0" style={{ animationFillMode: "forwards" }}>
-            <Card>
-              <PanelHeader title="Il mio profilo" href="/profile" icon={UserRound} />
-              <div className="mt-4 flex items-center gap-3">
-                <div className="relative grid size-14 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-xl font-bold shadow-soft">
-                  {currentUser.photo_url ? <img src={currentUser.photo_url} alt={currentUser.name} className="size-full object-cover" /> : currentUser.name.slice(0, 1)}
-                  <span className="absolute -right-0.5 top-0 size-3 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse-green" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">{currentUser.name}</p>
-                  <p className="text-xs text-black/50 dark:text-white/50">{currentUser.location?.name ?? "Nessun salone"}</p>
-                </div>
-              </div>
-              <div className="mt-4 grid gap-2 text-sm">
-                <Info label="Email" value={currentUser.email} />
-                <Info label="Telefono" value={currentUser.whatsapp_phone ?? "Non impostato"} />
-                <Info label="Codice fiscale" value={currentUser.fiscal_code ?? "Non impostato"} />
-                <Info label="Contratto fino al" value={formatDate(currentUser.contract_end)} />
-              </div>
-            </Card>
+          <div className="animate-fade-in-up [animation-delay:200ms] opacity-0" style={{ animationFillMode: "forwards" }}>
             <Card>
               <PanelHeader title="Documenti recenti" href="/documents" icon={FileText} />
               <div className="mt-3"><PersonalDocuments documents={personalDocuments.slice(0, 3)} /></div>
@@ -935,15 +996,11 @@ function QuickActionsPanel({ role }: { role: Role }) {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
         {actions.map((act) => {
           const Icon = act.icon;
-          const isRequestAction = act.href === "/requests";
           return (
             <Link 
               key={act.label} 
               href={act.href} 
-              className={cn(
-                "flex flex-col p-4 rounded-xl border border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-paradise-pink/40 hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-sm",
-                isRequestAction && "kiosk-hidden-action"
-              )}
+              className="flex flex-col p-4 rounded-xl border border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-paradise-pink/40 hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-sm"
             >
               <div className="grid size-9 place-items-center rounded-lg bg-paradise-softPink dark:bg-white/10 text-[#B85B68] dark:text-paradise-pink group-hover:scale-105 transition-transform duration-300">
                 <Icon className="size-5" />

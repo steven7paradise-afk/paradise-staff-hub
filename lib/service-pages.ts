@@ -1,9 +1,8 @@
-import { CheckSquare, ClipboardList, FilePenLine } from "lucide-react";
 
 export const servicePages = {
-  1: { label: "NOTE", href: "/service-notes", icon: FilePenLine },
-  2: { label: "TASK", href: "/tasks", icon: CheckSquare },
-  3: { label: "FORMS", href: "/service-forms", icon: ClipboardList },
+  1: { label: "NOTE", href: "/service-notes", iconName: "FilePenLine" },
+  2: { label: "TASK", href: "/tasks", iconName: "CheckSquare" },
+  3: { label: "FORMS", href: "/service-forms", iconName: "ClipboardList" },
 } as const;
 
 export type ServicePageNumber = keyof typeof servicePages;

@@ -1,20 +1,4 @@
 import Link from "next/link";
-import {
-  Bell,
-  CalendarCheck,
-  CalendarDays,
-  Calculator,
-  CheckSquare,
-  ClipboardList,
-  FileText,
-  Building2,
-  LayoutDashboard,
-  Settings,
-  ShieldCheck,
-  Smartphone,
-  UserRound,
-  Users,
-} from "lucide-react";
 import { auth } from "@/lib/auth";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
@@ -27,26 +11,29 @@ import { SidebarFrame } from "@/components/sidebar-frame";
 import { TopControls } from "@/components/top-controls";
 import { NotificationWatcher } from "@/components/notification-watcher";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
+import { DynamicIcon } from "@/components/dynamic-icon";
 import pkg from "@/package.json";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
-  { href: "/my-shifts", label: "I miei turni", icon: CalendarDays, roles: ["DIPENDENTE"] },
-  { href: "/employees", label: "Dipendenti", icon: Users, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { href: "/attendance", label: "Timbrature", icon: CalendarCheck, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
-  { href: "/work-hours", label: "Ore staff", icon: Calculator, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { href: "/schedules", label: "Planning", icon: CalendarDays, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
-  { href: "/locations", label: "Saloni", icon: Building2, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
-  { href: "/tablet-clock", label: "Tablet Clock", icon: Smartphone, roles: routePermissions["/tablet-clock"] },
-  { href: "/requests", label: "Ferie e permessi", icon: ShieldCheck, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
-  { href: "/documents", label: "Documenti", icon: FileText, roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"] },
-  { href: "/settings/forms", label: "Moduli", icon: ClipboardList, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
-  { href: "/tasks", label: "TASK", icon: CheckSquare, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
-  { href: "/team", label: "Team", icon: Users, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
-  { href: "/notifications", label: "Comunicazioni", icon: Bell, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
-  { href: "/profile", label: "Profilo", icon: UserRound, roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
-  { href: "/settings", label: "Impostazioni", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN"] },
-] satisfies { href: string; label: string; icon: React.ComponentType<{ className?: string }>; roles: Role[] }[];
+  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
+  { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["DIPENDENTE"] },
+  { href: "/employees", label: "Dipendenti", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"] },
+  { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["SUPER_ADMIN", "ADMIN"] },
+  { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"] },
+  { href: "/requests", label: "Ferie e permessi", iconName: "ShieldCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
+  { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"] },
+  { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/tasks", label: "TASK", iconName: "CheckSquare", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
+  { href: "/team", label: "Team", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
+  { href: "/profile", label: "Profilo", iconName: "UserRound", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
+  { href: "/settings", label: "Impostazioni", iconName: "Settings", roles: ["SUPER_ADMIN", "ADMIN"] },
+] satisfies { href: string; label: string; iconName: string; roles: Role[] }[];
+
+const salonGroupRoutes = new Set(["/locations", "/employees", "/documents", "/schedules"]);
 
 export async function AppShell({ children, title, subtitle, role, hideHeader = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
@@ -55,14 +42,15 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ? await prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } })
     : null;
   const servicePage = servicePages[normalizeServicePage(String(serviceSetting?.value ?? 1))];
-  const selectedServiceItem = { href: servicePage.href, label: servicePage.label, icon: servicePage.icon, roles: ["DIPENDENTE"] as Role[] };
+  const selectedServiceItem = { href: servicePage.href, label: servicePage.label, iconName: servicePage.iconName, roles: ["DIPENDENTE"] as Role[] };
   const baseItems = visibleForRole(nav, currentRole);
+  const salonGroupItems = currentRole === "DIPENDENTE" ? [] : baseItems.filter((item) => salonGroupRoutes.has(item.href));
   const items = currentRole === "DIPENDENTE"
     ? [
         ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks"),
         selectedServiceItem,
       ]
-    : baseItems;
+    : baseItems.filter((item) => !salonGroupRoutes.has(item.href));
   const unreadNotifications = session?.user?.id
     ? await prisma.notification.count({ where: { user_id: session.user.id, read: false } })
     : 0;
@@ -99,7 +87,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           </Link>
           {currentRole === "DIPENDENTE" ? (
             <InstantLink href="/notifications" className="sidebar-role relative inline-flex items-center gap-2 rounded-full bg-paradise-softPink px-3 py-1 text-xs font-semibold xl:mt-5 transition-transform duration-300 hover:scale-105">
-              <Bell className="size-3.5" />
+              <DynamicIcon name="Bell" className="size-3.5" />
               Avvisi
               {unreadNotifications > 0 ? (
                 <span className="absolute -right-2 -top-2 min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
@@ -118,8 +106,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                 unreadNotifications={unreadNotifications}
                 logoutButton={<LogoutButton />}
               >
-                {items.map((item) => {
-                  const Icon = item.icon;
+                {baseItems.map((item) => {
                   return (
                     <InstantLink
                       key={item.href}
@@ -127,7 +114,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                       className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-200"
                       activeClassName="bg-paradise-softPink/60 text-[#C66170] font-bold dark:bg-white/20 dark:text-white"
                     >
-                      <Icon className="size-4 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)]" />
+                      <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)]" />
                       <span>{item.label}</span>
                       {item.href === "/notifications" && unreadNotifications > 0 ? (
                         <span className="ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
@@ -143,23 +130,45 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         </div>
         <nav className="luxury-scroll mt-5 xl:min-h-0 xl:flex-1 xl:space-y-1 xl:overflow-x-hidden xl:overflow-y-auto hidden xl:block">
           {items.map((item) => {
-            const Icon = item.icon;
             return (
-              <InstantLink
-                key={item.href}
-                href={item.href}
-                title={item.label}
-                className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
-                activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
-              >
-                <Icon className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
-                <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{item.label}</span>
-                {item.href === "/notifications" && unreadNotifications > 0 ? (
-                  <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
-                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                  </span>
+              <div key={item.href}>
+                <InstantLink
+                  href={item.href}
+                  title={item.label}
+                  className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
+                  activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
+                >
+                  <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
+                  <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{item.label}</span>
+                  {item.href === "/notifications" && unreadNotifications > 0 ? (
+                    <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
+                      {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                    </span>
+                  ) : null}
+                </InstantLink>
+                {item.href === "/dashboard" && salonGroupItems.length > 0 ? (
+                  <div className="sidebar-label ml-5 mt-1 space-y-1 border-l border-black/10 pl-3 dark:border-white/10">
+                    <div className="mb-1 flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]/45 dark:text-[color:var(--dark-sidebar-text)]/45">
+                      <DynamicIcon name="Building2" className="size-3.5 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)]" />
+                      Salone
+                    </div>
+                    {salonGroupItems.map((subItem) => {
+                      return (
+                        <InstantLink
+                          key={subItem.href}
+                          href={subItem.href}
+                          title={subItem.label}
+                          className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10"
+                          activeClassName="active bg-paradise-softPink/55 text-paradise-noir shadow-sm dark:bg-white/15 dark:text-white"
+                        >
+                          <DynamicIcon name={subItem.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
+                          <span className="transition-transform duration-300 hover:translate-x-0.5">{subItem.label}</span>
+                        </InstantLink>
+                      );
+                    })}
+                  </div>
                 ) : null}
-              </InstantLink>
+              </div>
             );
           })}
         </nav>
@@ -205,7 +214,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const mobileNav = currentRole === "DIPENDENTE" ? (
         <nav className="fixed inset-x-4 bottom-4 z-40 flex justify-around rounded-3xl border border-black/5 bg-white/80 px-2 py-2.5 shadow-luxury backdrop-blur-lg dark:border-white/10 dark:bg-black/75 xl:hidden">
           {mobileItems.map((item) => {
-            const Icon = item.icon;
             return (
               <InstantLink
                 key={item.href}
@@ -214,7 +222,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                 activeClassName="bg-paradise-softPink/60 text-paradise-noir shadow-[0_0_12px_rgba(255,214,234,0.4)] dark:bg-white/20 dark:text-white"
               >
                 <div className="relative">
-                  <Icon className="size-5 transition-transform duration-300 hover:scale-110" />
+                  <DynamicIcon name={item.iconName} className="size-5 transition-transform duration-300 hover:scale-110" />
                   {item.href === "/notifications" && unreadNotifications > 0 ? (
                     <span className="absolute -right-3 -top-2 min-w-4 rounded-full bg-[#C66170] px-1 text-center text-[10px] font-bold leading-4 text-white shadow-[0_0_6px_rgba(198,97,112,0.4)] animate-pulse-soft">
                       {unreadNotifications > 99 ? "99+" : unreadNotifications}

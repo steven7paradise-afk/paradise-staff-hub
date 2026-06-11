@@ -149,6 +149,7 @@ export function MonthlySchedulePlanner({
   const [year, setYear] = useState(2026);
   const [month, setMonth] = useState(today.getMonth());
   const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId);
+  const [secondPrintLocationId, setSecondPrintLocationId] = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [plannerMessage, setPlannerMessage] = useState("");
@@ -355,6 +356,74 @@ export function MonthlySchedulePlanner({
       const category = categories.find((item) => item.id === assignment?.categoryId);
       return total + minutesBetween(assignment?.startTime ?? category?.startTime, assignment?.endTime ?? category?.endTime);
     }, 0);
+  }
+
+  function workersForLocation(locationId: string) {
+    const base = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId === locationId);
+    const extraIds = new Set([
+      ...(extraWorkerIdsByLocation[locationId] ?? []),
+      ...entries
+        .filter((entry) => {
+          const date = new Date(entry.date);
+          return entry.locationId === locationId && date.getUTCFullYear() === year && date.getUTCMonth() === month;
+        })
+        .map((entry) => entry.userId),
+    ]);
+    const extra = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId !== locationId && extraIds.has(employee.id));
+    return [...base, ...extra].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function assignmentsForLocation(locationId: string, workers: ScheduleWorker[]) {
+    if (locationId === selectedLocationId) return assignments;
+    return createAssignmentsFromEntries(
+      entries,
+      year,
+      month,
+      workers.map((worker) => worker.id),
+      locationId,
+      extraWorkerIdsByLocation[locationId] ?? [],
+    );
+  }
+
+  function categoriesForLocation(locationId: string) {
+    return categories.filter((category) => !category.locationId || category.locationId === locationId);
+  }
+
+  function workerTotalMinutesFor(workerId: string, scheduleAssignments: AssignmentMap) {
+    return monthDays.reduce((total, day) => {
+      const assignment = scheduleAssignments[assignmentKey(workerId, day)];
+      const category = categories.find((item) => item.id === assignment?.categoryId);
+      return total + minutesBetween(assignment?.startTime ?? category?.startTime, assignment?.endTime ?? category?.endTime);
+    }, 0);
+  }
+
+  function hexToRgb(hex: string) {
+    const fallback = "FFFFFF";
+    const normalized = (hex || fallback).replace("#", "").trim();
+    const value =
+      normalized.length === 3
+        ? normalized
+            .split("")
+            .map((character) => `${character}${character}`)
+            .join("")
+        : normalized.padEnd(6, "F").slice(0, 6);
+    const parsed = Number.parseInt(value, 16);
+    if (Number.isNaN(parsed)) return { r: 255, g: 255, b: 255 };
+    return {
+      r: (parsed >> 16) & 255,
+      g: (parsed >> 8) & 255,
+      b: parsed & 255,
+    };
+  }
+
+  function setPdfFill(pdf: any, color: string) {
+    const { r, g, b } = hexToRgb(color);
+    pdf.setFillColor(r, g, b);
+  }
+
+  function setPdfText(pdf: any, color: string) {
+    const { r, g, b } = hexToRgb(color);
+    pdf.setTextColor(r, g, b);
   }
 
   async function addExternalWorker(userId: string) {
@@ -588,18 +657,168 @@ export function MonthlySchedulePlanner({
   async function downloadPdf() {
     if (!tableRef.current || exporting) return;
     setExporting(true);
+    tableRef.current.classList.add("schedule-pdf-mode");
     try {
       const [{ toPng }, { default: jsPDF }] = await Promise.all([import("html-to-image"), import("jspdf")]);
-      const image = await toPng(tableRef.current, { backgroundColor: "#FFFFFF", pixelRatio: 2, cacheBust: true });
-      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a3" });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const image = await toPng(tableRef.current, {
+        backgroundColor: "#FFFFFF",
+        pixelRatio: 3,
+        cacheBust: true,
+        filter: (node) => !(node instanceof HTMLElement && node.dataset.pdfHidden === "true"),
+      });
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
+      const margin = 4;
       const properties = pdf.getImageProperties(image);
       const ratio = Math.min((pageWidth - margin * 2) / properties.width, (pageHeight - margin * 2) / properties.height);
-      pdf.addImage(image, "PNG", margin, margin, properties.width * ratio, properties.height * ratio);
+      const imageWidth = properties.width * ratio;
+      const imageHeight = properties.height * ratio;
+      pdf.addImage(image, "PNG", (pageWidth - imageWidth) / 2, margin, imageWidth, imageHeight);
       const salon = (selectedLocation?.name ?? "Salone").replace(/\s+/g, "-");
       pdf.save(`Planning-${salon}-${monthNames[month]}-${year}.pdf`);
+    } finally {
+      tableRef.current?.classList.remove("schedule-pdf-mode");
+      setExporting(false);
+    }
+  }
+
+  async function downloadTwoSalonsPdf() {
+    if (exporting || !selectedLocationId) return;
+    const fallbackSecond = activeLocations.find((location) => location.id !== selectedLocationId)?.id ?? "";
+    const secondLocationId = secondPrintLocationId || fallbackSecond;
+    if (!secondLocationId || secondLocationId === selectedLocationId) {
+      setPlannerMessage("Seleziona un secondo salone diverso per stampare due saloni nello stesso foglio.");
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+      const gap = 5;
+      const sectionHeight = (pageHeight - margin * 2 - gap) / 2;
+      const sectionWidth = pageWidth - margin * 2;
+
+      const drawSection = (locationId: string, x: number, y: number, width: number, height: number) => {
+        const location = locations.find((item) => item.id === locationId);
+        const workers = workersForLocation(locationId);
+        const scheduleAssignments = assignmentsForLocation(locationId, workers);
+        const scheduleCategories = categoriesForLocation(locationId);
+        const headerHeight = 14;
+        const legendHeight = 11;
+        const tableTop = y + headerHeight;
+        const tableHeight = height - headerHeight - legendHeight;
+        const headerRowsHeight = 9;
+        const workerWidth = 44;
+        const hoursWidth = 12;
+        const dayWidth = (width - workerWidth - hoursWidth) / days;
+        const rowHeight = Math.max(4.6, Math.min(7.2, (tableHeight - headerRowsHeight) / Math.max(workers.length, 1)));
+
+        pdf.setDrawColor(225, 216, 220);
+        pdf.setLineWidth(0.15);
+        pdf.roundedRect(x, y, width, height, 4, 4, "S");
+
+        setPdfFill(pdf, "#F4D8E5");
+        pdf.roundedRect(x, y, width, headerHeight, 4, 4, "F");
+        setPdfFill(pdf, "#F4D8E5");
+        pdf.rect(x, y + headerHeight - 4, width, 4, "F");
+        pdf.setTextColor(82, 62, 72);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        pdf.text(`${monthNames[month]} ${year}`.toUpperCase(), x + 4, y + 8);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.5);
+        pdf.text(`${location?.name ?? "Salone"} · ${days} giorni · ${workers.length} lavoratori`, x + width - 4, y + 8, { align: "right" });
+
+        setPdfFill(pdf, "#F8F2F5");
+        pdf.rect(x, tableTop, width, headerRowsHeight, "F");
+        pdf.setDrawColor(204, 204, 204);
+        pdf.rect(x, tableTop, width, headerRowsHeight);
+        pdf.setTextColor(31, 31, 31);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(6);
+        pdf.text("Staff", x + 2, tableTop + 5.5);
+        pdf.text("Ore", x + workerWidth + 2, tableTop + 5.5);
+
+        monthDays.forEach((day) => {
+          const cellX = x + workerWidth + hoursWidth + (day - 1) * dayWidth;
+          pdf.line(cellX, tableTop, cellX, tableTop + tableHeight);
+          pdf.text(String(day), cellX + dayWidth / 2, tableTop + 3.7, { align: "center" });
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(5);
+          pdf.text(weekdayShort[new Date(year, month, day).getDay()], cellX + dayWidth / 2, tableTop + 7.5, { align: "center" });
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(6);
+        });
+
+        pdf.line(x + workerWidth, tableTop, x + workerWidth, tableTop + tableHeight);
+        pdf.line(x + workerWidth + hoursWidth, tableTop, x + workerWidth + hoursWidth, tableTop + tableHeight);
+
+        if (!workers.length) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(8);
+          pdf.setTextColor(120, 120, 120);
+          pdf.text("Nessun lavoratore attivo.", x + width / 2, tableTop + headerRowsHeight + 12, { align: "center" });
+        }
+
+        workers.forEach((worker, workerIndex) => {
+          const rowY = tableTop + headerRowsHeight + workerIndex * rowHeight;
+          pdf.setDrawColor(215, 215, 215);
+          pdf.line(x, rowY, x + width, rowY);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(rowHeight < 5.5 ? 5 : 5.8);
+          pdf.setTextColor(31, 31, 31);
+          pdf.text(worker.name.toUpperCase(), x + 2, rowY + rowHeight / 2 + 1.5, { maxWidth: workerWidth - 3 });
+          pdf.text(formatHours(workerTotalMinutesFor(worker.id, scheduleAssignments)), x + workerWidth + hoursWidth / 2, rowY + rowHeight / 2 + 1.5, {
+            align: "center",
+          });
+
+          monthDays.forEach((day) => {
+            const cellX = x + workerWidth + hoursWidth + (day - 1) * dayWidth;
+            const assignment = scheduleAssignments[assignmentKey(worker.id, day)];
+            const category = categories.find((item) => item.id === assignment?.categoryId);
+            if (category) {
+              setPdfFill(pdf, category.color);
+              pdf.rect(cellX + 0.1, rowY + 0.1, dayWidth - 0.2, rowHeight - 0.2, "F");
+              setPdfText(pdf, category.textColor);
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(rowHeight < 5.5 ? 4.6 : 5.2);
+              pdf.text(category.code, cellX + dayWidth / 2, rowY + rowHeight / 2 + 1.4, { align: "center", maxWidth: dayWidth - 0.4 });
+            }
+          });
+        });
+
+        const bottomLineY = tableTop + headerRowsHeight + workers.length * rowHeight;
+        pdf.setDrawColor(215, 215, 215);
+        pdf.line(x, bottomLineY, x + width, bottomLineY);
+
+        let cursorX = x + 2;
+        let cursorY = y + height - legendHeight + 4;
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(5.4);
+        scheduleCategories.forEach((category) => {
+          const label = `${category.code} - ${category.name}${category.startTime && category.endTime ? ` (${category.startTime}-${category.endTime})` : ""}`;
+          const itemWidth = Math.min(width - 4, pdf.getTextWidth(label) + 7);
+          if (cursorX + itemWidth > x + width - 2) {
+            cursorX = x + 2;
+            cursorY += 4.2;
+          }
+          setPdfFill(pdf, category.color);
+          pdf.roundedRect(cursorX, cursorY - 2.6, 2.8, 2.8, 0.6, 0.6, "F");
+          pdf.setTextColor(31, 31, 31);
+          pdf.text(label, cursorX + 4, cursorY);
+          cursorX += itemWidth + 2;
+        });
+      };
+
+      drawSection(selectedLocationId, margin, margin, sectionWidth, sectionHeight);
+      drawSection(secondLocationId, margin, margin + sectionHeight + gap, sectionWidth, sectionHeight);
+      pdf.save(`Planning-2-saloni-${monthNames[month]}-${year}.pdf`);
     } finally {
       setExporting(false);
     }
@@ -671,6 +890,32 @@ export function MonthlySchedulePlanner({
               <Button onClick={downloadPdf} disabled={exporting || !selectedLocationId}>
                 <Download className="size-4" />
                 {exporting ? "Creazione..." : "PDF"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t border-black/5 px-6 py-4">
+            <div className="flex flex-wrap items-end gap-3 rounded-3xl bg-[#fbf7f9] p-3">
+              <label className="min-w-[260px] flex-1 space-y-2">
+                <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Stampa due saloni nello stesso foglio</span>
+                <select
+                  className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/90 px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                  value={secondPrintLocationId}
+                  onChange={(event) => setSecondPrintLocationId(event.target.value)}
+                >
+                  <option value="">Seleziona secondo salone</option>
+                  {activeLocations
+                    .filter((location) => location.id !== selectedLocationId)
+                    .map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <Button onClick={downloadTwoSalonsPdf} disabled={exporting || !selectedLocationId || activeLocations.length < 2}>
+                <Download className="size-4" />
+                {exporting ? "Creazione..." : "PDF 2 saloni"}
               </Button>
             </div>
           </div>
@@ -841,11 +1086,12 @@ export function MonthlySchedulePlanner({
       {plannerMessage ? <p className="no-print rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm font-medium dark:text-white">{plannerMessage}</p> : null}
  
       <div ref={tableRef} className="print-surface overflow-hidden rounded-[26px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-soft">
-        <div className="schedule-title border-b border-black/10 dark:border-white/10 bg-paradise-noir px-6 py-5 text-white">
+        <div className="schedule-title border-b border-black/10 dark:border-white/10 bg-[#F4D8E5] px-6 py-5 text-[#523E48]">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/45">Turnistica staff</p>
               <h2 className="mt-1 text-3xl font-black tracking-tight">{monthNames[month]} {year}</h2>
+              <p className="mt-1 text-sm font-semibold uppercase tracking-[0.14em] text-white/65">{selectedLocation?.name ?? "Salone"}</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-white/75">
               <span className="inline-flex items-center gap-2"><CalendarDays className="size-4" /> {days} giorni</span>

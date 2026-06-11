@@ -57,6 +57,7 @@ model User {
   contract_end      DateTime?
   photo_url         String?
   whatsapp_phone    String?
+  mansione          String?
   google_calendar_sync Boolean          @default(false)
   google_calendar_id   String?
   active            Boolean          @default(true)

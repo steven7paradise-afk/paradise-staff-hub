@@ -53,6 +53,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       contract_end: contractEnd,
       photo_url: data.photoUrl ? String(data.photoUrl).trim() : null,
       whatsapp_phone: data.whatsappPhone ? String(data.whatsappPhone).trim() : null,
+      mansione: data.mansione !== undefined ? (data.mansione ? String(data.mansione).trim() : null) : undefined,
       active: data.active !== false,
       ...(pin ? { pin_hash: await bcrypt.hash(pin, 12), pin_lookup: pinLookup(pin) } : {}),
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {}),

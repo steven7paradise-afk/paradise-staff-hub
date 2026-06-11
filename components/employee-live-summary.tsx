@@ -105,8 +105,8 @@ export function EmployeeLiveSummary({
   }, []);
 
   return (
-    <div className="grid gap-3 md:grid-cols-[1.45fr_1fr] xl:grid-cols-[1.35fr_1fr_1fr]">
-      <InstantLink className="rounded-[24px] md:row-span-2 xl:row-span-1" href="/my-shifts" activeClassName="">
+    <div className="grid gap-3 grid-cols-1 md:grid-cols-[1.5fr_1fr]">
+      <InstantLink className="rounded-[24px]" href="/my-shifts" activeClassName="">
         <Card className={`h-full p-5 sm:p-6 transition-all duration-500 ${
           clock.isWorking 
             ? "border-emerald-300 dark:border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.12)] animate-pulse-green bg-emerald-50/5 dark:bg-emerald-950/5" 
@@ -145,13 +145,6 @@ export function EmployeeLiveSummary({
         hint="totale oggi"
         href="/my-shifts"
         active={clock.isPaused}
-      />
-      <CompactLiveStatus
-        icon={Users}
-        label="Colleghi in servizio"
-        value={String(colleaguesToday)}
-        hint="oggi"
-        href="#colleghi"
       />
     </div>
   );

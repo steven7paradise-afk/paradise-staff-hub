@@ -21,6 +21,7 @@ type Employee = {
   contractEnd: string;
   photoUrl: string;
   whatsappPhone: string;
+  mansione?: string | null;
 };
 
 type Location = { id: string; name: string };
@@ -57,6 +58,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     contractEnd: "",
     photoUrl: "",
     whatsappPhone: "",
+    mansione: "",
   };
   const activeEmployees = employees.filter((employee) => employee.active);
   const inactiveEmployees = employees.filter((employee) => !employee.active);
@@ -119,6 +121,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       contractEnd: data.contract_end ? String(data.contract_end).slice(0, 10) : "",
       photoUrl: data.photo_url ?? "",
       whatsappPhone: data.whatsapp_phone ?? "",
+      mansione: data.mansione ?? "",
     };
     setEmployees((current) =>
       creating ? [...current, updated].sort((a, b) => a.name.localeCompare(b.name)) : current.map((item) => (item.id === updated.id ? updated : item)),
@@ -213,6 +216,23 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                 <Select value={editing.role} onChange={(event) => updateDraft("role", event.target.value as Role)}>
                   {roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
                 </Select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-bold tracking-wide uppercase text-black/55">Mansione (es. Hairstyle, Videomaker)</span>
+                <Field 
+                  value={editing.mansione ?? ""} 
+                  onChange={(event) => updateDraft("mansione", event.target.value)} 
+                  placeholder="Seleziona o scrivi una mansione"
+                  list="mansioni-list"
+                />
+                <datalist id="mansioni-list">
+                  <option value="Hairstyle" />
+                  <option value="Videomaker" />
+                  <option value="Sito Web" />
+                  <option value="Magazzino" />
+                  <option value="Grafico" />
+                </datalist>
               </label>
 
               {/* Private IDs */}
@@ -319,9 +339,14 @@ function EmployeeSection({ title, employees, openEdit, empty, muted = false }: {
             </div>
 
             {/* Salon Sede info */}
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-black/60">
-              <MapPin className="size-3.5 text-[#B85B68] shrink-0" />
-              <span>{employee.location}</span>
+            <div className="flex flex-col gap-1 text-xs font-semibold text-black/60">
+              <div className="flex items-center gap-1.5">
+                <MapPin className="size-3.5 text-[#B85B68] shrink-0" />
+                <span>{employee.location}</span>
+              </div>
+              {employee.mansione && (
+                <p className="text-[11px] text-[#B85B68] font-bold mt-0.5 pl-5">{employee.mansione}</p>
+              )}
             </div>
 
             {/* Role designation badge */}
