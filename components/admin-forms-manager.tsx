@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   Plus, Trash2, Edit, ClipboardList, Eye, Check, X, 
-  Sliders, User, MapPin, Calendar, Download, AlertCircle, Play
+  Sliders, User, MapPin, Calendar, Download, AlertCircle, Play,
+  Archive, Undo, Inbox
 } from "lucide-react";
 import { Badge, Card, Select, Button } from "@/components/ui";
+import { DynamicIcon } from "@/components/dynamic-icon";
+import { ResponseComments } from "@/components/response-comments";
 
 type LocationOption = { id: string; name: string };
 
@@ -28,6 +31,8 @@ type FormTemplate = {
   allowed_roles: any; // string[] or null
   allowed_location_ids: any; // string[] or null
   fields: any; // FormField[]
+  notify_roles: any; // string[] or null
+  notify_user_ids: any; // string[] or null
   created_at: string;
 };
 
@@ -38,6 +43,8 @@ type FormResponse = {
   user_role: string;
   user_location_name: string | null;
   answers: any; // Record<string, any>
+  status: string;
+  comments?: any;
   created_at: string;
   user: {
     name: string;
@@ -53,21 +60,35 @@ const USER_ROLES = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
 ];
 
+const FORM_ICONS = [
+  "ClipboardList", "FileCheck2", "CalendarDays", "Calculator", "CheckSquare", 
+  "FileText", "Building2", "Smartphone", "UserRound", "Users", "Mail", 
+  "Bell", "Activity", "Star", "Heart", "Smile", "Sparkles", "Coffee", 
+  "ShoppingBag", "Utensils", "DollarSign", "MapPin", "Folder", "Package"
+];
+
 export function AdminFormsManager({
   role,
   initialForms,
   locations,
   initialResponses,
+  users = [],
+  initialTab = "templates",
+  currentUserName = "Direzione",
 }: {
   role: string;
   initialForms: any[];
   locations: LocationOption[];
   initialResponses: any[];
+  users?: Array<{ id: string; name: string; role: string; mansione: string | null }>;
+  initialTab?: "templates" | "responses" | "upcoming";
+  currentUserName?: string;
 }) {
   const canManage = role === "SUPER_ADMIN" || role === "ADMIN";
   const [forms, setForms] = useState<FormTemplate[]>(initialForms);
   const [responses, setResponses] = useState<FormResponse[]>(initialResponses);
-  const [activeTab, setActiveTab] = useState<"templates" | "responses">("templates");
+  const [activeTab, setActiveTab] = useState<"templates" | "responses" | "upcoming">(initialTab);
+  const [responseSubTab, setResponseSubTab] = useState<"active" | "archived">("active");
   
   // Filter states for responses
   const [filterFormId, setFilterFormId] = useState<string>("all");
@@ -82,8 +103,11 @@ export function AdminFormsManager({
   const [formDesc, setFormDesc] = useState("");
   const [formCategory, setFormCategory] = useState("Generale");
   const [formActive, setFormActive] = useState(true);
+  const [formIcon, setFormIcon] = useState("ClipboardList");
   const [allowedRoles, setAllowedRoles] = useState<string[]>([]);
   const [allowedLocations, setAllowedLocations] = useState<string[]>([]);
+  const [notifyRoles, setNotifyRoles] = useState<string[]>([]);
+  const [notifyUserIds, setNotifyUserIds] = useState<string[]>([]);
   const [formFields, setFormFields] = useState<FormField[]>([]);
 
   // Response Viewer Detail State
@@ -96,8 +120,11 @@ export function AdminFormsManager({
     setFormDesc(form.description || "");
     setFormCategory(form.category);
     setFormActive(form.active);
+    setFormIcon(form.icon || "ClipboardList");
     setAllowedRoles(form.allowed_roles || []);
     setAllowedLocations(form.allowed_location_ids || []);
+    setNotifyRoles(form.notify_roles || []);
+    setNotifyUserIds(form.notify_user_ids || []);
     setFormFields(form.fields || []);
     setShowModal(true);
   };
@@ -108,8 +135,11 @@ export function AdminFormsManager({
     setFormDesc("");
     setFormCategory("Generale");
     setFormActive(true);
+    setFormIcon("ClipboardList");
     setAllowedRoles([]);
     setAllowedLocations([]);
+    setNotifyRoles([]);
+    setNotifyUserIds([]);
     setFormFields([
       { id: "field_1", label: "Domanda 1", type: "text", required: true }
     ]);
@@ -145,8 +175,11 @@ export function AdminFormsManager({
       description: formDesc.trim(),
       category: formCategory,
       active: formActive,
+      icon: formIcon,
       allowed_roles: allowedRoles.length > 0 ? allowedRoles : null,
       allowed_location_ids: allowedLocations.length > 0 ? allowedLocations : null,
+      notify_roles: notifyRoles.length > 0 ? notifyRoles : null,
+      notify_user_ids: notifyUserIds.length > 0 ? notifyUserIds : null,
       fields: formFields,
     };
 
@@ -212,16 +245,121 @@ export function AdminFormsManager({
     }
   };
 
+  // Notify roles toggle
+  const toggleNotifyRole = (roleVal: string) => {
+    if (notifyRoles.includes(roleVal)) {
+      setNotifyRoles(notifyRoles.filter((r) => r !== roleVal));
+    } else {
+      setNotifyRoles([...notifyRoles, roleVal]);
+    }
+  };
+
+  // Notify users toggle
+  const toggleNotifyUser = (userId: string) => {
+    if (notifyUserIds.includes(userId)) {
+      setNotifyUserIds(notifyUserIds.filter((id) => id !== userId));
+    } else {
+      setNotifyUserIds([...notifyUserIds, userId]);
+    }
+  };
+
   // Filter responses
   const filteredResponses = responses.filter((resp) => {
+    const matchesTab = responseSubTab === "archived" 
+      ? resp.status === "ARCHIVED" 
+      : resp.status !== "ARCHIVED";
     const matchesForm = filterFormId === "all" || resp.form_id === filterFormId;
     const searchLower = filterSearch.toLowerCase().trim();
     const matchesUser = 
       !searchLower || 
       resp.user.name.toLowerCase().includes(searchLower) ||
       resp.user.email.toLowerCase().includes(searchLower);
-    return matchesForm && matchesUser;
+    return matchesTab && matchesForm && matchesUser;
   });
+
+  // Extract upcoming events from active responses containing date fields
+  const upcomingEvents = useMemo(() => {
+    const events: any[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    responses.forEach((resp) => {
+      if (resp.status === "ARCHIVED") return;
+
+      const fields = resp.form?.fields as FormField[] | null;
+      const answersObj = resp.answers as Record<string, any> | null;
+      if (!fields || !answersObj) return;
+
+      fields.forEach((field) => {
+        if (field.type === "date") {
+          const dateVal = answersObj[field.id];
+          if (dateVal && typeof dateVal === "string") {
+            const eventDate = new Date(dateVal);
+            if (!isNaN(eventDate.getTime())) {
+              const eventDay = new Date(eventDate);
+              eventDay.setHours(0, 0, 0, 0);
+              
+              if (eventDay >= today) {
+                events.push({
+                  responseId: resp.id,
+                  formName: resp.form.name,
+                  userName: resp.user?.name || "Dipendente",
+                  locationName: resp.user_location_name,
+                  dateValue: dateVal,
+                  dateLabel: new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(eventDate),
+                  daysLeft: Math.ceil((eventDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
+                  answers: answersObj,
+                  fields
+                });
+              }
+            }
+          }
+        }
+      });
+    });
+
+    return events.sort((a, b) => a.dateValue.localeCompare(b.dateValue));
+  }, [responses]);
+
+  const handleArchiveResponse = async (responseId: string) => {
+    try {
+      const res = await fetch(`/api/service-forms/responses/${responseId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ARCHIVED" }),
+      });
+      if (res.ok) {
+        setResponses((prev) => 
+          prev.map((r) => r.id === responseId ? { ...r, status: "ARCHIVED" } : r)
+        );
+        if (selectedResponse && selectedResponse.id === responseId) {
+          setSelectedResponse({ ...selectedResponse, status: "ARCHIVED" });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to archive response:", err);
+    }
+  };
+
+  const handleRestoreResponse = async (responseId: string) => {
+    try {
+      const res = await fetch(`/api/service-forms/responses/${responseId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "NEW" }),
+      });
+      if (res.ok) {
+        setResponses((prev) => 
+          prev.map((r) => r.id === responseId ? { ...r, status: "NEW" } : r)
+        );
+        if (selectedResponse && selectedResponse.id === responseId) {
+          setSelectedResponse({ ...selectedResponse, status: "NEW" });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to restore response:", err);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -248,6 +386,17 @@ export function AdminFormsManager({
         >
           <Sliders className="size-4" />
           Risposte ricevute ({responses.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("upcoming")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            activeTab === "upcoming" 
+              ? "bg-white text-black shadow-sm" 
+              : "text-black/50 hover:text-black/80"
+          }`}
+        >
+          <Calendar className="size-4" />
+          Prossimi eventi ({upcomingEvents.length})
         </button>
       </div>
 
@@ -284,7 +433,12 @@ export function AdminFormsManager({
                       {form.active ? "Attivo" : "Disattivato"}
                     </Badge>
                   </div>
-                  <h3 className="mt-3 text-lg font-semibold tracking-tight text-black">{form.name}</h3>
+                  <div className="flex items-center gap-2.5 mt-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#A74758]/10 text-[#A74758]">
+                      <DynamicIcon name={form.icon || "ClipboardList"} className="size-4.5" />
+                    </div>
+                    <h3 className="text-base font-bold tracking-tight text-black">{form.name}</h3>
+                  </div>
                   <p className="mt-1.5 text-sm text-black/55 line-clamp-2">
                     {form.description || "Nessuna descrizione specificata."}
                   </p>
@@ -349,12 +503,38 @@ export function AdminFormsManager({
             )}
           </div>
         </Card>
-      ) : (
+      ) : activeTab === "responses" ? (
         <Card className="bg-white">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Risposte</p>
               <h2 className="mt-1 text-2xl font-semibold">Risposte ricevute dai dipendenti</h2>
+              
+              {/* Sub-tabs for Active vs Archived */}
+              <div className="flex gap-2 rounded-xl bg-black/5 p-1 w-fit mt-3">
+                <button
+                  onClick={() => setResponseSubTab("active")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    responseSubTab === "active" 
+                      ? "bg-white text-black shadow-sm" 
+                      : "text-black/50 hover:text-black/80"
+                  }`}
+                >
+                  <Inbox className="size-3.5" />
+                  Risposte Attive
+                </button>
+                <button
+                  onClick={() => setResponseSubTab("archived")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    responseSubTab === "archived" 
+                      ? "bg-white text-black shadow-sm" 
+                      : "text-black/50 hover:text-black/80"
+                  }`}
+                >
+                  <Archive className="size-3.5" />
+                  Archiviate
+                </button>
+              </div>
             </div>
           </div>
 
@@ -418,14 +598,31 @@ export function AdminFormsManager({
                     <td className="px-5 py-3.5 whitespace-nowrap text-black/70">
                       {resp.user_location_name || "Nessuna sede"}
                     </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap space-x-2">
                       <button
                         onClick={() => setSelectedResponse(resp)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3.5 py-1.5 text-xs font-semibold shadow-sm hover:bg-black/5 transition"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-black/5 transition"
                       >
                         <Eye className="size-3.5" />
                         Vedi risposte
                       </button>
+                      {responseSubTab === "active" ? (
+                        <button
+                          onClick={() => handleArchiveResponse(resp.id)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50 text-red-600 px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-red-100 transition"
+                        >
+                          <Archive className="size-3.5" />
+                          Archivia
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleRestoreResponse(resp.id)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-black/5 bg-white px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-black/5 transition"
+                        >
+                          <Undo className="size-3.5" />
+                          Ripristina
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -440,6 +637,82 @@ export function AdminFormsManager({
                 )}
               </tbody>
             </table>
+          </div>
+        </Card>
+      ) : (
+        <Card className="bg-white">
+          <div className="mb-6">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Timeline</p>
+            <h2 className="mt-1 text-2xl font-semibold">Prossimi eventi in agenda</h2>
+            <p className="text-sm text-black/55 mt-1">Date e attività future pianificate estratte dai moduli dello staff.</p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {upcomingEvents.map((evt, idx) => (
+              <div 
+                key={`${evt.responseId}-${idx}`}
+                className="flex flex-col justify-between rounded-2xl border border-black/5 bg-[#FBF7F9] p-5 hover:border-[#E8C98B] transition shadow-sm"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase text-[#A74758] bg-[#A74758]/5 px-2 py-0.5 rounded-lg border border-[#A74758]/10">
+                      {evt.daysLeft === 0 ? "Oggi" : evt.daysLeft === 1 ? "Domani" : `Tra ${evt.daysLeft} giorni`}
+                    </span>
+                    <span className="text-xs text-black/45 font-semibold">{evt.dateLabel}</span>
+                  </div>
+                  <h4 className="font-bold text-base text-black mt-3 truncate">{evt.formName}</h4>
+                  <div className="text-xs text-black/60 mt-1.5 space-y-1">
+                    <p className="flex items-center gap-1.5">
+                      <User className="size-3.5 text-black/40" /> {evt.userName}
+                    </p>
+                    {evt.locationName && (
+                      <p className="flex items-center gap-1.5">
+                        <MapPin className="size-3.5 text-black/40" /> {evt.locationName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-black/5 space-y-1.5">
+                    {evt.fields.filter((f: any) => f.type !== "date").slice(0, 3).map((field: any) => {
+                      const ans = evt.answers[field.id];
+                      if (ans === undefined || ans === null || ans === "") return null;
+                      return (
+                        <div key={field.id} className="text-xs">
+                          <span className="font-semibold text-black/50">{field.label}: </span>
+                          <span className="text-black">{typeof ans === "object" ? ans.name : String(ans)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-3 border-t border-black/5 flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      const resp = responses.find(r => r.id === evt.responseId);
+                      if (resp) setSelectedResponse(resp);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-black/60 hover:text-black hover:underline"
+                  >
+                    <Eye className="size-3.5" /> Dettagli
+                  </button>
+                  <button
+                    onClick={() => handleArchiveResponse(evt.responseId)}
+                    className="inline-flex items-center gap-1 rounded-xl bg-white border border-black/5 px-2.5 py-1.5 text-xs font-bold text-red-500 shadow-sm hover:bg-red-50 transition"
+                  >
+                    <Archive className="size-3.5" /> Archivia
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {upcomingEvents.length === 0 && (
+              <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-black/40">
+                <Calendar className="size-10 text-black/30 mb-3" />
+                <p className="font-semibold text-lg">Nessun evento futuro</p>
+                <p className="text-sm mt-1">Non ci sono eventi attivi o date future inserite nei moduli compilati.</p>
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -508,6 +781,31 @@ export function AdminFormsManager({
                 </div>
               </div>
 
+              {/* Icon Picker */}
+              <div className="border-t border-black/5 pt-4">
+                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Seleziona Icona per il Modulo</label>
+                <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-12 max-h-36 overflow-y-auto p-2 border border-black/5 bg-[#FBF7F9] rounded-2xl">
+                  {FORM_ICONS.map((iconName) => {
+                    const selected = formIcon === iconName;
+                    return (
+                      <button
+                        key={iconName}
+                        type="button"
+                        onClick={() => setFormIcon(iconName)}
+                        className={`grid aspect-square place-items-center rounded-xl border p-2 transition hover:scale-105 active:scale-95 ${
+                          selected 
+                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm font-bold" 
+                            : "bg-white border-black/5 text-black/60 hover:bg-black/5"
+                        }`}
+                        title={iconName}
+                      >
+                        <DynamicIcon name={iconName} className="size-5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Target Audience (Roles) */}
               <div className="border-t border-black/5 pt-4">
                 <label className="text-xs font-bold uppercase tracking-wider text-black/50">Chi può compilarlo? (Ruoli)</label>
@@ -554,6 +852,65 @@ export function AdminFormsManager({
                       >
                         {selected && <Check className="size-3" />}
                         {loc.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notification Targets (Roles) */}
+              <div className="border-t border-black/5 pt-4">
+                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Chi riceve le notifiche? (Ruoli)</label>
+                <p className="text-xs text-black/40 mb-2">Seleziona quali ruoli riceveranno una notifica all'invio di questo modulo. Se non selezioni nulla, verranno notificati i Responsabili/Admin di default.</p>
+                <div className="flex flex-wrap gap-2">
+                  {USER_ROLES.map((role) => {
+                    const selected = notifyRoles.includes(role.value);
+                    return (
+                      <button
+                        key={`notify-${role.value}`}
+                        type="button"
+                        onClick={() => toggleNotifyRole(role.value)}
+                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                          selected 
+                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758]" 
+                            : "bg-[#FBF7F9] border-black/5 text-black/60 hover:bg-black/5"
+                        }`}
+                      >
+                        {selected && <Check className="size-3" />}
+                        {role.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notification Targets (Specific Users) */}
+              <div className="border-t border-black/5 pt-4">
+                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Notifica collaboratori specifici</label>
+                <p className="text-xs text-black/40 mb-2">Seleziona collaboratori specifici da notificare all'invio (es. Magazziniere, Responsabili specifici).</p>
+                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 max-h-40 overflow-y-auto p-3 border border-black/5 bg-[#FBF7F9] rounded-2xl">
+                  {users.map((u) => {
+                    const selected = notifyUserIds.includes(u.id);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleNotifyUser(u.id)}
+                        className={`flex items-center gap-2 rounded-xl border p-2 text-left text-xs transition hover:bg-black/5 ${
+                          selected 
+                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] font-bold" 
+                            : "bg-white border-black/5 text-black/75"
+                        }`}
+                      >
+                        <div className={`grid size-4 place-items-center rounded border transition ${
+                          selected ? "bg-[#A74758] border-[#A74758] text-white" : "border-black/20"
+                        }`}>
+                          {selected && <Check className="size-3" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold">{u.name}</p>
+                          {u.mansione && <p className="text-[10px] text-black/40 truncate mt-0.5">{u.mansione}</p>}
+                        </div>
                       </button>
                     );
                   })}
@@ -750,15 +1107,26 @@ export function AdminFormsManager({
                           {answer === undefined || answer === null || answer === "" ? (
                             <span className="text-black/30 italic">Nessuna risposta</span>
                           ) : field.type === "file" && typeof answer === "object" ? (
-                            <a
-                              href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-[#FBF7F9] px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-[#A74758]/5 transition mt-1"
-                            >
-                              <Download className="size-3.5" />
-                              Scarica: {answer.name}
-                            </a>
+                            <div className="space-y-3 mt-1.5">
+                              {/\.(jpg|jpeg|png|webp|gif)$/i.test(answer.name) && (
+                                <div className="relative rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-sm aspect-video flex items-center justify-center group/img">
+                                  <img
+                                    src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                    alt={answer.name}
+                                    className="object-contain max-h-48 w-full transition group-hover/img:scale-[1.02]"
+                                  />
+                                </div>
+                              )}
+                              <a
+                                href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-[#FBF7F9] px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-[#A74758]/5 transition"
+                              >
+                                <Download className="size-3.5" />
+                                Scarica: {answer.name}
+                              </a>
+                            </div>
                           ) : field.type === "money" ? (
                             <p className="whitespace-pre-line leading-relaxed font-semibold bg-[#FBF7F9] p-3 rounded-xl border border-black/5 text-[#A74758]">
                               € {(() => {
@@ -789,10 +1157,43 @@ export function AdminFormsManager({
                   <p className="text-sm italic text-black/40">Impossibile mappare le domande (modulo eliminato).</p>
                 )}
               </div>
+
+              {/* Response Comments */}
+              <ResponseComments
+                responseId={selectedResponse.id}
+                initialComments={selectedResponse.comments}
+                currentUserName={currentUserName}
+                currentUserRole={role}
+                onCommentsUpdate={(updatedComments) => {
+                  setResponses((prev) =>
+                    prev.map((r) =>
+                      r.id === selectedResponse.id
+                        ? { ...r, comments: updatedComments }
+                        : r
+                    )
+                  );
+                  setSelectedResponse((prev) => {
+                    if (!prev) return null;
+                    return { ...prev, comments: updatedComments };
+                  });
+                }}
+              />
             </div>
 
-            <div className="flex items-center justify-end bg-[#FBF7F9] px-6 py-4 border-t border-black/5">
-              <Button type="button" onClick={() => setSelectedResponse(null)}>
+            <div className="flex items-center justify-end gap-3 bg-[#FBF7F9] px-6 py-4 border-t border-black/5">
+              {selectedResponse.status !== "ARCHIVED" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleArchiveResponse(selectedResponse.id);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#A74758] text-white px-4 py-2 text-xs font-semibold hover:scale-[1.02] active:scale-[0.98] transition shadow-sm"
+                >
+                  <Archive className="size-3.5" />
+                  Marca come Completato
+                </button>
+              )}
+              <Button type="button" variant="soft" onClick={() => setSelectedResponse(null)}>
                 Chiudi
               </Button>
             </div>

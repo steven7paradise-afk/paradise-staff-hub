@@ -92,24 +92,61 @@ export async function POST(request: NextRequest) {
 
     // Notify Responsabili of that salon (or Admin/Super Admin as fallback)
     try {
-      let recipients = session.user.sedeId
-        ? await prisma.user.findMany({
+      let notifyRoles = form.notify_roles as string[] | null;
+      let notifyUserIds = form.notify_user_ids as string[] | null;
+      let recipients: any[] = [];
+
+      if ((notifyRoles && notifyRoles.length > 0) || (notifyUserIds && notifyUserIds.length > 0)) {
+        if (notifyRoles && notifyRoles.length > 0) {
+          const matchedUsers = await prisma.user.findMany({
             where: {
               active: true,
-              role: "RESPONSABILE",
-              sede_id: session.user.sedeId,
+              role: { in: notifyRoles as any[] },
             },
-          })
-        : [];
+          });
+          const roleRecipients = matchedUsers.filter((u) => {
+            if (u.role === "SUPER_ADMIN" || u.role === "ADMIN") return true;
+            if (!session.user.sedeId) return true;
+            return u.sede_id === session.user.sedeId;
+          });
+          recipients.push(...roleRecipients);
+        }
 
-      if (recipients.length === 0) {
-        // Fallback to admins/super admins if there are no Responsabili in that salon
-        recipients = await prisma.user.findMany({
-          where: {
-            active: true,
-            role: { in: ["ADMIN", "SUPER_ADMIN"] },
-          },
+        if (notifyUserIds && notifyUserIds.length > 0) {
+          const matchedUsers = await prisma.user.findMany({
+            where: {
+              active: true,
+              id: { in: notifyUserIds },
+            },
+          });
+          recipients.push(...matchedUsers);
+        }
+
+        const seen = new Set();
+        recipients = recipients.filter((r) => {
+          if (seen.has(r.id)) return false;
+          seen.add(r.id);
+          return true;
         });
+      } else {
+        recipients = session.user.sedeId
+          ? await prisma.user.findMany({
+              where: {
+                active: true,
+                role: "RESPONSABILE",
+                sede_id: session.user.sedeId,
+              },
+            })
+          : [];
+
+        if (recipients.length === 0) {
+          recipients = await prisma.user.findMany({
+            where: {
+              active: true,
+              role: { in: ["ADMIN", "SUPER_ADMIN"] },
+            },
+          });
+        }
       }
 
       if (recipients.length > 0) {
@@ -123,7 +160,7 @@ export async function POST(request: NextRequest) {
             title: `Modulo Compilato: ${form.name}`,
             message: `Il dipendente ${session.user.name ?? "Dipendente"} ha inviato una risposta per il modulo "${form.name}".`,
             type: "FORM",
-            action_url: "/settings/forms",
+            action_url: `/service-forms/responses/${response.id}`,
           }))
         );
 

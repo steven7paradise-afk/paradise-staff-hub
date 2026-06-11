@@ -7,7 +7,11 @@ import type { Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsFormsPage() {
+export default async function SettingsFormsPage(props: { searchParams: Promise<{ tab?: string }> }) {
+  const searchParams = await props.searchParams;
+  const initialTab = (searchParams.tab === "responses" || searchParams.tab === "upcoming") 
+    ? searchParams.tab 
+    : "templates";
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
@@ -16,8 +20,8 @@ export default async function SettingsFormsPage() {
     redirect("/dashboard");
   }
 
-  // Fetch all templates, locations, and responses
-  const [forms, locations, responses] = await Promise.all([
+  // Fetch all templates, locations, responses, and active users
+  const [forms, locations, responses, users] = await Promise.all([
     prisma.serviceForm.findMany({
       orderBy: { created_at: "desc" },
     }),
@@ -32,6 +36,11 @@ export default async function SettingsFormsPage() {
         user: true,
         form: true,
       },
+    }),
+    prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, role: true, mansione: true },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -53,6 +62,13 @@ export default async function SettingsFormsPage() {
     updated_at: r.updated_at.toISOString(),
   }));
 
+  const serializedUsers = users.map((u) => ({
+    id: u.id,
+    name: u.name,
+    role: u.role,
+    mansione: u.mansione,
+  }));
+
   return (
     <AppShell 
       title="Gestione Moduli" 
@@ -64,6 +80,9 @@ export default async function SettingsFormsPage() {
         initialForms={serializedForms}
         locations={serializedLocations}
         initialResponses={serializedResponses}
+        users={serializedUsers}
+        initialTab={initialTab}
+        currentUserName={session?.user?.name || "Direzione"}
       />
     </AppShell>
   );

@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, category, icon, active, allowed_roles, allowed_location_ids, fields } = body;
+    const { name, description, category, icon, active, allowed_roles, allowed_location_ids, fields, notify_roles, notify_user_ids } = body;
 
     if (!name || !fields || !Array.isArray(fields)) {
       return NextResponse.json({ error: "Nome e campi del modulo obbligatori." }, { status: 400 });
@@ -72,6 +72,8 @@ export async function POST(request: NextRequest) {
         allowed_roles: allowed_roles || null,
         allowed_location_ids: allowed_location_ids || null,
         fields,
+        notify_roles: notify_roles || null,
+        notify_user_ids: notify_user_ids || null,
         created_by_id: session.user.id,
       },
     });

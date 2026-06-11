@@ -218,22 +218,25 @@ export function NotificationManager({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-4 md:gap-6">
           {[
-            { label: "Totali comunicazioni", value: stats.total, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
-            { label: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
-            { label: "Da firmare", value: stats.sign, icon: PencilLine, bg: "bg-amber-100 text-amber-700" },
-            { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-rose-100 text-rose-700" },
+            { label: "Totali comunicazioni", shortLabel: "Totali", value: stats.total, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
+            { label: "Non lette", shortLabel: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
+            { label: "Da firmare", shortLabel: "Da firmare", value: stats.sign, icon: PencilLine, bg: "bg-amber-100 text-amber-700" },
+            { label: "Urgenti", shortLabel: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-rose-100 text-rose-700" },
           ].map((metric) => {
             const Icon = metric.icon;
             return (
-              <Card key={metric.label} className="flex items-center gap-5">
-                <div className={cn("grid size-14 place-items-center rounded-2xl", metric.bg)}>
-                  <Icon className="size-6" />
+              <Card key={metric.label} className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-5 p-1.5 py-3 sm:p-5 text-center sm:text-left">
+                <div className={cn("grid size-9 sm:size-14 place-items-center rounded-xl sm:rounded-2xl shrink-0", metric.bg)}>
+                  <Icon className="size-4 sm:size-6" />
                 </div>
-                <div>
-                  <p className="text-3xl font-semibold">{metric.value}</p>
-                  <p className="text-sm text-black/55">{metric.label}</p>
+                <div className="min-w-0">
+                  <p className="text-base sm:text-3xl font-semibold leading-none sm:leading-tight">{metric.value}</p>
+                  <p className="text-[9px] sm:text-sm text-black/55 leading-tight line-clamp-2 mt-0.5 sm:mt-0">
+                    <span className="inline sm:hidden">{metric.shortLabel}</span>
+                    <span className="hidden sm:inline">{metric.label}</span>
+                  </p>
                 </div>
               </Card>
             );

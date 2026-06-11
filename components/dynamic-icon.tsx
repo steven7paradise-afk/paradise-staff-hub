@@ -29,7 +29,19 @@ import {
   FileCheck2,
   BellRing,
   Activity,
-  ArrowRight
+  ArrowRight,
+  Heart,
+  Smile,
+  Star,
+  Sparkles,
+  Coffee,
+  ShoppingBag,
+  Utensils,
+  DollarSign,
+  MapPin,
+  TrendingUp,
+  Folder,
+  Package
 } from "lucide-react";
 
 const iconMap = {
@@ -60,7 +72,19 @@ const iconMap = {
   FileCheck2,
   BellRing,
   Activity,
-  ArrowRight
+  ArrowRight,
+  Heart,
+  Smile,
+  Star,
+  Sparkles,
+  Coffee,
+  ShoppingBag,
+  Utensils,
+  DollarSign,
+  MapPin,
+  TrendingUp,
+  Folder,
+  Package
 } as const;
 
 export type IconName = keyof typeof iconMap;

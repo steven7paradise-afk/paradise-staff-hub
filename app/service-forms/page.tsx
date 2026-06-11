@@ -33,11 +33,47 @@ export default async function ServiceFormsPage() {
     return roleMatch && locationMatch;
   });
 
+  // Fetch responses (active/non-archived) that this employee can see (their own, their salon's, or those they are notified about)
+  const responses = await prisma.serviceFormResponse.findMany({
+    where: {
+      status: { not: "ARCHIVED" },
+    },
+    include: {
+      user: true,
+      form: true,
+    },
+    orderBy: { created_at: "desc" },
+  });
+
+  const allowedResponses = responses.filter((r) => {
+    // 1. Own submission
+    if (r.user_id === session.user.id) return true;
+    
+    // 2. Same salon
+    if (locationId && r.user_location_id === locationId) return true;
+    
+    // 3. User explicitly notified
+    const notifyUserIds = r.form?.notify_user_ids as string[] | null;
+    if (notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(session.user.id)) return true;
+
+    // 4. Role notified
+    const notifyRoles = r.form?.notify_roles as string[] | null;
+    if (notifyRoles && Array.isArray(notifyRoles) && notifyRoles.includes(role)) return true;
+
+    return false;
+  });
+
   const serializedForms = allowedForms.map((f) => ({
     ...f,
     created_at: f.created_at.toISOString(),
     updated_at: f.updated_at.toISOString(),
   })) as any;
+
+  const serializedResponses = allowedResponses.map((r) => ({
+    ...r,
+    created_at: r.created_at.toISOString(),
+    updated_at: r.updated_at.toISOString(),
+  }));
 
   // Retrieve active employees
   const activeEmployees = await prisma.user.findMany({
@@ -52,7 +88,14 @@ export default async function ServiceFormsPage() {
 
   return (
     <AppShell title="Forms" role={role} hideHeader>
-      <StaffFormsViewer forms={serializedForms} employees={serializedEmployees} />
+      <StaffFormsViewer 
+        forms={serializedForms} 
+        employees={serializedEmployees} 
+        initialResponses={serializedResponses}
+        currentUserId={session.user.id}
+        currentUserName={session.user.name || "Dipendente"}
+        currentUserRole={role}
+      />
     </AppShell>
   );
 }
