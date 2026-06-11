@@ -65,7 +65,7 @@ export default async function ProfilePage() {
               <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-paradise-pink to-paradise-gold opacity-45 blur group-hover:opacity-75 transition duration-500" />
               <div className="relative grid size-24 place-items-center overflow-hidden rounded-full border-4 border-white dark:border-neutral-800 bg-paradise-nude text-3xl font-extrabold text-paradise-noir shadow-md">
                 {user.photo_url ? (
-                  <img src={user.photo_url} alt={user.name} className="size-full object-cover" />
+                  <img src={user.photo_url} alt={user.name} className="size-full object-cover rounded-full select-none pointer-events-none" />
                 ) : (
                   user.name.slice(0, 1).toUpperCase()
                 )}

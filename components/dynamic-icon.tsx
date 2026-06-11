@@ -41,7 +41,9 @@ import {
   MapPin,
   TrendingUp,
   Folder,
-  Package
+  Package,
+  MoreHorizontal,
+  Timer
 } from "lucide-react";
 
 const iconMap = {
@@ -84,7 +86,9 @@ const iconMap = {
   MapPin,
   TrendingUp,
   Folder,
-  Package
+  Package,
+  MoreHorizontal,
+  Timer
 } as const;
 
 export type IconName = keyof typeof iconMap;

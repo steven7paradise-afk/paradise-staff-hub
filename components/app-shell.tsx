@@ -111,27 +111,87 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   }).format(new Date());
   const mobileItems = currentRole === "DIPENDENTE"
     ? [
-        items.find((item) => item.href === "/dashboard"),
-        items.find((item) => item.href === "/my-shifts"),
-        items.find((item) => item.href === "/requests"),
-        selectedServiceItem,
-        items.find((item) => item.href === "/profile"),
-      ].filter(Boolean) as typeof items
+        { href: "/my-shifts", label: "I miei turni", iconName: "Timer", roles: ["DIPENDENTE"] as Role[] },
+        { href: "/requests", label: "Calendario", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[] },
+        { href: "/dashboard", label: "Timbrature", iconName: "Clock3", roles: ["DIPENDENTE"] as Role[] },
+        { href: "/profile", label: "Altro", iconName: "MoreHorizontal", roles: ["DIPENDENTE"] as Role[] },
+      ]
     : [];
 
   const aside = (
       <aside className="z-30 w-full max-w-full border-b border-black/5 bg-[color:var(--sidebar)] px-4 py-3 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:border-b-0 xl:border-r xl:px-5 xl:py-4">
-        <div className="shrink-0 flex items-center justify-between xl:block">
-          <Link href="/dashboard" className="sidebar-brand group flex items-center gap-3" title="Paradise Staff Hub">
-            <div className="grid size-11 place-items-center overflow-hidden rounded-full text-lg font-bold text-white shadow-soft transition-all duration-300 group-hover:scale-105 group-hover:shadow-luxury bg-transparent">
-              <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="size-full object-contain dark:invert" />
-            </div>
-            <div className="sidebar-label">
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] transition-colors duration-300 group-hover:text-[#B85B68] dark:text-[color:var(--dark-sidebar-text)] dark:group-hover:text-paradise-pink">Paradise</p>
-              <p className="sidebar-subtitle text-xs text-[color:var(--sidebar-text)] opacity-55 dark:text-[color:var(--dark-sidebar-text)]">Staff Hub</p>
-            </div>
+        {/* Mobile Header (xl:hidden) */}
+        <div className="relative flex xl:hidden items-center justify-between w-full">
+          {/* Hamburger Drawer */}
+          <MobileMenuDrawer
+            logoUrl={branding.logo_url}
+            roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            unreadNotifications={unreadNotifications}
+            logoutButton={<LogoutButton />}
+          >
+            {(currentRole === "DIPENDENTE" ? items : baseItems).map((item) => (
+              <InstantLink
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-200"
+                activeClassName="bg-paradise-softPink/60 text-[#C66170] font-bold dark:bg-white/20 dark:text-white"
+              >
+                <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)]" />
+                <span>{item.label}</span>
+              </InstantLink>
+            ))}
+          </MobileMenuDrawer>
+
+          {/* Logo Center */}
+          <Link href="/dashboard" className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">
+            <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
           </Link>
-          {currentRole === "DIPENDENTE" ? (
+
+          {/* Bell & Profile Photo Right */}
+          <div className="flex items-center gap-3.5">
+            <InstantLink href="/notifications" className="relative p-1 text-paradise-noir/80 dark:text-white/80 active:scale-95 transition">
+              <DynamicIcon name="Bell" className="size-5" />
+              {unreadNotifications > 0 && (
+                <span className="absolute top-0 right-0 size-2.5 rounded-full bg-[#C66170] ring-2 ring-white dark:ring-black animate-pulse-soft" />
+              )}
+            </InstantLink>
+
+            <InstantLink href="/profile" className="relative active:scale-95 transition">
+              <div className="size-9 rounded-full overflow-hidden border border-black/5 bg-paradise-nude shadow-sm">
+                {currentUser?.photo_url ? (
+                  <img src={currentUser.photo_url} alt={currentUser.name ?? "User"} className="size-full object-cover rounded-full select-none pointer-events-none" />
+                ) : (
+                  <div className="size-full flex items-center justify-center font-bold text-xs text-paradise-noir">
+                    {currentUser?.name?.slice(0, 1).toUpperCase() ?? "P"}
+                  </div>
+                )}
+              </div>
+              <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
+            </InstantLink>
+          </div>
+        </div>
+
+        {/* Desktop Header (hidden xl:block) */}
+        <div className="shrink-0 xl:block hidden">
+          <div className="flex items-center justify-between">
+            <Link href="/dashboard" className="sidebar-brand group flex items-center gap-3" title="Paradise Staff Hub">
+              <div className="grid size-11 place-items-center overflow-hidden rounded-full text-lg font-bold text-white shadow-soft transition-all duration-300 group-hover:scale-105 group-hover:shadow-luxury bg-transparent">
+                <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="size-full object-contain dark:invert" />
+              </div>
+              <div className="sidebar-label">
+                <p className="text-sm font-bold uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] transition-colors duration-300 group-hover:text-[#B85B68] dark:text-[color:var(--dark-sidebar-text)] dark:group-hover:text-paradise-pink">Paradise</p>
+                <p className="sidebar-subtitle text-xs text-[color:var(--sidebar-text)] opacity-55 dark:text-[color:var(--dark-sidebar-text)]">Staff Hub</p>
+              </div>
+            </Link>
+            {currentRole !== "DIPENDENTE" && (
+              <div className="flex items-center gap-3 xl:block">
+                <div className="sidebar-role rounded-full bg-paradise-softPink px-3 py-1 text-xs font-semibold xl:mt-5 hidden xl:inline-block">
+                  {roleLabels[currentRole]}
+                </div>
+              </div>
+            )}
+          </div>
+          {currentRole === "DIPENDENTE" && (
             <InstantLink href="/notifications" className="sidebar-role relative inline-flex items-center gap-2 rounded-full bg-paradise-softPink px-3 py-1 text-xs font-semibold xl:mt-5 transition-transform duration-300 hover:scale-105">
               <DynamicIcon name="Bell" className="size-3.5" />
               Avvisi
@@ -141,37 +201,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                 </span>
               ) : null}
             </InstantLink>
-          ) : (
-            <div className="flex items-center gap-3 xl:block">
-              <div className="sidebar-role rounded-full bg-paradise-softPink px-3 py-1 text-xs font-semibold xl:mt-5 hidden xl:inline-block">
-                {roleLabels[currentRole]}
-              </div>
-              <MobileMenuDrawer
-                logoUrl={branding.logo_url}
-                roleLabel={roleLabels[currentRole]}
-                unreadNotifications={unreadNotifications}
-                logoutButton={<LogoutButton />}
-              >
-                {baseItems.map((item) => {
-                  return (
-                    <InstantLink
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-200"
-                      activeClassName="bg-paradise-softPink/60 text-[#C66170] font-bold dark:bg-white/20 dark:text-white"
-                    >
-                      <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)]" />
-                      <span>{item.label}</span>
-                      {item.href === "/notifications" && unreadNotifications > 0 ? (
-                        <span className="ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
-                          {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                        </span>
-                      ) : null}
-                    </InstantLink>
-                  );
-                })}
-              </MobileMenuDrawer>
-            </div>
           )}
         </div>
         <nav className="luxury-scroll mt-5 xl:min-h-0 xl:flex-1 xl:space-y-1 xl:overflow-x-hidden xl:overflow-y-auto hidden xl:block">
@@ -275,7 +304,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                     </span>
                   ) : null}
                 </div>
-                {item.href === "/dashboard" ? "Home" : item.href === "/my-shifts" ? "Turni" : item.label}
+                {item.label}
               </InstantLink>
             );
           })}
