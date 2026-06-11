@@ -324,11 +324,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   const metrics = useMemo(
     () => [
-      { label: "Tasks di oggi", shortLabel: "Oggi", value: todayTasks.length, icon: CalendarDays, color: "text-[#C66170]" },
-      { label: "In corso", shortLabel: "In corso", value: activeTasks.length, icon: ListChecks, color: "text-[#8B78D6]" },
-      { label: "Da iniziare", shortLabel: "Da fare", value: newTasks.length, icon: Clock3, color: "text-[#E2B719]" },
-      { label: "Completate", shortLabel: "Fatte", value: completedTasks.length, icon: CheckCircle2, color: "text-[#42A85E]" },
-      { label: "In attesa", shortLabel: "Attesa", value: waitingTasks.length, icon: Timer, color: "text-[#9B80DE]" },
+      { filter: "TODAY" as TaskFilter, label: "Tasks di oggi", shortLabel: "Oggi", value: todayTasks.length, icon: CalendarDays, color: "text-[#C66170]" },
+      { filter: "ACTIVE" as TaskFilter, label: "In corso", shortLabel: "In corso", value: activeTasks.length, icon: ListChecks, color: "text-[#8B78D6]" },
+      { filter: "NEW" as TaskFilter, label: "Da iniziare", shortLabel: "Da fare", value: newTasks.length, icon: Clock3, color: "text-[#E2B719]" },
+      { filter: "COMPLETED" as TaskFilter, label: "Completate", shortLabel: "Fatte", value: completedTasks.length, icon: CheckCircle2, color: "text-[#42A85E]" },
+      { filter: "WAITING" as TaskFilter, label: "In attesa", shortLabel: "Attesa", value: waitingTasks.length, icon: Timer, color: "text-[#9B80DE]" },
     ],
     [activeTasks, completedTasks.length, newTasks.length, todayTasks.length, waitingTasks.length],
   );
@@ -759,15 +759,28 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         <div className="mt-7 grid grid-cols-5 gap-1.5 sm:gap-4 md:gap-6">
           {metrics.map((metric) => {
             const Icon = metric.icon;
+            const isSelected = view === "LIST" && filter === metric.filter;
             return (
-              <div key={metric.label} className="flex flex-col items-center justify-center rounded-[22px] border border-black/5 bg-white p-1 py-2.5 sm:p-4 text-center shadow-sm">
+              <button
+                key={metric.label}
+                type="button"
+                onClick={() => {
+                  setFilter(metric.filter);
+                  setView("LIST");
+                }}
+                className={cn(
+                  "flex flex-col items-center justify-center rounded-[22px] border border-black/5 bg-white p-1 py-2.5 sm:p-4 text-center shadow-sm",
+                  "transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95",
+                  isSelected && "ring-2 ring-paradise-pink/60 bg-paradise-softPink/10"
+                )}
+              >
                 <Icon className={cn("size-4 sm:size-6 shrink-0", metric.color)} />
                 <p className="mt-1 sm:mt-4 text-base sm:text-3xl font-semibold leading-none sm:leading-tight">{metric.value}</p>
                 <p className="text-[8.5px] sm:text-sm text-black/50 leading-tight mt-0.5 sm:mt-1">
                   <span className="inline sm:hidden">{metric.shortLabel}</span>
                   <span className="hidden sm:inline">{metric.label}</span>
                 </p>
-              </div>
+              </button>
             );
           })}
         </div>
