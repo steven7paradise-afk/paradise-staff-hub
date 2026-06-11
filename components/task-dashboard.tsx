@@ -324,11 +324,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   const metrics = useMemo(
     () => [
-      { label: "Tasks di oggi", value: todayTasks.length, icon: CalendarDays, color: "text-[#C66170]" },
-      { label: "In corso", value: activeTasks.length, icon: ListChecks, color: "text-[#8B78D6]" },
-      { label: "Da iniziare", value: newTasks.length, icon: Clock3, color: "text-[#E2B719]" },
-      { label: "Completate", value: completedTasks.length, icon: CheckCircle2, color: "text-[#42A85E]" },
-      { label: "In attesa", value: waitingTasks.length, icon: Timer, color: "text-[#9B80DE]" },
+      { label: "Tasks di oggi", shortLabel: "Oggi", value: todayTasks.length, icon: CalendarDays, color: "text-[#C66170]" },
+      { label: "In corso", shortLabel: "In corso", value: activeTasks.length, icon: ListChecks, color: "text-[#8B78D6]" },
+      { label: "Da iniziare", shortLabel: "Da fare", value: newTasks.length, icon: Clock3, color: "text-[#E2B719]" },
+      { label: "Completate", shortLabel: "Fatte", value: completedTasks.length, icon: CheckCircle2, color: "text-[#42A85E]" },
+      { label: "In attesa", shortLabel: "Attesa", value: waitingTasks.length, icon: Timer, color: "text-[#9B80DE]" },
     ],
     [activeTasks, completedTasks.length, newTasks.length, todayTasks.length, waitingTasks.length],
   );
@@ -756,14 +756,17 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           </div>
         </div>
 
-        <div className="mt-7 grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="mt-7 grid grid-cols-5 gap-1.5 sm:gap-4 md:gap-6">
           {metrics.map((metric) => {
             const Icon = metric.icon;
             return (
-              <div key={metric.label} className="rounded-[22px] border border-black/5 bg-white p-4 shadow-sm">
-                <Icon className={`size-6 ${metric.color}`} />
-                <p className="mt-5 text-3xl font-semibold">{metric.value}</p>
-                <p className="mt-1 text-sm text-black/50">{metric.label}</p>
+              <div key={metric.label} className="flex flex-col items-center justify-center rounded-[22px] border border-black/5 bg-white p-1 py-2.5 sm:p-4 text-center shadow-sm">
+                <Icon className={cn("size-4 sm:size-6 shrink-0", metric.color)} />
+                <p className="mt-1 sm:mt-4 text-base sm:text-3xl font-semibold leading-none sm:leading-tight">{metric.value}</p>
+                <p className="text-[8.5px] sm:text-sm text-black/50 leading-tight mt-0.5 sm:mt-1">
+                  <span className="inline sm:hidden">{metric.shortLabel}</span>
+                  <span className="hidden sm:inline">{metric.label}</span>
+                </p>
               </div>
             );
           })}
