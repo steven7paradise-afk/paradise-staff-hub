@@ -111,21 +111,25 @@ export function MobileMenuDrawer({
 
   return (
     <div className="xl:hidden">
-      {/* Hamburger Button */}
-      <div className="flex items-center gap-3">
-        {unreadNotifications > 0 && (
-          <span className="relative flex size-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C66170] opacity-75"></span>
-            <span className="relative inline-flex rounded-full size-2.5 bg-[#C66170]"></span>
-          </span>
-        )}
+      {/* Hamburger Button (Floating Tab on the Left with Vertical Border Line) */}
+      <div className="fixed left-0 top-[14px] z-40 flex items-center">
+        {/* Color-changing vertical border line on the left screen edge */}
+        <div className="fixed left-0 top-0 bottom-0 w-1 bg-[color:var(--primary)] pointer-events-none" />
+        
+        {/* Floating Capsule/Tab Button */}
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="grid size-11 place-items-center rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/5 dark:border-white/5 text-paradise-noir dark:text-white transition active:scale-95"
+          className="relative flex h-10 w-9 items-center justify-center rounded-r-2xl bg-[color:var(--primary)] text-white shadow-soft transition-all duration-200 active:scale-95 hover:w-10 focus:outline-none"
           aria-label="Apri menu"
         >
           <Menu className="size-5" />
+          {unreadNotifications > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex size-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C66170] opacity-75"></span>
+              <span className="relative inline-flex rounded-full size-2.5 bg-[#C66170]"></span>
+            </span>
+          )}
         </button>
       </div>
 
