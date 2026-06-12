@@ -230,23 +230,6 @@ export function StaffFormsViewer({
         }
       `}} />
 
-      {/* Header card */}
-      <div className="rounded-[24px] bg-white p-6 shadow-sm hidden sm:block">
-        <div className="flex items-start gap-4">
-          <div className="grid size-14 place-items-center rounded-2xl bg-paradise-softPink text-[#A74758]">
-            <ClipboardList className="size-6" />
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">Pagina operativa</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-black">Moduli e Form</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-black/55">
-              Clicca su un modulo per visualizzare la <strong>cronologia degli invii</strong> e i <strong>commenti</strong>. Fai <strong>doppio click</strong> per compilarlo direttamente.
-            </p>
-          </div>
-        </div>
-      </div>
-
-
 
       {/* Prossimi Eventi */}
       {upcomingEvents.length > 0 && (
