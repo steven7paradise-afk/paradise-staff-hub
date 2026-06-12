@@ -40,6 +40,9 @@ export function ProfileSettings({
     if (!response.ok) return setPhotoStatus(result.error ?? "Errore nel caricamento della foto.");
     setImage(result.photoUrl);
     setPhotoStatus("Foto profilo aggiornata con successo.");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("photo-change", { detail: result.photoUrl }));
+    }
   }
 
   async function updatePassword(event: FormEvent<HTMLFormElement>) {
@@ -80,7 +83,7 @@ export function ProfileSettings({
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Photo settings card */}
-      <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6 flex flex-col justify-between">
+      <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6 space-y-6">
         <div>
           <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3 mb-4">
             <Camera className="size-5 text-[#B85B68] dark:text-paradise-pink" />
@@ -106,16 +109,17 @@ export function ProfileSettings({
               <Camera className="size-4 text-[#B85B68] dark:text-paradise-pink" /> Carica Nuova Foto
             </button>
           </div>
-        </div>
 
-        <div>
           {photoStatus && (
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-in fade-in">
               <CheckCircle2 className="size-4 shrink-0" />
               <span>{photoStatus}</span>
             </div>
           )}
-          <p className="mt-4 flex items-center gap-1.5 text-[10px] text-black/45 dark:text-white/40">
+        </div>
+
+        <div className="border-t border-black/5 dark:border-white/5 pt-4">
+          <p className="flex items-center gap-1.5 text-[10px] text-black/45 dark:text-white/40">
             <Upload className="size-3.5" /> 
             <span>File accettati: JPG o PNG. Dimensione massima consentita: 5 MB.</span>
           </p>

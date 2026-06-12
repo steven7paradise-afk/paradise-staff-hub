@@ -4,11 +4,12 @@ import React, { useState, useMemo } from "react";
 import { 
   Plus, Trash2, Edit, ClipboardList, Eye, Check, X, 
   Sliders, User, MapPin, Calendar, Download, AlertCircle, Play,
-  Archive, Undo, Inbox
+  Archive, Undo, Inbox, ArrowUpRight
 } from "lucide-react";
 import { Badge, Card, Select, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
+import { cn } from "@/lib/utils";
 
 type LocationOption = { id: string; name: string };
 
@@ -89,6 +90,9 @@ export function AdminFormsManager({
   const [responses, setResponses] = useState<FormResponse[]>(initialResponses);
   const [activeTab, setActiveTab] = useState<"templates" | "responses" | "upcoming">(initialTab);
   const [responseSubTab, setResponseSubTab] = useState<"active" | "archived">("active");
+  const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(initialForms[0]?.id ?? null);
+  const [expandedResponseId, setExpandedResponseId] = useState<string | null>(initialResponses[0]?.id ?? null);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   
   // Filter states for responses
   const [filterFormId, setFilterFormId] = useState<string>("all");
@@ -364,7 +368,7 @@ export function AdminFormsManager({
   return (
     <div className="space-y-6">
       {/* Navigation tabs */}
-      <div className="flex gap-2 rounded-2xl bg-black/5 p-1.5 w-fit">
+      <div className="flex flex-wrap sm:flex-nowrap gap-2 rounded-2xl bg-black/5 p-1.5 w-full sm:w-fit">
         <button
           onClick={() => setActiveTab("templates")}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
@@ -403,7 +407,7 @@ export function AdminFormsManager({
       {activeTab === "templates" ? (
         <Card className="bg-white">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <div>
+            <div className="hidden sm:block">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Templates</p>
               <h2 className="mt-1 text-2xl font-semibold">Elenco moduli operativi</h2>
             </div>
@@ -418,7 +422,7 @@ export function AdminFormsManager({
             )}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 hidden sm:grid">
             {forms.map((form) => (
               <div 
                 key={form.id} 
@@ -502,13 +506,135 @@ export function AdminFormsManager({
               </div>
             )}
           </div>
+
+          {/* Templates List (Mobile Stacked Cards) */}
+          <div className="space-y-4 sm:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
+            {forms.map((form, idx) => {
+              const colors = [
+                { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+              ];
+              const color = colors[idx % colors.length];
+              const isExpanded = expandedTemplateId === form.id;
+
+              return (
+                <div
+                  key={form.id}
+                  onClick={() => setExpandedTemplateId(isExpanded ? null : form.id)}
+                  className={cn(
+                    "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
+                    color.bg,
+                    color.text,
+                    isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[72px] flex items-center justify-between"
+                  )}
+                >
+                  {isExpanded ? (
+                    <div className="flex flex-col justify-between w-full">
+                      <div>
+                        <div className="flex justify-between items-start gap-3">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-60">
+                              {form.category}
+                            </span>
+                            <h3 className="text-base font-extrabold mt-0.5 leading-tight">{form.name}</h3>
+                          </div>
+                          {canManage && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEdit(form);
+                              }}
+                              className={cn(
+                                "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
+                                color.arrowBg,
+                                color.arrowText
+                              )}
+                            >
+                              <ArrowUpRight className="size-4.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        <p className="mt-3 text-xs font-semibold opacity-85 leading-relaxed">
+                          {form.description || "Nessuna descrizione specificata."}
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap gap-1.5 opacity-90">
+                          <span className={cn("rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase border border-current/15")}>
+                            {form.active ? "Attivo" : "Disattivato"}
+                          </span>
+                          <span className="rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase border border-current/15">
+                            {form.fields?.length || 0} domande
+                          </span>
+                        </div>
+                      </div>
+
+                      {canManage && (
+                        <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteForm(form.id);
+                            }}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-500/10 text-red-700 text-sm font-bold active:scale-95 transition border border-red-500/10"
+                          >
+                            <Trash2 className="size-4" />
+                            Elimina
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(form);
+                            }}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                          >
+                            <Edit className="size-4" />
+                            Modifica
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3 truncate">
+                        <DynamicIcon name={form.icon || "ClipboardList"} className="size-4 shrink-0 opacity-70" />
+                        <h3 className="text-sm font-extrabold truncate">{form.name}</h3>
+                      </div>
+                      <div
+                        className={cn(
+                          "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
+                          color.arrowBg,
+                          color.arrowText
+                        )}
+                      >
+                        <ArrowUpRight className="size-4" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {forms.length === 0 && (
+              <div className="py-12 flex flex-col items-center justify-center text-center text-white/45 border border-dashed border-white/10 rounded-[28px]">
+                <AlertCircle className="size-8 text-white/20 mb-2" />
+                <p className="font-bold text-sm">Nessun modulo disponibile</p>
+              </div>
+            )}
+          </div>
         </Card>
       ) : activeTab === "responses" ? (
         <Card className="bg-white">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Risposte</p>
-              <h2 className="mt-1 text-2xl font-semibold">Risposte ricevute dai dipendenti</h2>
+              <div className="hidden sm:block">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Risposte</p>
+                <h2 className="mt-1 text-2xl font-semibold">Risposte ricevute dai dipendenti</h2>
+              </div>
               
               {/* Sub-tabs for Active vs Archived */}
               <div className="flex gap-2 rounded-xl bg-black/5 p-1 w-fit mt-3">
@@ -561,7 +687,7 @@ export function AdminFormsManager({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-black/5">
+          <div className="overflow-x-auto rounded-2xl border border-black/5 hidden sm:block">
             <table className="w-full text-left border-collapse bg-[#FBF7F9]">
               <thead>
                 <tr className="border-b border-black/5 text-xs font-bold uppercase tracking-wider text-black/40 bg-black/5">
@@ -638,16 +764,155 @@ export function AdminFormsManager({
               </tbody>
             </table>
           </div>
+
+          {/* Responses List (Mobile Stacked Cards) */}
+          <div className="space-y-4 sm:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
+            {filteredResponses.map((resp, idx) => {
+              const colors = [
+                { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+              ];
+              const color = colors[idx % colors.length];
+              const isExpanded = expandedResponseId === resp.id;
+
+              return (
+                <div
+                  key={resp.id}
+                  onClick={() => setExpandedResponseId(isExpanded ? null : resp.id)}
+                  className={cn(
+                    "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
+                    color.bg,
+                    color.text,
+                    isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[72px] flex items-center justify-between"
+                  )}
+                >
+                  {isExpanded ? (
+                    <div className="flex flex-col justify-between w-full">
+                      <div>
+                        <div className="flex justify-between items-start gap-3">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-60">
+                              {resp.user_location_name || "Nessuna sede"}
+                            </span>
+                            <h3 className="text-base font-extrabold mt-0.5 leading-tight">
+                              {resp.form?.name || "Modulo eliminato"}
+                            </h3>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedResponse(resp);
+                            }}
+                            className={cn(
+                              "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
+                              color.arrowBg,
+                              color.arrowText
+                            )}
+                          >
+                            <ArrowUpRight className="size-4.5" />
+                          </button>
+                        </div>
+
+                        <div className="mt-4 space-y-2 text-xs font-semibold opacity-85">
+                          <p suppressHydrationWarning>
+                            <span className="opacity-60">Dipendente:</span> {resp.user.name}
+                          </p>
+                          <p>
+                            <span className="opacity-60">Email:</span> {resp.user.email}
+                          </p>
+                          <p>
+                            <span className="opacity-60">Inviato il:</span>{" "}
+                            {new Date(resp.created_at).toLocaleString("it-IT", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
+                        {responseSubTab === "active" ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleArchiveResponse(resp.id);
+                            }}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-500/10 text-red-700 text-sm font-bold active:scale-95 transition border border-red-500/10"
+                          >
+                            <Archive className="size-4" />
+                            Archivia
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestoreResponse(resp.id);
+                            }}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
+                          >
+                            <Undo className="size-4" />
+                            Ripristina
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedResponse(resp);
+                          }}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                        >
+                          <Eye className="size-4" />
+                          Vedi risposte
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-col truncate pr-4">
+                        <h3 className="text-sm font-extrabold truncate">{resp.form?.name || "Modulo eliminato"}</h3>
+                        <p className="text-[10px] font-bold opacity-60 truncate">
+                          {resp.user.name} • {new Date(resp.created_at).toLocaleDateString("it-IT")}
+                        </p>
+                      </div>
+                      <div
+                        className={cn(
+                          "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
+                          color.arrowBg,
+                          color.arrowText
+                        )}
+                      >
+                        <ArrowUpRight className="size-4" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {filteredResponses.length === 0 && (
+              <div className="py-12 flex flex-col items-center justify-center text-center text-white/45 border border-dashed border-white/10 rounded-[28px]">
+                <AlertCircle className="size-8 text-white/20 mb-2" />
+                <p className="font-bold text-sm">Nessuna risposta trovata</p>
+              </div>
+            )}
+          </div>
         </Card>
       ) : (
         <Card className="bg-white">
-          <div className="mb-6">
+          <div className="mb-6 hidden sm:block">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Timeline</p>
             <h2 className="mt-1 text-2xl font-semibold">Prossimi eventi in agenda</h2>
             <p className="text-sm text-black/55 mt-1">Date e attività future pianificate estratte dai moduli dello staff.</p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="hidden sm:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {upcomingEvents.map((evt, idx) => (
               <div 
                 key={`${evt.responseId}-${idx}`}
@@ -711,6 +976,141 @@ export function AdminFormsManager({
                 <Calendar className="size-10 text-black/30 mb-3" />
                 <p className="font-semibold text-lg">Nessun evento futuro</p>
                 <p className="text-sm mt-1">Non ci sono eventi attivi o date future inserite nei moduli compilati.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Upcoming List (Mobile Stacked Cards) */}
+          <div className="space-y-4 sm:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
+            {upcomingEvents.map((evt, idx) => {
+              const colors = [
+                { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+              ];
+              const color = colors[idx % colors.length];
+              const isExpanded = expandedEventId === evt.responseId;
+
+              return (
+                <div
+                  key={`${evt.responseId}-${idx}`}
+                  onClick={() => setExpandedEventId(isExpanded ? null : evt.responseId)}
+                  className={cn(
+                    "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
+                    color.bg,
+                    color.text,
+                    isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[72px] flex items-center justify-between"
+                  )}
+                >
+                  {isExpanded ? (
+                    <div className="flex flex-col justify-between w-full">
+                      <div>
+                        <div className="flex justify-between items-start gap-3">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-60">
+                              {evt.daysLeft === 0 ? "Oggi" : evt.daysLeft === 1 ? "Domani" : `Tra ${evt.daysLeft} giorni`}
+                            </span>
+                            <h3 className="text-base font-extrabold mt-0.5 leading-tight">
+                              {evt.formName}
+                            </h3>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const resp = responses.find(r => r.id === evt.responseId);
+                              if (resp) setSelectedResponse(resp);
+                            }}
+                            className={cn(
+                              "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
+                              color.arrowBg,
+                              color.arrowText
+                            )}
+                          >
+                            <ArrowUpRight className="size-4.5" />
+                          </button>
+                        </div>
+
+                        <div className="mt-4 space-y-2 text-xs font-semibold opacity-85">
+                          <p>
+                            <span className="opacity-60">Scadenza:</span> {evt.dateLabel}
+                          </p>
+                          <p>
+                            <span className="opacity-60">Dipendente:</span> {evt.userName}
+                          </p>
+                          {evt.locationName && (
+                            <p>
+                              <span className="opacity-60">Sede:</span> {evt.locationName}
+                            </p>
+                          )}
+                          <div className="mt-2 pt-2 border-t border-black/5 space-y-1">
+                            {evt.fields.filter((f: any) => f.type !== "date").slice(0, 2).map((field: any) => {
+                              const ans = evt.answers[field.id];
+                              if (ans === undefined || ans === null || ans === "") return null;
+                              return (
+                                <div key={field.id} className="text-[11px]">
+                                  <span className="opacity-60">{field.label}:</span>{" "}
+                                  <span>{typeof ans === "object" ? ans.name : String(ans)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleArchiveResponse(evt.responseId);
+                          }}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-500/10 text-red-700 text-sm font-bold active:scale-95 transition border border-red-500/10"
+                        >
+                          <Archive className="size-4" />
+                          Archivia
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const resp = responses.find(r => r.id === evt.responseId);
+                            if (resp) setSelectedResponse(resp);
+                          }}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                        >
+                          <Eye className="size-4" />
+                          Dettagli
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-col truncate pr-4">
+                        <h3 className="text-sm font-extrabold truncate">{evt.formName}</h3>
+                        <p className="text-[10px] font-bold opacity-60 truncate">
+                          {evt.userName} • {evt.daysLeft === 0 ? "Oggi" : evt.daysLeft === 1 ? "Domani" : `Tra ${evt.daysLeft} gg`} ({evt.dateLabel})
+                        </p>
+                      </div>
+                      <div
+                        className={cn(
+                          "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
+                          color.arrowBg,
+                          color.arrowText
+                        )}
+                      >
+                        <ArrowUpRight className="size-4" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {upcomingEvents.length === 0 && (
+              <div className="py-12 flex flex-col items-center justify-center text-center text-white/45 border border-dashed border-white/10 rounded-[28px]">
+                <Calendar className="size-8 text-white/20 mb-2" />
+                <p className="font-bold text-sm">Nessun evento futuro</p>
               </div>
             )}
           </div>

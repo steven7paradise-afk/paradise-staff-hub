@@ -67,6 +67,8 @@ export function brandingCss(theme: BrandingTheme) {
     "--light-card": theme.card_color,
     "--light-text": theme.text_color,
     "--light-button": theme.button_color,
+    "--light-sidebar-text": theme.sidebar_text_color,
+    "--light-sidebar-icon": theme.sidebar_icon_color,
     "--background": theme.background_color,
     "--sidebar": theme.sidebar_color,
     "--button": theme.button_color,
@@ -82,5 +84,6 @@ export function brandingCss(theme: BrandingTheme) {
     "--sidebar-icon": theme.sidebar_icon_color,
     "--dark-sidebar-text": theme.dark_sidebar_text_color,
     "--dark-sidebar-icon": theme.dark_sidebar_icon_color,
+    "--mobile-header-color": theme.sidebar_color,
   } as CSSProperties;
 }

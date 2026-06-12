@@ -6,6 +6,47 @@ const managementRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 type RouteParams = { params: Promise<{ id: string }> };
 
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await params;
+
+    const response = await prisma.serviceFormResponse.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        form: true,
+      },
+    });
+
+    if (!response) {
+      return NextResponse.json({ error: "Risposta non trovata" }, { status: 404 });
+    }
+
+    const isOwner = response.user_id === session.user.id;
+    const isManager = managementRoles.has(session.user.role);
+
+    const notifyUserIds = response.form?.notify_user_ids as string[] | null;
+    const notifyRoles = response.form?.notify_roles as string[] | null;
+    const isRecipient = 
+      (notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(session.user.id)) ||
+      (notifyRoles && Array.isArray(notifyRoles) && notifyRoles.includes(session.user.role));
+
+    if (!isOwner && !isManager && !isRecipient) {
+      return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+    }
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error("Failed to fetch form response:", error);
+    return NextResponse.json({ error: "Errore durante il recupero della risposta" }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const session = await auth();
   if (!session?.user?.id) {

@@ -35,7 +35,7 @@ const nav = [
 
 const salonGroupRoutes = new Set(["/locations", "/employees", "/documents", "/schedules"]);
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
   const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
@@ -119,9 +119,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     : [];
 
   const aside = (
-      <aside className="z-30 w-full max-w-full border-b-0 border-transparent bg-[color:var(--background)] px-4 py-3 xl:border-r xl:border-black/5 xl:bg-[color:var(--sidebar)] xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden">
+      <aside className={cn(
+        "z-30 w-full max-w-full border-b-0 border-transparent bg-[color:var(--sidebar)] px-4 py-3 text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden",
+        hideMobileHeader && "hidden xl:flex"
+      )}>
         {/* Mobile Header (xl:hidden) */}
-        <div className="relative flex xl:hidden items-center justify-between w-full">
+        {!hideMobileHeader && (
+          <div className="relative flex xl:hidden items-center justify-between w-full">
           {/* Hamburger Drawer */}
           <MobileMenuDrawer
             logoUrl={branding.logo_url}
@@ -130,14 +134,16 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
             logoutButton={
-              <LogoutButton className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/20 active:scale-95 shadow-sm" />
+              <LogoutButton className="flex w-full items-center gap-3 rounded-2xl border border-current/10 bg-white/20 px-4 py-3 text-sm font-bold text-[color:var(--sidebar-text)] shadow-sm transition hover:bg-white/30 active:scale-95" />
             }
           >
             {(currentRole === "DIPENDENTE"
               ? [
+                  { href: "/dashboard", label: "Home", iconName: "Home" },
                   { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
                   { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
                   { href: "/dashboard", label: "Timbrature", iconName: "Clock3" },
+                  { href: "/documents", label: "Documenti", iconName: "FileText" },
                   ...(servicePageNum === 2
                     ? [{ href: "/tasks", label: "TASK", iconName: "CheckSquare" }]
                     : []),
@@ -153,10 +159,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               <InstantLink
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold text-white/80 hover:bg-white/10 hover:text-white transition-all duration-200"
-                activeClassName="bg-white/15 text-white font-extrabold border-l-4 border-white pl-3"
+                className="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold text-[color:var(--sidebar-text)] opacity-80 transition-all duration-200 hover:bg-white/20 hover:opacity-100"
+                activeClassName="bg-white/25 opacity-100 font-extrabold border-l-4 border-[color:var(--sidebar-icon)] pl-3"
               >
-                <DynamicIcon name={item.iconName} className="size-5 text-white/80 shrink-0" />
+                <DynamicIcon name={item.iconName} className="size-5 shrink-0 text-[color:var(--sidebar-icon)]" />
                 <span>{item.label}</span>
               </InstantLink>
             ))}
@@ -169,7 +175,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
           {/* Bell & Profile Photo Right */}
           <div className="flex items-center gap-3.5">
-            <InstantLink href="/notifications" className="relative p-1 text-paradise-noir/80 dark:text-white/80 active:scale-95 transition">
+            <InstantLink href="/notifications" className="relative p-1 text-[color:var(--sidebar-icon)] active:scale-95 transition">
               <DynamicIcon name="Bell" className="size-5" />
               {unreadNotifications > 0 && (
                 <span className="absolute top-0 right-0 size-2.5 rounded-full bg-[#C66170] ring-2 ring-white dark:ring-black animate-pulse-soft" />
@@ -190,6 +196,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             </InstantLink>
           </div>
         </div>
+      )}
 
         {/* Desktop Header (hidden xl:block) */}
         <div className="shrink-0 xl:block hidden">
@@ -274,11 +281,15 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   );
  
   const main = (
-      <main className={cn("w-full min-w-0 max-w-full overflow-x-hidden bg-transparent px-4 py-5 sm:px-6 xl:px-10 xl:py-8", currentRole === "DIPENDENTE" && "pb-28 xl:pb-8")}>
+      <main className={cn(
+        "w-full min-w-0 max-w-full overflow-x-hidden bg-transparent xl:px-10 xl:py-8", 
+        hideMobileHeader ? "px-0 py-0" : "px-4 py-5 sm:px-6",
+        currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
+      )}>
         <div className="mb-5 hidden justify-end xl:flex">
           <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ?? null} />
         </div>
-        {!hideHeader ? <header className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        {!hideHeader ? <header className={cn("mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", hidePageHeaderOnMobile && "hidden sm:flex")}>
           <div>
             <p className={cn("text-sm font-semibold uppercase tracking-[0.18em] text-black/40 dark:text-white/40", currentRole === "DIPENDENTE" && "hidden sm:block")}>Paradise Beauty</p>
             <h1 className={cn("mt-2 font-bold tracking-tight text-[color:var(--text)]", currentRole === "DIPENDENTE" ? "text-3xl sm:text-4xl" : "text-3xl sm:text-4xl")}>

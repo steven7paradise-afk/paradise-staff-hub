@@ -74,6 +74,7 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
       title="Gestione Moduli" 
       subtitle="Crea, modifica e attiva moduli operativi per il personale e visualizza le risposte ricevute."
       role={role}
+      hidePageHeaderOnMobile
     >
       <AdminFormsManager
         role={role}

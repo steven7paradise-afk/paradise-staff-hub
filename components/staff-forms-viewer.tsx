@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
+import { cn } from "@/lib/utils";
 
 type FormField = {
   id: string;
@@ -44,6 +45,7 @@ export function StaffFormsViewer({
   const [selectedFormForHistory, setSelectedFormForHistory] = useState<FormTemplate | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
   const [responses, setResponses] = useState<any[]>(initialResponses);
+  const [expandedFormId, setExpandedFormId] = useState<string | null>(forms[0]?.id ?? null);
 
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -210,7 +212,7 @@ export function StaffFormsViewer({
   return (
     <div className="space-y-6">
       {/* Header card */}
-      <div className="rounded-[24px] bg-white p-6 shadow-sm">
+      <div className="rounded-[24px] bg-white p-6 shadow-sm hidden sm:block">
         <div className="flex items-start gap-4">
           <div className="grid size-14 place-items-center rounded-2xl bg-paradise-softPink text-[#A74758]">
             <ClipboardList className="size-6" />
@@ -278,8 +280,8 @@ export function StaffFormsViewer({
         </Card>
       )}
 
-      {/* Templates List */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {/* Templates List (Desktop/Tablet) */}
+      <div className="hidden sm:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {forms.map((form) => (
           <div
             key={form.id}
@@ -308,6 +310,113 @@ export function StaffFormsViewer({
             <AlertCircle className="size-10 text-black/30 mb-3" />
             <p className="font-semibold text-lg">Nessun modulo disponibile</p>
             <p className="text-sm mt-1">Non ci sono moduli assegnati al tuo ruolo o alla tua sede corrente.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Stacked Cards Layout (sm:hidden) */}
+      <div className="space-y-4 sm:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
+        {forms.map((form, idx) => {
+          const colors = [
+            { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+            { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+            { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+            { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+          ];
+          const color = colors[idx % colors.length];
+          const isExpanded = expandedFormId === form.id;
+
+          return (
+            <div
+              key={form.id}
+              onClick={() => setExpandedFormId(isExpanded ? null : form.id)}
+              className={cn(
+                "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
+                color.bg,
+                color.text,
+                isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[72px] flex items-center justify-between"
+              )}
+            >
+              {isExpanded ? (
+                <div className="flex flex-col justify-between w-full">
+                  <div>
+                    <div className="flex justify-between items-start gap-3">
+                      <div>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-60">
+                          {form.category}
+                        </span>
+                        <h3 className="text-base font-extrabold mt-0.5 leading-tight">{form.name}</h3>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenForm(form);
+                        }}
+                        className={cn(
+                          "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
+                          color.arrowBg,
+                          color.arrowText
+                        )}
+                      >
+                        <ArrowUpRight className="size-4.5" />
+                      </button>
+                    </div>
+
+                    <p className="mt-3 text-xs font-semibold opacity-85 leading-relaxed">
+                      {form.description || "Nessuna descrizione specificata per questo modulo."}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFormForHistory(form);
+                      }}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
+                    >
+                      <Clock className="size-4" />
+                      Invii
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenForm(form);
+                      }}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                    >
+                      <Plus className="size-4" />
+                      Compila
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 truncate">
+                    <DynamicIcon name={form.icon || "ClipboardList"} className="size-4 shrink-0 opacity-70" />
+                    <h3 className="text-sm font-extrabold truncate">{form.name}</h3>
+                  </div>
+                  <div
+                    className={cn(
+                      "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
+                      color.arrowBg,
+                      color.arrowText
+                    )}
+                  >
+                    <ArrowUpRight className="size-4" />
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+
+        {forms.length === 0 && (
+          <div className="py-12 flex flex-col items-center justify-center text-center text-white/45 border border-dashed border-white/10 rounded-[28px]">
+            <AlertCircle className="size-8 text-white/20 mb-2" />
+            <p className="font-bold text-sm">Nessun modulo disponibile</p>
           </div>
         )}
       </div>

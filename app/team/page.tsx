@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, BarChart3, CalendarDays, CheckCircle2, Clock3, Mail, PieChart, Star, Timer, UserRound } from "lucide-react";
+import { Activity, BadgeCheck, BarChart3, CalendarDays, CheckCircle2, Clock3, ListChecks, Mail, PieChart, Star, Timer, UserRound, Users } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { TaskEvaluationActions } from "@/components/task-evaluation-actions";
@@ -144,13 +144,36 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
         {selected ? (
           <div className="space-y-5">
             <div className="grid gap-5 xl:grid-cols-[1fr_2fr]">
-              <Card className="bg-white">
-                <div className="flex items-center gap-5">
-                  <Avatar name={selected.name} photoUrl={selected.photo_url} />
-                  <div>
-                    <h2 className="text-3xl font-semibold tracking-tight">{selected.name}</h2>
-                    <Badge tone="pink">{selected.location?.name ?? "Senza salone"}</Badge>
-                    <p className="mt-3 flex items-center gap-2 text-sm text-black/55"><Mail className="size-4" /> {selected.email}</p>
+              <Card className="overflow-hidden border border-white/70 bg-white/70 p-2 shadow-[0_24px_60px_rgba(31,31,31,0.12)] backdrop-blur-2xl">
+                <div className="relative min-h-[340px] overflow-hidden rounded-[30px] border border-white/70 bg-[#EFF3F1]">
+                  {selected.photo_url ? (
+                    <img src={selected.photo_url} alt={selected.name} className="absolute inset-0 size-full object-cover" />
+                  ) : (
+                    <div className="absolute inset-0 grid place-items-center bg-paradise-softPink text-7xl font-black text-paradise-noir">
+                      {selected.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white/92 via-white/74 to-transparent p-6 pt-24 backdrop-blur-[2px]">
+                    <h2 className="flex items-center gap-2 text-3xl font-black tracking-tight text-paradise-noir">
+                      {selected.name}
+                      <BadgeCheck className="size-7 fill-emerald-500 text-white" />
+                    </h2>
+                    <div className="mt-2">
+                      <Badge tone="pink">{selected.location?.name ?? "Senza salone"}</Badge>
+                    </div>
+                    <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-black/60"><Mail className="size-4" /> {selected.email}</p>
+                    <div className="mt-6 flex flex-wrap items-center gap-5">
+                      <span className="inline-flex items-center gap-2 text-sm font-black text-black/80">
+                        <Users className="size-4 text-black/45" />
+                        {workers.length}
+                        <span className="text-xs font-semibold text-black/45">dipendenti</span>
+                      </span>
+                      <span className="inline-flex items-center gap-2 text-sm font-black text-black/80">
+                        <ListChecks className="size-4 text-black/45" />
+                        {active.length}
+                        <span className="text-xs font-semibold text-black/45">task in corso</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               </Card>

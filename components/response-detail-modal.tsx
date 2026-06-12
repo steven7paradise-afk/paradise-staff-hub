@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { User, MapPin, Calendar, Download, Archive, X, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ResponseComments } from "@/components/response-comments";
@@ -27,6 +28,12 @@ export function ResponseDetailModal({
   const [response, setResponse] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [archiving, setArchiving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   useEffect(() => {
     if (!isOpen || !responseId) return;
@@ -54,7 +61,7 @@ export function ResponseDetailModal({
     };
   }, [isOpen, responseId]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleArchiveResponse = async () => {
     if (!response) return;
@@ -82,7 +89,7 @@ export function ResponseDetailModal({
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="flex flex-col max-h-[85vh] w-full max-w-2xl rounded-[28px] bg-white shadow-2xl overflow-hidden border border-black/5 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
@@ -239,6 +246,7 @@ export function ResponseDetailModal({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
