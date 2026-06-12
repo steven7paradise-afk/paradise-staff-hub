@@ -210,17 +210,33 @@ export function StaffFormsViewer({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 dark staff-forms-page">
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (min-width: 640px) {
+          div:has(> .staff-forms-page),
+          div:has(> * > .staff-forms-page),
+          div:has(> * > * > .staff-forms-page),
+          div:has(> * > * > * > .staff-forms-page) {
+            background-color: #0A0A0A !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+          }
+        }
+        div:has(> .staff-forms-page) footer {
+          border-top-color: rgba(255, 255, 255, 0.1) !important;
+          color: rgba(255, 255, 255, 0.35) !important;
+        }
+      `}} />
+
       {/* Header card */}
-      <div className="rounded-[24px] bg-white p-6 shadow-sm hidden sm:block">
+      <div className="rounded-[24px] bg-white/5 border border-white/10 p-6 shadow-sm hidden sm:block">
         <div className="flex items-start gap-4">
-          <div className="grid size-14 place-items-center rounded-2xl bg-paradise-softPink text-[#A74758]">
+          <div className="grid size-14 place-items-center rounded-2xl bg-[#A74758]/20 text-[#A74758]">
             <ClipboardList className="size-6" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">Pagina operativa</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Moduli e Form</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-black/55">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">Pagina operativa</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Moduli e Form</h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
               Clicca su un modulo per visualizzare la <strong>cronologia degli invii</strong> e i <strong>commenti</strong>. Fai <strong>doppio click</strong> per compilarlo direttamente.
             </p>
           </div>
@@ -229,12 +245,12 @@ export function StaffFormsViewer({
 
       {/* Prossimi Eventi */}
       {upcomingEvents.length > 0 && (
-        <Card className="bg-white border-l-4 border-l-[#E8C98B] p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2 border-b border-black/5 pb-3">
+        <Card className="bg-white/5 border border-white/10 border-l-4 border-l-[#E8C98B] p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2 border-b border-white/10 pb-3">
             <Calendar className="size-5 text-[#A74758]" />
             <div>
-              <h2 className="text-lg font-bold text-paradise-noir">Prossimi Eventi / Scadenze</h2>
-              <p className="text-xs text-black/55">Visualizza le date pianificate compilate nei moduli operativi</p>
+              <h2 className="text-lg font-bold text-white">Prossimi Eventi / Scadenze</h2>
+              <p className="text-xs text-white/60">Visualizza le date pianificate compilate nei moduli operativi</p>
             </div>
           </div>
 
@@ -242,33 +258,33 @@ export function StaffFormsViewer({
             {upcomingEvents.map((evt, idx) => (
               <div 
                 key={`${evt.responseId}-${idx}`}
-                className="flex flex-col justify-between rounded-2xl border border-black/5 bg-[#FBF7F9] p-4 hover:border-[#E8C98B]/55 transition duration-300"
+                className="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-[#E8C98B]/55 transition duration-300"
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold uppercase text-[#A74758] bg-[#FBF7F9] border border-black/5 px-2 py-0.5 rounded-lg shadow-sm">
+                    <span className="text-[10px] font-extrabold uppercase text-[#A74758] bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg shadow-sm">
                       {evt.daysLeft === 0 ? "Oggi" : evt.daysLeft === 1 ? "Domani" : `Tra ${evt.daysLeft} giorni`}
                     </span>
-                    <span className="text-[10px] text-black/40 font-semibold">{evt.dateLabel}</span>
+                    <span className="text-[10px] text-white/40 font-semibold">{evt.dateLabel}</span>
                   </div>
-                  <h4 className="font-bold text-sm text-black mt-2.5 truncate">{evt.formName}</h4>
-                  <p className="text-xs text-black/60 mt-1 flex items-center gap-1">
-                    <User className="size-3 text-black/40" /> {evt.userName}
+                  <h4 className="font-bold text-sm text-white mt-2.5 truncate">{evt.formName}</h4>
+                  <p className="text-xs text-white/60 mt-1 flex items-center gap-1">
+                    <User className="size-3 text-white/40" /> {evt.userName}
                   </p>
                   {evt.locationName && (
-                    <p className="text-[10px] text-black/40 mt-0.5 flex items-center gap-1">
-                      <MapPin className="size-3 text-black/40" /> {evt.locationName}
+                    <p className="text-[10px] text-white/40 mt-0.5 flex items-center gap-1">
+                      <MapPin className="size-3 text-white/40" /> {evt.locationName}
                     </p>
                   )}
 
-                  <div className="mt-3 pt-2 border-t border-black/5 space-y-1">
+                  <div className="mt-3 pt-2 border-t border-white/10 space-y-1">
                     {evt.fields.filter((f: any) => f.type !== "date").slice(0, 2).map((field: any) => {
                       const ans = evt.answers[field.id];
                       if (ans === undefined || ans === null || ans === "") return null;
                       return (
                         <div key={field.id} className="text-[11px] truncate">
-                          <span className="font-semibold text-black/50">{field.label}: </span>
-                          <span className="text-black">{typeof ans === "object" ? ans.name : String(ans)}</span>
+                          <span className="font-semibold text-white/50">{field.label}: </span>
+                          <span className="text-white">{typeof ans === "object" ? ans.name : String(ans)}</span>
                         </div>
                       );
                     })}
@@ -286,28 +302,28 @@ export function StaffFormsViewer({
           <div
             key={form.id}
             onClick={() => handleCardClick(form)}
-            className="group cursor-pointer flex items-center justify-between rounded-[22px] border border-black/5 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]"
+            className="group cursor-pointer flex items-center justify-between rounded-[22px] border border-white/10 bg-white/5 p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] hover:bg-white/10"
           >
             <div className="flex items-center gap-4">
-              <div className="grid size-12 place-items-center rounded-2xl bg-[#FBF7F9] text-[#A74758] group-hover:bg-[#A74758]/5 transition">
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/5 text-[#A74758] group-hover:bg-[#A74758]/10 transition">
                 <DynamicIcon name={form.icon || "ClipboardList"} className="size-5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-black/35">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">
                   {form.category}
                 </span>
-                <h3 className="text-base font-semibold tracking-tight text-black mt-0.5">
+                <h3 className="text-base font-semibold tracking-tight text-white mt-0.5">
                   {form.name}
                 </h3>
               </div>
             </div>
-            <ChevronRight className="size-5 text-black/25 transition group-hover:translate-x-0.5 group-hover:text-black/55" />
+            <ChevronRight className="size-5 text-white/40 transition group-hover:translate-x-0.5 group-hover:text-white/80" />
           </div>
         ))}
 
         {forms.length === 0 && (
-          <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-black/45 bg-white/50 rounded-3xl border border-dashed border-black/10">
-            <AlertCircle className="size-10 text-black/30 mb-3" />
+          <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-white/40 bg-white/5 rounded-3xl border border-dashed border-white/10">
+            <AlertCircle className="size-10 text-white/30 mb-3" />
             <p className="font-semibold text-lg">Nessun modulo disponibile</p>
             <p className="text-sm mt-1">Non ci sono moduli assegnati al tuo ruolo o alla tua sede corrente.</p>
           </div>
@@ -424,18 +440,18 @@ export function StaffFormsViewer({
       {/* FILL OUT MODAL */}
       {selectedForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex flex-col max-h-[85vh] w-full max-w-xl rounded-[28px] bg-white shadow-2xl overflow-hidden border border-black/5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
+          <div className="flex flex-col max-h-[85vh] w-full max-w-xl rounded-[28px] bg-neutral-900 text-white shadow-2xl overflow-hidden border border-white/10 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#A74758]">
                   {selectedForm.category}
                 </span>
-                <h3 className="text-lg font-bold">{selectedForm.name}</h3>
+                <h3 className="text-lg font-bold text-white">{selectedForm.name}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => !submitting && setSelectedForm(null)}
-                className="grid size-8 place-items-center rounded-xl bg-white border border-black/5 text-black/40 hover:bg-black/5 hover:text-black/80 transition"
+                className="grid size-8 place-items-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:bg-white/10 hover:text-white transition"
               >
                 <X className="size-4" />
               </button>
@@ -444,19 +460,19 @@ export function StaffFormsViewer({
             {success ? (
               <div className="flex flex-col items-center justify-center p-12 text-center flex-1">
                 <CheckCircle2 className="size-16 text-emerald-500 animate-bounce" />
-                <h3 className="text-xl font-bold mt-4">Inviato con Successo!</h3>
-                <p className="text-sm text-black/55 mt-1">Il modulo è stato salvato e sincronizzato.</p>
+                <h3 className="text-xl font-bold mt-4 text-white">Inviato con Successo!</h3>
+                <p className="text-sm text-white/60 mt-1">Il modulo è stato salvato e sincronizzato.</p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
                 {selectedForm.description && (
-                  <div className="rounded-xl bg-[#FBF7F9] border border-black/5 p-3.5 text-xs text-black/60 leading-relaxed">
+                  <div className="rounded-xl bg-white/5 border border-white/10 p-3.5 text-xs text-white/60 leading-relaxed">
                     {selectedForm.description}
                   </div>
                 )}
 
                 {errorMsg && (
-                  <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 p-3.5 text-sm text-red-600">
+                  <div className="flex items-center gap-2 rounded-xl bg-red-950/45 border border-red-500/30 p-3.5 text-sm text-red-200">
                     <AlertCircle className="size-4 flex-shrink-0" />
                     <span>{errorMsg}</span>
                   </div>
@@ -464,11 +480,11 @@ export function StaffFormsViewer({
 
                 {selectedForm.fields.map((field) => (
                   <div key={field.id} className="space-y-1.5">
-                    <label className="text-sm font-bold text-black/70 block">
+                    <label className="text-sm font-bold text-white/70 block">
                       {field.label} {field.required && <span className="text-red-500">*</span>}
                     </label>
                     {field.description && (
-                      <p className="text-xs text-black/45 -mt-0.5 mb-1 leading-relaxed">{field.description}</p>
+                      <p className="text-xs text-white/45 -mt-0.5 mb-1 leading-relaxed">{field.description}</p>
                     )}
 
                     {field.type === "text" && (
@@ -477,7 +493,7 @@ export function StaffFormsViewer({
                         required={field.required}
                         value={answers[field.id] || ""}
                         onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl border border-black/10 px-3.5 text-sm outline-none focus:border-[#A74758]"
+                        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
                       />
                     )}
 
@@ -487,7 +503,7 @@ export function StaffFormsViewer({
                         value={answers[field.id] || ""}
                         onChange={(e) => handleTextChange(field.id, e.target.value)}
                         rows={3}
-                        className="w-full rounded-xl border border-black/10 p-3 text-sm outline-none focus:border-[#A74758] resize-none"
+                        className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-white outline-none focus:border-[#A74758] resize-none"
                       />
                     )}
 
@@ -497,7 +513,7 @@ export function StaffFormsViewer({
                         required={field.required}
                         value={answers[field.id] || ""}
                         onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl border border-black/10 px-3.5 text-sm outline-none focus:border-[#A74758]"
+                        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
                       />
                     )}
 
@@ -506,25 +522,25 @@ export function StaffFormsViewer({
                         required={field.required}
                         value={answers[field.id] || ""}
                         onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl border border-black/10 px-3 text-sm outline-none focus:border-[#A74758] bg-white"
+                        className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
                       >
-                        <option value="">Seleziona un'opzione...</option>
+                        <option value="" className="bg-neutral-800 text-white">Seleziona un'opzione...</option>
                         {field.options?.map((opt) => (
-                          <option key={opt} value={opt}>{opt}</option>
+                          <option key={opt} value={opt} className="bg-neutral-800 text-white">{opt}</option>
                         ))}
                       </select>
                     )}
 
                     {field.type === "money" && (
                       <div className="relative flex items-center">
-                        <span className="absolute left-3.5 text-sm font-semibold text-black/45">€</span>
+                        <span className="absolute left-3.5 text-sm font-semibold text-white/45">€</span>
                         <input
                           type="number"
                           step="0.01"
                           required={field.required}
                           value={answers[field.id] || ""}
                           onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl border border-black/10 pl-8 pr-3.5 text-sm outline-none focus:border-[#A74758]"
+                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 pl-8 pr-3.5 text-sm text-white outline-none focus:border-[#A74758]"
                           placeholder="0.00"
                         />
                       </div>
@@ -536,7 +552,7 @@ export function StaffFormsViewer({
                         required={field.required}
                         value={answers[field.id] || ""}
                         onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl border border-black/10 px-3.5 text-sm outline-none focus:border-[#A74758] bg-white"
+                        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
                       />
                     )}
 
@@ -545,11 +561,11 @@ export function StaffFormsViewer({
                         required={field.required}
                         value={answers[field.id] || ""}
                         onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl border border-black/10 px-3 text-sm outline-none focus:border-[#A74758] bg-white"
+                        className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
                       >
-                        <option value="">Seleziona collaboratore...</option>
+                        <option value="" className="bg-neutral-800 text-white">Seleziona collaboratore...</option>
                         {employees.map((emp) => (
-                          <option key={emp.id} value={emp.name}>
+                          <option key={emp.id} value={emp.name} className="bg-neutral-800 text-white">
                             {emp.name}
                           </option>
                         ))}
@@ -557,7 +573,7 @@ export function StaffFormsViewer({
                     )}
 
                     {field.type === "file" && (
-                      <div className="relative flex items-center justify-center w-full min-h-24 border border-dashed border-black/20 rounded-xl bg-[#FBF7F9] hover:bg-[#A74758]/5 transition group">
+                      <div className="relative flex items-center justify-center w-full min-h-24 border border-dashed border-white/20 rounded-xl bg-white/5 hover:bg-[#A74758]/10 transition group">
                         <input
                           type="file"
                           required={field.required && !files[field.id]}
@@ -566,12 +582,12 @@ export function StaffFormsViewer({
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                         />
                         <div className="flex flex-col items-center p-4 text-center pointer-events-none">
-                          <Upload className="size-6 text-black/35 group-hover:text-[#A74758] transition" />
-                          <span className="text-xs font-semibold text-black/55 mt-1.5">
+                          <Upload className="size-6 text-white/40 group-hover:text-[#A74758] transition" />
+                          <span className="text-xs font-semibold text-white/70 mt-1.5">
                             {files[field.id] ? files[field.id].name : "Carica o trascina un file"}
                           </span>
                           {!files[field.id] && (
-                            <span className="text-[10px] text-black/35 mt-0.5">Dimensione max: 15 MB</span>
+                            <span className="text-[10px] text-white/40 mt-0.5">Dimensione max: 15 MB</span>
                           )}
                         </div>
                       </div>
@@ -579,12 +595,13 @@ export function StaffFormsViewer({
                   </div>
                 ))}
 
-                <div className="flex items-center justify-end gap-3 border-t border-black/5 pt-4 bg-white mt-6">
+                <div className="flex items-center justify-end gap-3 border-t border-white/10 pt-4 bg-neutral-900 mt-6">
                   <Button
                     type="button"
                     variant="soft"
                     disabled={submitting}
                     onClick={() => setSelectedForm(null)}
+                    className="bg-white/5 text-white hover:bg-white/10"
                   >
                     Annulla
                   </Button>
@@ -612,18 +629,18 @@ export function StaffFormsViewer({
       {/* HISTORY / SUBMISSIONS LIST MODAL */}
       {selectedFormForHistory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex flex-col max-h-[80vh] w-full max-w-2xl rounded-[28px] bg-white shadow-2xl overflow-hidden border border-black/5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
+          <div className="flex flex-col max-h-[80vh] w-full max-w-2xl rounded-[28px] bg-neutral-900 border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#A74758]">
                   Cronologia e Invii
                 </span>
-                <h3 className="text-lg font-bold">{selectedFormForHistory.name}</h3>
+                <h3 className="text-lg font-bold text-white">{selectedFormForHistory.name}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedFormForHistory(null)}
-                className="grid size-8 place-items-center rounded-xl bg-white border border-black/5 text-black/40 hover:bg-black/5 hover:text-black/80 transition"
+                className="grid size-8 place-items-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:bg-white/10 hover:text-white transition"
               >
                 <X className="size-4" />
               </button>
@@ -631,7 +648,7 @@ export function StaffFormsViewer({
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <p className="text-xs text-black/55">
+                <p className="text-xs text-white/60">
                   Visualizza le risposte inviate da te o quelle in cui sei stato taggato/notificato.
                 </p>
                 <button
@@ -647,30 +664,30 @@ export function StaffFormsViewer({
                 </button>
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-black/5 bg-[#FBF7F9]">
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-black/5 bg-black/5 text-[10px] font-bold uppercase tracking-wider text-black/40">
+                    <tr className="border-b border-white/10 bg-white/5 text-[10px] font-bold uppercase tracking-wider text-white/40">
                       <th className="px-4 py-2.5">Data Invio</th>
                       <th className="px-4 py-2.5">Dipendente</th>
                       <th className="px-4 py-2.5">Commenti</th>
                       <th className="px-4 py-2.5 text-right">Azioni</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-black/5 text-xs">
+                  <tbody className="divide-y divide-white/10 text-xs">
                     {formSubmissions.map((resp) => {
                       const commentsCount = Array.isArray(resp.comments) 
-                        ? resp.comments.length 
-                        : typeof resp.comments === "string" 
-                          ? (() => {
-                              try { return JSON.parse(resp.comments || "[]").length; } catch { return 0; }
-                            })()
-                          : 0;
+						? resp.comments.length 
+						: typeof resp.comments === "string" 
+						  ? (() => {
+							  try { return JSON.parse(resp.comments || "[]").length; } catch { return 0; }
+							})()
+						  : 0;
                       const isOwnSubmission = resp.user_id === currentUserId;
 
                       return (
-                        <tr key={resp.id} className="hover:bg-white transition">
-                          <td className="px-4 py-3 font-semibold text-black/80">
+                        <tr key={resp.id} className="hover:bg-white/5 transition">
+                          <td className="px-4 py-3 font-semibold text-white/80">
                             {new Date(resp.created_at).toLocaleDateString("it-IT", {
                               day: "numeric",
                               month: "short",
@@ -679,11 +696,11 @@ export function StaffFormsViewer({
                             })}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="font-semibold text-black">
+                            <span className="font-semibold text-white">
                               {isOwnSubmission ? "Tu" : resp.user?.name || "Collaboratore"}
                             </span>
                             {!isOwnSubmission && (
-                              <span className="ml-1 text-[9px] bg-blue-50 text-blue-600 border border-blue-100 rounded px-1 font-bold">
+                              <span className="ml-1 text-[9px] bg-blue-950/50 text-blue-300 border border-blue-900 rounded px-1 font-bold">
                                 Ricevuto
                               </span>
                             )}
@@ -695,14 +712,14 @@ export function StaffFormsViewer({
                                 {commentsCount}
                               </span>
                             ) : (
-                              <span className="text-black/35">-</span>
+                              <span className="text-white/35">-</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button
                               type="button"
                               onClick={() => setSelectedResponse(resp)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-black/5 bg-white px-2.5 py-1.5 text-[11px] font-semibold shadow-sm hover:bg-black/5 transition"
+                              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-white/10 transition"
                             >
                               <Eye className="size-3" />
                               Vedi e Rispondi
@@ -714,7 +731,7 @@ export function StaffFormsViewer({
 
                     {formSubmissions.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="p-8 text-center text-black/40 italic">
+                        <td colSpan={4} className="p-8 text-center text-white/40 italic">
                           Nessun invio presente per questo modulo.
                         </td>
                       </tr>
@@ -724,8 +741,8 @@ export function StaffFormsViewer({
               </div>
             </div>
 
-            <div className="flex items-center justify-end bg-[#FBF7F9] px-6 py-4 border-t border-black/5">
-              <Button type="button" onClick={() => setSelectedFormForHistory(null)}>
+            <div className="flex items-center justify-end bg-white/5 px-6 py-4 border-t border-white/10">
+              <Button type="button" onClick={() => setSelectedFormForHistory(null)} className="bg-white/5 text-white hover:bg-white/10">
                 Chiudi
               </Button>
             </div>
@@ -736,19 +753,19 @@ export function StaffFormsViewer({
       {/* RESPONSE DETAIL VIEWER MODAL */}
       {selectedResponse && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex flex-col max-h-[85vh] w-full max-w-2xl rounded-[28px] bg-white shadow-2xl overflow-hidden border border-black/5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
+          <div className="flex flex-col max-h-[85vh] w-full max-w-2xl rounded-[28px] bg-neutral-900 border border-white/10 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#A74758]">
                   Dettagli Invio / Risposta
                 </span>
-                <h3 className="text-lg font-bold">
+                <h3 className="text-lg font-bold text-white">
                   {selectedResponse.form?.name || "Dettagli Modulo"}
                 </h3>
               </div>
               <button 
                 onClick={() => setSelectedResponse(null)}
-                className="grid size-8 place-items-center rounded-xl bg-white border border-black/5 text-black/40 hover:bg-black/5 hover:text-black/80 transition"
+                className="grid size-8 place-items-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:bg-white/10 hover:text-white transition"
               >
                 <X className="size-4" />
               </button>
@@ -756,26 +773,26 @@ export function StaffFormsViewer({
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Submitter Metadata */}
-              <div className="grid gap-3 grid-cols-2 rounded-2xl bg-[#FBF7F9] border border-black/5 p-4 text-sm">
+              <div className="grid gap-3 grid-cols-2 rounded-2xl bg-white/5 border border-white/10 p-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <User className="size-4 text-black/40" />
+                  <User className="size-4 text-white/40" />
                   <div>
-                    <span className="block text-[10px] font-bold text-black/40 uppercase">Dipendente</span>
-                    <span className="font-semibold">{selectedResponse.user?.name || "Tu"}</span>
+                    <span className="block text-[10px] font-bold text-white/40 uppercase">Dipendente</span>
+                    <span className="font-semibold text-white">{selectedResponse.user?.name || "Tu"}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <MapPin className="size-4 text-black/40" />
+                  <MapPin className="size-4 text-white/40" />
                   <div>
-                    <span className="block text-[10px] font-bold text-black/40 uppercase">Sede</span>
-                    <span className="font-semibold">{selectedResponse.user_location_name || "Nessuna"}</span>
+                    <span className="block text-[10px] font-bold text-white/40 uppercase">Sede</span>
+                    <span className="font-semibold text-white">{selectedResponse.user_location_name || "Nessuna"}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 col-span-2 border-t border-black/5 pt-2 mt-1">
-                  <Calendar className="size-4 text-black/40" />
+                <div className="flex items-center gap-2 col-span-2 border-t border-white/10 pt-2 mt-1">
+                  <Calendar className="size-4 text-white/40" />
                   <div>
-                    <span className="block text-[10px] font-bold text-black/40 uppercase">Inviato il</span>
-                    <span className="font-semibold">
+                    <span className="block text-[10px] font-bold text-white/40 uppercase">Inviato il</span>
+                    <span className="font-semibold text-white">
                       {new Date(selectedResponse.created_at).toLocaleString("it-IT")}
                     </span>
                   </div>
@@ -784,23 +801,23 @@ export function StaffFormsViewer({
 
               {/* Answers Grid */}
               <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-black/50">Risposte alle Domande</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-white/50">Risposte alle Domande</h4>
                 
                 {selectedResponse.form?.fields ? (
                   (selectedResponse.form.fields as any[]).map((field) => {
                     const answer = selectedResponse.answers[field.id];
                     
                     return (
-                      <div key={field.id} className="border-b border-black/5 pb-3">
-                        <span className="block text-xs font-bold text-black/40">{field.label}</span>
+                      <div key={field.id} className="border-b border-white/10 pb-3">
+                        <span className="block text-xs font-bold text-white/40">{field.label}</span>
                         
-                        <div className="mt-1 text-sm text-black">
+                        <div className="mt-1 text-sm text-white">
                           {answer === undefined || answer === null || answer === "" ? (
-                            <span className="text-black/30 italic">Nessuna risposta</span>
+                            <span className="text-white/30 italic">Nessuna risposta</span>
                           ) : field.type === "file" && typeof answer === "object" ? (
                             <div className="space-y-3 mt-1.5">
                               {/\.(jpg|jpeg|png|webp|gif)$/i.test(answer.name) && (
-                                <div className="relative rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-sm aspect-video flex items-center justify-center group/img">
+                                <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5 max-w-sm aspect-video flex items-center justify-center group/img">
                                   <img
                                     src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
                                     alt={answer.name}
@@ -812,21 +829,21 @@ export function StaffFormsViewer({
                                 href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-[#FBF7F9] px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-[#A74758]/5 transition"
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-white/10 transition"
                               >
                                 <Download className="size-3.5" />
                                 Scarica: {answer.name}
                               </a>
                             </div>
                           ) : field.type === "money" ? (
-                            <p className="whitespace-pre-line leading-relaxed font-semibold bg-[#FBF7F9] p-3 rounded-xl border border-black/5 text-[#A74758]">
+                            <p className="whitespace-pre-line leading-relaxed font-semibold bg-white/5 p-3 rounded-xl border border-white/10 text-[#A74758]">
                               € {(() => {
                                 const val = parseFloat(answer);
                                 return isNaN(val) ? String(answer) : val.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                               })()}
                             </p>
                           ) : field.type === "date" ? (
-                            <p className="whitespace-pre-line leading-relaxed font-medium bg-[#FBF7F9] p-3 rounded-xl border border-black/5">
+                            <p className="whitespace-pre-line leading-relaxed font-medium bg-white/5 p-3 rounded-xl border border-white/10 text-white">
                               {(() => {
                                 const parts = String(answer).split("-");
                                 if (parts.length === 3) {
@@ -836,7 +853,7 @@ export function StaffFormsViewer({
                               })()}
                             </p>
                           ) : (
-                            <p className="whitespace-pre-line leading-relaxed font-medium bg-[#FBF7F9] p-3 rounded-xl border border-black/5">
+                            <p className="whitespace-pre-line leading-relaxed font-medium bg-white/5 p-3 rounded-xl border border-white/10 text-white">
                               {String(answer)}
                             </p>
                           )}
@@ -845,7 +862,7 @@ export function StaffFormsViewer({
                     );
                   })
                 ) : (
-                  <p className="text-sm italic text-black/40">Impossibile mappare le domande (modulo eliminato).</p>
+                  <p className="text-sm italic text-white/40">Impossibile mappare le domande (modulo eliminato).</p>
                 )}
               </div>
 
@@ -871,7 +888,7 @@ export function StaffFormsViewer({
               />
             </div>
 
-            <div className="flex items-center justify-end gap-3 bg-[#FBF7F9] px-6 py-4 border-t border-black/5">
+            <div className="flex items-center justify-end gap-3 bg-neutral-900 px-6 py-4 border-t border-white/10">
               {selectedResponse.status !== "ARCHIVED" && (
                 <button
                   type="button"
@@ -884,7 +901,7 @@ export function StaffFormsViewer({
                   Marca come Completato
                 </button>
               )}
-              <Button type="button" variant="soft" onClick={() => setSelectedResponse(null)}>
+              <Button type="button" variant="soft" onClick={() => setSelectedResponse(null)} className="bg-white/5 text-white hover:bg-white/10">
                 Chiudi
               </Button>
             </div>

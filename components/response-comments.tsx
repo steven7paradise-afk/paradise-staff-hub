@@ -74,7 +74,7 @@ export function ResponseComments({
   };
 
   return (
-    <div className="space-y-4 border-t border-black/5 pt-5 mt-5">
+    <div className="space-y-4 border-t border-black/5 dark:border-white/10 pt-5 mt-5">
       <div className="flex items-center gap-2 text-sm font-bold text-black/75 dark:text-white/80">
         <MessageSquare className="size-4 text-[#A74758]" />
         <span>Commenti e Note ({comments.length})</span>
@@ -90,7 +90,7 @@ export function ResponseComments({
               className={`rounded-2xl p-3 text-xs leading-relaxed max-w-[85%] ${
                 isManager 
                   ? "bg-[#A74758]/5 border border-[#A74758]/10 mr-auto text-left" 
-                  : "bg-black/5 border border-black/5 ml-auto text-left"
+                  : "bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 ml-auto text-left"
               }`}
             >
               <div className="flex items-center justify-between gap-3 mb-1">
@@ -125,7 +125,7 @@ export function ResponseComments({
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           placeholder="Scrivi una risposta o annotazione..."
-          className="flex-1 h-9 rounded-xl border border-black/10 px-3 text-xs focus:border-[#A74758] bg-white outline-none"
+          className="flex-1 h-9 rounded-xl border border-black/10 dark:border-white/10 px-3 text-xs focus:border-[#A74758] bg-white dark:bg-neutral-800 text-black dark:text-white outline-none"
           disabled={submitting}
         />
         <button
