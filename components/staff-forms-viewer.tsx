@@ -245,21 +245,7 @@ export function StaffFormsViewer({
         }
       `}} />
 
-      {/* Header card */}
-      <div className="rounded-[24px] bg-white/5 border border-white/10 p-6 shadow-sm hidden sm:block">
-        <div className="flex items-start gap-4">
-          <div className="grid size-14 place-items-center rounded-2xl bg-[#A74758]/20 text-[#A74758]">
-            <ClipboardList className="size-6" />
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/40">Pagina operativa</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Moduli e Form</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
-              Clicca su un modulo per visualizzare la <strong>cronologia degli invii</strong> e i <strong>commenti</strong>. Fai <strong>doppio click</strong> per compilarlo direttamente.
-            </p>
-          </div>
-        </div>
-      </div>
+
 
       {/* Prossimi Eventi */}
       {upcomingEvents.length > 0 && (
@@ -315,7 +301,7 @@ export function StaffFormsViewer({
       )}
 
       {/* Templates List (Desktop/Tablet) */}
-      <div className="hidden sm:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="hidden sm:grid gap-6 md:grid-cols-2">
         {forms.map((form, idx) => {
           const colors = [
             { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
@@ -331,21 +317,21 @@ export function StaffFormsViewer({
               key={form.id}
               onClick={() => setExpandedFormId(isExpanded ? null : form.id)}
               className={cn(
-                "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
+                "w-full rounded-[32px] p-6 transition-all duration-300 cursor-pointer shadow-md relative overflow-hidden select-none",
                 color.bg,
                 color.text,
-                isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[80px] flex items-center justify-between"
+                isExpanded ? "flex flex-col gap-5 animate-in fade-in-50 duration-200" : "h-[96px] flex items-center justify-between"
               )}
             >
               {isExpanded ? (
                 <div className="flex flex-col justify-between w-full h-full">
                   <div>
-                    <div className="flex justify-between items-start gap-3">
+                    <div className="flex justify-between items-start gap-4">
                       <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-60">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider opacity-60">
                           {form.category}
                         </span>
-                        <h3 className="text-base font-extrabold mt-0.5 leading-tight">{form.name}</h3>
+                        <h3 className="text-xl font-extrabold mt-0.5 leading-tight">{form.name}</h3>
                       </div>
                       <button
                         onClick={(e) => {
@@ -353,30 +339,30 @@ export function StaffFormsViewer({
                           handleOpenForm(form);
                         }}
                         className={cn(
-                          "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
+                          "size-12 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform shrink-0",
                           color.arrowBg,
                           color.arrowText
                         )}
                       >
-                        <ArrowUpRight className="size-4.5" />
+                        <ArrowUpRight className="size-5.5" />
                       </button>
                     </div>
 
-                    <p className="mt-3 text-xs font-semibold opacity-85 leading-relaxed">
+                    <p className="mt-3.5 text-sm font-semibold opacity-85 leading-relaxed">
                       {form.description || "Nessuna descrizione specificata per questo modulo."}
                     </p>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
+                  <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t border-black/15">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedFormForHistory(form);
                       }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-white/40 backdrop-blur-sm text-base font-extrabold text-current border border-black/5 active:scale-95 transition"
                     >
-                      <Clock className="size-4" />
+                      <Clock className="size-5" />
                       Invii
                     </button>
                     <button
@@ -385,32 +371,32 @@ export function StaffFormsViewer({
                         e.stopPropagation();
                         handleOpenForm(form);
                       }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-slate-900 text-white text-base font-extrabold active:scale-95 transition"
                     >
-                      <Plus className="size-4" />
+                      <Plus className="size-5" />
                       Compila
                     </button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-3 truncate">
-                    <DynamicIcon name={form.icon || "ClipboardList"} className="size-5 shrink-0 opacity-70" />
+                  <div className="flex items-center gap-4 truncate">
+                    <DynamicIcon name={form.icon || "ClipboardList"} className="size-6 shrink-0 opacity-70" />
                     <div className="truncate">
-                      <span className="text-[9px] font-extrabold uppercase tracking-wider opacity-50 block">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-50 block">
                         {form.category}
                       </span>
-                      <h3 className="text-sm font-extrabold truncate">{form.name}</h3>
+                      <h3 className="text-base sm:text-lg font-extrabold truncate">{form.name}</h3>
                     </div>
                   </div>
                   <div
                     className={cn(
-                      "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
+                      "size-12 rounded-full flex items-center justify-center shadow-md shrink-0",
                       color.arrowBg,
                       color.arrowText
                     )}
                   >
-                    <ArrowUpRight className="size-4" />
+                    <ArrowUpRight className="size-5.5" />
                   </div>
                 </>
               )}
