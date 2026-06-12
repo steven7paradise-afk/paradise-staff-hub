@@ -212,6 +212,24 @@ export function StaffFormsViewer({
   return (
     <div className="space-y-6 dark staff-forms-page">
       <style dangerouslySetInnerHTML={{__html: `
+        body,
+        .paradise-theme-root {
+          background-color: #0A0A0A !important;
+          background: #0A0A0A !important;
+        }
+        @media (max-width: 1279px) {
+          aside {
+            background-color: #0A0A0A !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+          }
+          aside svg, aside button, aside span, aside a {
+            color: white !important;
+          }
+          aside img {
+            filter: invert(1) !important;
+          }
+        }
         @media (min-width: 640px) {
           div:has(> .staff-forms-page),
           div:has(> * > .staff-forms-page),

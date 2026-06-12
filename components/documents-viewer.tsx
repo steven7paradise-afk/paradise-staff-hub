@@ -307,6 +307,26 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
 
   return (
     <>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 1023px) {
+          body,
+          .paradise-theme-root {
+            background-color: #0A0A0A !important;
+            background: #0A0A0A !important;
+          }
+          aside {
+            background-color: #0A0A0A !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+          }
+          aside svg, aside button, aside span, aside a {
+            color: white !important;
+          }
+          aside img {
+            filter: invert(1) !important;
+          }
+        }
+      `}} />
       <div className="space-y-4 lg:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
         {documents.map((doc, idx) => {
           const colors = [
