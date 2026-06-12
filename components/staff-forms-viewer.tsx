@@ -217,33 +217,34 @@ export function StaffFormsViewer({
           background-color: #0A0A0A !important;
           background: #0A0A0A !important;
         }
-        @media (max-width: 1279px) {
-          aside {
-            background-color: #0A0A0A !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-            color: white !important;
-          }
-          aside svg, aside button, aside span, aside a {
-            color: white !important;
-          }
-          aside img {
-            filter: invert(1) !important;
-          }
-        }
-        @media (min-width: 640px) {
-          div:has(> .staff-forms-page),
-          div:has(> * > .staff-forms-page),
-          div:has(> * > * > .staff-forms-page),
-          div:has(> * > * > * > .staff-forms-page) {
-            background-color: #0A0A0A !important;
-            border-color: rgba(255, 255, 255, 0.1) !important;
-          }
+        div:has(> .staff-forms-page),
+        div:has(> * > .staff-forms-page),
+        div:has(> * > * > .staff-forms-page),
+        div:has(> * > * > * > .staff-forms-page) {
+          background-color: #0A0A0A !important;
+          border-color: rgba(255, 255, 255, 0.1) !important;
         }
         div:has(> .staff-forms-page) footer {
           border-top-color: rgba(255, 255, 255, 0.1) !important;
           color: rgba(255, 255, 255, 0.35) !important;
         }
       `}} />
+
+      {/* Header card */}
+      <div className="rounded-[24px] bg-white p-6 shadow-sm hidden sm:block">
+        <div className="flex items-start gap-4">
+          <div className="grid size-14 place-items-center rounded-2xl bg-paradise-softPink text-[#A74758]">
+            <ClipboardList className="size-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">Pagina operativa</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-black">Moduli e Form</h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-black/55">
+              Clicca su un modulo per visualizzare la <strong>cronologia degli invii</strong> e i <strong>commenti</strong>. Fai <strong>doppio click</strong> per compilarlo direttamente.
+            </p>
+          </div>
+        </div>
+      </div>
 
 
 

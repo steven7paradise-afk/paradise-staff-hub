@@ -314,20 +314,16 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
             background-color: #0A0A0A !important;
             background: #0A0A0A !important;
           }
-          aside {
+          div:has(> .documents-page),
+          div:has(> * > .documents-page),
+          div:has(> * > * > .documents-page),
+          div:has(> * > * > * > .documents-page) {
             background-color: #0A0A0A !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-            color: white !important;
-          }
-          aside svg, aside button, aside span, aside a {
-            color: white !important;
-          }
-          aside img {
-            filter: invert(1) !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
           }
         }
       `}} />
-      <div className="space-y-4 lg:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
+      <div className="space-y-4 lg:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl documents-page">
         {documents.map((doc, idx) => {
           const colors = [
             { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
