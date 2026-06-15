@@ -18,6 +18,8 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["DIPENDENTE"] },
   { href: "/employees", label: "Dipendenti", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"] },
+  { href: "/recruitment", label: "Candidature", iconName: "UserPlus", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
   { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
   { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["SUPER_ADMIN", "ADMIN"] },
   { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },

@@ -63,6 +63,15 @@ model User {
   google_calendar_id   String?
   active            Boolean          @default(true)
   created_at        DateTime         @default(now())
+  employee_status   String           @default("Attivo")
+  manager_id        String?
+  access_list       Json?
+  hr_notes          String?
+  candidate_id      String?
+  
+  manager           User?            @relation("UserManager", fields: [manager_id], references: [id])
+  subordinates      User[]           @relation("UserManager")
+  
   location          Location?        @relation(fields: [sede_id], references: [id])
   attendance_logs   AttendanceLog[]
   leave_requests    LeaveRequest[]   @relation("UserLeaveRequests")
@@ -421,4 +430,62 @@ model GoogleSheetSetting {
   last_sync_at   DateTime?
 
   @@map("google_sheet_settings")
+}
+
+model Candidate {
+  id                 String    @id @default(cuid())
+  
+  // Step 1: Base Info
+  first_name         String
+  last_name          String
+  phone              String
+  email              String
+  birth_date         DateTime?
+  profession         String
+  city               String?
+  availability       String
+  preferred_location String
+  experience         String
+  cv_url             String?
+  instagram_url      String?
+  initial_notes      String?
+  status             String    @default("Nuova candidatura")
+  
+  // Step 2: Videochiamata
+  video_done               Boolean   @default(false)
+  video_date               DateTime?
+  video_interviewer_id     String?
+  video_impression         Int?
+  video_like               String?
+  video_has_experience     String?
+  video_prev_work          String?
+  video_communication      String?
+  video_motivation         String?
+  video_notes              String?
+  video_score              Int?
+  
+  // Step 3: Colloquio in sede
+  interview_done           Boolean   @default(false)
+  interview_date           DateTime?
+  interview_location       String?
+  interview_interviewer_id String?
+  interview_presentation   String?
+  interview_look_curato    Boolean?
+  interview_communication  Int?
+  interview_education      Int?
+  interview_confidence     Int?
+  interview_energy         Int?
+  interview_practical_test Boolean?
+  interview_notes          String?
+  interview_score          Int?
+  
+  // Step 5: Giudizio finale & hiring status
+  final_judgment           String?
+  employee_created         Boolean   @default(false)
+  created_user_id          String?
+  
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @updatedAt
+
+  @@map("candidates")
 }
