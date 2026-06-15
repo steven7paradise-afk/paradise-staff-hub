@@ -1031,20 +1031,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         <>
           <Card className="bg-white">
             <div className="mb-5 flex items-center justify-between gap-3">
-              <h2 className="text-2xl font-semibold">Liste operative</h2>
-              <Badge tone="pink">{openTasks.length}</Badge>
-            </div>
-            <div className="grid gap-2">
-              {listSections.map((section) => (
-                <button key={section.filter} onClick={() => setFilter(section.filter)} className={`flex items-center justify-between border-b border-black/5 py-4 text-left last:border-0 ${filter === section.filter ? "font-bold" : ""}`}>
-                  <span className="inline-flex items-center gap-3"><ListChecks className={`size-5 ${section.color}`} /> {section.label}</span>
-                  <span className="inline-flex items-center gap-2 rounded-full bg-[#FAF7F9] px-3 py-1 text-sm font-bold">{section.tasks.length}<ChevronRight className="size-4" /></span>
-                </button>
-              ))}
-            </div>
-          </Card>
-          <Card className="bg-white">
-            <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">{listSections.find((item) => item.filter === filter)?.label}</p>
                 <h2 className="mt-1 text-xl font-semibold">Task</h2>
