@@ -167,44 +167,97 @@ export async function appendFormResponseToGoogleSheet(input: FormSyncInput) {
     }
   }
 
-  // 4. Construct answer values
+  // 4. Construct answer values (handling group participants if applicable)
   const dateStr = new Date().toLocaleString("it-IT", { timeZone: "Europe/Rome" });
-  const rowValues = [
-    dateStr,
-    input.employeeName,
-    input.employeeEmail,
-    input.locationName,
-    ...input.fields.map((field) => {
-      const answer = input.answers[field.id];
-      if (answer === undefined || answer === null || answer === "") return "";
-      
-      if (field.type === "file" && typeof answer === "object") {
-        return `File: ${answer.name} [Percorso: ${answer.storagePath}]`;
-      }
-      
-      if (field.type === "money") {
-        const val = parseFloat(answer);
-        return isNaN(val) ? String(answer) : `€ ${val.toFixed(2)}`;
-      }
-      
-      if (field.type === "date") {
-        const parts = String(answer).split("-");
-        if (parts.length === 3) {
-          return `${parts[2]}/${parts[1]}/${parts[0]}`;
-        }
-      }
-      
-      return String(answer);
-    }),
-  ];
+  
+  const isCorsistiForm = input.formName.toUpperCase().includes("CORSISTI");
+  const participaField = input.fields.find((f) => f.label.toUpperCase().includes("PARTICIPA"));
+  const participaValue = participaField ? input.answers[participaField.id] : "";
+  const isGroupCourse = String(participaValue || "").toUpperCase().includes("GRUP");
+  const groupCount = parseInt(input.answers["group_participants_count"] || "0", 10);
 
-  // 5. Append response row
+  const nomeField = input.fields.find((f) => f.label.trim().toUpperCase() === "NOME CORSISTA");
+  const emailField = input.fields.find((f) => f.label.trim().toUpperCase() === "EMAIL CORSISTA");
+  const numeroField = input.fields.find((f) => f.label.trim().toUpperCase() === "NUMERO CORSISTA");
+
+  const rowsToAppend: any[][] = [];
+
+  if (isCorsistiForm && isGroupCourse && groupCount > 0) {
+    for (let pIndex = 1; pIndex <= groupCount; pIndex++) {
+      const participantAnswers = { ...input.answers };
+      if (nomeField) participantAnswers[nomeField.id] = input.answers[`participant_${pIndex}_name`] || "";
+      if (emailField) participantAnswers[emailField.id] = input.answers[`participant_${pIndex}_email`] || "";
+      if (numeroField) participantAnswers[numeroField.id] = input.answers[`participant_${pIndex}_phone`] || "";
+
+      const rowValues = [
+        dateStr,
+        input.employeeName,
+        input.employeeEmail,
+        input.locationName,
+        ...input.fields.map((field) => {
+          const answer = participantAnswers[field.id];
+          if (answer === undefined || answer === null || answer === "") return "";
+          
+          if (field.type === "file" && typeof answer === "object") {
+            return `File: ${answer.name} [Percorso: ${answer.storagePath}]`;
+          }
+          
+          if (field.type === "money") {
+            const val = parseFloat(answer);
+            return isNaN(val) ? String(answer) : `€ ${val.toFixed(2)}`;
+          }
+          
+          if (field.type === "date") {
+            const parts = String(answer).split("-");
+            if (parts.length === 3) {
+              return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+          }
+          
+          return String(answer);
+        }),
+      ];
+      rowsToAppend.push(rowValues);
+    }
+  } else {
+    const rowValues = [
+      dateStr,
+      input.employeeName,
+      input.employeeEmail,
+      input.locationName,
+      ...input.fields.map((field) => {
+        const answer = input.answers[field.id];
+        if (answer === undefined || answer === null || answer === "") return "";
+        
+        if (field.type === "file" && typeof answer === "object") {
+          return `File: ${answer.name} [Percorso: ${answer.storagePath}]`;
+        }
+        
+        if (field.type === "money") {
+          const val = parseFloat(answer);
+          return isNaN(val) ? String(answer) : `€ ${val.toFixed(2)}`;
+        }
+        
+        if (field.type === "date") {
+          const parts = String(answer).split("-");
+          if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+        }
+        
+        return String(answer);
+      }),
+    ];
+    rowsToAppend.push(rowValues);
+  }
+
+  // 5. Append response row(s)
   await sheets.spreadsheets.values.append({
     spreadsheetId,
     range: `${targetTabName}!A:Z`,
     valueInputOption: "USER_ENTERED",
     requestBody: {
-      values: [rowValues],
+      values: rowsToAppend,
     },
   });
 
