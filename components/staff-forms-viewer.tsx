@@ -33,6 +33,8 @@ export function StaffFormsViewer({
   currentUserId,
   currentUserName,
   currentUserRole,
+  autoFillFormId,
+  autoFillFormName,
 }: {
   forms: FormTemplate[];
   employees?: Array<{ id: string; name: string }>;
@@ -40,6 +42,8 @@ export function StaffFormsViewer({
   currentUserId: string;
   currentUserName: string;
   currentUserRole: string;
+  autoFillFormId?: string;
+  autoFillFormName?: string;
 }) {
   const [selectedForm, setSelectedForm] = useState<FormTemplate | null>(null);
   const [selectedFormForHistory, setSelectedFormForHistory] = useState<FormTemplate | null>(null);
@@ -72,6 +76,7 @@ export function StaffFormsViewer({
   const [files, setFiles] = useState<Record<string, File>>({});
 
   // Derived helper variables for dynamic group participants form
+  const candidaturaForm = forms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
   const isGroupCourse = String(participaValue || "").toUpperCase().includes("GRUP");
@@ -188,6 +193,20 @@ export function StaffFormsViewer({
     setErrorMsg("");
   };
 
+  React.useEffect(() => {
+    if (autoFillFormId) {
+      const match = forms.find(f => f.id === autoFillFormId);
+      if (match) {
+        handleOpenForm(match);
+      }
+    } else if (autoFillFormName) {
+      const match = forms.find(f => f.name.toUpperCase().includes(autoFillFormName.toUpperCase()));
+      if (match) {
+        handleOpenForm(match);
+      }
+    }
+  }, [autoFillFormId, autoFillFormName, forms]);
+
   const handleTextChange = (fieldId: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
   };
@@ -277,6 +296,22 @@ export function StaffFormsViewer({
         }
       `}} />
 
+
+      {/* Header Card with Candidacy shortcut */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/5 border border-white/10 rounded-[28px] p-6 mb-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white">Moduli & Form</h1>
+          <p className="text-xs sm:text-sm text-white/65 mt-0.5">Compila i moduli operativi del salone o registra una nuova candidatura.</p>
+        </div>
+        {candidaturaForm && (
+          <Button 
+            onClick={() => handleOpenForm(candidaturaForm)}
+            className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 rounded-2xl min-h-12 shrink-0 font-extrabold text-sm"
+          >
+            <Plus className="size-5 text-paradise-noir" /> Compila Nuova Candidatura
+          </Button>
+        )}
+      </div>
 
       {/* Prossimi Eventi */}
       {upcomingEvents.length > 0 && (

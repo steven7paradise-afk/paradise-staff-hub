@@ -8,7 +8,10 @@ import { requireServicePageAccess } from "@/lib/service-page-access";
 
 export const dynamic = "force-dynamic";
 
-export default async function ServiceFormsPage() {
+export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string }> }) {
+  const searchParams = await props.searchParams;
+  const fillId = searchParams.fillId;
+  const fill = searchParams.fill;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
@@ -28,7 +31,12 @@ export default async function ServiceFormsPage() {
     const allowedLocations = form.allowed_location_ids as string[] | null;
 
     const roleMatch = !allowedRoles || allowedRoles.length === 0 || allowedRoles.includes(role);
-    const locationMatch = !allowedLocations || allowedLocations.length === 0 || (locationId && allowedLocations.includes(locationId));
+    const locationMatch = 
+      role === "SUPER_ADMIN" || 
+      role === "ADMIN" ||
+      !allowedLocations || 
+      allowedLocations.length === 0 || 
+      (locationId && allowedLocations.includes(locationId));
 
     return roleMatch && locationMatch;
   });
@@ -100,6 +108,8 @@ export default async function ServiceFormsPage() {
         currentUserId={session.user.id}
         currentUserName={session.user.name || "Dipendente"}
         currentUserRole={role}
+        autoFillFormId={fillId}
+        autoFillFormName={fill}
       />
     </AppShell>
   );

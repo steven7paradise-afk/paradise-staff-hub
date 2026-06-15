@@ -171,3 +171,144 @@ function buildLeaveEvent(leave: LeaveRequestWithUser) {
     end: eventDate(addDays(leave.end_date, 1)),
   };
 }
+
+export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+  });
+
+  if (!candidate) {
+    return { skipped: true, reason: "Candidate not found" };
+  }
+
+  let calendarId = process.env.GOOGLE_CALENDAR_ID || "cd56578ac3f02b555abd38d368d5f4a97aa91cf8ca74995f921baec95a8bada9@group.calendar.google.com";
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  // Prioritize calendar ID configured in the admin's database settings
+  const adminWithCalendar = await prisma.user.findFirst({
+    where: {
+      active: true,
+      role: { in: ["SUPER_ADMIN", "ADMIN"] },
+      google_calendar_sync: true,
+      google_calendar_id: { not: null },
+    },
+    select: { google_calendar_id: true },
+  });
+
+  if (adminWithCalendar?.google_calendar_id) {
+    calendarId = adminWithCalendar.google_calendar_id.trim();
+  }
+
+  if (!calendarId || !clientEmail || !privateKey) {
+    return { 
+      skipped: true, 
+      reason: "Google Calendar credentials or calendar ID not configured." 
+    };
+  }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/calendar.events"],
+  });
+  const calendar = google.calendar({ version: "v3", auth });
+
+  let videoEventId = candidate.video_calendar_event_id;
+  let interviewEventId = candidate.interview_calendar_event_id;
+
+  // 1. Sync Video Call Event
+  if (candidate.video_date) {
+    const start = new Date(candidate.video_date);
+    const end = new Date(start.getTime() + 30 * 60 * 1000); // + 30 minutes
+    const event = {
+      summary: `[CANDIDATURA] Video Call - ${candidate.first_name} ${candidate.last_name}`,
+      description: `Videochiamata conoscitiva con ${candidate.first_name} ${candidate.last_name}\nMansione: ${candidate.profession}\nTelefono: ${candidate.phone}\nEmail: ${candidate.email}\nNote: ${candidate.video_notes || "Nessuna nota"}`,
+      start: { dateTime: start.toISOString(), timeZone: "Europe/Rome" },
+      end: { dateTime: end.toISOString(), timeZone: "Europe/Rome" },
+    };
+
+    if (videoEventId) {
+      try {
+        await calendar.events.update({ calendarId, eventId: videoEventId, requestBody: event, sendUpdates: "none" });
+      } catch (error) {
+        console.warn("Candidate video call update failed, re-inserting:", error);
+        try {
+          const res = await calendar.events.insert({ calendarId, requestBody: event, sendUpdates: "none" });
+          videoEventId = res.data.id || null;
+        } catch (insertErr) {
+          console.error("Failed to insert video calendar event:", insertErr);
+        }
+      }
+    } else {
+      try {
+        const res = await calendar.events.insert({ calendarId, requestBody: event, sendUpdates: "none" });
+        videoEventId = res.data.id || null;
+      } catch (insertErr) {
+        console.error("Failed to insert video calendar event:", insertErr);
+      }
+    }
+  } else if (videoEventId) {
+    // delete event if date cleared
+    try {
+      await calendar.events.delete({ calendarId, eventId: videoEventId, sendUpdates: "none" });
+      videoEventId = null;
+    } catch (e) {
+      console.error("Failed to delete video calendar event:", e);
+    }
+  }
+
+  // 2. Sync In-sede Interview Event
+  if (candidate.interview_date) {
+    const start = new Date(candidate.interview_date);
+    const end = new Date(start.getTime() + 60 * 60 * 1000); // + 1 hour
+    const event = {
+      summary: `[CANDIDATURA] Colloquio - ${candidate.first_name} ${candidate.last_name}`,
+      description: `Colloquio dal vivo in sede con ${candidate.first_name} ${candidate.last_name}\nMansione: ${candidate.profession}\nTelefono: ${candidate.phone}\nEmail: ${candidate.email}\nSede: ${candidate.interview_location || "Sede da stabilire"}\nNote: ${candidate.interview_notes || "Nessuna nota"}`,
+      start: { dateTime: start.toISOString(), timeZone: "Europe/Rome" },
+      end: { dateTime: end.toISOString(), timeZone: "Europe/Rome" },
+    };
+
+    if (interviewEventId) {
+      try {
+        await calendar.events.update({ calendarId, eventId: interviewEventId, requestBody: event, sendUpdates: "none" });
+      } catch (error) {
+        console.warn("Candidate interview update failed, re-inserting:", error);
+        try {
+          const res = await calendar.events.insert({ calendarId, requestBody: event, sendUpdates: "none" });
+          interviewEventId = res.data.id || null;
+        } catch (insertErr) {
+          console.error("Failed to insert interview calendar event:", insertErr);
+        }
+      }
+    } else {
+      try {
+        const res = await calendar.events.insert({ calendarId, requestBody: event, sendUpdates: "none" });
+        interviewEventId = res.data.id || null;
+      } catch (insertErr) {
+        console.error("Failed to insert interview calendar event:", insertErr);
+      }
+    }
+  } else if (interviewEventId) {
+    // delete event if date cleared
+    try {
+      await calendar.events.delete({ calendarId, eventId: interviewEventId, sendUpdates: "none" });
+      interviewEventId = null;
+    } catch (e) {
+      console.error("Failed to delete interview calendar event:", e);
+    }
+  }
+
+  // Save changes to Candidate model
+  if (videoEventId !== candidate.video_calendar_event_id || interviewEventId !== candidate.interview_calendar_event_id) {
+    await prisma.candidate.update({
+      where: { id: candidate.id },
+      data: {
+        video_calendar_event_id: videoEventId,
+        interview_calendar_event_id: interviewEventId,
+      },
+    });
+  }
+
+  return { success: true };
+}

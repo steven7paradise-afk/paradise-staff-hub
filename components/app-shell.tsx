@@ -17,9 +17,8 @@ import pkg from "@/package.json";
 const nav = [
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"] },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["DIPENDENTE"] },
-  { href: "/employees", label: "Dipendenti", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"] },
-  { href: "/recruitment", label: "Candidature", iconName: "UserPlus", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
   { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+  { href: "/recruitment", label: "Candidature", iconName: "UserPlus", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
   { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
   { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["SUPER_ADMIN", "ADMIN"] },
   { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
@@ -35,7 +34,7 @@ const nav = [
   { href: "/settings", label: "Impostazioni", iconName: "Settings", roles: ["SUPER_ADMIN", "ADMIN"] },
 ] satisfies { href: string; label: string; iconName: string; roles: Role[] }[];
 
-const salonGroupRoutes = new Set(["/locations", "/employees", "/documents", "/schedules"]);
+const salonGroupRoutes = new Set(["/locations", "/staff", "/documents", "/schedules"]);
 
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);

@@ -70,6 +70,60 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Automatically create a Candidate record if the form is for candidatura
+    if (form.name.toUpperCase().includes("CANDIDATURA")) {
+      try {
+        let nameVal = "";
+        let emailVal = "";
+        let phoneVal = "";
+        let birthVal: string | null = null;
+        let roleVal = "Altro";
+
+        const formFields = form.fields as Array<{ id: string; label: string; type: string }>;
+        for (const field of formFields) {
+          const labelUpper = field.label.toUpperCase();
+          const val = answersObj[field.id];
+          if (!val) continue;
+
+          if (labelUpper.includes("NOME")) {
+            nameVal = String(val).trim();
+          } else if (labelUpper.includes("EMAIL")) {
+            emailVal = String(val).trim();
+          } else if (labelUpper.includes("TELEFONO") || labelUpper.includes("NUMERO") || labelUpper.includes("CELLULARE")) {
+            phoneVal = String(val).trim();
+          } else if (labelUpper.includes("NASCITA") || labelUpper.includes("DATA")) {
+            birthVal = String(val).trim();
+          } else if (labelUpper.includes("RUOLO") || labelUpper.includes("MANSIONE") || labelUpper.includes("PROFESSIONE")) {
+            roleVal = String(val).trim();
+          }
+        }
+
+        if (nameVal) {
+          const nameParts = nameVal.split(/\s+/);
+          const first_name = nameParts[0] || "Nuovo";
+          const last_name = nameParts.slice(1).join(" ") || "Candidato";
+          
+          await prisma.candidate.create({
+            data: {
+              first_name,
+              last_name,
+              phone: phoneVal || "Non fornito",
+              email: emailVal || "candidato@paradise.it",
+              birth_date: birthVal ? new Date(birthVal) : null,
+              profession: roleVal,
+              preferred_location: location?.name || "Tutte",
+              availability: "Immediata",
+              experience: "Meno di 1 anno",
+              initial_notes: "Inserito automaticamente tramite form in salone.",
+              status: "Nuova candidatura",
+            }
+          });
+        }
+      } catch (candError) {
+        console.error("Failed to automatically create candidate from form submission:", candError);
+      }
+    }
+
     // Try syncing to Google Sheets
     let googleSheetSync = { success: true };
     try {

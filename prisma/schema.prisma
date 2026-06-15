@@ -484,6 +484,9 @@ model Candidate {
   employee_created         Boolean   @default(false)
   created_user_id          String?
   
+  video_calendar_event_id     String?
+  interview_calendar_event_id String?
+  
   created_at               DateTime  @default(now())
   updated_at               DateTime  @updatedAt
 

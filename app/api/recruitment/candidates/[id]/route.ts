@@ -55,6 +55,23 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       data: body,
     });
 
+    // Synchronize call or interview dates with Google Calendar in the background
+    if (
+      body.video_date !== undefined || 
+      body.interview_date !== undefined || 
+      body.first_name !== undefined || 
+      body.last_name !== undefined ||
+      body.video_notes !== undefined ||
+      body.interview_notes !== undefined
+    ) {
+      try {
+        const { syncCandidateEventsToGoogleCalendar } = await import("@/lib/google-calendar");
+        await syncCandidateEventsToGoogleCalendar(id);
+      } catch (calErr) {
+        console.error("Failed to sync candidate calendar events on update:", calErr);
+      }
+    }
+
     return NextResponse.json(updatedCandidate);
   } catch (error) {
     console.error("Failed to update candidate:", error);

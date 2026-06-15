@@ -10,6 +10,7 @@ import { Badge, Card, Select, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 type LocationOption = { id: string; name: string };
 
@@ -87,6 +88,7 @@ export function AdminFormsManager({
 }) {
   const canManage = role === "SUPER_ADMIN" || role === "ADMIN";
   const [forms, setForms] = useState<FormTemplate[]>(initialForms);
+  const candidaturaForm = useMemo(() => forms.find(f => f.name.toUpperCase().includes("CANDIDATURA") && f.active), [forms]);
   const [responses, setResponses] = useState<FormResponse[]>(initialResponses);
   const [activeTab, setActiveTab] = useState<"templates" | "responses" | "upcoming">(initialTab);
   const [responseSubTab, setResponseSubTab] = useState<"active" | "archived">("active");
@@ -440,15 +442,26 @@ export function AdminFormsManager({
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Templates</p>
               <h2 className="mt-1 text-2xl font-semibold">Elenco moduli operativi</h2>
             </div>
-            {canManage && (
-              <button
-                onClick={handleOpenCreate}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#A74758] px-4 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <Plus className="size-4" />
-                Crea nuovo modulo
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {candidaturaForm && (
+                <Link
+                  href={`/service-forms?fillId=${candidaturaForm.id}`}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] px-4 py-2.5 text-sm font-bold text-paradise-noir transition hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow-md"
+                >
+                  <Plus className="size-4 text-paradise-noir" />
+                  Compila Nuova Candidatura
+                </Link>
+              )}
+              {canManage && (
+                <button
+                  onClick={handleOpenCreate}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-[#A74758] px-4 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Plus className="size-4" />
+                  Crea nuovo modulo
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 hidden sm:grid">
@@ -501,10 +514,22 @@ export function AdminFormsManager({
                   </div>
                 </div>
 
-                <div className="mt-6 flex items-center justify-between gap-3 border-t border-black/5 pt-4">
-                  <span className="text-xs text-black/40">
-                    {form.fields?.length || 0} domande
-                  </span>
+                 <div className="mt-6 flex items-center justify-between gap-3 border-t border-black/5 pt-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-black/40">
+                      {form.fields?.length || 0} domande
+                    </span>
+                    {form.active && (
+                      <Link
+                        href={`/service-forms?fillId=${form.id}`}
+                        className="inline-flex items-center gap-1 rounded-xl bg-[#A74758]/10 px-2.5 py-1 text-xs font-bold text-[#A74758] hover:bg-[#A74758]/20 transition ml-2"
+                        title="Compila Modulo"
+                      >
+                        <Play className="size-3" />
+                        Compila
+                      </Link>
+                    )}
+                  </div>
                   {canManage && (
                     <div className="flex gap-1">
                       <button
@@ -600,32 +625,44 @@ export function AdminFormsManager({
                         </div>
                       </div>
 
-                      {canManage && (
-                        <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteForm(form.id);
-                            }}
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-500/10 text-red-700 text-sm font-bold active:scale-95 transition border border-red-500/10"
+                      <div className="mt-5 flex flex-col gap-3 pt-3 border-t border-black/10 w-full">
+                        {form.active && (
+                          <Link
+                            href={`/service-forms?fillId=${form.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white text-black text-sm font-bold active:scale-95 transition"
                           >
-                            <Trash2 className="size-4" />
-                            Elimina
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenEdit(form);
-                            }}
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
-                          >
-                            <Edit className="size-4" />
-                            Modifica
-                          </button>
-                        </div>
-                      )}
+                            <Play className="size-4" />
+                            Compila modulo
+                          </Link>
+                        )}
+                        {canManage && (
+                          <div className="grid grid-cols-2 gap-3 w-full">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteForm(form.id);
+                              }}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-500/10 text-red-700 text-sm font-bold active:scale-95 transition border border-red-500/10"
+                            >
+                              <Trash2 className="size-4" />
+                              Elimina
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEdit(form);
+                              }}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                            >
+                              <Edit className="size-4" />
+                              Modifica
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <>
