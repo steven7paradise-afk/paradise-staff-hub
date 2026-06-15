@@ -15,7 +15,7 @@ export function SidebarFrame({
   mobileNav?: React.ReactNode;
   style: React.CSSProperties;
 }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
 
   useEffect(() => {
