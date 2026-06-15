@@ -131,6 +131,7 @@ export function StaffFormsViewer({
               if (eventDay >= today) {
                 events.push({
                   responseId: resp.id,
+                  response: resp,
                   formName: resp.form.name,
                   userName: resp.user?.name || "Dipendente",
                   locationName: resp.user_location_name,
@@ -292,7 +293,8 @@ export function StaffFormsViewer({
             {upcomingEvents.map((evt, idx) => (
               <div 
                 key={`${evt.responseId}-${idx}`}
-                className="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-[#E8C98B]/55 transition duration-300"
+                onClick={() => setSelectedResponse(evt.response)}
+                className="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-[#E8C98B]/80 hover:bg-white/10 transition duration-300 cursor-pointer group"
               >
                 <div>
                   <div className="flex items-center justify-between">
@@ -301,7 +303,7 @@ export function StaffFormsViewer({
                     </span>
                     <span className="text-[10px] text-white/40 font-semibold">{evt.dateLabel}</span>
                   </div>
-                  <h4 className="font-bold text-sm text-white mt-2.5 truncate">{evt.formName}</h4>
+                  <h4 className="font-bold text-sm text-white mt-2.5 truncate group-hover:text-[#E8C98B] transition">{evt.formName}</h4>
                   <p className="text-xs text-white/60 mt-1 flex items-center gap-1">
                     <User className="size-3 text-white/40" /> {evt.userName}
                   </p>
@@ -312,16 +314,52 @@ export function StaffFormsViewer({
                   )}
 
                   <div className="mt-3 pt-2 border-t border-white/10 space-y-1">
-                    {evt.fields.filter((f: any) => f.type !== "date").slice(0, 2).map((field: any) => {
-                      const ans = evt.answers[field.id];
-                      if (ans === undefined || ans === null || ans === "") return null;
-                      return (
-                        <div key={field.id} className="text-[11px] truncate">
-                          <span className="font-semibold text-white/50">{field.label}: </span>
-                          <span className="text-white">{typeof ans === "object" ? ans.name : String(ans)}</span>
-                        </div>
-                      );
-                    })}
+                    {(() => {
+                      const isEvtCorsistiForm = evt.formName.toUpperCase().includes("CORSISTI");
+                      const evtParticipaField = evt.fields.find((f: any) => f.label.toUpperCase().includes("PARTICIPA"));
+                      const evtParticipaValue = evtParticipaField ? evt.answers[evtParticipaField.id] : "";
+                      const isEvtGroupCourse = String(evtParticipaValue || "").toUpperCase().includes("GRUP");
+
+                      const isDefaultField = (label: string) => {
+                        const l = label.toUpperCase();
+                        return l === "NOME CORSISTA" || l === "EMAIL CORSISTA" || l === "NUMERO CORSISTA";
+                      };
+
+                      const fieldsToRender = evt.fields.filter((f: any) => {
+                        if (f.type === "date") return false;
+                        if (isEvtCorsistiForm && isEvtGroupCourse && isDefaultField(f.label)) return false;
+                        return true;
+                      });
+
+                      const renderedFields = fieldsToRender.slice(0, 2).map((field: any) => {
+                        const ans = evt.answers[field.id];
+                        if (ans === undefined || ans === null || ans === "") return null;
+                        return (
+                          <div key={field.id} className="text-[11px] truncate">
+                            <span className="font-semibold text-white/50">{field.label}: </span>
+                            <span className="text-white">{typeof ans === "object" ? ans.name : String(ans)}</span>
+                          </div>
+                        );
+                      });
+
+                      if (isEvtCorsistiForm && isEvtGroupCourse) {
+                        const pNames: string[] = [];
+                        for (let i = 1; i <= 10; i++) {
+                          const name = evt.answers[`participant_${i}_name`];
+                          if (name) pNames.push(name);
+                        }
+                        if (pNames.length > 0) {
+                          renderedFields.push(
+                            <div key="group_participants" className="text-[11px] truncate">
+                              <span className="font-semibold text-white/50">Corsisti: </span>
+                              <span className="text-[#E8C98B] font-medium">{pNames.join(", ")}</span>
+                            </div>
+                          );
+                        }
+                      }
+
+                      return renderedFields;
+                    })()}
                   </div>
                 </div>
               </div>

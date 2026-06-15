@@ -334,6 +334,7 @@ export function AdminFormsManager({
               if (eventDay >= today) {
                 events.push({
                   responseId: resp.id,
+                  response: resp,
                   formName: resp.form.name,
                   userName: resp.user?.name || "Dipendente",
                   locationName: resp.user_location_name,
@@ -944,16 +945,20 @@ export function AdminFormsManager({
             {upcomingEvents.map((evt, idx) => (
               <div 
                 key={`${evt.responseId}-${idx}`}
-                className="flex flex-col justify-between rounded-2xl border border-black/5 bg-[#FBF7F9] p-5 hover:border-[#E8C98B] transition shadow-sm"
+                onClick={() => {
+                  const resp = responses.find(r => r.id === evt.responseId);
+                  if (resp) setSelectedResponse(resp);
+                }}
+                className="flex flex-col justify-between rounded-2xl border border-black/5 bg-[#FBF7F9] p-5 hover:border-[#E8C98B] hover:bg-black/[0.02] transition shadow-sm cursor-pointer group"
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold uppercase text-[#A74758] bg-[#A74758]/5 px-2 py-0.5 rounded-lg border border-[#A74758]/10">
+                    <span className="text-[10px] font-extrabold uppercase text-[#A74758] bg-[#A74758]/5 px-2 py-0.5 rounded-lg shadow-sm border border-[#A74758]/10">
                       {evt.daysLeft === 0 ? "Oggi" : evt.daysLeft === 1 ? "Domani" : `Tra ${evt.daysLeft} giorni`}
                     </span>
                     <span className="text-xs text-black/45 font-semibold">{evt.dateLabel}</span>
                   </div>
-                  <h4 className="font-bold text-base text-black mt-3 truncate">{evt.formName}</h4>
+                  <h4 className="font-bold text-base text-black mt-3 truncate group-hover:text-[#A74758] transition">{evt.formName}</h4>
                   <div className="text-xs text-black/60 mt-1.5 space-y-1">
                     <p className="flex items-center gap-1.5">
                       <User className="size-3.5 text-black/40" /> {evt.userName}
@@ -966,20 +971,56 @@ export function AdminFormsManager({
                   </div>
 
                   <div className="mt-4 pt-3 border-t border-black/5 space-y-1.5">
-                    {evt.fields.filter((f: any) => f.type !== "date").slice(0, 3).map((field: any) => {
-                      const ans = evt.answers[field.id];
-                      if (ans === undefined || ans === null || ans === "") return null;
-                      return (
-                        <div key={field.id} className="text-xs">
-                          <span className="font-semibold text-black/50">{field.label}: </span>
-                          <span className="text-black">{typeof ans === "object" ? ans.name : String(ans)}</span>
-                        </div>
-                      );
-                    })}
+                    {(() => {
+                      const isEvtCorsistiForm = evt.formName.toUpperCase().includes("CORSISTI");
+                      const evtParticipaField = evt.fields.find((f: any) => f.label.toUpperCase().includes("PARTICIPA"));
+                      const evtParticipaValue = evtParticipaField ? evt.answers[evtParticipaField.id] : "";
+                      const isEvtGroupCourse = String(evtParticipaValue || "").toUpperCase().includes("GRUP");
+
+                      const isDefaultField = (label: string) => {
+                        const l = label.toUpperCase();
+                        return l === "NOME CORSISTA" || l === "EMAIL CORSISTA" || l === "NUMERO CORSISTA";
+                      };
+
+                      const fieldsToRender = evt.fields.filter((f: any) => {
+                        if (f.type === "date") return false;
+                        if (isEvtCorsistiForm && isEvtGroupCourse && isDefaultField(f.label)) return false;
+                        return true;
+                      });
+
+                      const renderedFields = fieldsToRender.slice(0, 3).map((field: any) => {
+                        const ans = evt.answers[field.id];
+                        if (ans === undefined || ans === null || ans === "") return null;
+                        return (
+                          <div key={field.id} className="text-xs">
+                            <span className="font-semibold text-black/50">{field.label}: </span>
+                            <span className="text-black">{typeof ans === "object" ? ans.name : String(ans)}</span>
+                          </div>
+                        );
+                      });
+
+                      if (isEvtCorsistiForm && isEvtGroupCourse) {
+                        const pNames: string[] = [];
+                        for (let i = 1; i <= 10; i++) {
+                          const name = evt.answers[`participant_${i}_name`];
+                          if (name) pNames.push(name);
+                        }
+                        if (pNames.length > 0) {
+                          renderedFields.push(
+                            <div key="group_participants" className="text-xs">
+                              <span className="font-semibold text-black/50">Corsisti: </span>
+                              <span className="text-[#A74758] font-semibold">{pNames.join(", ")}</span>
+                            </div>
+                          );
+                        }
+                      }
+
+                      return renderedFields;
+                    })()}
                   </div>
                 </div>
 
-                <div className="mt-6 pt-3 border-t border-black/5 flex items-center justify-between gap-3">
+                <div className="mt-6 pt-3 border-t border-black/5 flex items-center justify-between gap-3" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => {
                       const resp = responses.find(r => r.id === evt.responseId);
