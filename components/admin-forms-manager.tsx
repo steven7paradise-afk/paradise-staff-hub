@@ -125,7 +125,19 @@ export function AdminFormsManager({
     : "";
   const isResponseGroupCourse = String(responseParticipaValue || "").toUpperCase().includes("GRUP");
   const isResponseCorsistiForm = selectedResponse?.form?.name?.toUpperCase().includes("CORSISTI");
-  const responseGroupCount = parseInt((selectedResponse?.answers as any)?.["group_participants_count"] || "0", 10);
+  const responseGroupCount = (() => {
+    let count = parseInt((selectedResponse?.answers as any)?.["group_participants_count"] || "0", 10);
+    if (isResponseGroupCourse && count === 0 && selectedResponse?.answers) {
+      let maxIdx = 0;
+      for (let i = 1; i <= 10; i++) {
+        if ((selectedResponse.answers as any)[`participant_${i}_name`]) {
+          maxIdx = i;
+        }
+      }
+      count = maxIdx > 0 ? maxIdx : 2;
+    }
+    return count;
+  })();
 
   const isDefaultParticipantField = (fieldLabel: string) => {
     const labelUpper = fieldLabel.toUpperCase();

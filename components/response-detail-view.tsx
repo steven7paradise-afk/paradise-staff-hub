@@ -22,6 +22,34 @@ export function ResponseDetailView({
   const [response, setResponse] = useState(initialResponse);
   const [success, setSuccess] = useState(false);
 
+  // Derived helper variables for dynamic group participants response viewer
+  const responseParticipaField = response?.form?.fields 
+    ? (response.form.fields as any[]).find((f: any) => f.label.toUpperCase().includes("PARTICIPA")) 
+    : null;
+  const responseParticipaValue = responseParticipaField && response?.answers 
+    ? (response.answers as any)[responseParticipaField.id] 
+    : "";
+  const isResponseGroupCourse = String(responseParticipaValue || "").toUpperCase().includes("GRUP");
+  const isResponseCorsistiForm = response?.form?.name?.toUpperCase().includes("CORSISTI");
+  const responseGroupCount = (() => {
+    let count = parseInt((response?.answers as any)?.["group_participants_count"] || "0", 10);
+    if (isResponseGroupCourse && count === 0 && response?.answers) {
+      let maxIdx = 0;
+      for (let i = 1; i <= 10; i++) {
+        if ((response.answers as any)[`participant_${i}_name`]) {
+          maxIdx = i;
+        }
+      }
+      count = maxIdx > 0 ? maxIdx : 2;
+    }
+    return count;
+  })();
+
+  const isDefaultParticipantField = (fieldLabel: string) => {
+    const labelUpper = fieldLabel.toUpperCase();
+    return labelUpper === "NOME CORSISTA" || labelUpper === "EMAIL CORSISTA" || labelUpper === "NUMERO CORSISTA";
+  };
+
   const handleArchiveResponse = async () => {
     try {
       const res = await fetch(`/api/service-forms/responses/${response.id}`, {
@@ -106,6 +134,10 @@ export function ResponseDetailView({
             
             {response.form?.fields ? (
               (response.form.fields as any[]).map((field) => {
+                if (isResponseCorsistiForm && isResponseGroupCourse && isDefaultParticipantField(field.label)) {
+                  return null;
+                }
+
                 const answer = response.answers[field.id];
                 
                 return (
@@ -159,6 +191,58 @@ export function ResponseDetailView({
                         </p>
                       )}
                     </div>
+
+                    {field.id === responseParticipaField?.id && isResponseGroupCourse && responseGroupCount > 0 && (
+                      <div className="mt-4 p-4 rounded-2xl bg-[#FBF7F9] border border-black/5 space-y-4">
+                        <span className="block text-xs font-bold text-black/40 uppercase tracking-wider text-left">
+                          Corsisti Partecipanti ({responseGroupCount})
+                        </span>
+                        
+                        <div className="space-y-4">
+                          {Array.from({ length: responseGroupCount }).map((_, idx) => {
+                            const pIndex = idx + 1;
+                            const pName = (response.answers as any)[`participant_${pIndex}_name`] || "-";
+                            const pEmail = (response.answers as any)[`participant_${pIndex}_email`] || "";
+                            const pPhone = (response.answers as any)[`participant_${pIndex}_phone`] || "";
+                            const pNotes = (response.answers as any)[`participant_${pIndex}_notes`] || "";
+
+                            return (
+                              <div key={pIndex} className="p-3.5 rounded-xl bg-white border border-black/5 space-y-2 text-left">
+                                <div className="flex items-center justify-between border-b border-black/5 pb-1.5 mb-1.5">
+                                  <span className="text-xs font-bold text-[#A74758]">Corsista {pIndex}</span>
+                                </div>
+                                <div className="text-sm">
+                                  <span className="text-black/40 text-xs block">Nome</span>
+                                  <span className="font-semibold text-black">{pName}</span>
+                                </div>
+                                {(pEmail || pPhone) && (
+                                  <div className="grid grid-cols-2 gap-3 text-xs">
+                                    {pEmail && (
+                                      <div>
+                                        <span className="text-black/40 block">Email</span>
+                                        <span className="text-black font-medium">{pEmail}</span>
+                                      </div>
+                                    )}
+                                    {pPhone && (
+                                      <div>
+                                        <span className="text-black/40 block">Telefono</span>
+                                        <span className="text-black font-medium">{pPhone}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                {pNotes && (
+                                  <div className="text-xs border-t border-black/5 pt-1.5 mt-1">
+                                    <span className="text-black/40 block">Dati Professionali & Altro</span>
+                                    <span className="text-black/80 whitespace-pre-wrap leading-relaxed">{pNotes}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })

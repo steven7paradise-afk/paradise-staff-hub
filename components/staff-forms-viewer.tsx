@@ -91,7 +91,19 @@ export function StaffFormsViewer({
     : "";
   const isResponseGroupCourse = String(responseParticipaValue || "").toUpperCase().includes("GRUP");
   const isResponseCorsistiForm = selectedResponse?.form?.name?.toUpperCase().includes("CORSISTI");
-  const responseGroupCount = parseInt(selectedResponse?.answers?.["group_participants_count"] || "0", 10);
+  const responseGroupCount = (() => {
+    let count = parseInt(selectedResponse?.answers?.["group_participants_count"] || "0", 10);
+    if (isResponseGroupCourse && count === 0 && selectedResponse?.answers) {
+      let maxIdx = 0;
+      for (let i = 1; i <= 10; i++) {
+        if (selectedResponse.answers[`participant_${i}_name`]) {
+          maxIdx = i;
+        }
+      }
+      count = maxIdx > 0 ? maxIdx : 2;
+    }
+    return count;
+  })();
 
 
   // Extract upcoming events from active responses containing date fields
@@ -195,9 +207,20 @@ export function StaffFormsViewer({
 
     const formData = new FormData();
     formData.append("formId", selectedForm.id);
-    
+
+    const answersPayload = { ...answers };
+    const isGroupCourse = selectedForm.name.toUpperCase().includes("CORSISTI") &&
+      Object.entries(answers).some(([key, val]) => {
+        const field = selectedForm.fields.find(f => f.id === key);
+        return field?.label.toUpperCase().includes("PARTICIPA") && String(val || "").toUpperCase().includes("GRUP");
+      });
+
+    if (isGroupCourse && !answersPayload["group_participants_count"]) {
+      answersPayload["group_participants_count"] = "2";
+    }
+
     // Non-file answers
-    formData.append("answers", JSON.stringify(answers));
+    formData.append("answers", JSON.stringify(answersPayload));
 
     // File answers
     Object.entries(files).forEach(([fieldId, file]) => {
