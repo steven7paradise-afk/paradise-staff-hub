@@ -71,6 +71,29 @@ export function StaffFormsViewer({
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [files, setFiles] = useState<Record<string, File>>({});
 
+  // Derived helper variables for dynamic group participants form
+  const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
+  const participaValue = participaField ? answers[participaField.id] : "";
+  const isGroupCourse = String(participaValue || "").toUpperCase().includes("GRUP");
+  const isCorsistiForm = selectedForm?.name.toUpperCase().includes("CORSISTI");
+  const groupCount = parseInt(answers["group_participants_count"] || "2", 10);
+
+  const isDefaultParticipantField = (fieldLabel: string) => {
+    const labelUpper = fieldLabel.toUpperCase();
+    return labelUpper === "NOME CORSISTA" || labelUpper === "EMAIL CORSISTA" || labelUpper === "NUMERO CORSISTA";
+  };
+
+  const responseParticipaField = selectedResponse?.form?.fields 
+    ? (selectedResponse.form.fields as any[]).find(f => f.label.toUpperCase().includes("PARTICIPA")) 
+    : null;
+  const responseParticipaValue = responseParticipaField && selectedResponse?.answers 
+    ? selectedResponse.answers[responseParticipaField.id] 
+    : "";
+  const isResponseGroupCourse = String(responseParticipaValue || "").toUpperCase().includes("GRUP");
+  const isResponseCorsistiForm = selectedResponse?.form?.name?.toUpperCase().includes("CORSISTI");
+  const responseGroupCount = parseInt(selectedResponse?.answers?.["group_participants_count"] || "0", 10);
+
+
   // Extract upcoming events from active responses containing date fields
   const upcomingEvents = useMemo(() => {
     const events: any[] = [];
@@ -545,122 +568,210 @@ export function StaffFormsViewer({
                   </div>
                 )}
 
-                {selectedForm.fields.map((field) => (
-                  <div key={field.id} className="space-y-1.5">
-                    <label className="text-sm font-bold text-white/70 block">
-                      {field.label} {field.required && <span className="text-red-500">*</span>}
-                    </label>
-                    {field.description && (
-                      <p className="text-xs text-white/45 -mt-0.5 mb-1 leading-relaxed">{field.description}</p>
-                    )}
+                {selectedForm.fields.map((field) => {
+                  if (isCorsistiForm && isGroupCourse && isDefaultParticipantField(field.label)) {
+                    return null;
+                  }
 
-                    {field.type === "text" && (
-                      <input
-                        type="text"
-                        required={field.required}
-                        value={answers[field.id] || ""}
-                        onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                      />
-                    )}
+                  return (
+                    <div key={field.id} className="space-y-1.5">
+                      <label className="text-sm font-bold text-white/70 block">
+                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                      </label>
+                      {field.description && (
+                        <p className="text-xs text-white/45 -mt-0.5 mb-1 leading-relaxed">{field.description}</p>
+                      )}
 
-                    {field.type === "textarea" && (
-                      <textarea
-                        required={field.required}
-                        value={answers[field.id] || ""}
-                        onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        rows={3}
-                        className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-white outline-none focus:border-[#A74758] resize-none"
-                      />
-                    )}
-
-                    {field.type === "number" && (
-                      <input
-                        type="number"
-                        required={field.required}
-                        value={answers[field.id] || ""}
-                        onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                      />
-                    )}
-
-                    {field.type === "select" && (
-                      <select
-                        required={field.required}
-                        value={answers[field.id] || ""}
-                        onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
-                      >
-                        <option value="" className="bg-neutral-800 text-white">Seleziona un'opzione...</option>
-                        {field.options?.map((opt) => (
-                          <option key={opt} value={opt} className="bg-neutral-800 text-white">{opt}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {field.type === "money" && (
-                      <div className="relative flex items-center">
-                        <span className="absolute left-3.5 text-sm font-semibold text-white/45">€</span>
+                      {field.type === "text" && (
                         <input
-                          type="number"
-                          step="0.01"
+                          type="text"
                           required={field.required}
                           value={answers[field.id] || ""}
                           onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 pl-8 pr-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                          placeholder="0.00"
+                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
                         />
-                      </div>
-                    )}
+                      )}
 
-                    {field.type === "date" && (
-                      <input
-                        type="date"
-                        required={field.required}
-                        value={answers[field.id] || ""}
-                        onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                      />
-                    )}
+                      {field.type === "textarea" && (
+                        <textarea
+                          required={field.required}
+                          value={answers[field.id] || ""}
+                          onChange={(e) => handleTextChange(field.id, e.target.value)}
+                          rows={3}
+                          className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-white outline-none focus:border-[#A74758] resize-none"
+                        />
+                      )}
 
-                    {field.type === "worker" && (
-                      <select
-                        required={field.required}
-                        value={answers[field.id] || ""}
-                        onChange={(e) => handleTextChange(field.id, e.target.value)}
-                        className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
-                      >
-                        <option value="" className="bg-neutral-800 text-white">Seleziona collaboratore...</option>
-                        {employees.map((emp) => (
-                          <option key={emp.id} value={emp.name} className="bg-neutral-800 text-white">
-                            {emp.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {field.type === "file" && (
-                      <div className="relative flex items-center justify-center w-full min-h-24 border border-dashed border-white/20 rounded-xl bg-white/5 hover:bg-[#A74758]/10 transition group">
+                      {field.type === "number" && (
                         <input
-                          type="file"
-                          required={field.required && !files[field.id]}
-                          onChange={(e) => handleFileChange(field.id, e)}
-                          accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                          type="number"
+                          required={field.required}
+                          value={answers[field.id] || ""}
+                          onChange={(e) => handleTextChange(field.id, e.target.value)}
+                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
                         />
-                        <div className="flex flex-col items-center p-4 text-center pointer-events-none">
-                          <Upload className="size-6 text-white/40 group-hover:text-[#A74758] transition" />
-                          <span className="text-xs font-semibold text-white/70 mt-1.5">
-                            {files[field.id] ? files[field.id].name : "Carica o trascina un file"}
-                          </span>
-                          {!files[field.id] && (
-                            <span className="text-[10px] text-white/40 mt-0.5">Dimensione max: 15 MB</span>
-                          )}
+                      )}
+
+                      {field.type === "select" && (
+                        <select
+                          required={field.required}
+                          value={answers[field.id] || ""}
+                          onChange={(e) => handleTextChange(field.id, e.target.value)}
+                          className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                        >
+                          <option value="" className="bg-neutral-800 text-white">Seleziona un'opzione...</option>
+                          {field.options?.map((opt) => (
+                            <option key={opt} value={opt} className="bg-neutral-800 text-white">{opt}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      {field.type === "money" && (
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3.5 text-sm font-semibold text-white/45">€</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required={field.required}
+                            value={answers[field.id] || ""}
+                            onChange={(e) => handleTextChange(field.id, e.target.value)}
+                            className="w-full h-10 rounded-xl bg-white/5 border border-white/10 pl-8 pr-3.5 text-sm text-white outline-none focus:border-[#A74758]"
+                            placeholder="0.00"
+                          />
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+
+                      {field.type === "date" && (
+                        <input
+                          type="date"
+                          required={field.required}
+                          value={answers[field.id] || ""}
+                          onChange={(e) => handleTextChange(field.id, e.target.value)}
+                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
+                        />
+                      )}
+
+                      {field.type === "worker" && (
+                        <select
+                          required={field.required}
+                          value={answers[field.id] || ""}
+                          onChange={(e) => handleTextChange(field.id, e.target.value)}
+                          className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                        >
+                          <option value="" className="bg-neutral-800 text-white">Seleziona collaboratore...</option>
+                          {employees.map((emp) => (
+                            <option key={emp.id} value={emp.name} className="bg-neutral-800 text-white">
+                              {emp.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {field.type === "file" && (
+                        <div className="relative flex items-center justify-center w-full min-h-24 border border-dashed border-white/20 rounded-xl bg-white/5 hover:bg-[#A74758]/10 transition group">
+                          <input
+                            type="file"
+                            required={field.required && !files[field.id]}
+                            onChange={(e) => handleFileChange(field.id, e)}
+                            accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                          />
+                          <div className="flex flex-col items-center p-4 text-center pointer-events-none">
+                            <Upload className="size-6 text-white/40 group-hover:text-[#A74758] transition" />
+                            <span className="text-xs font-semibold text-white/70 mt-1.5">
+                              {files[field.id] ? files[field.id].name : "Carica o trascina un file"}
+                            </span>
+                            {!files[field.id] && (
+                              <span className="text-[10px] text-white/40 mt-0.5">Dimensione max: 15 MB</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {field.id === participaField?.id && isGroupCourse && (
+                        <div className="mt-4 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                          <label className="text-sm font-bold text-white/70 block">
+                            Numero di Corsisti (Partecipanti) <span className="text-red-500">*</span>
+                          </label>
+                          <select
+                            value={answers["group_participants_count"] || "2"}
+                            onChange={(e) => {
+                              handleTextChange("group_participants_count", e.target.value);
+                            }}
+                            className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                              <option key={num} value={String(num)} className="bg-neutral-800 text-white">
+                                {num} {num === 1 ? "Corsista" : "Corsisti"}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="space-y-6 pt-4 border-t border-white/10">
+                            {Array.from({ length: groupCount }).map((_, idx) => {
+                              const pIndex = idx + 1;
+                              return (
+                                <div key={pIndex} className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3 text-left">
+                                  <h5 className="text-xs font-bold uppercase tracking-wider text-[#A74758]">
+                                    Dati Corsista {pIndex}
+                                  </h5>
+
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-white/60">
+                                      Nome Corsista {pIndex} <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      required={isGroupCourse}
+                                      value={answers[`participant_${pIndex}_name`] || ""}
+                                      onChange={(e) => handleTextChange(`participant_${pIndex}_name`, e.target.value)}
+                                      className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
+                                      placeholder={`Nome completo corsista ${pIndex}`}
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-white/60">Email</label>
+                                      <input
+                                        type="email"
+                                        value={answers[`participant_${pIndex}_email`] || ""}
+                                        onChange={(e) => handleTextChange(`participant_${pIndex}_email`, e.target.value)}
+                                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
+                                        placeholder="Email (opzionale)"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-white/60">Telefono</label>
+                                      <input
+                                        type="text"
+                                        value={answers[`participant_${pIndex}_phone`] || ""}
+                                        onChange={(e) => handleTextChange(`participant_${pIndex}_phone`, e.target.value)}
+                                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
+                                        placeholder="Telefono (opzionale)"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-white/60">Dati Professionali e Altre Info</label>
+                                    <textarea
+                                      value={answers[`participant_${pIndex}_notes`] || ""}
+                                      onChange={(e) => handleTextChange(`participant_${pIndex}_notes`, e.target.value)}
+                                      rows={2}
+                                      className="w-full rounded-lg bg-white/5 border border-white/10 p-2 text-xs text-white outline-none focus:border-[#A74758] resize-none"
+                                      placeholder="Dati professionali, mansione o altre informazioni..."
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
 
                 <div className="flex items-center justify-end gap-3 border-t border-white/10 pt-4 bg-neutral-900 mt-6">
                   <Button
@@ -872,6 +983,10 @@ export function StaffFormsViewer({
                 
                 {selectedResponse.form?.fields ? (
                   (selectedResponse.form.fields as any[]).map((field) => {
+                    if (isResponseCorsistiForm && isResponseGroupCourse && isDefaultParticipantField(field.label)) {
+                      return null;
+                    }
+
                     const answer = selectedResponse.answers[field.id];
                     
                     return (
@@ -925,6 +1040,58 @@ export function StaffFormsViewer({
                             </p>
                           )}
                         </div>
+
+                        {field.id === responseParticipaField?.id && isResponseGroupCourse && responseGroupCount > 0 && (
+                          <div className="mt-4 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                            <span className="block text-xs font-bold text-white/40 uppercase tracking-wider">
+                              Corsisti Partecipanti ({responseGroupCount})
+                            </span>
+                            
+                            <div className="space-y-4">
+                              {Array.from({ length: responseGroupCount }).map((_, idx) => {
+                                const pIndex = idx + 1;
+                                const pName = selectedResponse.answers[`participant_${pIndex}_name`] || "-";
+                                const pEmail = selectedResponse.answers[`participant_${pIndex}_email`] || "";
+                                const pPhone = selectedResponse.answers[`participant_${pIndex}_phone`] || "";
+                                const pNotes = selectedResponse.answers[`participant_${pIndex}_notes`] || "";
+
+                                return (
+                                  <div key={pIndex} className="p-3.5 rounded-xl bg-white/5 border border-white/5 space-y-2 text-left">
+                                    <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-1.5">
+                                      <span className="text-xs font-bold text-[#A74758]">Corsista {pIndex}</span>
+                                    </div>
+                                    <div className="text-sm">
+                                      <span className="text-white/40 text-xs block">Nome</span>
+                                      <span className="font-semibold text-white">{pName}</span>
+                                    </div>
+                                    {(pEmail || pPhone) && (
+                                      <div className="grid grid-cols-2 gap-3 text-xs">
+                                        {pEmail && (
+                                          <div>
+                                            <span className="text-white/40 block">Email</span>
+                                            <span className="text-white font-medium">{pEmail}</span>
+                                          </div>
+                                        )}
+                                        {pPhone && (
+                                          <div>
+                                            <span className="text-white/40 block">Telefono</span>
+                                            <span className="text-white font-medium">{pPhone}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {pNotes && (
+                                      <div className="text-xs border-t border-white/5 pt-1.5 mt-1">
+                                        <span className="text-white/40 block">Dati Professionali & Altro</span>
+                                        <span className="text-white/80 whitespace-pre-wrap leading-relaxed">{pNotes}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })
