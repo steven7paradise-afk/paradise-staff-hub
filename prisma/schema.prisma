@@ -188,7 +188,6 @@ model StaffTask {
   evaluated_by_id String?
   evaluated_at DateTime?
   location_id    String
-  assigned_to_id String
   created_by_id  String
   due_date       DateTime?
   started_at     DateTime?
@@ -196,12 +195,11 @@ model StaffTask {
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
   location       Location  @relation(fields: [location_id], references: [id])
-  assigned_to    User      @relation("AssignedTasks", fields: [assigned_to_id], references: [id])
+  assignees      User[]    @relation("AssignedTasks")
   created_by     User      @relation("CreatedTasks", fields: [created_by_id], references: [id])
   comments       StaffTaskComment[]
 
   @@index([location_id])
-  @@index([assigned_to_id])
   @@index([status])
   @@map("staff_tasks")
 }

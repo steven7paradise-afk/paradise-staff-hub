@@ -39,7 +39,7 @@ export default async function ProfilePage() {
     prisma.leaveRequest.count({ where: { user_id: user.id, status: "PENDING" } }),
     prisma.document.count({ where: { user_id: user.id } }),
     prisma.notification.count({ where: { user_id: session.user.id, read: false } }),
-    prisma.staffTask.count({ where: { assigned_to_id: user.id, status: "ACTIVE" } }),
+    prisma.staffTask.count({ where: { assignees: { some: { id: user.id } }, status: "ACTIVE" } }),
     prisma.user.findMany({
       where: {
         id: { not: user.id },

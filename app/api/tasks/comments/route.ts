@@ -13,9 +13,10 @@ export async function POST(request: NextRequest) {
   const message = String(payload.message ?? "").trim();
   if (!taskId || !message) return NextResponse.json({ error: "Commento mancante." }, { status: 400 });
 
-  const task = await prisma.staffTask.findUnique({ where: { id: taskId }, include: { assigned_to: true, created_by: true } });
+  const task = await prisma.staffTask.findUnique({ where: { id: taskId }, include: { assignees: true, created_by: true } });
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
-  const canComment = managerRoles.has(session.user.role) || task.assigned_to_id === session.user.id;
+  const isAssignee = task.assignees.some((a) => a.id === session.user.id);
+  const canComment = managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
   if (!canComment || (session.user.role === "RESPONSABILE" && session.user.sedeId !== task.location_id)) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
@@ -24,16 +25,22 @@ export async function POST(request: NextRequest) {
     data: { task_id: taskId, user_id: session.user.id, message },
     include: { user: true },
   });
-  const targetId = session.user.id === task.assigned_to_id ? task.created_by_id : task.assigned_to_id;
-  if (targetId !== session.user.id) {
-    await createNotification({
-        user_id: targetId,
-        title: `Nuovo commento: ${task.title}`,
-        message,
-        type: "TASK",
-        action_url: "/tasks",
-    });
-  }
+
+  const isCommenterCreator = session.user.id === task.created_by_id;
+  const notifyUsers = isCommenterCreator 
+    ? task.assignees.map((a) => a.id) 
+    : Array.from(new Set([task.created_by_id, ...task.assignees.filter((a) => a.id !== session.user.id).map((a) => a.id)]));
+
+  await Promise.all(notifyUsers.map((userId) => 
+    createNotification({
+      user_id: userId,
+      title: `Nuovo commento: ${task.title}`,
+      message,
+      type: "TASK",
+      action_url: "/tasks",
+    }).catch((err) => console.error("Notification failed for comment on task:", userId, err))
+  ));
+
   return NextResponse.json(comment);
 }
 

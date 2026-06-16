@@ -85,8 +85,8 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   const [tasks, attendanceLogs] = selected
     ? await Promise.all([
         prisma.staffTask.findMany({
-          where: role === "RESPONSABILE" ? { assigned_to_id: selected.id, location_id: session.user.sedeId ?? undefined } : { assigned_to_id: selected.id },
-          include: { created_by: true, assigned_to: true },
+          where: role === "RESPONSABILE" ? { assignees: { some: { id: selected.id } }, location_id: session.user.sedeId ?? undefined } : { assignees: { some: { id: selected.id } } },
+          include: { created_by: true, assignees: true },
           orderBy: { updated_at: "desc" },
         }),
         prisma.attendanceLog.findMany({

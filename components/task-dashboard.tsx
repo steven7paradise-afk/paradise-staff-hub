@@ -66,6 +66,7 @@ type Task = {
   assignedToId: string;
   assignedToName: string;
   assignedToPhoto: string | null;
+  assignees: { id: string; name: string; photoUrl: string | null }[];
   createdByName: string;
   createdById: string;
   createdByPhoto: string | null;
@@ -334,6 +335,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     title: "",
     description: "",
     assignedToId: initialAllowedWorkers[0]?.id ?? "",
+    assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[],
     priority: "MEDIA",
     category: "Operativa",
     dueDate: "",
@@ -344,12 +346,12 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   });
 
   const baseTasks = useMemo(() => {
-    return (canAssign || role === "DIPENDENTE") ? tasks : tasks.filter((task) => task.assignedToId === userId);
+    return (canAssign || role === "DIPENDENTE") ? tasks : tasks.filter((task) => task.assignedToId === userId || task.assignees?.some((a) => a.id === userId));
   }, [tasks, canAssign, role, userId]);
 
   const personalTasks = useMemo(() => {
     if (assignmentFilter === "ASSIGNED_TO_ME") {
-      return baseTasks.filter((task) => task.assignedToId === userId);
+      return baseTasks.filter((task) => task.assignedToId === userId || task.assignees?.some((a) => a.id === userId));
     }
     if (assignmentFilter === "ASSIGNED_BY_ME") {
       return baseTasks.filter((task) => task.createdById === userId);
@@ -367,7 +369,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
   const categories = Array.from(new Set([...initialCategories, ...tasks.map((task) => task.category).filter(Boolean)]));
-  const selectedWorker = initialAllowedWorkers.find((worker) => worker.id === form.assignedToId) ?? initialAllowedWorkers[0] ?? null;
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const priorityRank: Record<string, number> = { ALTA: 0, MEDIA: 1, BASSA: 2 };
@@ -417,6 +418,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
+        assignedToId: form.assignedToIds[0] ?? "",
+        assignedToIds: form.assignedToIds,
         checklist: form.checklistText.split("\n"),
       }),
     });
@@ -456,9 +459,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         })) : [],
         locationId: data.location_id,
         locationName: data.location?.name ?? "Salone",
-        assignedToId: data.assigned_to_id,
-        assignedToName: data.assigned_to.name,
-        assignedToPhoto: data.assigned_to.photo_url ?? null,
+        assignedToId: data.assignees?.[0]?.id ?? data.assigned_to_id ?? "",
+        assignedToName: data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno",
+        assignedToPhoto: data.assignees?.[0]?.photo_url ?? data.assigned_to?.photo_url ?? null,
+        assignees: Array.isArray(data.assignees) 
+          ? data.assignees.map((a: any) => ({ id: a.id, name: a.name, photoUrl: a.photo_url }))
+          : data.assigned_to 
+            ? [{ id: data.assigned_to.id, name: data.assigned_to.name, photoUrl: data.assigned_to.photo_url }]
+            : [],
         createdByName: data.created_by.name,
         createdById: data.created_by_id,
         createdByPhoto: data.created_by.photo_url ?? null,
@@ -468,16 +476,16 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       },
       ...current,
     ]);
-    setFormStatus(`Task inviata a ${data.assigned_to.name}. Notifica creata.`);
+    setFormStatus(`Task inviata a ${data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno"}. Notifica creata.`);
     setTimeout(() => {
-      setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistText: "" });
+      setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistText: "" });
       setFormStatus("");
       setOpen(false);
     }, 900);
   }
 
   function resetTaskForm() {
-    setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistText: "" });
+    setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistText: "" });
     setEditingTaskId(null);
     setFormStatus("");
     setOpen(false);
@@ -490,6 +498,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       title: task.title,
       description: task.description,
       assignedToId: task.assignedToId,
+      assignedToIds: task.assignees ? task.assignees.map((a) => a.id) : [task.assignedToId],
       priority: task.priority,
       category: task.category,
       dueDate: toDateTimeLocal(task.dueDate),
@@ -507,7 +516,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     const response = await fetch("/api/tasks", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: editingTaskId, ...form, checklist: form.checklistText.split("\n") }),
+      body: JSON.stringify({ id: editingTaskId, ...form, assignedToId: form.assignedToIds[0] ?? "", assignedToIds: form.assignedToIds, checklist: form.checklistText.split("\n") }),
     });
     const data = await response.json();
     setSaving(false);
@@ -633,9 +642,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       evaluation: data.evaluation ?? null,
       locationId: data.location_id,
       locationName: data.location?.name ?? "Salone",
-      assignedToId: data.assigned_to_id,
-      assignedToName: data.assigned_to.name,
-      assignedToPhoto: data.assigned_to.photo_url ?? null,
+      assignedToId: data.assignees?.[0]?.id ?? data.assigned_to_id ?? "",
+      assignedToName: data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno",
+      assignedToPhoto: data.assignees?.[0]?.photo_url ?? data.assigned_to?.photo_url ?? null,
+      assignees: Array.isArray(data.assignees) 
+        ? data.assignees.map((a: any) => ({ id: a.id, name: a.name, photoUrl: a.photo_url }))
+        : data.assigned_to 
+          ? [{ id: data.assigned_to.id, name: data.assigned_to.name, photoUrl: data.assigned_to.photo_url }]
+          : [],
       createdByName: data.created_by.name,
       createdById: data.created_by_id,
       createdByPhoto: data.created_by.photo_url ?? null,
@@ -830,7 +844,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         <div className="min-w-0">
           <p className="truncate font-semibold">{task.title}</p>
           <div className="mt-1 flex items-center gap-2 text-xs text-black/45">
-            <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-5" />
+            <div className="flex -space-x-1 overflow-hidden">
+              {task.assignees?.map((assignee) => (
+                <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-5 rounded-full ring-1 ring-white" />
+              )) || <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-5" />}
+            </div>
             <span className="truncate">{task.assignedToName}</span>
             <span>·</span>
             <span>{formatTaskDate(task.dueDate)}</span>
@@ -1105,7 +1123,16 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     <td className="cursor-pointer px-4 py-4 font-semibold" onClick={() => setSelected(task)}>{task.title}<p className="mt-1 line-clamp-1 text-xs font-normal text-black/45">{task.description}</p></td>
                     <td className="px-4 py-4"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${statusClasses(task.status)}`}>{statusLabel(task.status)}</span></td>
                     <td className="px-4 py-4"><Badge tone={priorityTone(task.priority)}>{task.priority}</Badge></td>
-                    <td className="px-4 py-4"><span className="inline-flex items-center gap-2"><Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-7" /> {task.assignedToName}</span></td>
+                    <td className="px-4 py-4">
+                      <span className="inline-flex items-center gap-2">
+                        <div className="flex -space-x-1.5 overflow-hidden">
+                          {task.assignees?.map((assignee) => (
+                            <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-7 rounded-full ring-2 ring-white" />
+                          )) || <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-7" />}
+                        </div>
+                        <span className="truncate max-w-[150px]">{task.assignedToName}</span>
+                      </span>
+                    </td>
                     <td className="px-4 py-4">{formatCategoryLabel(task.category)}</td>
                     <td className="px-4 py-4">{formatShortDateTime(task.dueDate)}</td>
                     <td className="px-4 py-4">{task.locationName}</td>
@@ -1156,7 +1183,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                       </div>
                       <div className="mt-4 flex items-center justify-between gap-3 text-xs text-black/45">
                         <span className="inline-flex min-w-0 items-center gap-2">
-                          <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-6" />
+                          <div className="flex -space-x-1.5 overflow-hidden">
+                            {task.assignees?.map((assignee) => (
+                              <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-6 rounded-full ring-2 ring-white" />
+                            )) || <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-6" />}
+                          </div>
                           <span className="truncate">{task.assignedToName}</span>
                         </span>
                         <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" /> {formatTaskDate(task.dueDate)}</span>
@@ -1684,15 +1715,38 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-2"><span className="text-sm font-semibold">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
                 <label className="space-y-2"><span className="text-sm font-semibold">Priorita</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
-                <label className="space-y-2">
-                  <span className="text-sm font-semibold">Assegnato a</span>
-                  <div className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white px-3 py-2">
-                    {selectedWorker ? <Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} className="size-10" /> : null}
-                    <Select className="border-0 bg-transparent px-0 shadow-none focus:ring-0" value={form.assignedToId} onChange={(event) => setForm({ ...form, assignedToId: event.target.value })}>
-                      {initialAllowedWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
-                    </Select>
+                <div className="space-y-2 md:col-span-2">
+                  <span className="text-sm font-semibold text-black/60 block">Assegnato a (Seleziona uno o più dipendenti)</span>
+                  <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-3.5 border border-black/10 rounded-2xl bg-[#FAF7F9]">
+                    {initialAllowedWorkers.map((worker) => {
+                      const isSelected = form.assignedToIds.includes(worker.id);
+                      return (
+                        <button
+                          key={worker.id}
+                          type="button"
+                          onClick={() => {
+                            const newIds = isSelected
+                              ? form.assignedToIds.filter((id) => id !== worker.id)
+                              : [...form.assignedToIds, worker.id];
+                            setForm({ 
+                              ...form, 
+                              assignedToIds: newIds, 
+                              assignedToId: newIds[0] ?? "" 
+                            });
+                          }}
+                          className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all shadow-sm ${
+                            isSelected 
+                              ? "bg-paradise-pink text-black ring-2 ring-paradise-pink/50 scale-[1.03]" 
+                              : "bg-white text-black/60 hover:bg-[#FAF7F9] hover:text-black ring-1 ring-black/5"
+                          }`}
+                        >
+                          <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-6" />
+                          <span>{worker.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                </label>
+                </div>
                 <label className="space-y-2">
                   <span className="text-sm font-semibold">Categoria</span>
                   <Select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>

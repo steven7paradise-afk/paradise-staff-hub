@@ -8,3 +8,5 @@ node_modules
 prisma/*.db
 prisma/import_staff_officiale.sql
 APP STAFF/
+scratch/
+

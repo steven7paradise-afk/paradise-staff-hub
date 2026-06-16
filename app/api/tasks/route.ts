@@ -15,7 +15,11 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   const title = String(payload.title ?? "").trim();
   const description = String(payload.description ?? "").trim();
-  const assignedToId = String(payload.assignedToId ?? "");
+  
+  const workerIds = Array.isArray(payload.assignedToIds)
+    ? payload.assignedToIds.map(String).filter(Boolean)
+    : [String(payload.assignedToId ?? "")].filter(Boolean);
+
   const priority = String(payload.priority ?? "MEDIA").toUpperCase();
   const category = String(payload.category ?? "Operativa").trim() || "Operativa";
   const linkUrl = String(payload.linkUrl ?? "").trim();
@@ -25,13 +29,24 @@ export async function POST(request: NextRequest) {
     ? payload.checklist.map((item: unknown) => ({ text: String(item).trim(), done: false })).filter((item: { text: string; done: boolean }) => item.text)
     : [];
   const dueDate = payload.dueDate ? new Date(String(payload.dueDate)) : null;
-  if (!title || !description || !assignedToId) {
-    return NextResponse.json({ error: "Inserisci titolo, descrizione e lavoratore." }, { status: 400 });
+
+  if (!title || !description || workerIds.length === 0) {
+    return NextResponse.json({ error: "Inserisci titolo, descrizione e almeno un lavoratore." }, { status: 400 });
   }
 
-  const worker = await prisma.user.findFirst({ where: { id: assignedToId, active: true, role: { not: "SUPER_ADMIN" } } });
-  if (!worker?.sede_id) return NextResponse.json({ error: "Lavoratore senza salone." }, { status: 400 });
-  if ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && session.user.sedeId !== worker.sede_id) {
+  const workers = await prisma.user.findMany({
+    where: { id: { in: workerIds }, active: true, role: { not: "SUPER_ADMIN" } }
+  });
+  if (workers.length === 0) {
+    return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
+  }
+
+  const firstLocationId = workers[0]?.sede_id;
+  if (!firstLocationId) {
+    return NextResponse.json({ error: "I lavoratori selezionati devono essere assegnati a un salone." }, { status: 400 });
+  }
+  
+  if ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && session.user.sedeId !== firstLocationId) {
     return NextResponse.json({ error: "Puoi assegnare task solo al tuo salone." }, { status: 403 });
   }
 
@@ -45,21 +60,26 @@ export async function POST(request: NextRequest) {
       link_url: linkUrl || null,
       attachment_name: attachmentName || null,
       photo_url: photoUrl || null,
-      assigned_to_id: assignedToId,
-      location_id: worker.sede_id,
+      assignees: {
+        connect: workers.map(w => ({ id: w.id }))
+      },
+      location_id: firstLocationId,
       created_by_id: session.user.id,
       due_date: dueDate && !Number.isNaN(dueDate.valueOf()) ? dueDate : null,
     },
-    include: { assigned_to: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
+    include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
   });
-  await createNotification({
-      user_id: assignedToId,
+
+  await Promise.all(workers.map(worker => 
+    createNotification({
+      user_id: worker.id,
       title: `Nuova task: ${title}`,
       message: description,
       type: "TASK",
       action_url: "/tasks",
       read: false,
-  });
+    }).catch(err => console.error("Notification failed for", worker.id, err))
+  ));
 
   return NextResponse.json(task);
 }
@@ -94,14 +114,17 @@ export async function PATCH(request: NextRequest) {
     : [];
   const isNotesUpdate = notes !== null && !status && !evaluation;
   const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
+  
   if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !["ACTIVE", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
   }
 
-  const task = await prisma.staffTask.findUnique({ where: { id }, include: { assigned_to: true, created_by: true } });
+  const task = await prisma.staffTask.findUnique({ where: { id }, include: { assignees: true, created_by: true } });
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
   const isEvaluation = ["LIKE", "OK", "DISLIKE"].includes(evaluation) && !status;
-  const canEdit = isEvaluation ? managerRoles.has(session.user.role) : managerRoles.has(session.user.role) || task.assigned_to_id === session.user.id || task.created_by_id === session.user.id;
+  
+  const isAssignee = task.assignees.some(u => u.id === session.user.id);
+  const canEdit = isEvaluation ? managerRoles.has(session.user.role) : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
   if (!canEdit || ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && session.user.sedeId !== task.location_id)) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
@@ -123,13 +146,14 @@ export async function PATCH(request: NextRequest) {
           completion_links: status === "COMPLETED" ? completionLinks : task.completion_links,
           completion_files: status === "COMPLETED" ? completionFiles : task.completion_files,
         },
-    include: { assigned_to: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
+    include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
   });
+
   if (status === "COMPLETED" && task.created_by_id !== session.user.id) {
     await createNotification({
         user_id: task.created_by_id,
         title: `Task completata: ${task.title}`,
-        message: `${task.assigned_to.name} ha completato la task in ${Math.floor((updated.timer_seconds ?? 0) / 60)} min.`,
+        message: `${session.user.name} ha completato la task in ${Math.floor((updated.timer_seconds ?? 0) / 60)} min.`,
         type: "TASK",
         action_url: "/tasks",
     });
@@ -147,7 +171,11 @@ export async function PUT(request: NextRequest) {
   const id = String(payload.id ?? "");
   const title = String(payload.title ?? "").trim();
   const description = String(payload.description ?? "").trim();
-  const assignedToId = String(payload.assignedToId ?? "");
+  
+  const workerIds = Array.isArray(payload.assignedToIds)
+    ? payload.assignedToIds.map(String).filter(Boolean)
+    : [String(payload.assignedToId ?? "")].filter(Boolean);
+
   const priority = String(payload.priority ?? "MEDIA").toUpperCase();
   const category = String(payload.category ?? "Operativa").trim() || "Operativa";
   const linkUrl = String(payload.linkUrl ?? "").trim();
@@ -155,16 +183,26 @@ export async function PUT(request: NextRequest) {
   const photoUrl = String(payload.photoUrl ?? "").trim();
   const dueDate = payload.dueDate ? new Date(String(payload.dueDate)) : null;
 
-  if (!id || !title || !description || !assignedToId) {
-    return NextResponse.json({ error: "Inserisci titolo, descrizione e lavoratore." }, { status: 400 });
+  if (!id || !title || !description || workerIds.length === 0) {
+    return NextResponse.json({ error: "Inserisci titolo, descrizione e almeno un lavoratore." }, { status: 400 });
   }
 
-  const task = await prisma.staffTask.findUnique({ where: { id }, include: { assigned_to: true } });
+  const task = await prisma.staffTask.findUnique({ where: { id }, include: { assignees: true } });
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
 
-  const worker = await prisma.user.findFirst({ where: { id: assignedToId, active: true, role: { not: "SUPER_ADMIN" } } });
-  if (!worker?.sede_id) return NextResponse.json({ error: "Lavoratore senza salone." }, { status: 400 });
-  if ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && (session.user.sedeId !== task.location_id || session.user.sedeId !== worker.sede_id)) {
+  const workers = await prisma.user.findMany({
+    where: { id: { in: workerIds }, active: true, role: { not: "SUPER_ADMIN" } }
+  });
+  if (workers.length === 0) {
+    return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
+  }
+
+  const firstLocationId = workers[0]?.sede_id;
+  if (!firstLocationId) {
+    return NextResponse.json({ error: "Lavoratori senza salone." }, { status: 400 });
+  }
+  
+  if ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && (session.user.sedeId !== task.location_id || session.user.sedeId !== firstLocationId)) {
     return NextResponse.json({ error: "Puoi modificare task solo nel tuo salone." }, { status: 403 });
   }
 
@@ -187,23 +225,28 @@ export async function PUT(request: NextRequest) {
       link_url: linkUrl || null,
       attachment_name: attachmentName || null,
       photo_url: photoUrl || null,
-      assigned_to_id: assignedToId,
-      location_id: worker.sede_id,
+      assignees: {
+        set: workers.map(w => ({ id: w.id }))
+      },
+      location_id: firstLocationId,
       due_date: dueDate && !Number.isNaN(dueDate.valueOf()) ? dueDate : null,
     },
-    include: { assigned_to: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
+    include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
   });
 
-  if (task.assigned_to_id !== assignedToId) {
-    await createNotification({
-      user_id: assignedToId,
+  const existingAssigneeIds = new Set(task.assignees.map(a => a.id));
+  const newWorkers = workers.filter(w => !existingAssigneeIds.has(w.id));
+  
+  await Promise.all(newWorkers.map(worker =>
+    createNotification({
+      user_id: worker.id,
       title: `Task assegnata: ${title}`,
       message: description,
       type: "TASK",
       action_url: "/tasks",
       read: false,
-    });
-  }
+    }).catch(err => console.error("Notification failed for", worker.id, err))
+  ));
 
   return NextResponse.json(updated);
 }

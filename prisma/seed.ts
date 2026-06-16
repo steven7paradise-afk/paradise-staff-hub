@@ -126,6 +126,90 @@ async function main() {
       uploaded_by: "u-super-admin",
     },
   });
+
+  const candidacyFields = [
+    {
+      id: "candidato_nome",
+      type: "text",
+      label: "NOME E COGNOME CANDIDATO",
+      required: true,
+      description: "Nome e cognome completi del candidato"
+    },
+    {
+      id: "candidato_email",
+      type: "text",
+      label: "EMAIL",
+      required: true,
+      description: "Indirizzo email di contatto"
+    },
+    {
+      id: "candidato_telefono",
+      type: "text",
+      label: "TELEFONO / CELLULARE",
+      required: true,
+      description: "Numero di telefono del candidato"
+    },
+    {
+      id: "candidato_nascita",
+      type: "date",
+      label: "DATA DI NASCITA",
+      required: false,
+      description: "Data di nascita del candidato"
+    },
+    {
+      id: "candidato_ruolo",
+      type: "select",
+      label: "RUOLO DESIDERATO / PROFESSIONE",
+      required: true,
+      options: [
+        "Estetista",
+        "Onicotecnica",
+        "Receptionist",
+        "Lashemaker",
+        "Apprendista Estetista",
+        "Massaggiatrice",
+        "Store Manager",
+        "Responsabile",
+        "Altro"
+      ],
+      description: "Seleziona la mansione o il ruolo principale"
+    },
+    {
+      id: "candidato_note",
+      type: "textarea",
+      label: "NOTE E COMMENTI",
+      required: false,
+      description: "Eventuali note aggiuntive sulla candidatura"
+    }
+  ];
+
+  const existingCandidatura = await prisma.serviceForm.findFirst({
+    where: { name: { equals: "CANDIDATURA", mode: "insensitive" } },
+  });
+
+  if (existingCandidatura) {
+    await prisma.serviceForm.update({
+      where: { id: existingCandidatura.id },
+      data: {
+        active: true,
+        allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+        fields: candidacyFields,
+      },
+    });
+  } else {
+    await prisma.serviceForm.create({
+      data: {
+        name: "CANDIDATURA",
+        description: "Registra una nuova candidatura o compila i dettagli di un potenziale dipendente.",
+        category: "Generale",
+        icon: "UserPlus",
+        active: true,
+        allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+        allowed_location_ids: [],
+        fields: candidacyFields,
+      },
+    });
+  }
 }
 
 main()
