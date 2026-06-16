@@ -149,7 +149,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                   { href: "/dashboard", label: "Home", iconName: "Home" },
                   { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
                   { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
-                  { href: "/dashboard", label: "Timbrature", iconName: "Clock3" },
                   { href: "/documents", label: "Documenti", iconName: "FileText" },
                   ...(servicePageNum === 2
                     ? [{ href: "/tasks", label: "TASK", iconName: "CheckSquare" }]
