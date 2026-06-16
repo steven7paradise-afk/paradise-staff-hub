@@ -89,7 +89,7 @@ export function ClientProfile({
     { label: "Nome e Cognome", value: user.name, icon: User },
     { label: "Email di Servizio", value: user.email, icon: Mail },
     { label: "Data di Nascita", value: user.birthDateLabel, icon: CalendarDays },
-    { label: "Codice Fiscale", value: user.fiscalCode, icon: Fingerprint },
+    { label: "Codice", value: user.fiscalCode, icon: Fingerprint },
     { label: "Inizio Contratto", value: user.contractStartLabel, icon: Briefcase },
     { label: "Scadenza Contratto", value: user.contractEndLabel, icon: ShieldAlert },
     { label: "Salone Primario", value: user.locationName, icon: MapPin },

@@ -680,7 +680,27 @@ export function StaffDirectory({
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
+                      <Field 
+                        value={editForm.fiscalCode || ""}
+                        onChange={(e) => setEditForm(prev => prev ? { ...prev, fiscalCode: e.target.value } : null)}
+                        placeholder="Codice..."
+                      />
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
+                      <Field 
+                        type="date"
+                        value={editForm.birthDate}
+                        onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data Inizio Contratto</span>
                       <Field 
@@ -696,15 +716,6 @@ export function StaffDirectory({
                         type="date"
                         value={editForm.contractEnd}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
-                      />
-                    </label>
-
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
-                      <Field 
-                        type="date"
-                        value={editForm.birthDate}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
                       />
                     </label>
                   </div>
@@ -833,7 +844,7 @@ export function StaffDirectory({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Codice Fiscale</span>
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Codice</span>
                       <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200">{selectedEmployee.fiscalCode || "Non inserito"}</span>
                     </div>
 
@@ -1039,11 +1050,11 @@ export function StaffDirectory({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice Fiscale</span>
+                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
                   <Field 
                     value={newEmployeeForm.fiscalCode || ""}
                     onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, fiscalCode: e.target.value } : null)}
-                    placeholder="CF..."
+                    placeholder="Codice..."
                   />
                 </label>
                 <label className="space-y-1">

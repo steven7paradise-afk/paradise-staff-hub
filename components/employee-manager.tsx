@@ -242,8 +242,8 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
               </label>
 
               <label className="space-y-1.5">
-                <span className="text-xs font-bold tracking-wide uppercase text-black/55">Codice Fiscale</span>
-                <Field value={editing.fiscalCode} onChange={(event) => updateDraft("fiscalCode", event.target.value.toUpperCase())} placeholder="XXXYYYZZZ..." />
+                <span className="text-xs font-bold tracking-wide uppercase text-black/55">Codice</span>
+                <Field value={editing.fiscalCode} onChange={(event) => updateDraft("fiscalCode", event.target.value.toUpperCase())} placeholder="Codice..." />
               </label>
 
               {/* Contract dates */}
