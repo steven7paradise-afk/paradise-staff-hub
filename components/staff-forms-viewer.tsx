@@ -229,6 +229,14 @@ export function StaffFormsViewer({
     formData.append("formId", selectedForm.id);
 
     const answersPayload = { ...answers };
+    // Replace "Altro" select options with the custom text value typed in the specified input
+    Object.keys(answersPayload).forEach((key) => {
+      if (answersPayload[key] === "Altro" && answersPayload[key + "_altro"]) {
+        answersPayload[key] = answersPayload[key + "_altro"];
+        delete answersPayload[key + "_altro"];
+      }
+    });
+
     const isGroupCourse = selectedForm.name.toUpperCase().includes("CORSISTI") &&
       Object.entries(answers).some(([key, val]) => {
         const field = selectedForm.fields.find(f => f.id === key);
@@ -709,17 +717,29 @@ export function StaffFormsViewer({
                       )}
 
                       {field.type === "select" && (
-                        <select
-                          required={field.required}
-                          value={answers[field.id] || ""}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
-                        >
-                          <option value="" className="bg-neutral-800 text-white">Seleziona un'opzione...</option>
-                          {field.options?.map((opt) => (
-                            <option key={opt} value={opt} className="bg-neutral-800 text-white">{opt}</option>
-                          ))}
-                        </select>
+                        <div className="space-y-2 w-full">
+                          <select
+                            required={field.required}
+                            value={answers[field.id] || ""}
+                            onChange={(e) => handleTextChange(field.id, e.target.value)}
+                            className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                          >
+                            <option value="" className="bg-neutral-800 text-white">Seleziona un'opzione...</option>
+                            {field.options?.map((opt) => (
+                              <option key={opt} value={opt} className="bg-neutral-800 text-white">{opt}</option>
+                            ))}
+                          </select>
+                          {answers[field.id] === "Altro" && (
+                            <input
+                              type="text"
+                              required={field.required}
+                              placeholder="Specifica ruolo..."
+                              value={answers[field.id + "_altro"] || ""}
+                              onChange={(e) => handleTextChange(field.id + "_altro", e.target.value)}
+                              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
+                            />
+                          )}
+                        </div>
                       )}
 
                       {field.type === "money" && (

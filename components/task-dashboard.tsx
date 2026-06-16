@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -35,6 +35,13 @@ import { cn } from "@/lib/utils";
 type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null };
 type ChecklistItem = { text: string; done: boolean };
 type CompletionFile = { name: string; url?: string | null };
+type FreeNoteBlock =
+  | { type: "title"; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "text"; text: string }
+  | { type: "image"; name: string; url: string }
+  | { type: "file"; name: string; url?: string | null }
+  | { type: "link"; url: string };
 type Task = {
   id: string;
   title: string;
@@ -222,6 +229,71 @@ function formatTimer(seconds: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
+function parseFreeNotes(value?: string | null): FreeNoteBlock[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.flatMap((block): FreeNoteBlock[] => {
+        if (!block || typeof block !== "object") return [];
+        const item = block as Record<string, unknown>;
+        if (item.type === "title" && typeof item.text === "string") return [{ type: "title", text: item.text }];
+        if ((item.type === "paragraph" || item.type === "text") && typeof item.text === "string") return [{ type: "paragraph", text: item.text }];
+        if (item.type === "image" && typeof item.name === "string" && typeof item.url === "string") return [{ type: "image", name: item.name, url: item.url }];
+        if (item.type === "file" && typeof item.name === "string") return [{ type: "file", name: item.name, url: item.url ? String(item.url) : null }];
+        if (item.type === "link" && typeof item.url === "string") return [{ type: "link", url: item.url }];
+        return [];
+      });
+    }
+  } catch {
+    return [{ type: "paragraph", text: value }];
+  }
+  return [];
+}
+
+function serializeFreeNotes(blocks: FreeNoteBlock[]) {
+  return JSON.stringify(blocks);
+}
+
+function normalizeFreeNoteLink(value: string) {
+  const clean = value.replace(/[),.;!?]+$/g, "");
+  return clean.startsWith("http://") || clean.startsWith("https://") ? clean : `https://${clean}`;
+}
+
+function extractFreeNoteLinks(value: string) {
+  const matches = value.match(/https?:\/\/[^\s]+|www\.[^\s]+/gi) ?? [];
+  return Array.from(new Set(matches.map(normalizeFreeNoteLink)));
+}
+
+function formatFreeNoteLinkLabel(value: string) {
+  try {
+    const url = new URL(value);
+    const path = decodeURIComponent(url.pathname).replace(/^\/+/, "");
+    const shortPath = path.length > 42 ? `${path.slice(0, 42)}...` : path;
+    return shortPath ? `${url.hostname} · ${shortPath}` : url.hostname;
+  } catch {
+    return value.length > 56 ? `${value.slice(0, 56)}...` : value;
+  }
+}
+
+function workerMentionSlug(name: string) {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function getActiveMentionQuery(value: string) {
+  return value.match(/(^|\s)@([a-zA-Z0-9_]*)$/)?.[2] ?? null;
+}
+
+function extractMentionedWorkers(value: string, workers: Worker[]) {
+  const tags = Array.from(value.matchAll(/@([a-zA-Z0-9_]+)/g)).map((match) => match[1].toLowerCase());
+  if (tags.length === 0) return [];
+  return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
+}
+
 export function TaskDashboard({ role, userId, userName, workers, categories: initialCategories, initialTasks }: { role: Role; userId: string; userName: string; workers: Worker[]; categories: string[]; initialTasks: Task[] }) {
   const canAssign = role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   
@@ -254,6 +326,10 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [completion, setCompletion] = useState({ note: "", link: "", files: [] as CompletionFile[] });
+  const [freeNoteBlocks, setFreeNoteBlocks] = useState<FreeNoteBlock[]>([]);
+  const [freeNoteStatus, setFreeNoteStatus] = useState("");
+  const freeNoteSavedJson = useRef("");
+  const freeNoteSaveTimer = useRef<number | null>(null);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -457,10 +533,58 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setForm((current) => ({ ...current, attachmentName: file.name }));
   }
 
+  async function attachDescriptionImage(file: File | undefined) {
+    if (!selected || !file) return;
+    const dataUrl = await fileToDataUrl(file);
+    const response = await fetch("/api/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: selected.id, attachmentName: file.name, photoUrl: dataUrl }),
+    });
+    if (!response.ok) return;
+    const mapped = mapApiTask(await response.json());
+    setSelected(mapped);
+    setTasks((current) => current.map((task) => task.id === mapped.id ? mapped : task));
+  }
+
   useEffect(() => {
     setTimerRunning(false);
     setTimerPaused(false);
+    const blocks = parseFreeNotes(selected?.notes);
+    const json = serializeFreeNotes(blocks);
+    freeNoteSavedJson.current = json;
+    setFreeNoteBlocks(blocks);
+    setFreeNoteStatus("");
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const json = serializeFreeNotes(freeNoteBlocks);
+    if (json === freeNoteSavedJson.current) return;
+
+    if (freeNoteSaveTimer.current) window.clearTimeout(freeNoteSaveTimer.current);
+    setFreeNoteStatus("Salvataggio...");
+    freeNoteSaveTimer.current = window.setTimeout(async () => {
+      const response = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selected.id, notes: json }),
+      });
+      if (!response.ok) {
+        setFreeNoteStatus("Errore salvataggio");
+        return;
+      }
+      const mapped = mapApiTask(await response.json());
+      freeNoteSavedJson.current = json;
+      setSelected((current) => current?.id === mapped.id ? { ...mapped, notes: json } : current);
+      setTasks((current) => current.map((task) => task.id === mapped.id ? { ...mapped, notes: json } : task));
+      setFreeNoteStatus("Salvato");
+    }, 700);
+
+    return () => {
+      if (freeNoteSaveTimer.current) window.clearTimeout(freeNoteSaveTimer.current);
+    };
+  }, [freeNoteBlocks, selected?.id]);
 
   useEffect(() => {
     if (!selected || selected.status !== "ACTIVE" || !timerRunning || timerPaused) return;
@@ -554,6 +678,72 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setCompletion((current) => ({ ...current, files: next }));
   }
 
+  function addFreeNoteBlock(type: "title" | "paragraph") {
+    setFreeNoteBlocks((current) => [...current, { type, text: "" }]);
+  }
+
+  function updateFreeNoteBlock(index: number, block: FreeNoteBlock) {
+    setFreeNoteBlocks((current) => current.map((item, itemIndex) => itemIndex === index ? block : item));
+  }
+
+  function removeFreeNoteBlock(index: number) {
+    setFreeNoteBlocks((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function moveFreeNoteBlock(index: number, direction: -1 | 1) {
+    setFreeNoteBlocks((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  }
+
+  function insertFreeNoteMention(index: number, worker: Worker) {
+    setFreeNoteBlocks((current) => current.map((item, itemIndex) => {
+      if (itemIndex !== index || (item.type !== "paragraph" && item.type !== "text")) return item;
+      const text = item.text.replace(/(^|\s)@([a-zA-Z0-9_]*)$/, (_match, prefix) => `${prefix}@${workerMentionSlug(worker.name)} `);
+      return { type: "paragraph", text };
+    }));
+  }
+
+  async function attachFreeNoteFiles(files: FileList | null) {
+    const next: FreeNoteBlock[] = [];
+    for (const file of Array.from(files ?? [])) {
+      const url = await fileToDataUrl(file);
+      if (file.type.startsWith("image/")) {
+        next.push({ type: "image", name: file.name, url });
+      } else {
+        next.push({ type: "file", name: file.name, url });
+      }
+    }
+    setFreeNoteBlocks((current) => [...current, ...next]);
+  }
+
+  async function pasteFreeNoteImages(index: number, clipboardData: DataTransfer) {
+    const files = [
+      ...Array.from(clipboardData.files).filter((file) => file.type.startsWith("image/")),
+      ...Array.from(clipboardData.items)
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => Boolean(file)),
+    ];
+    if (files.length === 0) return false;
+    const next: FreeNoteBlock[] = [];
+    for (const file of files) {
+      next.push({ type: "image", name: file.name || "immagine-incollata.png", url: await fileToDataUrl(file) });
+    }
+    setFreeNoteBlocks((current) => [
+      ...current.slice(0, index + 1),
+      ...next,
+      ...current.slice(index + 1),
+    ]);
+    return true;
+  }
+
+
   async function saveComment() {
     if (!selected || !commentText.trim()) return;
     const isEdit = Boolean(editingCommentId);
@@ -609,6 +799,23 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           >
             Apri allegato
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  function ImagePreviewBlock({ name, url }: { name: string; url: string }) {
+    return (
+      <div className="overflow-hidden rounded-[22px] border border-black/10 bg-[#FAF7F9]">
+        <button type="button" onClick={() => setAttachmentPreview({ name, url, kind: "image" })} className="block w-full bg-white">
+          <img src={url} alt={name} className="max-h-[28rem] w-full object-contain" />
+        </button>
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-black/70">{name}</p>
+            <p className="text-xs text-black/40">Immagine in anteprima</p>
+          </div>
+          <Button type="button" variant="soft" onClick={() => setAttachmentPreview({ name, url, kind: "image" })}>Apri</Button>
         </div>
       </div>
     );
@@ -804,12 +1011,12 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           </button>
           ) : null}
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <Card className="bg-white">
+            <Card className="overflow-hidden bg-white">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-2xl font-semibold">Le mie task</h2>
                 <button type="button" onClick={() => setView("LIST")} className="text-sm font-bold text-[#C66170]">Vedi lista</button>
               </div>
-              <div className="grid gap-3">
+              <div className="grid max-h-[62dvh] min-w-0 gap-3 overflow-y-auto pr-1">
                 {todayTasks.length === 0 ? <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/45">Nessuna task di oggi ancora aperta.</p> : null}
                 {todayTasks.slice(0, 5).map((task) => <TaskRow key={task.id} task={task} />)}
               </div>
@@ -843,16 +1050,16 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 ))}
               </div>
             </Card>
-            <Card className="bg-white">
+            <Card className="overflow-hidden bg-white">
               <h2 className="text-2xl font-semibold">Commenti recenti</h2>
-              <div className="mt-5 grid gap-3">
+              <div className="mt-5 grid min-w-0 gap-3">
                 {recentComments.length === 0 ? <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/45">Nessun commento recente.</p> : null}
                 {recentComments.map((comment) => (
-                  <button key={comment.id} onClick={() => setSelected(personalTasks.find((task) => task.id === comment.taskId) ?? null)} className="flex items-start gap-3 rounded-2xl border border-black/5 p-4 text-left">
-                    <Avatar name={comment.userName} photoUrl={comment.userPhoto} />
-                    <div className="min-w-0">
-                      <p className="font-semibold">{comment.userName}</p>
-                      <p className="truncate text-sm text-black/55">{comment.taskTitle}: {comment.message}</p>
+                  <button key={comment.id} onClick={() => setSelected(personalTasks.find((task) => task.id === comment.taskId) ?? null)} className="flex min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-black/5 p-4 text-left">
+                    <Avatar name={comment.userName} photoUrl={comment.userPhoto} className="size-9" />
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="truncate font-semibold">{comment.userName}</p>
+                      <p className="line-clamp-2 break-words text-sm leading-5 text-black/55">{comment.taskTitle}: {comment.message}</p>
                     </div>
                   </button>
                 ))}
@@ -1047,7 +1254,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 backdrop-blur-sm md:block md:overflow-y-auto md:bg-[#F8F3F6] md:p-4">
-          <div className="max-h-[92dvh] w-full space-y-5 overflow-y-auto rounded-t-[36px] bg-[#F8F3F6] p-4 pb-24 shadow-2xl md:mx-auto md:max-h-none md:max-w-3xl md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-24 md:shadow-none">
+          <div className="max-h-[92dvh] w-full space-y-5 overflow-y-auto rounded-t-[36px] bg-[#F8F3F6] p-4 pb-32 shadow-2xl md:mx-auto md:max-h-none md:max-w-5xl md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-32 md:shadow-none">
             <div className="mx-auto mb-2 h-1.5 w-14 rounded-full bg-black/15 md:hidden" />
             <div className="flex items-center justify-between pt-2 md:pt-4">
               <button onClick={() => setSelected(null)} className="grid size-12 place-items-center rounded-2xl bg-white shadow-sm"><ArrowLeft className="size-5" /></button>
@@ -1057,14 +1264,15 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 </button>
               ) : null}
             </div>
-            <Card className="bg-white">
+            <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
+            <div className="space-y-5 xl:sticky xl:top-4">
+            <Card className="bg-white p-5">
               <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
-              <h1 className="mt-5 text-4xl font-semibold tracking-tight">{selected.title}</h1>
-              <p className="mt-4 text-lg leading-8 text-black/55">{selected.description}</p>
-              <div className="mt-6 divide-y divide-black/5">
+              <h1 className="mt-4 text-2xl font-semibold tracking-tight">{selected.title}</h1>
+              <p className="mt-3 line-clamp-4 text-sm leading-6 text-black/55">{selected.description}</p>
+              <div className="mt-5 grid gap-2">
               {[
                   { icon: UserRound, label: "Assegnata da", value: selected.createdByName, photo: selected.createdByPhoto },
-                  { icon: CalendarDays, label: "Data di creazione", value: formatFullDate(selected.createdAt) },
                   { icon: CalendarDays, label: "Scadenza", value: formatFullDate(selected.dueDate) },
                   { icon: Flag, label: "Priorita", value: selected.priority },
                   { icon: Tag, label: "Categoria", value: formatCategoryLabel(selected.category) },
@@ -1072,27 +1280,212 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 ].map((row) => {
                   const Icon = row.icon;
                   return (
-                    <div key={row.label} className="flex items-center gap-4 py-4">
-                      {"photo" in row ? <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-9" /> : <Icon className="size-5 text-black/55" />}
-                      <div className="flex-1">
-                        <p className="text-sm text-black/45">{row.label}</p>
-                        <p className="font-semibold">{row.value}</p>
+                    <div key={row.label} className="flex items-center gap-3 rounded-2xl bg-[#FAF7F9] px-3 py-2.5">
+                      {"photo" in row ? <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-8" /> : <Icon className="size-4 text-black/45" />}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-black/40">{row.label}</p>
+                        <p className="truncate text-sm font-semibold">{row.value}</p>
                       </div>
-                      <ChevronRight className="size-5 text-black/25" />
                     </div>
                   );
                 })}
               </div>
             </Card>
-            <Card className="bg-white">
-              <h2 className="font-semibold">Descrizione</h2>
-              <p className="mt-4 leading-7 text-black/55">{selected.description}</p>
+            <Card className="bg-white p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-semibold">Descrizione</h2>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
+                  <FileImage className="size-4" /> Immagine
+                  <input type="file" accept="image/*" className="hidden" onChange={(event) => { void attachDescriptionImage(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+                </label>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-black/55">{selected.description}</p>
               {selected.photoUrl || selected.attachmentUrl || selected.attachmentName ? (
-                <div className="mt-5">
-                  <AttachmentCard name={selected.attachmentName ?? "Allegato task"} url={selected.photoUrl ?? selected.attachmentUrl} />
+                <div className="mt-4">
+                  {selected.photoUrl ? (
+                    <ImagePreviewBlock name={selected.attachmentName ?? "Immagine descrizione"} url={selected.photoUrl} />
+                  ) : (
+                    <AttachmentCard name={selected.attachmentName ?? "Allegato task"} url={selected.attachmentUrl} />
+                  )}
                 </div>
               ) : null}
               {selected.linkUrl ? <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]" href={selected.linkUrl} target="_blank"><LinkIcon className="size-4" /> Apri link</a> : null}
+            </Card>
+            </div>
+            <div className="min-w-0 space-y-5">
+            <Card className="overflow-hidden bg-white">
+              <div className="mb-4 flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="font-semibold">Nota operativa</h2>
+                  <p className="mt-1 text-xs text-black/45">Scrivi, incolla link o immagini, allega PDF/file e tagga il personale con @nome.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="dark">{freeNoteBlocks.length} blocchi</Badge>
+                  <Badge tone={freeNoteStatus === "Errore salvataggio" ? "pink" : "gold"}>{freeNoteStatus || "Autosave attivo"}</Badge>
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-[22px] border border-black/5 bg-[#FAF7F9] p-2">
+                <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => addFreeNoteBlock("title")} className="inline-flex items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
+                  <Pencil className="size-4" /> Titolo
+                </button>
+                <button type="button" onClick={() => addFreeNoteBlock("paragraph")} className="inline-flex items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
+                  <ListChecks className="size-4" /> Paragrafo
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
+                  <FileImage className="size-4" /> Immagine
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void attachFreeNoteFiles(event.target.files); event.currentTarget.value = ""; }} />
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
+                  <Paperclip className="size-4" /> PDF/File
+                  <input type="file" accept="application/pdf,.pdf,*/*" multiple className="hidden" onChange={(event) => { void attachFreeNoteFiles(event.target.files); event.currentTarget.value = ""; }} />
+                </label>
+                </div>
+                <p className="mt-2 px-2 text-[11px] font-medium text-black/35">Suggerimento: incolla una foto con Ctrl+V dentro un paragrafo. I link diventano cliccabili automaticamente.</p>
+              </div>
+
+              <div className="grid min-w-0 gap-3">
+                {freeNoteBlocks.length === 0 ? (
+                  <button type="button" onClick={() => addFreeNoteBlock("paragraph")} className="rounded-[24px] border border-dashed border-black/15 bg-[#FAF7F9] p-8 text-center text-sm font-semibold text-black/45 transition hover:border-paradise-pink hover:text-[#C66170]">
+                    Aggiungi la prima nota operativa
+                  </button>
+                ) : null}
+                {freeNoteBlocks.map((block, index) => {
+                  if (block.type === "title") {
+                    return (
+                      <div key={`note-title-${index}`} className="group rounded-[22px] border border-black/10 bg-white p-3 transition focus-within:border-paradise-pink">
+                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
+                          <span>Titolo</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
+                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <input
+                            value={block.text}
+                            onChange={(event) => updateFreeNoteBlock(index, { ...block, text: event.target.value })}
+                            placeholder="Titolo"
+                            className="min-w-0 flex-1 bg-transparent text-2xl font-semibold outline-none placeholder:text-black/25"
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (block.type === "paragraph" || block.type === "text") {
+                    const detectedLinks = extractFreeNoteLinks(block.text);
+                    const mentionQuery = getActiveMentionQuery(block.text);
+                    const mentionSuggestions = mentionQuery === null
+                      ? []
+                      : workers
+                          .filter((worker) => {
+                            const query = mentionQuery.toLowerCase();
+                            return worker.name.toLowerCase().includes(query) || workerMentionSlug(worker.name).toLowerCase().includes(query);
+                          })
+                          .slice(0, 6);
+                    const mentionedWorkers = extractMentionedWorkers(block.text, workers);
+                    return (
+                      <div key={`note-paragraph-${index}`} className="group min-w-0 overflow-hidden rounded-[22px] border border-black/10 bg-white p-4 transition focus-within:border-paradise-pink">
+                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
+                          <span>Paragrafo</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
+                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <textarea
+                            value={block.text}
+                            onChange={(event) => updateFreeNoteBlock(index, { type: "paragraph", text: event.target.value })}
+                            onPaste={(event) => {
+                              const hasImage = Array.from(event.clipboardData.files).some((file) => file.type.startsWith("image/")) || Array.from(event.clipboardData.items).some((item) => item.kind === "file" && item.type.startsWith("image/"));
+                              if (!hasImage) return;
+                              event.preventDefault();
+                              void pasteFreeNoteImages(index, event.clipboardData);
+                            }}
+                            placeholder="Scrivi testo lungo, incolla link, tagga con @nome, incolla immagini..."
+                            wrap="soft"
+                            className="min-h-48 min-w-0 flex-1 resize-y overflow-x-hidden bg-transparent text-sm leading-7 outline-none placeholder:text-black/25"
+                          />
+                        </div>
+                        {mentionSuggestions.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2 rounded-2xl bg-[#FAF7F9] p-2">
+                            {mentionSuggestions.map((worker) => (
+                              <button
+                                key={worker.id}
+                                type="button"
+                                onClick={() => insertFreeNoteMention(index, worker)}
+                                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black/65 shadow-sm transition hover:text-[#C66170]"
+                              >
+                                <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-5" />
+                                @{workerMentionSlug(worker.name)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {mentionedWorkers.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {mentionedWorkers.map((worker) => (
+                              <span key={worker.id} className="inline-flex items-center gap-2 rounded-full bg-paradise-softPink px-3 py-1.5 text-xs font-bold text-[#C66170]">
+                                <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-5" />
+                                {worker.name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {detectedLinks.length > 0 ? (
+                          <div className="mt-4 grid min-w-0 gap-2 border-t border-black/5 pt-3">
+                            {detectedLinks.map((link) => (
+                              <a key={link} href={link} target="_blank" rel="noreferrer" title={link} className="inline-flex min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-2xl bg-[#F5F1FF] px-3 py-2 text-xs font-semibold text-[#8064D8]">
+                                <LinkIcon className="size-3.5 shrink-0" />
+                                <span className="min-w-0 truncate">{formatFreeNoteLinkLabel(link)}</span>
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  if (block.type === "image") {
+                    return (
+                      <div key={`note-image-${index}`} className="relative rounded-[22px] border border-black/10 bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
+                          <span>Immagine</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
+                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
+                          </div>
+                        </div>
+                        <ImagePreviewBlock name={block.name} url={block.url} />
+                      </div>
+                    );
+                  }
+                  if (block.type === "file") {
+                    return (
+                      <div key={`note-file-${index}`} className="relative rounded-[22px] border border-black/10 bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
+                          <span>File</span>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
+                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
+                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
+                          </div>
+                        </div>
+                        <AttachmentCard name={block.name} url={block.url} />
+                      </div>
+                    );
+                  }
+                  return (
+                    <a key={`note-link-${index}`} href={block.url} target="_blank" rel="noreferrer" title={block.url} className="inline-flex min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-2xl bg-[#F5F1FF] px-4 py-3 text-sm font-semibold text-[#8064D8]">
+                      <LinkIcon className="size-4 shrink-0" /> <span className="min-w-0 truncate">{formatFreeNoteLinkLabel(block.url)}</span>
+                    </a>
+                  );
+                })}
+              </div>
             </Card>
             {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
               <Card className="bg-white">
@@ -1188,7 +1581,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <Card className="bg-white"><p className="text-sm text-black/45">Tempo impiegato</p><p className="mt-2 text-3xl font-semibold tabular-nums">{formatTimer(selected.timerSeconds)}</p></Card>
             ) : null}
             {isCompletedTask(selected) ? null : (
-            <div className="sticky bottom-4 grid grid-cols-2 gap-3 rounded-[24px] bg-white p-3 shadow-lg">
+            <div className="sticky bottom-4 z-10 grid grid-cols-2 gap-3 rounded-[24px] border border-black/5 bg-white/95 p-3 shadow-xl backdrop-blur">
               {isNewTask(selected) ? (
                 <Button className="col-span-2" onClick={() => { setTimerRunning(true); setTimerPaused(false); void updateStatus(selected, "ACTIVE"); }}><Clock3 className="size-4" /> Inizia task</Button>
               ) : (
@@ -1199,6 +1592,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               )}
             </div>
             )}
+            </div>
+            </div>
           </div>
         </div>
       ) : null}

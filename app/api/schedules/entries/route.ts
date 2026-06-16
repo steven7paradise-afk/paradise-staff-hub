@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { deleteScheduleEventFromGoogleCalendar, syncScheduleEntryToGoogleCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 
 const planningRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
@@ -40,6 +41,20 @@ export async function PUT(request: NextRequest) {
         }
       }
 
+      const deleteFilters = data
+        .filter((item) => !item.categoryId)
+        .map((item) => ({
+          user_id: String(item.userId ?? ""),
+          date: new Date(String(item.date ?? "")),
+          location_id: item.locationId ? String(item.locationId) : null,
+        }));
+      const calendarEventsToDelete = deleteFilters.length
+        ? await prisma.scheduleEntry.findMany({
+            where: { OR: deleteFilters },
+            select: { google_calendar_event_id: true },
+          })
+        : [];
+
       const operations = data.map((item) => {
         const userId = String(item.userId ?? "");
         const categoryId = item.categoryId ? String(item.categoryId) : null;
@@ -61,8 +76,17 @@ export async function PUT(request: NextRequest) {
         });
       });
 
-      await prisma.$transaction(operations);
-      return NextResponse.json({ success: true, count: data.length });
+      const results = await prisma.$transaction(operations);
+      const upsertedEntryIds = results
+        .map((result) => (result && typeof result === "object" && "id" in result ? String(result.id) : null))
+        .filter((id): id is string => Boolean(id));
+      const calendarSync = await Promise.allSettled([
+        ...calendarEventsToDelete.map((entry) => deleteScheduleEventFromGoogleCalendar(entry.google_calendar_event_id)),
+        ...upsertedEntryIds.map((id) => syncScheduleEntryToGoogleCalendar(id)),
+      ]);
+      const calendarFailures = calendarSync.filter((result) => result.status === "rejected").length;
+
+      return NextResponse.json({ success: true, count: data.length, calendarSync: { attempted: calendarSync.length, failures: calendarFailures } });
     } catch (error: any) {
       return NextResponse.json({ error: error.message ?? "Errore nel salvataggio di massa." }, { status: 500 });
     }
@@ -95,8 +119,13 @@ export async function PUT(request: NextRequest) {
   }
 
   if (!categoryId) {
+    const existing = await prisma.scheduleEntry.findFirst({
+      where: { user_id: userId, date, location_id: locationId },
+      select: { google_calendar_event_id: true },
+    });
     await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date, location_id: locationId } });
-    return NextResponse.json({ removed: true });
+    const calendarSync = await deleteScheduleEventFromGoogleCalendar(existing?.google_calendar_event_id);
+    return NextResponse.json({ removed: true, calendarSync });
   }
 
   const category = await prisma.scheduleCategory.findUnique({ where: { id: categoryId } });
@@ -112,5 +141,6 @@ export async function PUT(request: NextRequest) {
     update: { category_id: categoryId, location_id: locationId, start_time: startTime, end_time: endTime },
     create: { user_id: userId, category_id: categoryId, location_id: locationId, date, start_time: startTime, end_time: endTime },
   });
-  return NextResponse.json(entry);
+  const calendarSync = await syncScheduleEntryToGoogleCalendar(entry.id);
+  return NextResponse.json({ ...entry, calendarSync });
 }

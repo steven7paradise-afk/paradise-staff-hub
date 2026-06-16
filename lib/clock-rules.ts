@@ -28,3 +28,39 @@ export function applyExitRounding(timestamp: Date, minutes: number) {
   const interval = minutes * 60 * 1000;
   return new Date(Math.floor(timestamp.getTime() / interval) * interval);
 }
+
+const halfHourMilliseconds = 30 * 60 * 1000;
+const entranceGraceMilliseconds = 5 * 60 * 1000;
+
+export function applyParadiseEntranceRounding(timestamp: Date) {
+  const remainder = timestamp.getTime() % halfHourMilliseconds;
+  if (remainder === 0) {
+    return { timestamp, usedGrace: false };
+  }
+
+  const base = timestamp.getTime() - remainder;
+  const rounded = remainder <= entranceGraceMilliseconds
+    ? base
+    : base + halfHourMilliseconds;
+
+  return {
+    timestamp: new Date(rounded),
+    usedGrace: remainder <= entranceGraceMilliseconds,
+  };
+}
+
+export function localDateKey(timestamp: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(timestamp);
+}
+
+export function localWeekRange(timestamp: Date) {
+  const localDate = localDateKey(timestamp);
+  const day = new Date(`${localDate}T00:00:00.000Z`);
+  const weekday = day.getUTCDay() || 7;
+  const start = new Date(day);
+  start.setUTCDate(day.getUTCDate() - weekday + 1);
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 7);
+
+  return { start, end };
+}

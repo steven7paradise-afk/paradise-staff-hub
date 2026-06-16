@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AttendanceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
-import { applyEntranceRounding, applyExitRounding, clockRuleKey, parseClockRule } from "@/lib/clock-rules";
+import { applyExitRounding, applyParadiseEntranceRounding, clockRuleKey, localWeekRange, parseClockRule } from "@/lib/clock-rules";
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
 import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
@@ -66,8 +66,11 @@ export async function POST(request: NextRequest) {
   const rule = parseClockRule(savedRule?.value);
 
   let timestamp = actualTimestamp;
-  if (type === "ENTRATA" && rule.entranceRoundingMinutes > 0) {
-    timestamp = applyEntranceRounding(actualTimestamp, rule.entranceRoundingMinutes);
+  let usedEntranceGrace = false;
+  if (type === "ENTRATA") {
+    const rounded = applyParadiseEntranceRounding(actualTimestamp);
+    timestamp = rounded.timestamp;
+    usedEntranceGrace = rounded.usedGrace;
   } else if (type === "USCITA" && rule.entranceRoundingMinutes > 0) {
     timestamp = applyExitRounding(actualTimestamp, rule.entranceRoundingMinutes);
   }
@@ -86,8 +89,8 @@ export async function POST(request: NextRequest) {
     second: "2-digit",
     timeZone: "Europe/Rome",
   }).format(actualTimestamp);
-  const roundedNote = type === "ENTRATA" && rule.entranceRoundingMinutes > 0 && actualTime !== time
-    ? `Ora rilevata ${actualTime}; arrotondamento entrata ${rule.entranceRoundingMinutes} min.`
+  const roundedNote = type === "ENTRATA" && actualTime !== time
+    ? `Ora rilevata ${actualTime}; arrotondamento entrata Paradise a ${time}${usedEntranceGrace ? "; tolleranza entrata usata" : ""}.`
     : type === "USCITA" && rule.entranceRoundingMinutes > 0 && actualTime !== time
     ? `Ora rilevata ${actualTime}; arrotondamento uscita ${rule.entranceRoundingMinutes} min.`
     : null;
@@ -112,6 +115,34 @@ export async function POST(request: NextRequest) {
     data: { last_used_at: actualTimestamp },
   });
 
+  if (type === "ENTRATA" && usedEntranceGrace) {
+    const { start, end } = localWeekRange(actualTimestamp);
+    const weeklyGraceCount = await prisma.attendanceLog.count({
+      where: {
+        user_id: user.id,
+        type: "ENTRATA",
+        date: { gte: start, lt: end },
+        note: { contains: "tolleranza entrata usata" },
+      },
+    });
+
+    if (weeklyGraceCount > 5) {
+      const admins = await prisma.user.findMany({
+        where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
+        select: { id: true },
+      });
+      await createNotifications(
+        admins.map((admin) => ({
+          user_id: admin.id,
+          title: "Tolleranze entrata superate",
+          message: `${user.name} ha usato ${weeklyGraceCount} tolleranze di entrata questa settimana. Ora rilevata ${actualTime}, registrata ${time}.`,
+          type: "TIMBRATURA",
+          action_url: "/attendance",
+        })),
+      ).catch((err) => console.error("Failed to send entrance grace notifications:", err));
+    }
+  }
+
   // Check break limit on RIENTRO and notify admins/superadmins
   if (type === "RIENTRO" && latestLog?.timestamp) {
     const breakDurationMs = actualTimestamp.getTime() - latestLog.timestamp.getTime();
@@ -134,16 +165,25 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await appendAttendanceToGoogleSheet({
-    date: new Intl.DateTimeFormat("it-IT").format(timestamp),
-    time,
-    employeeName: user.name,
-    employeeEmail: user.email,
-    locationName: logLocationName,
-    type,
-    deviceName: device.device_name,
-    note: storedNote,
-  });
+  if (type !== "PAUSA") {
+    let finalNote = storedNote;
+    if (type === "RIENTRO" && latestLog?.timestamp) {
+      const breakDurationMs = actualTimestamp.getTime() - latestLog.timestamp.getTime();
+      const breakDurationMins = Math.round(breakDurationMs / (1000 * 60));
+      const breakInfo = `Pausa durata: ${breakDurationMins} min`;
+      finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;
+    }
+    await appendAttendanceToGoogleSheet({
+      date: new Intl.DateTimeFormat("it-IT").format(timestamp),
+      time,
+      employeeName: user.name,
+      employeeEmail: user.email,
+      locationName: logLocationName,
+      type,
+      deviceName: device.device_name,
+      note: finalNote,
+    });
+  }
 
   return NextResponse.json({ id: log.id, type, time, adjusted: Boolean(roundedNote), actualTime });
 }

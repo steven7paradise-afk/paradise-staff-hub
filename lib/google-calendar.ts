@@ -1,8 +1,15 @@
 import { google } from "googleapis";
-import type { LeaveRequest, User } from "@prisma/client";
+import type { LeaveRequest, Location, ScheduleCategory, ScheduleEntry, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type LeaveRequestWithUser = LeaveRequest & { user: User };
+type ScheduleEntryForCalendar = ScheduleEntry & {
+  user: User;
+  category: ScheduleCategory;
+  location: Location | null;
+};
+
+const DEFAULT_CALENDAR_ID = "fee99b51672c8f5b5079181522a68a2f3a1e3791bd9af73c926d3feb109eab9d@group.calendar.google.com";
 
 function getPrivateKey() {
   if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
@@ -26,6 +33,155 @@ function eventDate(date: Date, time?: string | null) {
   return { dateTime: `${dateOnly(date)}T${time}:00`, timeZone: "Europe/Rome" };
 }
 
+async function resolveCalendarId() {
+  let calendarId = process.env.GOOGLE_CALENDAR_ID || DEFAULT_CALENDAR_ID;
+
+  const adminWithCalendar = await prisma.user.findFirst({
+    where: {
+      active: true,
+      role: { in: ["SUPER_ADMIN", "ADMIN"] },
+      google_calendar_sync: true,
+      google_calendar_id: { not: null },
+    },
+    select: { google_calendar_id: true },
+  });
+
+  if (adminWithCalendar?.google_calendar_id) {
+    calendarId = adminWithCalendar.google_calendar_id.trim();
+  }
+
+  return calendarId;
+}
+
+async function getCalendarClient() {
+  const calendarId = await resolveCalendarId();
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  if (!calendarId || !clientEmail || !privateKey) {
+    return {
+      skipped: true as const,
+      reason: `Google Calendar not configured. calendarId: ${calendarId ? "present" : "missing"}, clientEmail: ${clientEmail ? "present" : "missing"}, privateKey: ${privateKey ? "present" : "missing"}`,
+    };
+  }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/calendar.events"],
+  });
+
+  return {
+    skipped: false as const,
+    calendarId,
+    calendar: google.calendar({ version: "v3", auth }),
+  };
+}
+
+function scheduleColorId(category: ScheduleCategory) {
+  const code = category.code.toUpperCase();
+  const name = category.name.toLowerCase();
+
+  if (code === "P" || code === "PE" || name.includes("permesso")) return "3";
+  if (code === "F" || code === "FE" || name.includes("ferie")) return "7";
+  if (code === "R" || code === "RI" || name.includes("riposo")) return "10";
+  if (code === "M" || code === "MA" || code === "ML" || name.includes("malattia")) return "5";
+  if (code === "C" || name.includes("chiuso")) return "4";
+  if (code === "A" || name.includes("assenza")) return "6";
+  if (code === "ND" || name.includes("non lavora")) return "11";
+
+  return undefined;
+}
+
+function buildScheduleEvent(entry: ScheduleEntryForCalendar) {
+  const startTime = entry.start_time ?? entry.category.start_time;
+  const endTime = entry.end_time ?? entry.category.end_time;
+  const timeLabel = startTime && endTime ? ` ${startTime}-${endTime}` : "";
+  const salone = entry.location?.name ?? "Sede non specificata";
+
+  return {
+    summary: `${entry.category.name}${timeLabel} - ${entry.user.name}`,
+    description: [
+      `Dipendente: ${entry.user.name}`,
+      `Email: ${entry.user.email}`,
+      `Salone: ${salone}`,
+      `Categoria: ${entry.category.code} - ${entry.category.name}`,
+      entry.note ? `Note: ${entry.note}` : null,
+      "Creato automaticamente dal planning Paradise Staff Hub.",
+    ].filter(Boolean).join("\n"),
+    start: eventDate(entry.date, startTime),
+    end: endTime ? eventDate(entry.date, endTime) : eventDate(addDays(entry.date, 1)),
+    colorId: scheduleColorId(entry.category),
+  };
+}
+
+export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string) {
+  const entry = await prisma.scheduleEntry.findUnique({
+    where: { id: scheduleEntryId },
+    include: { user: true, category: true, location: true },
+  });
+
+  if (!entry) {
+    return { skipped: true, reason: "Schedule entry not found" };
+  }
+
+  const setup = await getCalendarClient();
+  if (setup.skipped) return setup;
+
+  const event = buildScheduleEvent(entry);
+
+  if (entry.google_calendar_event_id) {
+    try {
+      await setup.calendar.events.update({
+        calendarId: setup.calendarId,
+        eventId: entry.google_calendar_event_id,
+        requestBody: event,
+        sendUpdates: "none",
+      });
+      return { skipped: false, eventId: entry.google_calendar_event_id, updated: true };
+    } catch (error) {
+      console.warn("Schedule event update failed, re-inserting:", error);
+    }
+  }
+
+  const response = await setup.calendar.events.insert({
+    calendarId: setup.calendarId,
+    requestBody: event,
+    sendUpdates: "none",
+  });
+  const eventId = response.data.id;
+
+  if (eventId) {
+    await prisma.scheduleEntry.update({
+      where: { id: entry.id },
+      data: { google_calendar_event_id: eventId },
+    });
+  }
+
+  return { skipped: false, eventId, updated: false };
+}
+
+export async function deleteScheduleEventFromGoogleCalendar(eventId?: string | null) {
+  if (!eventId) {
+    return { skipped: true, reason: "No schedule event to delete" };
+  }
+
+  const setup = await getCalendarClient();
+  if (setup.skipped) return setup;
+
+  try {
+    await setup.calendar.events.delete({
+      calendarId: setup.calendarId,
+      eventId,
+      sendUpdates: "none",
+    });
+    return { deleted: true, eventId };
+  } catch (error) {
+    console.error("Failed to delete schedule calendar event:", error);
+    return { error: true, message: error instanceof Error ? error.message : "Delete failed" };
+  }
+}
+
 export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
   const leave = await prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
@@ -36,7 +192,7 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
     return { skipped: true, reason: "Leave request not found" };
   }
 
-  let calendarId = process.env.GOOGLE_CALENDAR_ID || "cd56578ac3f02b555abd38d368d5f4a97aa91cf8ca74995f921baec95a8bada9@group.calendar.google.com";
+  let calendarId = process.env.GOOGLE_CALENDAR_ID || DEFAULT_CALENDAR_ID;
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -181,7 +337,7 @@ export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
     return { skipped: true, reason: "Candidate not found" };
   }
 
-  let calendarId = process.env.GOOGLE_CALENDAR_ID || "cd56578ac3f02b555abd38d368d5f4a97aa91cf8ca74995f921baec95a8bada9@group.calendar.google.com";
+  let calendarId = process.env.GOOGLE_CALENDAR_ID || DEFAULT_CALENDAR_ID;
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 

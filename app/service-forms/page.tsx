@@ -29,11 +29,13 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   const allowedForms = allActiveForms.filter((form) => {
     const allowedRoles = form.allowed_roles as string[] | null;
     const allowedLocations = form.allowed_location_ids as string[] | null;
+    const isCandidacy = form.name.toUpperCase().includes("CANDIDATURA");
 
     const roleMatch = !allowedRoles || allowedRoles.length === 0 || allowedRoles.includes(role);
     const locationMatch = 
       role === "SUPER_ADMIN" || 
       role === "ADMIN" ||
+      isCandidacy ||
       !allowedLocations || 
       allowedLocations.length === 0 || 
       (locationId && allowedLocations.includes(locationId));

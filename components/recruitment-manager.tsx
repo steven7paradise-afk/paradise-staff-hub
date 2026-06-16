@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Search, Plus, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, Star, ClipboardList, CheckCircle, TrendingUp, Video, 
   Award, Trash2, UserCheck, SlidersHorizontal, Sparkles, Clock, 
-  ArrowRight, Heart, Check, Building
+  ArrowRight, Heart, Check, Building, Edit
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -105,6 +105,13 @@ export function RecruitmentManager({
   const [filterLocation, setFilterLocation] = useState("");
   const [activeCandidate, setActiveCandidate] = useState<Candidate | null>(null);
   const [activeTab, setActiveTab] = useState<"info" | "video" | "interview" | "hire">("info");
+  const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [editingCandidate, setEditingCandidate] = useState<any>(null);
+
+  useEffect(() => {
+    setIsEditingInfo(false);
+    setEditingCandidate(null);
+  }, [activeCandidate]);
   
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -841,7 +848,7 @@ export function RecruitmentManager({
               )}
 
               {/* TAB 1: INFO BASE */}
-              {activeTab === "info" && (
+              {activeTab === "info" && !isEditingInfo && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
                     <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
@@ -920,8 +927,8 @@ export function RecruitmentManager({
                   )}
 
                   {isEditable && (
-                    <div className="pt-4 border-t border-black/5 dark:border-white/5">
-                      <label className="block space-y-1.5 max-w-sm">
+                    <div className="pt-4 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-4">
+                      <label className="block space-y-1.5 max-w-sm flex-1">
                         <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Sposta Fase Candidatura</span>
                         <Select
                           value={activeCandidate.status}
@@ -932,6 +939,188 @@ export function RecruitmentManager({
                           ))}
                         </Select>
                       </label>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setEditingCandidate({
+                            first_name: activeCandidate.first_name,
+                            last_name: activeCandidate.last_name,
+                            profession: activeCandidate.profession,
+                            experience: activeCandidate.experience,
+                            availability: activeCandidate.availability,
+                            preferred_location: activeCandidate.preferred_location,
+                            phone: activeCandidate.phone,
+                            email: activeCandidate.email,
+                            birth_date: activeCandidate.birth_date ? new Date(activeCandidate.birth_date).toISOString().slice(0, 10) : "",
+                            city: activeCandidate.city || "",
+                            initial_notes: activeCandidate.initial_notes || "",
+                            cv_url: activeCandidate.cv_url || "",
+                            instagram_url: activeCandidate.instagram_url || ""
+                          });
+                          setIsEditingInfo(true);
+                        }}
+                        className="bg-[#A74758] text-white flex items-center gap-2 self-end h-10 px-5 rounded-xl font-bold text-sm"
+                      >
+                        <Edit className="size-4" /> Modifica Informazioni
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 1: INFO BASE (EDIT MODE) */}
+              {activeTab === "info" && isEditingInfo && editingCandidate && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Nome *</span>
+                      <Field
+                        required
+                        value={editingCandidate.first_name}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, first_name: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Cognome *</span>
+                      <Field
+                        required
+                        value={editingCandidate.last_name}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, last_name: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Mansione *</span>
+                      <Select
+                        value={editingCandidate.profession}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, profession: e.target.value }))}
+                      >
+                        {!PRESET_PROFESSIONS.includes(editingCandidate.profession) && (
+                          <option value={editingCandidate.profession}>{editingCandidate.profession}</option>
+                        )}
+                        {PRESET_PROFESSIONS.map((p) => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </Select>
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Esperienza *</span>
+                      <Select
+                        value={editingCandidate.experience}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, experience: e.target.value }))}
+                      >
+                        <option value="Nessuna">Nessuna esperienza</option>
+                        <option value="Meno di 1 anno">Meno di 1 anno</option>
+                        <option value="1-3 anni">1-3 anni</option>
+                        <option value="3-5 anni">3-5 anni</option>
+                        <option value="Più di 5 anni">Più di 5 anni</option>
+                      </Select>
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Disponibilità *</span>
+                      <Select
+                        value={editingCandidate.availability}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, availability: e.target.value }))}
+                      >
+                        <option value="Immediata">Immediata</option>
+                        <option value="1 settimana">1 settimana</option>
+                        <option value="2 settimane">2 settimane</option>
+                        <option value="1 mese">1 mese</option>
+                        <option value="Altro">Altro</option>
+                      </Select>
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Sede Preferita *</span>
+                      <Select
+                        value={editingCandidate.preferred_location}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, preferred_location: e.target.value }))}
+                      >
+                        <option value="Tutte">Qualsiasi sede</option>
+                        {locations.map((loc) => (
+                          <option key={loc.id} value={loc.name}>{loc.name}</option>
+                        ))}
+                      </Select>
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Telefono *</span>
+                      <Field
+                        required
+                        value={editingCandidate.phone}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, phone: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Email *</span>
+                      <Field
+                        required
+                        type="email"
+                        value={editingCandidate.email}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, email: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Data di Nascita</span>
+                      <Field
+                        type="date"
+                        value={editingCandidate.birth_date}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, birth_date: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block col-span-1 sm:col-span-2 md:col-span-3">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Città di Residenza</span>
+                      <Field
+                        value={editingCandidate.city}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, city: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block col-span-1 sm:col-span-2 md:col-span-1.5">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">CV URL</span>
+                      <Field
+                        value={editingCandidate.cv_url}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, cv_url: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 block col-span-1 sm:col-span-2 md:col-span-1.5">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Instagram URL</span>
+                      <Field
+                        value={editingCandidate.instagram_url}
+                        onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, instagram_url: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Note Iniziali</span>
+                    <textarea
+                      value={editingCandidate.initial_notes}
+                      onChange={(e) => setEditingCandidate((prev: any) => ({ ...prev, initial_notes: e.target.value }))}
+                      rows={3}
+                      className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-900 dark:text-white p-3 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
+                    />
+                  </label>
+
+                  {isEditable && (
+                    <div className="pt-4 border-t border-black/5 dark:border-white/5 flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="soft"
+                        onClick={() => setIsEditingInfo(false)}
+                        className="border border-neutral-200 text-neutral-700"
+                      >
+                        Annulla
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => {
+                          const payload = { ...editingCandidate };
+                          payload.birth_date = payload.birth_date ? new Date(payload.birth_date) : null;
+                          handleUpdateCandidateDetails(payload);
+                          setIsEditingInfo(false);
+                        }}
+                        className="bg-[#A74758] text-white font-bold h-10 px-5 rounded-xl text-sm transition hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        Salva Modifiche
+                      </Button>
                     </div>
                   )}
                 </div>

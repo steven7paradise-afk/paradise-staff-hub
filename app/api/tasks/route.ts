@@ -72,6 +72,9 @@ export async function PATCH(request: NextRequest) {
   const id = String(payload.id ?? "");
   const status = String(payload.status ?? "").toUpperCase();
   const evaluation = String(payload.evaluation ?? "").toUpperCase();
+  const notes = typeof payload.notes === "string" ? payload.notes : null;
+  const attachmentName = typeof payload.attachmentName === "string" ? payload.attachmentName.trim() : null;
+  const photoUrl = typeof payload.photoUrl === "string" ? payload.photoUrl.trim() : null;
   const timerSeconds = Number(payload.timerSeconds ?? 0);
   const completionNote = String(payload.completionNote ?? "").trim();
   const completionLinks = Array.isArray(payload.completionLinks) ? payload.completionLinks.map(String).filter(Boolean) : [];
@@ -89,7 +92,9 @@ export async function PATCH(request: NextRequest) {
         })
         .filter(Boolean)
     : [];
-  if (!id || (!["ACTIVE", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
+  const isNotesUpdate = notes !== null && !status && !evaluation;
+  const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
+  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !["ACTIVE", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
   }
 
@@ -103,7 +108,11 @@ export async function PATCH(request: NextRequest) {
 
   const updated = await prisma.staffTask.update({
     where: { id },
-    data: isEvaluation
+    data: isNotesUpdate
+      ? { notes: notes || null }
+      : isDescriptionImageUpdate
+      ? { photo_url: photoUrl || null, attachment_name: attachmentName || null }
+      : isEvaluation
       ? { evaluation, evaluated_by_id: session.user.id, evaluated_at: new Date() }
       : {
           status,

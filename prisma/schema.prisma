@@ -139,6 +139,7 @@ model ScheduleEntry {
   date        DateTime
   start_time  String?
   end_time    String?
+  google_calendar_event_id String?
   note        String?
   created_at  DateTime         @default(now())
   updated_at  DateTime         @updatedAt

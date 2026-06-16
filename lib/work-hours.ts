@@ -14,6 +14,11 @@ function roundedHours(milliseconds: number) {
   return Math.round((milliseconds / 3_600_000) * 100) / 100;
 }
 
+function countedBreakMilliseconds(milliseconds: number) {
+  if (milliseconds <= 0) return 0;
+  return milliseconds <= 38 * 60 * 1000 ? 30 * 60 * 1000 : 60 * 60 * 1000;
+}
+
 function timeLabel(date: Date) {
   return new Intl.DateTimeFormat("it-IT", {
     hour: "2-digit",
@@ -41,12 +46,12 @@ export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
       breakAt = log.timestamp;
     }
     if (log.type === "RIENTRO" && breakAt) {
-      breakMilliseconds += log.timestamp.getTime() - breakAt.getTime();
+      breakMilliseconds += countedBreakMilliseconds(log.timestamp.getTime() - breakAt.getTime());
       breakAt = null;
     }
     if (log.type === "USCITA" && enteredAt) {
       if (breakAt) {
-        breakMilliseconds += log.timestamp.getTime() - breakAt.getTime();
+        breakMilliseconds += countedBreakMilliseconds(log.timestamp.getTime() - breakAt.getTime());
         breakAt = null;
       }
       grossMilliseconds += log.timestamp.getTime() - enteredAt.getTime();

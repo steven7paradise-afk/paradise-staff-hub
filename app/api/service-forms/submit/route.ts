@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         let phoneVal = "";
         let birthVal: string | null = null;
         let roleVal = "Altro";
+        let notesVal = "";
 
         const formFields = form.fields as Array<{ id: string; label: string; type: string }>;
         for (const field of formFields) {
@@ -95,6 +96,8 @@ export async function POST(request: NextRequest) {
             birthVal = String(val).trim();
           } else if (labelUpper.includes("RUOLO") || labelUpper.includes("MANSIONE") || labelUpper.includes("PROFESSIONE")) {
             roleVal = String(val).trim();
+          } else if (labelUpper.includes("NOTE") || labelUpper.includes("COMMENTI")) {
+            notesVal = String(val).trim();
           }
         }
 
@@ -114,7 +117,7 @@ export async function POST(request: NextRequest) {
               preferred_location: location?.name || "Tutte",
               availability: "Immediata",
               experience: "Meno di 1 anno",
-              initial_notes: "Inserito automaticamente tramite form in salone.",
+              initial_notes: notesVal || "Inserito automaticamente tramite form in salone.",
               status: "Nuova candidatura",
             }
           });
