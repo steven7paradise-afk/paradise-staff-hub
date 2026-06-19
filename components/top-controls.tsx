@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Bell, CalendarDays, Languages, LogOut, Moon, Sun, UserRound } from "lucide-react";
-
-type Language = "EN" | "ES" | "IT";
+import { Bell, CalendarDays, LogOut, Moon, Sun, UserRound } from "lucide-react";
 
 function applyThemeVariables(isDark: boolean) {
   const root = document.querySelector<HTMLElement>(".paradise-theme-root");
@@ -42,15 +40,9 @@ export function TopControls({
   name: string;
   photoUrl: string | null;
 }) {
-  const [language, setLanguage] = useState<Language>("IT");
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("paradise-language") as Language | null;
-    if (saved === "EN" || saved === "ES" || saved === "IT") {
-      setLanguage(saved);
-      document.documentElement.lang = saved.toLowerCase();
-    }
     const savedTheme = window.localStorage.getItem("paradise-theme");
     if (savedTheme === "dark") {
       setDark(true);
@@ -60,12 +52,6 @@ export function TopControls({
       window.requestAnimationFrame(() => applyThemeVariables(false));
     }
   }, []);
-
-  function changeLanguage(next: Language) {
-    setLanguage(next);
-    window.localStorage.setItem("paradise-language", next);
-    document.documentElement.lang = next.toLowerCase();
-  }
 
   function toggleTheme() {
     const next = !dark;
@@ -88,19 +74,6 @@ export function TopControls({
       <button onClick={toggleTheme} className="grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15" type="button" aria-label="Tema">
         {dark ? <Sun className="size-5 text-amber-400 animate-pulse-soft" /> : <Moon className="size-5 text-slate-700" />}
       </button>
-      <div className="hidden items-center gap-1 rounded-2xl bg-white/80 p-1 shadow-sm ring-1 ring-black/5 backdrop-blur-md dark:bg-white/10 dark:ring-white/10 sm:flex">
-        <Languages className="ml-2 size-4 text-black/45 dark:text-white/45" />
-        {(["EN", "ES", "IT"] as Language[]).map((item) => (
-          <button
-            key={item}
-            type="button"
-            onClick={() => changeLanguage(item)}
-            className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 ${language === item ? "bg-[#C66170] text-white shadow-sm" : "text-black/55 hover:bg-paradise-softPink hover:text-paradise-noir dark:text-white/70 dark:hover:bg-white/10"}`}
-          >
-            {item}
-          </button>
-        ))}
-      </div>
       <div className="group relative">
         <Link href="/profile" className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
           <span className="grid size-12 place-items-center overflow-hidden rounded-full bg-[#C66170]">

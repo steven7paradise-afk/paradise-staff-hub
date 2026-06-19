@@ -35,6 +35,18 @@ export async function uploadCoverImage(userId: string, file: File) {
   return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }
 
+export async function uploadSocialCover(userId: string, file: File) {
+  const client = storageClient();
+  const bucket = process.env.SUPABASE_PROFILE_BUCKET ?? "profile-images";
+  const extension = safeName(file.name).split(".").pop() ?? "jpg";
+  const path = `${userId}/social-${Date.now()}.${extension}`;
+  const bytes = await file.arrayBuffer();
+  const { error } = await client.storage.from(bucket).upload(path, bytes, { contentType: file.type, upsert: true });
+  if (error) throw new Error(error.message);
+  return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+
+
 
 export async function uploadPrivateDocument(userId: string, file: File) {
   const client = storageClient();

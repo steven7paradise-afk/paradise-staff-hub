@@ -81,6 +81,8 @@ export default async function TasksPage() {
           createdById: task.created_by_id,
           createdByPhoto: task.created_by.photo_url,
           dueDate: task.due_date?.toISOString() ?? null,
+          startedAt: task.started_at?.toISOString() ?? null,
+          completedAt: task.completed_at?.toISOString() ?? null,
           createdAt: task.created_at.toISOString(),
           updatedAt: task.updated_at.toISOString(),
           comments: task.comments.map((comment) => ({
@@ -89,6 +91,7 @@ export default async function TasksPage() {
             userId: comment.user_id,
             userName: comment.user.name,
             userPhoto: comment.user.photo_url,
+            files: comment.files as any,
             createdAt: comment.created_at.toISOString(),
             updatedAt: comment.updated_at.toISOString(),
           })),

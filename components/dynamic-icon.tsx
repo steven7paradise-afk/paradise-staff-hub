@@ -44,7 +44,8 @@ import {
   Package,
   MoreHorizontal,
   Timer,
-  Home
+  Home,
+  Share2
 } from "lucide-react";
 
 const iconMap = {
@@ -90,7 +91,8 @@ const iconMap = {
   Package,
   MoreHorizontal,
   Timer,
-  Home
+  Home,
+  Share2
 } as const;
 
 export type IconName = keyof typeof iconMap;

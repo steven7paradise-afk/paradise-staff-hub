@@ -34,12 +34,12 @@ export function MobileMenuDrawer({
   return (
     <div className="xl:hidden">
       <div className="fixed left-0 top-[14px] z-40 flex items-center">
-        <div className="pointer-events-none fixed bottom-0 left-0 top-0 w-1 bg-[color:var(--sidebar)]" />
+        <div className="pointer-events-none fixed bottom-0 left-0 top-0 w-1 bg-[color:var(--user-sidebar-color,var(--sidebar))]" />
 
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="relative flex h-10 w-9 items-center justify-center rounded-r-2xl border border-black/5 bg-[color:var(--sidebar)] text-[color:var(--sidebar-icon)] shadow-soft transition-all duration-200 hover:w-10 active:scale-95"
+          className="relative flex h-10 w-9 items-center justify-center rounded-r-2xl border border-black/5 bg-[color:var(--user-sidebar-color,var(--sidebar))] text-[color:var(--sidebar-icon)] shadow-soft transition-all duration-200 hover:w-10 active:scale-95"
           aria-label="Apri menu"
         >
           <Menu className="size-5" />
@@ -67,7 +67,7 @@ export function MobileMenuDrawer({
         )}
         style={{
           background:
-            "linear-gradient(160deg, var(--sidebar) 0%, color-mix(in srgb, var(--sidebar) 84%, var(--button)) 100%)",
+            "linear-gradient(160deg, var(--user-sidebar-color,var(--sidebar)) 0%, color-mix(in srgb, var(--user-sidebar-color,var(--sidebar)) 84%, var(--button)) 100%)",
           color: "var(--sidebar-text)",
         }}
       >

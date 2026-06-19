@@ -68,6 +68,8 @@ model User {
   access_list       Json?
   hr_notes          String?
   candidate_id      String?
+  header_color      String?
+  sidebar_color     String?
   
   manager           User?            @relation("UserManager", fields: [manager_id], references: [id])
   subordinates      User[]           @relation("UserManager")
@@ -87,6 +89,7 @@ model User {
   work_hour_records WorkHourRecord[]
   created_service_forms ServiceForm[] @relation("CreatedServiceForms")
   service_form_responses ServiceFormResponse[]
+  social_posts      SocialPost[]     @relation("CreatedSocialPosts")
 
   @@map("users")
 }
@@ -209,6 +212,7 @@ model StaffTaskComment {
   task_id    String
   user_id    String
   message    String
+  files      Json?
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
   task       StaffTask @relation(fields: [task_id], references: [id], onDelete: Cascade)
@@ -491,3 +495,22 @@ model Candidate {
 
   @@map("candidates")
 }
+
+model SocialPost {
+  id               String          @id @default(cuid())
+  title            String
+  description      String?
+  scheduled_at     DateTime
+  platform         String          // e.g. "INSTAGRAM", "TIKTOK", "YOUTUBE", "FACEBOOK", "ALTRO"
+  status           String          @default("DRAFT") // "DRAFT", "PLANNED", "PUBLISHED"
+  cover_url        String?         // Copertina
+  video_url        String?         // Link video opzionale
+  notes            String?
+  created_by_id    String
+  created_by       User            @relation("CreatedSocialPosts", fields: [created_by_id], references: [id])
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+
+  @@map("social_posts")
+}
+

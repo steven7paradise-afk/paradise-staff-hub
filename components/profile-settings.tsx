@@ -1,9 +1,18 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
-import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle } from "lucide-react";
+import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle, Palette, RotateCcw } from "lucide-react";
 import { Button, Card, Field } from "@/components/ui";
 import { cn } from "@/lib/utils";
+
+const presets = [
+  { name: "Brand Classico", header: "#C66170", sidebar: "#FFFFFF" },
+  { name: "Rose Gold", header: "#B85B68", sidebar: "#FAF1F2" },
+  { name: "Smeraldo", header: "#2D5A4C", sidebar: "#EBF2EF" },
+  { name: "Royal Blue", header: "#1E3A8A", sidebar: "#F3F4F6" },
+  { name: "Luxury Dark", header: "#1A1A1A", sidebar: "#1F1F1F" },
+  { name: "Sand & Gold", header: "#D4AF37", sidebar: "#FCF9F2" },
+];
 
 export function ProfileSettings({
   photoUrl,
@@ -11,12 +20,16 @@ export function ProfileSettings({
   role,
   calendarSync = false,
   calendarId = "",
+  headerColor = "",
+  sidebarColor = "",
 }: {
   photoUrl: string | null;
   name: string;
   role: string;
   calendarSync?: boolean;
   calendarId?: string | null;
+  headerColor?: string | null;
+  sidebarColor?: string | null;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState(photoUrl);
@@ -25,6 +38,9 @@ export function ProfileSettings({
   const [calendarEnabled, setCalendarEnabled] = useState(calendarSync);
   const [calendarValue, setCalendarValue] = useState(calendarId ?? "");
   const [calendarStatus, setCalendarStatus] = useState("");
+  const [headerColorVal, setHeaderColorVal] = useState(headerColor ?? "");
+  const [sidebarColorVal, setSidebarColorVal] = useState(sidebarColor ?? "");
+  const [themeStatus, setThemeStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const canUseCalendar = role === "SUPER_ADMIN" || role === "ADMIN";
 
@@ -78,6 +94,62 @@ export function ProfileSettings({
     setLoading(false);
     if (!response.ok) return setCalendarStatus(result.error ?? "Google Calendar non salvato.");
     setCalendarStatus("Sincronizzazione Google Calendar salvata.");
+  }
+
+  function updateLivePreview(header: string, sidebar: string) {
+    const root = document.querySelector<HTMLElement>(".paradise-theme-root");
+    if (root) {
+      if (header) {
+        root.style.setProperty("--user-header-color", header);
+      } else {
+        root.style.removeProperty("--user-header-color");
+      }
+      if (sidebar) {
+        root.style.setProperty("--user-sidebar-color", sidebar);
+        root.style.setProperty("--user-background-color", `color-mix(in srgb, ${sidebar} 6%, var(--background))`);
+      } else {
+        root.style.removeProperty("--user-sidebar-color");
+        root.style.removeProperty("--user-background-color");
+      }
+    }
+  }
+
+  function applyPreset(header: string, sidebar: string) {
+    setHeaderColorVal(header);
+    setSidebarColorVal(sidebar);
+    updateLivePreview(header, sidebar);
+  }
+
+  async function saveThemeColors() {
+    setLoading(true);
+    setThemeStatus("");
+    const response = await fetch("/api/profile/theme", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ headerColor: headerColorVal, sidebarColor: sidebarColorVal }),
+    });
+    const result = await response.json();
+    setLoading(false);
+    if (!response.ok) return setThemeStatus(result.error ?? "Errore nel salvataggio dei colori.");
+    setThemeStatus("Colori del tema salvati con successo.");
+    updateLivePreview(headerColorVal, sidebarColorVal);
+  }
+
+  async function resetThemeColors() {
+    setLoading(true);
+    setThemeStatus("");
+    const response = await fetch("/api/profile/theme", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ headerColor: "", sidebarColor: "" }),
+    });
+    const result = await response.json();
+    setLoading(false);
+    if (!response.ok) return setThemeStatus(result.error ?? "Errore nel ripristino dei colori.");
+    setHeaderColorVal("");
+    setSidebarColorVal("");
+    setThemeStatus("Colori ripristinati con successo.");
+    updateLivePreview("", "");
   }
 
   return (
@@ -165,6 +237,113 @@ export function ProfileSettings({
             </Button>
           </div>
         </form>
+      </Card>
+
+      {/* Colori Interfaccia card */}
+      <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6 space-y-6">
+        <div>
+          <div className="flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3 mb-4">
+            <Palette className="size-5 text-[#B85B68] dark:text-paradise-pink" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Personalizza Colori</h2>
+          </div>
+          <p className="mt-2 text-xs text-black/50 dark:text-white/40">Scegli i colori di sfondo per l'header del telefono (mobile) e la barra laterale (desktop).</p>
+          
+          {/* Preset templates */}
+          <div className="mt-4 space-y-2">
+            <span className="text-[10px] font-bold text-black/50 dark:text-white/40 uppercase tracking-wider pl-1">Combinazioni Suggerite</span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {presets.map((preset) => (
+                <button
+                  key={preset.name}
+                  type="button"
+                  onClick={() => applyPreset(preset.header, preset.sidebar)}
+                  className="flex items-center gap-2 rounded-xl border border-black/5 bg-black/5 p-2 text-left text-xs font-semibold hover:bg-black/10 dark:border-white/5 dark:bg-white/5 dark:hover:bg-white/10 transition-all duration-200"
+                >
+                  <span className="flex size-5 shrink-0 overflow-hidden rounded-full border border-black/10 dark:border-white/20">
+                    <span className="h-full w-1/2" style={{ backgroundColor: preset.header || "#C66170" }} />
+                    <span className="h-full w-1/2" style={{ backgroundColor: preset.sidebar || "#FFFFFF" }} />
+                  </span>
+                  <span className="truncate">{preset.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            {/* Header Color Picker */}
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-black/[0.01] p-3 dark:border-white/5 dark:bg-white/[0.01]">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-black/75 dark:text-white/85">Colore Header (Mobile)</span>
+                <span className="text-[10px] text-black/45 dark:text-white/45">Colore della barra superiore su dispositivi mobili.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-black/60 dark:text-white/60 uppercase">{headerColorVal || "Default (#C66170)"}</span>
+                <input
+                  type="color"
+                  value={headerColorVal || "#C66170"}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setHeaderColorVal(val);
+                    updateLivePreview(val, sidebarColorVal);
+                  }}
+                  className="size-10 cursor-pointer rounded-xl border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-xl [&::-webkit-color-swatch]:border [&::-webkit-color-swatch]:border-black/10 [&::-webkit-color-swatch]:ring-0"
+                />
+              </div>
+            </div>
+
+            {/* Sidebar Color Picker */}
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-black/[0.01] p-3 dark:border-white/5 dark:bg-white/[0.01]">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-black/75 dark:text-white/85">Colore Sidebar (Desktop)</span>
+                <span className="text-[10px] text-black/45 dark:text-white/45">Colore del menu di navigazione su schermi grandi.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-black/60 dark:text-white/60 uppercase">{sidebarColorVal || "Default"}</span>
+                <input
+                  type="color"
+                  value={sidebarColorVal || "#ffffff"}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSidebarColorVal(val);
+                    updateLivePreview(headerColorVal, val);
+                  }}
+                  className="size-10 cursor-pointer rounded-xl border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-xl [&::-webkit-color-swatch]:border [&::-webkit-color-swatch]:border-black/10 [&::-webkit-color-swatch]:ring-0"
+                />
+              </div>
+            </div>
+          </div>
+
+          {themeStatus && (
+            <div className={cn(
+              "mt-4 rounded-xl border px-3 py-2 text-xs font-bold flex items-center gap-2 animate-in fade-in",
+              themeStatus.includes("successo")
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400"
+            )}>
+              {themeStatus.includes("successo") ? <CheckCircle2 className="size-4 shrink-0" /> : <AlertCircle className="size-4 shrink-0" />}
+              <span>{themeStatus}</span>
+            </div>
+          )}
+
+          <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-end">
+            <button
+              type="button"
+              onClick={resetThemeColors}
+              disabled={loading}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-semibold shadow-sm transition-all duration-200 ease-out active:scale-[0.96] active:brightness-95 hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-black/20 bg-white text-black/70 ring-1 ring-black/5 hover:bg-black/5 dark:bg-white/10 dark:text-white/70 dark:ring-white/10 dark:hover:bg-white/15"
+            >
+              <RotateCcw className="size-4" /> Ripristina Predefiniti
+            </button>
+            <Button
+              type="button"
+              onClick={saveThemeColors}
+              disabled={loading}
+              className="w-full sm:w-auto"
+            >
+              Salva Colori
+            </Button>
+          </div>
+        </div>
       </Card>
 
       {/* Google Calendar card (Admins/Super Admins only) */}

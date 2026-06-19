@@ -47,7 +47,7 @@ export function SidebarFrame({
   return (
     <div
       className={cn(
-        "paradise-theme-root min-h-screen bg-[color:var(--background)] xl:h-screen xl:overflow-hidden",
+        "paradise-theme-root min-h-screen bg-[color:var(--user-background-color,var(--background))] xl:h-screen xl:overflow-hidden",
         collapsed && "sidebar-collapsed",
         isTablet && "tablet-mode"
       )}
@@ -56,7 +56,7 @@ export function SidebarFrame({
       <div
         className={cn(
           "relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
-          collapsed ? "xl:w-[88px] bg-transparent" : "xl:w-[280px] bg-[color:var(--sidebar)] border-r border-black/5 dark:border-white/10"
+          collapsed ? "xl:w-[88px] bg-transparent" : "xl:w-[280px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10"
         )}
       >
         <button

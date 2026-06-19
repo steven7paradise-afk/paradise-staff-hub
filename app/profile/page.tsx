@@ -89,6 +89,8 @@ export default async function ProfilePage() {
             role={user.role}
             calendarSync={user.google_calendar_sync}
             calendarId={user.google_calendar_id}
+            headerColor={user.header_color}
+            sidebarColor={user.sidebar_color}
           />
         }
       />

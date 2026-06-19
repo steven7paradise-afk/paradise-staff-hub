@@ -23,6 +23,7 @@ const nav = [
 
   // Section: Planning & Saloni
   { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
   { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
@@ -96,20 +97,24 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     section: "Generale"
   };
 
+  const currentUser = session?.user?.id
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, photo_url: true, header_color: true, sidebar_color: true, mansione: true } })
+    : null;
+
   const baseItems = visibleForRole(nav, currentRole);
+  const userHasSocialAccess = currentUser?.mansione?.toLowerCase().includes("social");
+
   const items = currentRole === "DIPENDENTE"
     ? [
-        ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks"),
+        ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar"),
         selectedServiceItem,
         ...(showFormsLinkSeparately ? [formsLinkItem] : []),
+        ...(userHasSocialAccess ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
     : baseItems;
   const unreadNotifications = session?.user?.id
     ? await prisma.notification.count({ where: { user_id: session.user.id, read: false } })
     : 0;
-  const currentUser = session?.user?.id
-    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, photo_url: true } })
-    : null;
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
     month: "long",
@@ -127,7 +132,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   const aside = (
       <aside className={cn(
-        "z-30 w-full max-w-full border-b-0 border-transparent bg-[color:var(--sidebar)] px-4 py-3 text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden",
+        "z-30 w-full max-w-full border-b-0 border-transparent bg-[color:var(--user-header-color,var(--sidebar))] xl:bg-[color:var(--user-sidebar-color,var(--sidebar))] px-4 py-3 text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden",
         hideMobileHeader && "hidden xl:flex"
       )}>
         {/* Mobile Header (xl:hidden) */}
@@ -158,6 +163,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                     : []),
                   ...(servicePageNum === 1
                     ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
+                    : []),
+                  ...(userHasSocialAccess
+                    ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
                     : []),
                 ]
               : baseItems
@@ -321,7 +329,14 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       aside={aside}
       main={<>{main}<NotificationWatcher initialUnread={unreadNotifications} /></>}
       mobileNav={mobileNav}
-      style={brandingCss(branding)}
+      style={{
+        ...brandingCss(branding),
+        ...(currentUser?.header_color ? { "--user-header-color": currentUser.header_color } : {}),
+        ...(currentUser?.sidebar_color ? {
+          "--user-sidebar-color": currentUser.sidebar_color,
+          "--user-background-color": `color-mix(in srgb, ${currentUser.sidebar_color} 6%, var(--background))`,
+        } : {}),
+      } as React.CSSProperties}
     />
   );
 }

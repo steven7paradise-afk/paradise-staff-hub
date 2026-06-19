@@ -71,10 +71,21 @@ type Task = {
   createdById: string;
   createdByPhoto: string | null;
   dueDate: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
-type TaskComment = { id: string; message: string; userId: string; userName: string; userPhoto: string | null; createdAt: string; updatedAt: string };
+type TaskComment = { 
+  id: string; 
+  message: string; 
+  userId: string; 
+  userName: string; 
+  userPhoto: string | null; 
+  createdAt: string; 
+  updatedAt: string;
+  files?: { name: string; url: string }[] | null;
+};
 type TaskView = "HOME" | "TABLE" | "BOARD" | "CALENDAR" | "LIST";
 type TaskFilter = "TODAY" | "ACTIVE" | "NEW" | "WAITING" | "COMPLETED";
 type AttachmentPreview = { name: string; url: string; kind: "image" | "file" };
@@ -326,11 +337,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [timerPaused, setTimerPaused] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [commentFiles, setCommentFiles] = useState<{ name: string; url: string }[]>([]);
+  const [commentUploading, setCommentUploading] = useState(false);
   const [completion, setCompletion] = useState({ note: "", link: "", files: [] as CompletionFile[] });
-  const [freeNoteBlocks, setFreeNoteBlocks] = useState<FreeNoteBlock[]>([]);
-  const [freeNoteStatus, setFreeNoteStatus] = useState("");
-  const freeNoteSavedJson = useRef("");
-  const freeNoteSaveTimer = useRef<number | null>(null);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -368,6 +377,73 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const visibleTasks = filter === "TODAY" ? todayTasks : filter === "COMPLETED" ? completedTasks : filter === "WAITING" ? waitingTasks : filter === "NEW" ? newTasks : activeTasks;
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
+  const timelineEvents = useMemo(() => {
+    if (!selected) return [];
+    const events: {
+      type: "system" | "comment";
+      date: Date;
+      title: string;
+      description?: string;
+      user?: { name: string; photoUrl: string | null };
+      commentId?: string;
+      commentUser?: string;
+      commentPhoto?: string | null;
+      commentUserId?: string;
+      message?: string;
+      files?: any[];
+    }[] = [];
+
+    // 1. Task created
+    events.push({
+      type: "system",
+      date: new Date(selected.createdAt),
+      title: "Task creata",
+      description: `Creata da ${selected.createdByName}`,
+      user: { name: selected.createdByName, photoUrl: selected.createdByPhoto }
+    });
+
+    // 2. Task started
+    if (selected.startedAt) {
+      events.push({
+        type: "system",
+        date: new Date(selected.startedAt),
+        title: "Task iniziata (Timer avviato)",
+        description: "La task è passata in corso."
+      });
+    }
+
+    // 3. User comments (our "blocks")
+    if (selected.comments) {
+      selected.comments.forEach((c) => {
+        events.push({
+          type: "comment",
+          date: new Date(c.createdAt),
+          title: "",
+          commentId: c.id,
+          commentUser: c.userName || "Collaboratore",
+          commentPhoto: c.userPhoto || null,
+          commentUserId: c.userId,
+          message: c.message,
+          files: typeof c.files === "string" ? JSON.parse(c.files) : (c.files || [])
+        });
+      });
+    }
+
+    // 4. Task completed
+    if (selected.completedAt) {
+      events.push({
+        type: "system",
+        date: new Date(selected.completedAt),
+        title: "Task completata",
+        description: selected.completionNote || "Completata con successo.",
+        files: selected.completionFiles || [],
+        user: { name: selected.assignedToName, photoUrl: selected.assignedToPhoto }
+      });
+    }
+
+    // Sort all events by date asc
+    return events.sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [selected]);
   const categories = Array.from(new Set([...initialCategories, ...tasks.map((task) => task.category).filter(Boolean)]));
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -456,6 +532,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           userPhoto: comment.user.photo_url ?? null,
           createdAt: comment.created_at,
           updatedAt: comment.updated_at,
+          files: comment.files,
         })) : [],
         locationId: data.location_id,
         locationName: data.location?.name ?? "Salone",
@@ -471,6 +548,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         createdById: data.created_by_id,
         createdByPhoto: data.created_by.photo_url ?? null,
         dueDate: data.due_date,
+        startedAt: data.started_at ?? null,
+        completedAt: data.completed_at ?? null,
         createdAt: data.created_at,
         updatedAt: data.updated_at ?? data.created_at,
       },
@@ -559,41 +638,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   useEffect(() => {
     setTimerRunning(false);
     setTimerPaused(false);
-    const blocks = parseFreeNotes(selected?.notes);
-    const json = serializeFreeNotes(blocks);
-    freeNoteSavedJson.current = json;
-    setFreeNoteBlocks(blocks);
-    setFreeNoteStatus("");
   }, [selected?.id]);
-
-  useEffect(() => {
-    if (!selected) return;
-    const json = serializeFreeNotes(freeNoteBlocks);
-    if (json === freeNoteSavedJson.current) return;
-
-    if (freeNoteSaveTimer.current) window.clearTimeout(freeNoteSaveTimer.current);
-    setFreeNoteStatus("Salvataggio...");
-    freeNoteSaveTimer.current = window.setTimeout(async () => {
-      const response = await fetch("/api/tasks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: selected.id, notes: json }),
-      });
-      if (!response.ok) {
-        setFreeNoteStatus("Errore salvataggio");
-        return;
-      }
-      const mapped = mapApiTask(await response.json());
-      freeNoteSavedJson.current = json;
-      setSelected((current) => current?.id === mapped.id ? { ...mapped, notes: json } : current);
-      setTasks((current) => current.map((task) => task.id === mapped.id ? { ...mapped, notes: json } : task));
-      setFreeNoteStatus("Salvato");
-    }, 700);
-
-    return () => {
-      if (freeNoteSaveTimer.current) window.clearTimeout(freeNoteSaveTimer.current);
-    };
-  }, [freeNoteBlocks, selected?.id]);
 
   useEffect(() => {
     if (!selected || selected.status !== "ACTIVE" || !timerRunning || timerPaused) return;
@@ -654,6 +699,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       createdById: data.created_by_id,
       createdByPhoto: data.created_by.photo_url ?? null,
       dueDate: data.due_date,
+      startedAt: data.started_at ?? null,
+      completedAt: data.completed_at ?? null,
       createdAt: data.created_at,
       updatedAt: data.updated_at ?? data.created_at,
       comments: Array.isArray(data.comments) ? data.comments.map((comment: any) => ({
@@ -664,6 +711,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         userPhoto: comment.user.photo_url ?? null,
         createdAt: comment.created_at,
         updatedAt: comment.updated_at,
+        files: comment.files,
       })) : [],
     };
   }
@@ -692,79 +740,36 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setCompletion((current) => ({ ...current, files: next }));
   }
 
-  function addFreeNoteBlock(type: "title" | "paragraph") {
-    setFreeNoteBlocks((current) => [...current, { type, text: "" }]);
-  }
 
-  function updateFreeNoteBlock(index: number, block: FreeNoteBlock) {
-    setFreeNoteBlocks((current) => current.map((item, itemIndex) => itemIndex === index ? block : item));
-  }
-
-  function removeFreeNoteBlock(index: number) {
-    setFreeNoteBlocks((current) => current.filter((_, itemIndex) => itemIndex !== index));
-  }
-
-  function moveFreeNoteBlock(index: number, direction: -1 | 1) {
-    setFreeNoteBlocks((current) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= current.length) return current;
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
-    });
-  }
-
-  function insertFreeNoteMention(index: number, worker: Worker) {
-    setFreeNoteBlocks((current) => current.map((item, itemIndex) => {
-      if (itemIndex !== index || (item.type !== "paragraph" && item.type !== "text")) return item;
-      const text = item.text.replace(/(^|\s)@([a-zA-Z0-9_]*)$/, (_match, prefix) => `${prefix}@${workerMentionSlug(worker.name)} `);
-      return { type: "paragraph", text };
-    }));
-  }
-
-  async function attachFreeNoteFiles(files: FileList | null) {
-    const next: FreeNoteBlock[] = [];
-    for (const file of Array.from(files ?? [])) {
+  async function attachCommentFiles(files: FileList | null) {
+    if (!files) return;
+    setCommentUploading(true);
+    const next = [...commentFiles];
+    for (const file of Array.from(files)) {
       const url = await fileToDataUrl(file);
-      if (file.type.startsWith("image/")) {
-        next.push({ type: "image", name: file.name, url });
-      } else {
-        next.push({ type: "file", name: file.name, url });
-      }
+      next.push({ name: file.name, url });
     }
-    setFreeNoteBlocks((current) => [...current, ...next]);
+    setCommentFiles(next);
+    setCommentUploading(false);
   }
 
-  async function pasteFreeNoteImages(index: number, clipboardData: DataTransfer) {
-    const files = [
-      ...Array.from(clipboardData.files).filter((file) => file.type.startsWith("image/")),
-      ...Array.from(clipboardData.items)
-        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-        .map((item) => item.getAsFile())
-        .filter((file): file is File => Boolean(file)),
-    ];
-    if (files.length === 0) return false;
-    const next: FreeNoteBlock[] = [];
-    for (const file of files) {
-      next.push({ type: "image", name: file.name || "immagine-incollata.png", url: await fileToDataUrl(file) });
-    }
-    setFreeNoteBlocks((current) => [
-      ...current.slice(0, index + 1),
-      ...next,
-      ...current.slice(index + 1),
-    ]);
-    return true;
+  function removeCommentFile(index: number) {
+    setCommentFiles((current) => current.filter((_, i) => i !== index));
   }
-
 
   async function saveComment() {
-    if (!selected || !commentText.trim()) return;
+    if (!selected) return;
+    const trimmed = commentText.trim();
+    if (!trimmed && commentFiles.length === 0) return;
     const isEdit = Boolean(editingCommentId);
     const response = await fetch("/api/tasks/comments", {
       method: isEdit ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(isEdit ? { id: editingCommentId, message: commentText } : { taskId: selected.id, message: commentText }),
+      body: JSON.stringify(
+        isEdit 
+          ? { id: editingCommentId, message: trimmed, files: commentFiles } 
+          : { taskId: selected.id, message: trimmed, files: commentFiles }
+      ),
     });
     if (!response.ok) return;
     const data = await response.json();
@@ -776,6 +781,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       userPhoto: data.user.photo_url ?? null,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
+      files: data.files ? (typeof data.files === "string" ? JSON.parse(data.files) : data.files) : []
     };
     const comments = isEdit
       ? selected.comments.map((item) => item.id === comment.id ? comment : item)
@@ -784,6 +790,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setSelected(updated);
     setTasks((current) => current.map((item) => item.id === selected.id ? updated : item));
     setCommentText("");
+    setCommentFiles([]);
     setEditingCommentId(null);
   }
 
@@ -1304,6 +1311,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div className="mt-5 grid gap-2">
               {[
                   { icon: UserRound, label: "Assegnata da", value: selected.createdByName, photo: selected.createdByPhoto },
+                  { icon: UserRound, label: "Assegnata a", value: selected.assignedToName, photo: selected.assignedToPhoto },
                   { icon: CalendarDays, label: "Scadenza", value: formatFullDate(selected.dueDate) },
                   { icon: Flag, label: "Priorita", value: selected.priority },
                   { icon: Tag, label: "Categoria", value: formatCategoryLabel(selected.category) },
@@ -1344,193 +1352,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             </Card>
             </div>
             <div className="min-w-0 space-y-5">
-            <Card className="overflow-hidden bg-white">
-              <div className="mb-4 flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h2 className="font-semibold">Nota operativa</h2>
-                  <p className="mt-1 text-xs text-black/45">Scrivi, incolla link o immagini, allega PDF/file e tagga il personale con @nome.</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="dark">{freeNoteBlocks.length} blocchi</Badge>
-                  <Badge tone={freeNoteStatus === "Errore salvataggio" ? "pink" : "gold"}>{freeNoteStatus || "Autosave attivo"}</Badge>
-                </div>
-              </div>
-
-              <div className="mb-4 rounded-[22px] border border-black/5 bg-[#FAF7F9] p-2">
-                <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => addFreeNoteBlock("title")} className="inline-flex items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
-                  <Pencil className="size-4" /> Titolo
-                </button>
-                <button type="button" onClick={() => addFreeNoteBlock("paragraph")} className="inline-flex items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
-                  <ListChecks className="size-4" /> Paragrafo
-                </button>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
-                  <FileImage className="size-4" /> Immagine
-                  <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void attachFreeNoteFiles(event.target.files); event.currentTarget.value = ""; }} />
-                </label>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-bold text-black/65 shadow-sm transition hover:text-[#C66170]">
-                  <Paperclip className="size-4" /> PDF/File
-                  <input type="file" accept="application/pdf,.pdf,*/*" multiple className="hidden" onChange={(event) => { void attachFreeNoteFiles(event.target.files); event.currentTarget.value = ""; }} />
-                </label>
-                </div>
-                <p className="mt-2 px-2 text-[11px] font-medium text-black/35">Suggerimento: incolla una foto con Ctrl+V dentro un paragrafo. I link diventano cliccabili automaticamente.</p>
-              </div>
-
-              <div className="grid min-w-0 gap-3">
-                {freeNoteBlocks.length === 0 ? (
-                  <button type="button" onClick={() => addFreeNoteBlock("paragraph")} className="rounded-[24px] border border-dashed border-black/15 bg-[#FAF7F9] p-8 text-center text-sm font-semibold text-black/45 transition hover:border-paradise-pink hover:text-[#C66170]">
-                    Aggiungi la prima nota operativa
-                  </button>
-                ) : null}
-                {freeNoteBlocks.map((block, index) => {
-                  if (block.type === "title") {
-                    return (
-                      <div key={`note-title-${index}`} className="group rounded-[22px] border border-black/10 bg-white p-3 transition focus-within:border-paradise-pink">
-                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
-                          <span>Titolo</span>
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
-                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <input
-                            value={block.text}
-                            onChange={(event) => updateFreeNoteBlock(index, { ...block, text: event.target.value })}
-                            placeholder="Titolo"
-                            className="min-w-0 flex-1 bg-transparent text-2xl font-semibold outline-none placeholder:text-black/25"
-                          />
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (block.type === "paragraph" || block.type === "text") {
-                    const detectedLinks = extractFreeNoteLinks(block.text);
-                    const mentionQuery = getActiveMentionQuery(block.text);
-                    const mentionSuggestions = mentionQuery === null
-                      ? []
-                      : workers
-                          .filter((worker) => {
-                            const query = mentionQuery.toLowerCase();
-                            return worker.name.toLowerCase().includes(query) || workerMentionSlug(worker.name).toLowerCase().includes(query);
-                          })
-                          .slice(0, 6);
-                    const mentionedWorkers = extractMentionedWorkers(block.text, workers);
-                    return (
-                      <div key={`note-paragraph-${index}`} className="group min-w-0 overflow-hidden rounded-[22px] border border-black/10 bg-white p-4 transition focus-within:border-paradise-pink">
-                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
-                          <span>Paragrafo</span>
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
-                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <textarea
-                            value={block.text}
-                            onChange={(event) => updateFreeNoteBlock(index, { type: "paragraph", text: event.target.value })}
-                            onPaste={(event) => {
-                              const hasImage = Array.from(event.clipboardData.files).some((file) => file.type.startsWith("image/")) || Array.from(event.clipboardData.items).some((item) => item.kind === "file" && item.type.startsWith("image/"));
-                              if (!hasImage) return;
-                              event.preventDefault();
-                              void pasteFreeNoteImages(index, event.clipboardData);
-                            }}
-                            placeholder="Scrivi testo lungo, incolla link, tagga con @nome, incolla immagini..."
-                            wrap="soft"
-                            className="min-h-48 min-w-0 flex-1 resize-y overflow-x-hidden bg-transparent text-sm leading-7 outline-none placeholder:text-black/25"
-                          />
-                        </div>
-                        {mentionSuggestions.length > 0 ? (
-                          <div className="mt-3 flex flex-wrap gap-2 rounded-2xl bg-[#FAF7F9] p-2">
-                            {mentionSuggestions.map((worker) => (
-                              <button
-                                key={worker.id}
-                                type="button"
-                                onClick={() => insertFreeNoteMention(index, worker)}
-                                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black/65 shadow-sm transition hover:text-[#C66170]"
-                              >
-                                <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-5" />
-                                @{workerMentionSlug(worker.name)}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                        {mentionedWorkers.length > 0 ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {mentionedWorkers.map((worker) => (
-                              <span key={worker.id} className="inline-flex items-center gap-2 rounded-full bg-paradise-softPink px-3 py-1.5 text-xs font-bold text-[#C66170]">
-                                <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-5" />
-                                {worker.name}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                        {detectedLinks.length > 0 ? (
-                          <div className="mt-4 grid min-w-0 gap-2 border-t border-black/5 pt-3">
-                            {detectedLinks.map((link) => (
-                              <a key={link} href={link} target="_blank" rel="noreferrer" title={link} className="inline-flex min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-2xl bg-[#F5F1FF] px-3 py-2 text-xs font-semibold text-[#8064D8]">
-                                <LinkIcon className="size-3.5 shrink-0" />
-                                <span className="min-w-0 truncate">{formatFreeNoteLinkLabel(link)}</span>
-                              </a>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  }
-                  if (block.type === "image") {
-                    return (
-                      <div key={`note-image-${index}`} className="relative rounded-[22px] border border-black/10 bg-white p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
-                          <span>Immagine</span>
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
-                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
-                          </div>
-                        </div>
-                        <ImagePreviewBlock name={block.name} url={block.url} />
-                      </div>
-                    );
-                  }
-                  if (block.type === "file") {
-                    return (
-                      <div key={`note-file-${index}`} className="relative rounded-[22px] border border-black/10 bg-white p-3">
-                        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-black/30">
-                          <span>File</span>
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, -1)} disabled={index === 0} className="rounded-full px-2 py-1 disabled:opacity-25">Su</button>
-                            <button type="button" onClick={() => moveFreeNoteBlock(index, 1)} disabled={index === freeNoteBlocks.length - 1} className="rounded-full px-2 py-1 disabled:opacity-25">Giu</button>
-                            <button type="button" onClick={() => removeFreeNoteBlock(index)} className="grid size-7 place-items-center rounded-full text-black/35 transition hover:bg-[#FAF7F9] hover:text-[#C66170]"><X className="size-4" /></button>
-                          </div>
-                        </div>
-                        <AttachmentCard name={block.name} url={block.url} />
-                      </div>
-                    );
-                  }
-                  return (
-                    <a key={`note-link-${index}`} href={block.url} target="_blank" rel="noreferrer" title={block.url} className="inline-flex min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-2xl bg-[#F5F1FF] px-4 py-3 text-sm font-semibold text-[#8064D8]">
-                      <LinkIcon className="size-4 shrink-0" /> <span className="min-w-0 truncate">{formatFreeNoteLinkLabel(block.url)}</span>
-                    </a>
-                  );
-                })}
-              </div>
-            </Card>
-            {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
-              <Card className="bg-white">
-                <h2 className="font-semibold">Prova completamento</h2>
-                {selected.completionNote ? <p className="mt-4 leading-7 text-black/55">{selected.completionNote}</p> : null}
-                <div className="mt-4 grid gap-3">
-                  {selected.completionFiles.map((file, index) => (
-                    <AttachmentCard key={`${file.name}-${index}`} name={file.name} url={file.url} />
-                  ))}
-                  {selected.completionLinks.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]"><LinkIcon className="size-4" /> {link}</a>)}
-                </div>
-              </Card>
-            ) : null}
-            <Card className="bg-white">
+              {/* Checklist */}
+            <Card className="bg-white p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-semibold">Checklist</h2>
                 <span className="text-sm font-semibold text-[#8064D8]">{completedChecklist}/{selected.checklist.length} completate</span>
@@ -1545,61 +1368,174 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 ))}
               </div>
             </Card>
-            <Card className="bg-white">
-              <h2 className="font-semibold">Commenti</h2>
-              <div className="mt-4 grid gap-3">
-                {selected.comments.length === 0 ? <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/45">Nessun commento ancora.</p> : null}
-                {selected.comments.map((comment) => (
-                  <div key={comment.id} className="rounded-2xl border border-black/5 p-4">
-                    <div className="flex items-start gap-3">
-                      <Avatar name={comment.userName} photoUrl={comment.userPhoto} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-semibold">{comment.userName}</p>
-                            <p className="text-xs text-black/45">{formatTaskDate(comment.createdAt)}</p>
+
+            {/* Prova completamento (se presente) */}
+            {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
+              <Card className="bg-white p-5">
+                <h2 className="font-semibold">Prova completamento</h2>
+                {selected.completionNote ? <p className="mt-4 leading-7 text-black/55">{selected.completionNote}</p> : null}
+                <div className="mt-4 grid gap-3">
+                  {selected.completionFiles.map((file, index) => (
+                    <AttachmentCard key={`${file.name}-${index}`} name={file.name} url={file.url} />
+                  ))}
+                  {selected.completionLinks.map((link) => <a key={link} href={link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]"><LinkIcon className="size-4" /> {link}</a>)}
+                </div>
+              </Card>
+            ) : null}
+
+            {/* Timeline Feed Cronologico Unificato */}
+            <Card className="bg-white p-5">
+              <div className="mb-6 flex items-center justify-between border-b border-black/5 pb-4">
+                <div>
+                  <h2 className="font-semibold">Attività e cronologia</h2>
+                  <p className="mt-1 text-xs text-black/45">Il flusso storico di tutti gli eventi, commenti e note della task.</p>
+                </div>
+                <Badge tone="dark">{timelineEvents.length}</Badge>
+              </div>
+
+              {/* Timeline feed */}
+              <div className="relative border-l border-black/10 pl-5 ml-3 space-y-6">
+                {timelineEvents.map((event, idx) => {
+                  const isComment = event.type === "comment";
+
+                  return (
+                    <div key={idx} className="relative">
+                      {/* Timeline dot */}
+                      <span className="absolute -left-[27px] top-1.5 size-3.5 rounded-full border-2 border-white bg-[#C66170] shadow-xs" />
+
+                      {isComment ? (
+                        /* Comment Element */
+                        <div className="rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-4 hover:bg-[#FAF7F9]/50 transition animate-in fade-in duration-200">
+                          <div className="flex items-start gap-3">
+                            <Avatar name={event.commentUser || "Collaboratore"} photoUrl={event.commentPhoto ?? null} className="size-8" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold">{event.commentUser}</p>
+                                  <p className="text-[10px] text-black/45">{formatTaskDate(event.date.toISOString())}</p>
+                                </div>
+                                {event.commentUserId === userId ? (
+                                  <button 
+                                    type="button" 
+                                    onClick={() => { 
+                                      setEditingCommentId(event.commentId || null); 
+                                      setCommentText(event.message || ""); 
+                                      setCommentFiles(event.files || []);
+                                    }} 
+                                    className="text-xs font-semibold text-[#8064D8] hover:underline"
+                                  >
+                                    Modifica
+                                  </button>
+                                ) : null}
+                              </div>
+                              {event.message && (
+                                <p className="mt-2 text-sm leading-6 text-black/70 whitespace-pre-wrap">{event.message}</p>
+                              )}
+                              
+                              {/* Attached files */}
+                              {event.files && event.files.length > 0 && (
+                                <div className="mt-3 grid gap-2">
+                                  {event.files.map((file: any, fileIdx: number) => {
+                                    const isImage = file.url?.startsWith("data:image/") || file.name?.match(/\.(jpeg|jpg|gif|png|webp)/i);
+                                    return (
+                                      <div key={fileIdx} className="max-w-md">
+                                        {isImage ? (
+                                          <ImagePreviewBlock name={file.name} url={file.url} />
+                                        ) : (
+                                          <AttachmentCard name={file.name} url={file.url} />
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {comment.userId === userId ? (
-                            <button type="button" onClick={() => { setEditingCommentId(comment.id); setCommentText(comment.message); }} className="text-xs font-semibold text-[#8064D8]">Modifica</button>
-                          ) : null}
                         </div>
-                        <p className="mt-3 text-sm leading-6 text-black/60">{comment.message}</p>
-                      </div>
+                      ) : (
+                        /* System Event Element */
+                        <div className="text-sm animate-in fade-in duration-200">
+                          <div className="flex items-center gap-2">
+                            {event.user ? (
+                              <Avatar name={event.user.name} photoUrl={event.user.photoUrl} className="size-5 shrink-0" />
+                            ) : null}
+                            <span className="font-semibold text-black/80">{event.title}</span>
+                            <span className="text-[10px] text-black/40 font-normal ml-auto shrink-0">{formatTaskDate(event.date.toISOString())}</span>
+                          </div>
+                          {event.description && (
+                            <p className="mt-1 text-xs text-black/50 ml-7">{event.description}</p>
+                          )}
+
+                          {/* Completion Proof Files */}
+                          {event.files && event.files.length > 0 && (
+                            <div className="mt-2 ml-7 grid gap-2 max-w-md">
+                              {event.files.map((file: any, fileIdx: number) => (
+                                <AttachmentCard key={fileIdx} name={file.name} url={file.url} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Comment Input Box at bottom of timeline */}
+              <div className="mt-6 border-t border-black/5 pt-5 space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-black/45">
+                  {editingCommentId ? "Modifica il commento" : "Aggiungi commento o nota"}
+                </h3>
+                <div className="rounded-2xl border border-black/10 p-3 bg-[#FAF7F9]/40">
+                  <textarea 
+                    className="min-h-20 w-full resize-none rounded-xl border border-black/5 px-3 py-2 text-sm outline-none bg-white shadow-xs focus:border-[#8064D8] transition" 
+                    value={commentText} 
+                    onChange={(event) => setCommentText(event.target.value)} 
+                    placeholder="Scrivi un aggiornamento, nota o commento..." 
+                  />
+                  
+                  {/* File Upload Previews */}
+                  {commentFiles.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-black/[0.02] p-2">
+                      {commentFiles.map((file, idx) => (
+                        <div key={idx} className="relative flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-xs font-medium border border-black/5 shadow-2xs">
+                          <span className="truncate max-w-[120px]">{file.name}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => removeCommentFile(idx)} 
+                            className="text-black/40 hover:text-black"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
+                        <FileImage className="size-4" /> Foto
+                        <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void attachCommentFiles(event.target.files); event.currentTarget.value = ""; }} />
+                      </label>
+                      <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
+                        <Paperclip className="size-4" /> File / PDF
+                        <input type="file" accept="application/pdf,.pdf,*/*" multiple className="hidden" onChange={(event) => { void attachCommentFiles(event.target.files); event.currentTarget.value = ""; }} />
+                      </label>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      {editingCommentId && (
+                        <Button variant="soft" className="h-9 text-xs" onClick={() => { setEditingCommentId(null); setCommentText(""); setCommentFiles([]); }}>
+                          Annulla
+                        </Button>
+                      )}
+                      <Button className="h-9 text-xs" disabled={commentUploading} onClick={saveComment}>
+                        <Send className="size-3.5" /> {editingCommentId ? "Salva" : "Invia"}
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-              <div className="mt-4 rounded-2xl border border-black/10 p-3">
-                <textarea className="min-h-20 w-full resize-none rounded-xl border border-black/10 px-3 py-2 text-sm outline-none" value={commentText} onChange={(event) => setCommentText(event.target.value)} placeholder="Scrivi un commento per questa task..." />
-                <div className="mt-2 flex justify-end">
-                  <Button onClick={saveComment}><Send className="size-4" /> {editingCommentId ? "Salva commento" : "Invia commento"}</Button>
                 </div>
-              </div>
-            </Card>
-            <Card className="bg-white">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-semibold">Attivita e cronologia</h2>
-                <Badge tone="dark">{selected.comments.length + 3}</Badge>
-              </div>
-              <div className="grid gap-3 text-sm">
-                <div className="flex items-center justify-between rounded-2xl bg-[#FAF7F9] p-4">
-                  <span>Task creata</span>
-                  <span className="font-semibold">{formatShortDateTime(selected.createdAt)}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-[#FAF7F9] p-4">
-                  <span>Ultima modifica</span>
-                  <span className="font-semibold">{formatShortDateTime(selected.updatedAt)}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-2xl bg-[#FAF7F9] p-4">
-                  <span>Stato attuale</span>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClasses(selected.status)}`}>{statusLabel(selected.status)}</span>
-                </div>
-                {selected.comments.length > 0 ? (
-                  <div className="flex items-center justify-between rounded-2xl bg-[#FAF7F9] p-4">
-                    <span>Commenti registrati</span>
-                    <span className="font-semibold">{selected.comments.length}</span>
-                  </div>
-                ) : null}
               </div>
             </Card>
             {selected.status === "ACTIVE" ? (
