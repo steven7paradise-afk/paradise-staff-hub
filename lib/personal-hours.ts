@@ -47,7 +47,7 @@ export function plannedHours(schedule?: ScheduleRow) {
   const endTime = schedule?.end_time ?? schedule?.category.end_time;
   if (!startTime || !endTime) return 0;
   const rawHours = schedule?.category.paid_hours ?? durationHours(startTime, endTime);
-  const expectedHours = rawHours >= 8 ? rawHours - 1 : rawHours;
+  const expectedHours = rawHours >= 6 ? rawHours - 1 : rawHours;
   return roundedHours(expectedHours);
 }
 
