@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -14,6 +14,11 @@ type FormField = {
   required: boolean;
   options?: string[];
   description?: string;
+  show_if?: {
+    field_id: string;
+    operator: "equals" | "not_equals" | "contains";
+    value: string;
+  } | null;
 };
 
 type FormTemplate = {
@@ -77,6 +82,7 @@ export function StaffFormsViewer({
 
   // Derived helper variables for dynamic group participants form
   const candidaturaForm = forms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
+  const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
   const isGroupCourse = String(participaValue || "").toUpperCase().includes("GRUP");
@@ -211,6 +217,16 @@ export function StaffFormsViewer({
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
   };
 
+  const isFieldVisible = (field: FormField, sourceAnswers = answers) => {
+    if (!field.show_if?.field_id) return true;
+    const actualValue = String(sourceAnswers[field.show_if.field_id] ?? "").toLowerCase().trim();
+    const expectedValue = String(field.show_if.value ?? "").toLowerCase().trim();
+    if (!expectedValue) return Boolean(actualValue);
+    if (field.show_if.operator === "contains") return actualValue.includes(expectedValue);
+    if (field.show_if.operator === "not_equals") return actualValue !== expectedValue;
+    return actualValue === expectedValue;
+  };
+
   const handleFileChange = (fieldId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -228,7 +244,10 @@ export function StaffFormsViewer({
     const formData = new FormData();
     formData.append("formId", selectedForm.id);
 
-    const answersPayload = { ...answers };
+    const visibleFieldIds = new Set(selectedForm.fields.filter((field) => isFieldVisible(field)).map((field) => field.id));
+    const answersPayload = Object.fromEntries(
+      Object.entries(answers).filter(([key]) => visibleFieldIds.has(key) || key.includes("_altro") || key.startsWith("participant_") || key === "group_participants_count")
+    );
     // Replace "Altro" select options with the custom text value typed in the specified input
     Object.keys(answersPayload).forEach((key) => {
       if (answersPayload[key] === "Altro" && answersPayload[key + "_altro"]) {
@@ -252,7 +271,9 @@ export function StaffFormsViewer({
 
     // File answers
     Object.entries(files).forEach(([fieldId, file]) => {
-      formData.append(fieldId, file);
+      if (visibleFieldIds.has(fieldId)) {
+        formData.append(fieldId, file);
+      }
     });
 
     try {
@@ -305,21 +326,50 @@ export function StaffFormsViewer({
       `}} />
 
 
-      {/* Header Card with Candidacy shortcut */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white/5 border border-white/10 rounded-[28px] p-6 mb-2">
+      {/* Header Card with shortcuts */}
+      <div className="flex flex-col gap-4 bg-white/5 border border-white/10 rounded-[28px] p-6 mb-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-white">Moduli & Form</h1>
-          <p className="text-xs sm:text-sm text-white/65 mt-0.5">Compila i moduli operativi del salone o registra una nuova candidatura.</p>
+          <p className="text-xs sm:text-sm text-white/65 mt-0.5">Compila moduli operativi, crea nuovi ordini o registra una nuova candidatura.</p>
         </div>
-        {candidaturaForm && (
-          <Button 
-            onClick={() => handleOpenForm(candidaturaForm)}
-            className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 rounded-2xl min-h-12 shrink-0 font-extrabold text-sm"
-          >
-            <Plus className="size-5 text-paradise-noir" /> Compila Nuova Candidatura
-          </Button>
-        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {orderForm && (
+            <Button 
+              onClick={() => handleOpenForm(orderForm)}
+              className="bg-gradient-to-r from-[#E8C98B] via-[#F7DFA7] to-[#FFE8B9] text-paradise-noir shadow-soft hover:shadow-luxury hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 rounded-2xl min-h-12 shrink-0 font-extrabold text-sm"
+            >
+              <ShoppingCart className="size-5 text-paradise-noir" /> Nuovo Ordine
+            </Button>
+          )}
+          {candidaturaForm && (
+            <Button 
+              onClick={() => handleOpenForm(candidaturaForm)}
+              className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 rounded-2xl min-h-12 shrink-0 font-extrabold text-sm"
+            >
+              <Plus className="size-5 text-paradise-noir" /> Nuova Candidatura
+            </Button>
+          )}
+        </div>
       </div>
+
+      {orderForm && (
+        <a
+          href="/orders"
+          className="group grid w-full gap-4 rounded-[28px] border border-[#E8C98B]/40 bg-gradient-to-br from-[#1F1B13] via-[#171412] to-[#0F0F0F] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#E8C98B] hover:shadow-xl md:grid-cols-[auto_1fr_auto] md:items-center"
+        >
+          <div className="grid size-14 place-items-center rounded-2xl bg-[#E8C98B] text-paradise-noir">
+            <ShoppingCart className="size-7" />
+          </div>
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#E8C98B]">Ordini salone</p>
+            <h2 className="mt-1 text-xl font-extrabold text-white">Controlla tutti gli ordini</h2>
+            <p className="mt-1 text-sm text-white/60">Vedi lo stato degli ordini del salone: nuovi, in preparazione, ordinati, arrivati e completati.</p>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-paradise-noir transition group-hover:translate-x-1">
+            Apri ordini <ArrowUpRight className="size-4" />
+          </span>
+        </a>
+      )}
 
       {/* Prossimi Eventi */}
       {upcomingEvents.length > 0 && (
@@ -672,7 +722,7 @@ export function StaffFormsViewer({
                   </div>
                 )}
 
-                {selectedForm.fields.map((field) => {
+                {selectedForm.fields.filter((field) => isFieldVisible(field)).map((field) => {
                   if (isCorsistiForm && isGroupCourse && isDefaultParticipantField(field.label)) {
                     return null;
                   }

@@ -1,0 +1,11 @@
+- `[x]` Creare la rotta server `/settings/forms/edit/[id]/page.tsx`
+- `[x]` Creare il componente client `FormBuilder` in `components/form-builder.tsx`
+  - `[x]` Struttura a tab (Builder, Settings, Preview) ed Inspector laterale
+  - `[x]` Visual Canvas con griglia a punti e blocchi/nodi domanda
+  - `[x]` Calcolo e rendering delle curve SVG di collegamento condizionale
+  - `[x]` Tab Settings (integrazione categoria "Ordini", notifiche, ruoli e sedi)
+  - `[x]` Tab Preview con simulatore desktop/mobile e calcolo logiche in real-time
+  - `[x]` Chiamate API per il salvataggio (POST/PUT) e reindirizzamento
+- `[x]` Modificare `components/admin-forms-manager.tsx` per reindirizzare le azioni "Edita/Crea" al builder di pagina e pulire il vecchio codice modal
+- `[x]` Eseguire build di verifica (`npm run build`)
+- `[x]` Aggiornare `walkthrough.md`

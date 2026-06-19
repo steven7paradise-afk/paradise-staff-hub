@@ -24,10 +24,16 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
   const [forms, locations, responses, users] = await Promise.all([
     prisma.serviceForm.findMany({
       orderBy: { created_at: "desc" },
+    }).catch((error) => {
+      console.error("Forms list unavailable:", error);
+      return [];
     }),
     prisma.location.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
+    }).catch((error) => {
+      console.error("Locations list unavailable:", error);
+      return [];
     }),
     prisma.serviceFormResponse.findMany({
       where: role === "RESPONSABILE" ? { user: { sede_id: session.user.sedeId ?? undefined } } : {},
@@ -36,11 +42,17 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
         user: true,
         form: true,
       },
+    }).catch((error) => {
+      console.error("Form responses unavailable:", error);
+      return [];
     }),
     prisma.user.findMany({
       where: { active: true },
       select: { id: true, name: true, role: true, mansione: true },
       orderBy: { name: "asc" },
+    }).catch((error) => {
+      console.error("Users list unavailable:", error);
+      return [];
     }),
   ]);
 

@@ -81,11 +81,33 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id || !session.user.role) redirect("/login");
 
-  const currentUser = await prisma.user.findUnique({
+  const safe = async <T,>(promise: Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await promise;
+    } catch (error) {
+      console.error("Dashboard data unavailable:", error);
+      return fallback;
+    }
+  };
+
+  const dbUser = await safe(prisma.user.findUnique({
     where: { id: session.user.id },
     include: { location: true },
-  });
-  if (!currentUser?.active) redirect("/login");
+  }), null);
+  if (dbUser && !dbUser.active) redirect("/login");
+
+  const currentUser = dbUser ?? ({
+    id: session.user.id,
+    active: true,
+    role: session.user.role,
+    name: session.user.name || "Paradise",
+    email: session.user.email || "",
+    sede_id: session.user.sedeId ?? null,
+    location: null,
+    photo_url: null,
+    whatsapp_phone: null,
+    fiscal_code: null,
+  } as any);
 
   const role: Role = currentUser.role;
 
@@ -112,8 +134,8 @@ export default async function DashboardPage() {
   }
 
   const [recentAttendance, recentRequests] = await Promise.all([
-    prisma.attendanceLog.findMany({ where: attendanceWhere, include: { user: true, location: true, device: true }, orderBy: { timestamp: "desc" }, take: 5 }),
-    prisma.leaveRequest.findMany({ where: requestWhere, include: { user: true }, orderBy: { created_at: "desc" }, take: 5 }),
+    safe(prisma.attendanceLog.findMany({ where: attendanceWhere, include: { user: true, location: true, device: true }, orderBy: { timestamp: "desc" }, take: 5 }), [] as AttendanceWithRelations[]),
+    safe(prisma.leaveRequest.findMany({ where: requestWhere, include: { user: true }, orderBy: { created_at: "desc" }, take: 5 }), [] as RequestWithUser[]),
   ]);
 
   let subtitle = "Controllo operativo HR, presenze, documenti e notifiche in un unico spazio.";
@@ -135,30 +157,30 @@ export default async function DashboardPage() {
 
   const [personalSchedule, personalMonthLogs, personalHourRecords, salonSchedule, salonWorkers, personalDocuments, personalNotifications, liveTeamWorkers, activeAbsences, locationsOverview, contractDeadlines, liveClockSettings, rawNewResponses] = await Promise.all([
     role === "DIPENDENTE"
-      ? prisma.scheduleEntry.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } }, include: { category: true }, orderBy: { date: "asc" } })
+      ? safe(prisma.scheduleEntry.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } }, include: { category: true }, orderBy: { date: "asc" } }), [] as ScheduleWithCategory[])
       : Promise.resolve([]),
     role === "DIPENDENTE"
-      ? prisma.attendanceLog.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } })
+      ? safe(prisma.attendanceLog.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } }), [])
       : Promise.resolve([]),
     role === "DIPENDENTE"
-      ? prisma.workHourRecord.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } } })
+      ? safe(prisma.workHourRecord.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } } }), [])
       : Promise.resolve([]),
     role === "DIPENDENTE"
-      ? prisma.scheduleEntry.findMany({
+      ? safe(prisma.scheduleEntry.findMany({
           where: { user: { sede_id: currentUser.sede_id ?? undefined }, date: { gte: month, lt: nextMonth } },
           include: { user: true, category: true },
           orderBy: [{ date: "asc" }, { user: { name: "asc" } }],
-        })
+        }), [] as ScheduleWithUserCategory[])
       : Promise.resolve([]),
     role === "DIPENDENTE"
-      ? prisma.user.findMany({ where: { active: true, sede_id: currentUser.sede_id, role: { not: "SUPER_ADMIN" } }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+      ? safe(prisma.user.findMany({ where: { active: true, sede_id: currentUser.sede_id, role: { not: "SUPER_ADMIN" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }), [] as WorkerRow[])
       : Promise.resolve([] as WorkerRow[]),
     role === "DIPENDENTE"
-      ? prisma.document.findMany({ where: { user_id: currentUser.id }, select: { id: true, title: true, file_url: true, storage_path: true, type: true, month: true, year: true }, orderBy: { created_at: "desc" }, take: 5 })
+      ? safe(prisma.document.findMany({ where: { user_id: currentUser.id }, select: { id: true, title: true, file_url: true, storage_path: true, type: true, month: true, year: true }, orderBy: { created_at: "desc" }, take: 5 }), [] as PersonalDocument[])
       : Promise.resolve([] as PersonalDocument[]),
-    prisma.notification.findMany({ where: { user_id: currentUser.id }, orderBy: { created_at: "desc" }, take: 5 }),
+    safe(prisma.notification.findMany({ where: { user_id: currentUser.id }, orderBy: { created_at: "desc" }, take: 5 }), []),
     role !== "DIPENDENTE"
-      ? prisma.user.findMany({
+      ? safe(prisma.user.findMany({
           where: {
             active: true,
             role: { not: "SUPER_ADMIN" },
@@ -166,10 +188,10 @@ export default async function DashboardPage() {
           },
           include: { location: true, attendance_logs: { where: { date: { gte: statusToday, lt: statusTomorrow } }, orderBy: { timestamp: "desc" }, take: 1 } },
           orderBy: { name: "asc" },
-        })
+        }), [])
       : Promise.resolve([]),
     role !== "DIPENDENTE"
-      ? prisma.leaveRequest.findMany({
+      ? safe(prisma.leaveRequest.findMany({
           where: {
             ...(role === "RESPONSABILE" ? { user: { sede_id: currentUser.sede_id ?? undefined } } : {}),
             status: "APPROVED",
@@ -178,13 +200,13 @@ export default async function DashboardPage() {
           },
           include: { user: true },
           orderBy: { start_date: "asc" },
-        })
+        }), [])
       : Promise.resolve([]),
     role === "ADMIN" || role === "SUPER_ADMIN"
-      ? prisma.location.findMany({ where: { active: true }, include: { users: { where: { active: true, role: { not: "SUPER_ADMIN" } }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } })
+      ? safe(prisma.location.findMany({ where: { active: true }, include: { users: { where: { active: true, role: { not: "SUPER_ADMIN" } }, orderBy: { name: "asc" } } }, orderBy: { name: "asc" } }), [])
       : Promise.resolve([]),
     role !== "DIPENDENTE"
-      ? prisma.user.findMany({
+      ? safe(prisma.user.findMany({
           where: {
             active: true,
             role: { not: "SUPER_ADMIN" },
@@ -194,14 +216,14 @@ export default async function DashboardPage() {
           include: { location: true },
           orderBy: { contract_end: "asc" },
           take: 8,
-        })
+        }), [])
       : Promise.resolve([]),
     role === "DIPENDENTE" && currentUser.sede_id
-      ? prisma.setting.findMany({ where: { key: clockRuleKey(currentUser.sede_id) } })
+      ? safe(prisma.setting.findMany({ where: { key: clockRuleKey(currentUser.sede_id) } }), [])
       : role !== "DIPENDENTE"
-      ? prisma.setting.findMany({ where: { key: { startsWith: "clock_rule:" } } })
+      ? safe(prisma.setting.findMany({ where: { key: { startsWith: "clock_rule:" } } }), [])
       : Promise.resolve([]),
-    prisma.serviceFormResponse.findMany({
+    safe(prisma.serviceFormResponse.findMany({
       where: {
         status: "NEW",
       },
@@ -209,7 +231,7 @@ export default async function DashboardPage() {
         form: true,
         user: true,
       },
-    }),
+    }), []),
   ]);
   const allowedNewResponses = rawNewResponses.filter((r: any) => {
     // Exclude own submissions
@@ -239,16 +261,16 @@ export default async function DashboardPage() {
     const today = statusToday;
     const tomorrow = statusTomorrow;
     const [todayEntry, futureEntries, todaySalonEntries, openRequests, unread, todayLogs] = await Promise.all([
-      prisma.scheduleEntry.findFirst({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, include: { category: true } }),
-      prisma.scheduleEntry.findMany({ where: { user_id: currentUser.id, date: { gte: tomorrow } }, include: { category: true }, orderBy: { date: "asc" }, take: 24 }),
-      prisma.scheduleEntry.findMany({ 
+      safe(prisma.scheduleEntry.findFirst({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, include: { category: true } }), null),
+      safe(prisma.scheduleEntry.findMany({ where: { user_id: currentUser.id, date: { gte: tomorrow } }, include: { category: true }, orderBy: { date: "asc" }, take: 24 }), [] as ScheduleWithCategory[]),
+      safe(prisma.scheduleEntry.findMany({ 
         where: { location_id: currentUser.sede_id ?? undefined, date: { gte: today, lt: tomorrow } }, 
         include: { user: true, category: true },
         orderBy: { user: { name: "asc" } }
-      }),
-      prisma.leaveRequest.count({ where: { user_id: currentUser.id, status: "PENDING" } }),
-      prisma.notification.count({ where: { user_id: currentUser.id, read: false, type: "COMUNICAZIONE" } }),
-      prisma.attendanceLog.findMany({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
+      }), [] as ScheduleWithUserCategory[]),
+      safe(prisma.leaveRequest.count({ where: { user_id: currentUser.id, status: "PENDING" } }), 0),
+      safe(prisma.notification.count({ where: { user_id: currentUser.id, read: false, type: "COMUNICAZIONE" } }), 0),
+      safe(prisma.attendanceLog.findMany({ where: { user_id: currentUser.id, date: { gte: today, lt: tomorrow } }, select: { type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }), []),
     ]);
     todayShift = todayEntry;
     nextShift = futureEntries.find((entry) => Boolean((entry.start_time ?? entry.category.start_time) && (entry.end_time ?? entry.category.end_time))) ?? null;
@@ -298,10 +320,10 @@ export default async function DashboardPage() {
   } else if (role === "RESPONSABILE") {
     subtitle = `Vista responsabile: andamento turno, assenze e contratti di ${currentUser.location?.name ?? "sede assegnata"}.`;
     const [team, todaysLogs, openRequests, scheduleItems] = await Promise.all([
-      prisma.user.count({ where: { sede_id: currentUser.sede_id, active: true, role: { not: "SUPER_ADMIN" } } }),
-      prisma.attendanceLog.count({ where: { location_id: currentUser.sede_id ?? undefined, date: { gte: start, lt: end } } }),
-      prisma.leaveRequest.count({ where: { user: { sede_id: currentUser.sede_id ?? undefined }, status: "PENDING" } }),
-      prisma.scheduleEntry.count({ where: { location_id: currentUser.sede_id ?? undefined, date: { gte: month } } }),
+      safe(prisma.user.count({ where: { sede_id: currentUser.sede_id, active: true, role: { not: "SUPER_ADMIN" } } }), 0),
+      safe(prisma.attendanceLog.count({ where: { location_id: currentUser.sede_id ?? undefined, date: { gte: start, lt: end } } }), 0),
+      safe(prisma.leaveRequest.count({ where: { user: { sede_id: currentUser.sede_id ?? undefined }, status: "PENDING" } }), 0),
+      safe(prisma.scheduleEntry.count({ where: { location_id: currentUser.sede_id ?? undefined, date: { gte: month } } }), 0),
     ]);
     metrics = [
       { label: "Personale sede", value: team, icon: Users, trend: "Account attivi" },
@@ -312,10 +334,10 @@ export default async function DashboardPage() {
   } else if (role === "ADMIN") {
     subtitle = "Gestione operativa: dipendenti, timbrature, richieste, documenti e saloni.";
     const [staff, todaysLogs, openRequests, documents] = await Promise.all([
-      prisma.user.count({ where: { active: true, role: "DIPENDENTE" } }),
-      prisma.attendanceLog.count({ where: { date: { gte: start, lt: end } } }),
-      prisma.leaveRequest.count({ where: { status: "PENDING" } }),
-      prisma.document.count(),
+      safe(prisma.user.count({ where: { active: true, role: "DIPENDENTE" } }), 0),
+      safe(prisma.attendanceLog.count({ where: { date: { gte: start, lt: end } } }), 0),
+      safe(prisma.leaveRequest.count({ where: { status: "PENDING" } }), 0),
+      safe(prisma.document.count(), 0),
     ]);
     metrics = [
       { label: "Dipendenti attivi", value: staff, icon: Users, trend: "Tutte le sedi" },
@@ -326,10 +348,10 @@ export default async function DashboardPage() {
   } else {
     subtitle = "Console Super Admin: sistema, saloni, contratti e controllo completo.";
     const [locations, staff, devices, openRequests] = await Promise.all([
-      prisma.location.count({ where: { active: true } }),
-      prisma.user.count({ where: { active: true, role: { not: "SUPER_ADMIN" } } }),
-      prisma.device.count({ where: { status: "ACTIVE", archived_at: null, NOT: { device_id: { startsWith: "ADMIN-MANUAL-" } } } }),
-      prisma.leaveRequest.count({ where: { status: "PENDING" } }),
+      safe(prisma.location.count({ where: { active: true } }), 0),
+      safe(prisma.user.count({ where: { active: true, role: { not: "SUPER_ADMIN" } } }), 0),
+      safe(prisma.device.count({ where: { status: "ACTIVE", archived_at: null, NOT: { device_id: { startsWith: "ADMIN-MANUAL-" } } } }), 0),
+      safe(prisma.leaveRequest.count({ where: { status: "PENDING" } }), 0),
     ]);
     metrics = [
       { label: "Sedi attive", value: locations, icon: Building2, trend: "Configurate nel sistema" },

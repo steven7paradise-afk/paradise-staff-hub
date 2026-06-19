@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { syncSocialPostToGoogleCalendar, deleteSocialPostFromGoogleCalendar } from "@/lib/google-calendar";
 
 // Helper to check access permissions
 async function checkAuth(userId: string) {
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, description, scheduledAt, platform, status, coverUrl, videoUrl, notes } = body;
+    const { title, description, scheduledAt, platform, status, coverUrl, videoUrl, notes, brand } = body;
 
     if (!title || !scheduledAt || !platform) {
       return NextResponse.json({ error: "Titolo, data e piattaforma sono campi obbligatori." }, { status: 400 });
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
         cover_url: coverUrl || null,
         video_url: videoUrl || null,
         notes: notes || null,
+        brand: brand || "PARADISE",
         created_by_id: session.user.id,
       },
       include: {
@@ -90,6 +92,9 @@ export async function POST(request: NextRequest) {
         }
       }
     });
+
+    // Sync to Google Calendar in the background
+    void syncSocialPostToGoogleCalendar(post.id);
 
     return NextResponse.json(post);
   } catch (error) {
@@ -111,7 +116,7 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { id, title, description, scheduledAt, platform, status, coverUrl, videoUrl, notes } = body;
+    const { id, title, description, scheduledAt, platform, status, coverUrl, videoUrl, notes, brand } = body;
 
     if (!id || !title || !scheduledAt || !platform) {
       return NextResponse.json({ error: "ID, titolo, data e piattaforma sono obbligatori per l'aggiornamento." }, { status: 400 });
@@ -128,6 +133,7 @@ export async function PUT(request: NextRequest) {
         cover_url: coverUrl || null,
         video_url: videoUrl || null,
         notes: notes || null,
+        brand: brand || "PARADISE",
       },
       include: {
         created_by: {
@@ -139,6 +145,9 @@ export async function PUT(request: NextRequest) {
         }
       }
     });
+
+    // Sync to Google Calendar in the background
+    void syncSocialPostToGoogleCalendar(post.id);
 
     return NextResponse.json(post);
   } catch (error) {
@@ -166,9 +175,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "ID post mancante." }, { status: 400 });
     }
 
+    const post = await prisma.socialPost.findUnique({
+      where: { id },
+      select: { google_calendar_event_id: true }
+    });
+
     await prisma.socialPost.delete({
       where: { id },
     });
+
+    if (post?.google_calendar_event_id) {
+      void deleteSocialPostFromGoogleCalendar(post.google_calendar_event_id);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

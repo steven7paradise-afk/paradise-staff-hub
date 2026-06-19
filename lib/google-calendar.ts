@@ -468,3 +468,116 @@ export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
 
   return { success: true };
 }
+
+const SOCIAL_CALENDAR_ID = "c5ee9c83ef80be6108f6b3008bb9c998cd92cee0c09cdec7b903edbb5573af5b@group.calendar.google.com";
+
+async function getSocialCalendarClient() {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  if (!clientEmail || !privateKey) {
+    return {
+      skipped: true as const,
+      reason: `Google Calendar credentials missing. clientEmail: ${clientEmail ? "present" : "missing"}, privateKey: ${privateKey ? "present" : "missing"}`,
+    };
+  }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/calendar.events"],
+  });
+
+  return {
+    skipped: false as const,
+    calendarId: SOCIAL_CALENDAR_ID,
+    calendar: google.calendar({ version: "v3", auth }),
+  };
+}
+
+export async function syncSocialPostToGoogleCalendar(socialPostId: string) {
+  const post = await prisma.socialPost.findUnique({
+    where: { id: socialPostId },
+  });
+
+  if (!post) {
+    return { skipped: true, reason: "Social post not found" };
+  }
+
+  const setup = await getSocialCalendarClient();
+  if (setup.skipped) return setup;
+
+  const startDateTime = post.scheduled_at.toISOString();
+  const endDateTime = new Date(post.scheduled_at.getTime() + 30 * 60 * 1000).toISOString();
+
+  const brandLabel = post.brand ? post.brand.split(",").map(b => b.trim() === "FRANCESCA" ? "FRANCESCA" : "PARADISE").join(" & ") : "PARADISE";
+  const platformList = post.platform ? post.platform.split(",").join(" / ") : "";
+
+  const event = {
+    summary: `[${brandLabel}] ${post.title} (${platformList})`,
+    description: [
+      `Titolo: ${post.title}`,
+      post.description ? `Descrizione: ${post.description}` : null,
+      `Piattaforme: ${platformList}`,
+      `Profilo/Brand: ${brandLabel}`,
+      `Stato: ${post.status}`,
+      post.video_url ? `Link Video: ${post.video_url}` : null,
+      post.notes ? `Note: ${post.notes}` : null,
+      `Gestito via Paradise Staff Hub.`,
+    ].filter(Boolean).join("\n"),
+    start: { dateTime: startDateTime, timeZone: "Europe/Rome" },
+    end: { dateTime: endDateTime, timeZone: "Europe/Rome" },
+  };
+
+  if (post.google_calendar_event_id) {
+    try {
+      await setup.calendar.events.update({
+        calendarId: setup.calendarId,
+        eventId: post.google_calendar_event_id,
+        requestBody: event,
+        sendUpdates: "none",
+      });
+      return { skipped: false, eventId: post.google_calendar_event_id, updated: true };
+    } catch (error) {
+      console.warn("Social event update failed, re-inserting:", error);
+    }
+  }
+
+  const response = await setup.calendar.events.insert({
+    calendarId: setup.calendarId,
+    requestBody: event,
+    sendUpdates: "none",
+  });
+  const eventId = response.data.id;
+
+  if (eventId) {
+    await prisma.socialPost.update({
+      where: { id: post.id },
+      data: { google_calendar_event_id: eventId },
+    });
+  }
+
+  return { skipped: false, eventId, updated: false };
+}
+
+export async function deleteSocialPostFromGoogleCalendar(eventId?: string | null) {
+  if (!eventId) {
+    return { skipped: true, reason: "No social post event to delete" };
+  }
+
+  const setup = await getSocialCalendarClient();
+  if (setup.skipped) return setup;
+
+  try {
+    await setup.calendar.events.delete({
+      calendarId: setup.calendarId,
+      eventId,
+      sendUpdates: "none",
+    });
+    return { deleted: true, eventId };
+  } catch (error) {
+    console.error("Failed to delete social calendar event:", error);
+    return { deleted: false, error };
+  }
+}
+

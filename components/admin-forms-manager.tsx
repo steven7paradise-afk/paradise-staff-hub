@@ -4,7 +4,7 @@ import React, { useState, useMemo } from "react";
 import { 
   Plus, Trash2, Edit, ClipboardList, Eye, Check, X, 
   Sliders, User, MapPin, Calendar, Download, AlertCircle, Play,
-  Archive, Undo, Inbox, ArrowUpRight
+  Archive, Undo, Inbox, ArrowUpRight, GitBranch, ListChecks, Settings2, MonitorSmartphone
 } from "lucide-react";
 import { Badge, Card, Select, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -21,6 +21,11 @@ type FormField = {
   required: boolean;
   options?: string[];
   description?: string;
+  show_if?: {
+    field_id: string;
+    operator: "equals" | "not_equals" | "contains";
+    value: string;
+  } | null;
 };
 
 type FormTemplate = {
@@ -100,22 +105,6 @@ export function AdminFormsManager({
   const [filterFormId, setFilterFormId] = useState<string>("all");
   const [filterSearch, setFilterSearch] = useState<string>("");
 
-  // Modal / Creator States
-  const [showModal, setShowModal] = useState(false);
-  const [editingForm, setEditingForm] = useState<FormTemplate | null>(null);
-  
-  // Form Field States
-  const [formName, setFormName] = useState("");
-  const [formDesc, setFormDesc] = useState("");
-  const [formCategory, setFormCategory] = useState("Generale");
-  const [formActive, setFormActive] = useState(true);
-  const [formIcon, setFormIcon] = useState("ClipboardList");
-  const [allowedRoles, setAllowedRoles] = useState<string[]>([]);
-  const [allowedLocations, setAllowedLocations] = useState<string[]>([]);
-  const [notifyRoles, setNotifyRoles] = useState<string[]>([]);
-  const [notifyUserIds, setNotifyUserIds] = useState<string[]>([]);
-  const [formFields, setFormFields] = useState<FormField[]>([]);
-
   const [selectedResponse, setSelectedResponse] = useState<FormResponse | null>(null);
 
   // Derived helper variables for dynamic group participants response viewer
@@ -146,108 +135,6 @@ export function AdminFormsManager({
     return labelUpper === "NOME CORSISTA" || labelUpper === "EMAIL CORSISTA" || labelUpper === "NUMERO CORSISTA";
   };
 
-
-  // Load editing values into state
-  const handleOpenEdit = (form: FormTemplate) => {
-    setEditingForm(form);
-    setFormName(form.name);
-    setFormDesc(form.description || "");
-    setFormCategory(form.category);
-    setFormActive(form.active);
-    setFormIcon(form.icon || "ClipboardList");
-    setAllowedRoles(form.allowed_roles || []);
-    setAllowedLocations(form.allowed_location_ids || []);
-    setNotifyRoles(form.notify_roles || []);
-    setNotifyUserIds(form.notify_user_ids || []);
-    setFormFields(form.fields || []);
-    setShowModal(true);
-  };
-
-  const handleOpenCreate = () => {
-    setEditingForm(null);
-    setFormName("");
-    setFormDesc("");
-    setFormCategory("Generale");
-    setFormActive(true);
-    setFormIcon("ClipboardList");
-    setAllowedRoles([]);
-    setAllowedLocations([]);
-    setNotifyRoles([]);
-    setNotifyUserIds([]);
-    setFormFields([
-      { id: "field_1", label: "Domanda 1", type: "text", required: true }
-    ]);
-    setShowModal(true);
-  };
-
-  // Add a question field
-  const addField = () => {
-    const newId = `field_${Date.now()}`;
-    setFormFields([...formFields, { id: newId, label: `Domanda ${formFields.length + 1}`, type: "text", required: true }]);
-  };
-
-  // Update a specific field's property
-  const updateField = (index: number, key: keyof FormField, value: any) => {
-    const updated = [...formFields];
-    updated[index] = { ...updated[index], [key]: value };
-    setFormFields(updated);
-  };
-
-  // Remove a question field
-  const removeField = (index: number) => {
-    if (formFields.length <= 1) return; // Keep at least one
-    setFormFields(formFields.filter((_, i) => i !== index));
-  };
-
-  // Handle template submit (Create or Update)
-  const handleSubmitForm = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName.trim()) return;
-
-    const payload = {
-      name: formName.trim(),
-      description: formDesc.trim(),
-      category: formCategory,
-      active: formActive,
-      icon: formIcon,
-      allowed_roles: allowedRoles.length > 0 ? allowedRoles : null,
-      allowed_location_ids: allowedLocations.length > 0 ? allowedLocations : null,
-      notify_roles: notifyRoles.length > 0 ? notifyRoles : null,
-      notify_user_ids: notifyUserIds.length > 0 ? notifyUserIds : null,
-      fields: formFields,
-    };
-
-    try {
-      if (editingForm) {
-        // Update
-        const res = await fetch(`/api/service-forms/${editingForm.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const updated = await res.json();
-          setForms(forms.map((f) => (f.id === editingForm.id ? updated : f)));
-          setShowModal(false);
-        }
-      } else {
-        // Create
-        const res = await fetch("/api/service-forms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          const created = await res.json();
-          setForms([created, ...forms]);
-          setShowModal(false);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to save template:", err);
-    }
-  };
-
   // Delete form template
   const handleDeleteForm = async (id: string) => {
     if (!confirm("Sei sicuro di voler eliminare questo modulo? Verranno eliminati anche tutti i dati ad esso associati.")) return;
@@ -258,42 +145,6 @@ export function AdminFormsManager({
       }
     } catch (err) {
       console.error("Failed to delete template:", err);
-    }
-  };
-
-  // Allowed roles toggle
-  const toggleRole = (role: string) => {
-    if (allowedRoles.includes(role)) {
-      setAllowedRoles(allowedRoles.filter((r) => r !== role));
-    } else {
-      setAllowedRoles([...allowedRoles, role]);
-    }
-  };
-
-  // Allowed locations toggle
-  const toggleLocation = (locId: string) => {
-    if (allowedLocations.includes(locId)) {
-      setAllowedLocations(allowedLocations.filter((id) => id !== locId));
-    } else {
-      setAllowedLocations([...allowedLocations, locId]);
-    }
-  };
-
-  // Notify roles toggle
-  const toggleNotifyRole = (roleVal: string) => {
-    if (notifyRoles.includes(roleVal)) {
-      setNotifyRoles(notifyRoles.filter((r) => r !== roleVal));
-    } else {
-      setNotifyRoles([...notifyRoles, roleVal]);
-    }
-  };
-
-  // Notify users toggle
-  const toggleNotifyUser = (userId: string) => {
-    if (notifyUserIds.includes(userId)) {
-      setNotifyUserIds(notifyUserIds.filter((id) => id !== userId));
-    } else {
-      setNotifyUserIds([...notifyUserIds, userId]);
     }
   };
 
@@ -453,13 +304,13 @@ export function AdminFormsManager({
                 </Link>
               )}
               {canManage && (
-                <button
-                  onClick={handleOpenCreate}
+                <Link
+                  href="/settings/forms/edit/new"
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#A74758] px-4 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Plus className="size-4" />
                   Crea nuovo modulo
-                </button>
+                </Link>
               )}
             </div>
           </div>
@@ -532,13 +383,13 @@ export function AdminFormsManager({
                   </div>
                   {canManage && (
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(form)}
+                      <Link
+                        href={`/settings/forms/edit/${form.id}`}
                         className="grid size-8 place-items-center rounded-xl bg-white text-black/60 shadow-sm border border-black/5 hover:bg-black/5 transition"
                         title="Modifica"
                       >
                         <Edit className="size-3.5" />
-                      </button>
+                      </Link>
                       <button
                         onClick={() => handleDeleteForm(form.id)}
                         className="grid size-8 place-items-center rounded-xl bg-white text-red-500 shadow-sm border border-black/5 hover:bg-red-50 transition"
@@ -595,11 +446,9 @@ export function AdminFormsManager({
                             <h3 className="text-base font-extrabold mt-0.5 leading-tight">{form.name}</h3>
                           </div>
                           {canManage && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenEdit(form);
-                              }}
+                            <Link
+                              href={`/settings/forms/edit/${form.id}`}
+                              onClick={(e) => e.stopPropagation()}
                               className={cn(
                                 "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
                                 color.arrowBg,
@@ -607,7 +456,7 @@ export function AdminFormsManager({
                               )}
                             >
                               <ArrowUpRight className="size-4.5" />
-                            </button>
+                            </Link>
                           )}
                         </div>
 
@@ -649,17 +498,14 @@ export function AdminFormsManager({
                               <Trash2 className="size-4" />
                               Elimina
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenEdit(form);
-                              }}
+                            <Link
+                              href={`/settings/forms/edit/${form.id}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
                             >
                               <Edit className="size-4" />
                               Modifica
-                            </button>
+                            </Link>
                           </div>
                         )}
                       </div>
@@ -1223,331 +1069,7 @@ export function AdminFormsManager({
         </Card>
       )}
 
-      {/* CREATE/EDIT TEMPLATE MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex flex-col max-h-[90vh] w-full max-w-3xl rounded-[28px] bg-white shadow-2xl overflow-hidden border border-black/5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
-              <h3 className="text-xl font-bold">
-                {editingForm ? "Modifica Modulo" : "Crea Nuovo Modulo"}
-              </h3>
-              <button 
-                onClick={() => setShowModal(false)}
-                className="grid size-8 place-items-center rounded-xl bg-white border border-black/5 text-black/40 hover:bg-black/5 hover:text-black/80 transition"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitForm} className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Metadata */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="col-span-full">
-                  <label className="text-xs font-bold uppercase tracking-wider text-black/50">Nome Modulo *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    placeholder="Es. Checklist Apertura Salone"
-                    className="mt-1 h-10 w-full rounded-xl border border-black/10 px-3 text-sm focus:border-[#A74758] outline-none"
-                  />
-                </div>
-                <div className="col-span-full">
-                  <label className="text-xs font-bold uppercase tracking-wider text-black/50">Descrizione</label>
-                  <textarea
-                    value={formDesc}
-                    onChange={(e) => setFormDesc(e.target.value)}
-                    placeholder="Scopo di questo modulo..."
-                    rows={2}
-                    className="mt-1 w-full rounded-xl border border-black/10 p-3 text-sm focus:border-[#A74758] outline-none resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-black/50">Categoria</label>
-                  <input
-                    type="text"
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    placeholder="Es. Operativa, Amministrativa"
-                    className="mt-1 h-10 w-full rounded-xl border border-black/10 px-3 text-sm focus:border-[#A74758] outline-none"
-                  />
-                </div>
-                <div className="flex items-center gap-3 mt-4">
-                  <input
-                    id="active"
-                    type="checkbox"
-                    checked={formActive}
-                    onChange={(e) => setFormActive(e.target.checked)}
-                    className="size-5 rounded-lg border-black/10 text-[#A74758] focus:ring-[#A74758]"
-                  />
-                  <label htmlFor="active" className="text-sm font-semibold cursor-pointer">
-                    Modulo Attivo (Visibile allo staff)
-                  </label>
-                </div>
-              </div>
-
-              {/* Icon Picker */}
-              <div className="border-t border-black/5 pt-4">
-                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Seleziona Icona per il Modulo</label>
-                <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-12 max-h-36 overflow-y-auto p-2 border border-black/5 bg-[#FBF7F9] rounded-2xl">
-                  {FORM_ICONS.map((iconName) => {
-                    const selected = formIcon === iconName;
-                    return (
-                      <button
-                        key={iconName}
-                        type="button"
-                        onClick={() => setFormIcon(iconName)}
-                        className={`grid aspect-square place-items-center rounded-xl border p-2 transition hover:scale-105 active:scale-95 ${
-                          selected 
-                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm font-bold" 
-                            : "bg-white border-black/5 text-black/60 hover:bg-black/5"
-                        }`}
-                        title={iconName}
-                      >
-                        <DynamicIcon name={iconName} className="size-5" />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Target Audience (Roles) */}
-              <div className="border-t border-black/5 pt-4">
-                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Chi può compilarlo? (Ruoli)</label>
-                <p className="text-xs text-black/40 mb-2">Se non selezioni nulla, tutti i dipendenti potranno compilarlo.</p>
-                <div className="flex flex-wrap gap-2">
-                  {USER_ROLES.map((role) => {
-                    const selected = allowedRoles.includes(role.value);
-                    return (
-                      <button
-                        key={role.value}
-                        type="button"
-                        onClick={() => toggleRole(role.value)}
-                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                          selected 
-                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758]" 
-                            : "bg-[#FBF7F9] border-black/5 text-black/60 hover:bg-black/5"
-                        }`}
-                      >
-                        {selected && <Check className="size-3" />}
-                        {role.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Target Audience (Locations) */}
-              <div className="border-t border-black/5 pt-4">
-                <label className="text-xs font-bold uppercase tracking-wider text-black/50">In quali sedi è disponibile?</label>
-                <p className="text-xs text-black/40 mb-2">Se non selezioni alcuna sede, sarà disponibile in tutti i saloni.</p>
-                <div className="flex flex-wrap gap-2">
-                  {locations.map((loc) => {
-                    const selected = allowedLocations.includes(loc.id);
-                    return (
-                      <button
-                        key={loc.id}
-                        type="button"
-                        onClick={() => toggleLocation(loc.id)}
-                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                          selected 
-                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758]" 
-                            : "bg-[#FBF7F9] border-black/5 text-black/60 hover:bg-black/5"
-                        }`}
-                      >
-                        {selected && <Check className="size-3" />}
-                        {loc.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Notification Targets (Roles) */}
-              <div className="border-t border-black/5 pt-4">
-                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Chi riceve le notifiche? (Ruoli)</label>
-                <p className="text-xs text-black/40 mb-2">Seleziona quali ruoli riceveranno una notifica all'invio di questo modulo. Se non selezioni nulla, verranno notificati i Responsabili/Admin di default.</p>
-                <div className="flex flex-wrap gap-2">
-                  {USER_ROLES.map((role) => {
-                    const selected = notifyRoles.includes(role.value);
-                    return (
-                      <button
-                        key={`notify-${role.value}`}
-                        type="button"
-                        onClick={() => toggleNotifyRole(role.value)}
-                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
-                          selected 
-                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758]" 
-                            : "bg-[#FBF7F9] border-black/5 text-black/60 hover:bg-black/5"
-                        }`}
-                      >
-                        {selected && <Check className="size-3" />}
-                        {role.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Notification Targets (Specific Users) */}
-              <div className="border-t border-black/5 pt-4">
-                <label className="text-xs font-bold uppercase tracking-wider text-black/50">Notifica collaboratori specifici</label>
-                <p className="text-xs text-black/40 mb-2">Seleziona collaboratori specifici da notificare all'invio (es. Magazziniere, Responsabili specifici).</p>
-                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 max-h-40 overflow-y-auto p-3 border border-black/5 bg-[#FBF7F9] rounded-2xl">
-                  {users.map((u) => {
-                    const selected = notifyUserIds.includes(u.id);
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleNotifyUser(u.id)}
-                        className={`flex items-center gap-2 rounded-xl border p-2 text-left text-xs transition hover:bg-black/5 ${
-                          selected 
-                            ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] font-bold" 
-                            : "bg-white border-black/5 text-black/75"
-                        }`}
-                      >
-                        <div className={`grid size-4 place-items-center rounded border transition ${
-                          selected ? "bg-[#A74758] border-[#A74758] text-white" : "border-black/20"
-                        }`}>
-                          {selected && <Check className="size-3" />}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold">{u.name}</p>
-                          {u.mansione && <p className="text-[10px] text-black/40 truncate mt-0.5">{u.mansione}</p>}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Questions/Fields Builder */}
-              <div className="border-t border-black/5 pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-bold uppercase tracking-wider text-black/50">Domande del Formulario</label>
-                  <button
-                    type="button"
-                    onClick={addField}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-[#A74758] hover:underline"
-                  >
-                    <Plus className="size-3.5" />
-                    Aggiungi domanda
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {formFields.map((field, idx) => (
-                    <div 
-                      key={field.id} 
-                      className="flex flex-col gap-3 rounded-2xl border border-black/5 bg-[#FBF7F9] p-4"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs font-bold text-black/40">Domanda {idx + 1}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeField(idx)}
-                          disabled={formFields.length <= 1}
-                          className="text-red-500 hover:text-red-700 disabled:opacity-40"
-                          title="Rimuovi"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </div>
-
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="sm:col-span-2">
-                          <label className="text-[10px] font-bold uppercase text-black/45">Testo della Domanda</label>
-                          <input
-                            type="text"
-                            required
-                            value={field.label}
-                            onChange={(e) => updateField(idx, "label", e.target.value)}
-                            placeholder="Es. Hai svuotato il magazzino?"
-                            className="mt-1 h-9 w-full rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#A74758]"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold uppercase text-black/45">Tipo Risposta</label>
-                          <Select
-                            value={field.type}
-                            onChange={(e) => updateField(idx, "type", e.target.value)}
-                            className="mt-1 h-9 w-full rounded-lg border border-black/10 px-2 text-xs"
-                          >
-                            <option value="text">Testo Breve</option>
-                            <option value="textarea">Testo Lungo</option>
-                            <option value="number">Valore Numerico</option>
-                            <option value="select">Opzioni a Scelta</option>
-                            <option value="money">Importo (€)</option>
-                            <option value="date">Data</option>
-                            <option value="worker">Selezione Collaboratore</option>
-                            <option value="file">Caricamento File</option>
-                          </Select>
-                        </div>
-                      </div>
-
-                      {field.type === "select" && (
-                        <div>
-                          <label className="text-[10px] font-bold uppercase text-black/45 block mb-1">
-                            Opzioni disponibili (Separate da virgola)
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={field.options?.join(", ") || ""}
-                            onChange={(e) => updateField(idx, "options", e.target.value.split(",").map(s => s.trim()).filter(Boolean))}
-                            placeholder="Es. Ottimo, Buono, Scarso"
-                            className="h-9 w-full rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#A74758]"
-                          />
-                        </div>
-                      )}
-
-                      <div className="mt-1">
-                        <label className="text-[10px] font-bold uppercase text-black/45 block">Descrizione / Dettaglio Domanda (Opzionale)</label>
-                        <input
-                          type="text"
-                          value={field.description || ""}
-                          onChange={(e) => updateField(idx, "description", e.target.value)}
-                          placeholder="Es. Inserisci importo in Euro o seleziona una data"
-                          className="mt-1 h-9 w-full rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#A74758]"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <input
-                          id={`required-${field.id}`}
-                          type="checkbox"
-                          checked={field.required}
-                          onChange={(e) => updateField(idx, "required", e.target.checked)}
-                          className="size-4 rounded text-[#A74758] focus:ring-[#A74758]"
-                        />
-                        <label htmlFor={`required-${field.id}`} className="text-xs font-semibold cursor-pointer">
-                          Obbligatorio
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </form>
-
-            <div className="flex items-center justify-end gap-3 border-t border-black/5 bg-[#FBF7F9] px-6 py-4">
-              <Button type="button" variant="soft" onClick={() => setShowModal(false)}>
-                Annulla
-              </Button>
-              <button
-                type="button"
-                onClick={handleSubmitForm}
-                className="rounded-xl bg-[#A74758] px-5 py-2 text-sm font-semibold text-white transition hover:scale-[1.02]"
-              >
-                Salva Modulo
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* Visual Canvas and editor elements removed - handled by dynamic full-page builder route */}
       {/* RESPONSE DETAIL VIEWER MODAL */}
       {selectedResponse && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">

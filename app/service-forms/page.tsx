@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
+import { ensureOrderForm } from "@/lib/order-form";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
   await requireServicePageAccess(role, session.user.sedeId, 3, session.user.id);
+  await ensureOrderForm(session.user.id);
 
   const locationId = session.user.sedeId;
 

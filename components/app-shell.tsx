@@ -25,6 +25,7 @@ const nav = [
   { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
   { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
 
@@ -46,7 +47,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
   const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
-    ? await prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } })
+    ? await prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } }).catch(() => null)
     : null;
 
   let servicePageNum = 1;
@@ -77,7 +78,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ? (await prisma.serviceForm.findMany({
         where: { active: true },
         select: { notify_user_ids: true, notify_roles: true }
-      })).some((form) => {
+      }).catch(() => [])).some((form) => {
         const notifyUserIds = form.notify_user_ids as string[] | null;
         const notifyRoles = form.notify_roles as string[] | null;
         return (
@@ -98,7 +99,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   };
 
   const currentUser = session?.user?.id
-    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, photo_url: true, header_color: true, sidebar_color: true, mansione: true } })
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, photo_url: true, header_color: true, sidebar_color: true, mansione: true } }).catch(() => null)
     : null;
 
   const baseItems = visibleForRole(nav, currentRole);
@@ -113,7 +114,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       ]
     : baseItems;
   const unreadNotifications = session?.user?.id
-    ? await prisma.notification.count({ where: { user_id: session.user.id, read: false } })
+    ? await prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
     : 0;
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
@@ -161,6 +162,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                   ...(servicePageNum === 3 || hasFormsAccess
                     ? [{ href: "/service-forms", label: "Moduli", iconName: "ClipboardList" }]
                     : []),
+                  { href: "/orders", label: "Ordini", iconName: "ShoppingCart" },
                   ...(servicePageNum === 1
                     ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
                     : []),

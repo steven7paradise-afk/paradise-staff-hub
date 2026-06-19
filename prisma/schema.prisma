@@ -90,6 +90,7 @@ model User {
   created_service_forms ServiceForm[] @relation("CreatedServiceForms")
   service_form_responses ServiceFormResponse[]
   social_posts      SocialPost[]     @relation("CreatedSocialPosts")
+  social_post_comments SocialPostComment[]
 
   @@map("users")
 }
@@ -497,20 +498,36 @@ model Candidate {
 }
 
 model SocialPost {
-  id               String          @id @default(cuid())
-  title            String
-  description      String?
-  scheduled_at     DateTime
-  platform         String          // e.g. "INSTAGRAM", "TIKTOK", "YOUTUBE", "FACEBOOK", "ALTRO"
-  status           String          @default("DRAFT") // "DRAFT", "PLANNED", "PUBLISHED"
-  cover_url        String?         // Copertina
-  video_url        String?         // Link video opzionale
-  notes            String?
-  created_by_id    String
-  created_by       User            @relation("CreatedSocialPosts", fields: [created_by_id], references: [id])
-  created_at       DateTime        @default(now())
-  updated_at       DateTime        @updatedAt
+  id                         String              @id @default(cuid())
+  title                      String
+  description                String?
+  scheduled_at               DateTime
+  platform                   String              // Memorizzato come stringa separata da virgole, es: "INSTAGRAM,TIKTOK"
+  status                     String              @default("DRAFT") // "DRAFT", "PLANNED", "PUBLISHED"
+  cover_url                  String?             
+  video_url                  String?             
+  notes                      String?
+  brand                      String              @default("PARADISE") // "PARADISE" (Paradise Beauty) o "FRANCESCA" (Francesca)
+  google_calendar_event_id   String?
+  comments                   SocialPostComment[]
+  created_by_id              String
+  created_by                 User                @relation("CreatedSocialPosts", fields: [created_by_id], references: [id])
+  created_at                 DateTime            @default(now())
+  updated_at                 DateTime            @updatedAt
 
   @@map("social_posts")
+}
+
+model SocialPostComment {
+  id            String      @id @default(cuid())
+  post_id       String
+  user_id       String
+  message       String
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
+  post          SocialPost  @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [user_id], references: [id])
+
+  @@map("social_post_comments")
 }
 

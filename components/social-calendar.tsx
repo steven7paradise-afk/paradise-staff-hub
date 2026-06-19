@@ -19,7 +19,9 @@ import {
   Clock,
   Sparkles,
   Info,
-  Layers
+  Layers,
+  MessageSquare,
+  Send
 } from "lucide-react";
 import { Button, Card, Field } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,7 @@ type SocialPost = {
   cover_url: string | null;
   video_url: string | null;
   notes: string | null;
+  brand: string;
   created_by_id: string;
   created_by: {
     id: string;
@@ -49,6 +52,21 @@ const PLATFORMS = [
   { id: "FACEBOOK", name: "Facebook", color: "from-blue-600 to-blue-500", bgLight: "bg-blue-50 dark:bg-blue-950/20", text: "text-blue-600 dark:text-blue-400" },
   { id: "ALTRO", name: "Altro / Canale", color: "from-teal-600 to-teal-500", bgLight: "bg-teal-50 dark:bg-teal-950/20", text: "text-teal-600 dark:text-teal-400" }
 ];
+
+const getPlatformsList = (platformStr: string) => {
+  if (!platformStr) return [];
+  return platformStr
+    .split(",")
+    .map((p) => PLATFORMS.find((plat) => plat.id === p.trim()))
+    .filter((plat): plat is typeof PLATFORMS[0] => !!plat);
+};
+
+const getLocalDateString = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
 
 const STATUSES = [
   { id: "DRAFT", name: "Bozza", color: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/30" },
@@ -72,7 +90,7 @@ export function SocialCalendar({
   
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPlatform, setSelectedPlatform] = useState<string>("ALL");
+  const [selectedBrand, setSelectedBrand] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [viewMode, setViewMode] = useState<"MONTH" | "LIST">("MONTH");
   
@@ -86,7 +104,8 @@ export function SocialCalendar({
   const [formDescription, setFormDescription] = useState("");
   const [formScheduledDate, setFormScheduledDate] = useState("");
   const [formScheduledTime, setFormScheduledTime] = useState("12:00");
-  const [formPlatform, setFormPlatform] = useState("INSTAGRAM");
+  const [formPlatforms, setFormPlatforms] = useState<string[]>(["INSTAGRAM"]);
+  const [formBrands, setFormBrands] = useState<string[]>(["PARADISE"]);
   const [formStatus, setFormStatus] = useState("DRAFT");
   const [formCoverUrl, setFormCoverUrl] = useState("");
   const [formVideoUrl, setFormVideoUrl] = useState("");
@@ -94,6 +113,141 @@ export function SocialCalendar({
   const [uploading, setUploading] = useState(false);
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
+
+  // Drag & Drop States
+  const [draggedOverDate, setDraggedOverDate] = useState<string | null>(null);
+
+  // Comments State
+  const [comments, setComments] = useState<any[]>([]);
+  const [newCommentMessage, setNewCommentMessage] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Fetch comments helper
+  async function fetchComments(postId: string) {
+    setLoadingComments(true);
+    try {
+      const res = await fetch(`/api/social-calendar/comments?postId=${postId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data);
+      }
+    } catch (err) {
+      console.error("Errore caricamento commenti:", err);
+    } finally {
+      setLoadingComments(false);
+    }
+  }
+
+  // Add comment helper
+  async function handleAddComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCommentMessage.trim() || !editingPost) return;
+
+    setSubmittingComment(true);
+    try {
+      const res = await fetch("/api/social-calendar/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: editingPost.id, message: newCommentMessage }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setComments((prev) => [...prev, data]);
+        setNewCommentMessage("");
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Errore durante l'aggiunta del commento");
+      }
+    } catch (err) {
+      console.error("Errore invio commento:", err);
+    } finally {
+      setSubmittingComment(false);
+    }
+  }
+
+  // Delete comment helper
+  async function handleDeleteComment(commentId: string) {
+    if (!confirm("Sei sicuro di voler eliminare questo commento?")) return;
+    try {
+      const res = await fetch(`/api/social-calendar/comments?id=${commentId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Errore durante l'eliminazione del commento");
+      }
+    } catch (err) {
+      console.error("Errore eliminazione commento:", err);
+    }
+  }
+
+  // Drag & Drop handlers
+  function handleDragStart(e: React.DragEvent, postId: string) {
+    e.dataTransfer.setData("text/plain", postId);
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  async function handleDrop(e: React.DragEvent, targetDate: Date) {
+    e.preventDefault();
+    setDraggedOverDate(null);
+    const postId = e.dataTransfer.getData("text/plain");
+    if (!postId) return;
+
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
+
+    const originalDate = new Date(post.scheduled_at);
+    const targetWithTime = new Date(targetDate);
+    targetWithTime.setHours(originalDate.getHours());
+    targetWithTime.setMinutes(originalDate.getMinutes());
+    targetWithTime.setSeconds(0);
+    targetWithTime.setMilliseconds(0);
+
+    const newScheduledAtStr = targetWithTime.toISOString();
+
+    const originalPosts = [...posts];
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, scheduled_at: newScheduledAtStr } : p
+      )
+    );
+
+    try {
+      const response = await fetch("/api/social-calendar", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: post.id,
+          title: post.title,
+          description: post.description,
+          scheduledAt: newScheduledAtStr,
+          platform: post.platform,
+          status: post.status,
+          coverUrl: post.cover_url,
+          videoUrl: post.video_url,
+          notes: post.notes,
+          brand: post.brand,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Errore nello spostamento del post.");
+      }
+
+      const updatedPost = await response.json();
+      setPosts((prev) =>
+        prev.map((p) => (p.id === updatedPost.id ? updatedPost : p))
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Impossibile spostare il post.");
+      setPosts(originalPosts);
+    }
+  }
 
   // Year & Month calculations
   const year = currentDate.getFullYear();
@@ -154,18 +308,18 @@ export function SocialCalendar({
         (post.description && post.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (post.notes && post.notes.toLowerCase().includes(searchQuery.toLowerCase()));
       
-      const matchesPlatform = selectedPlatform === "ALL" || post.platform === selectedPlatform;
+      const matchesBrand = selectedBrand === "ALL" || (post.brand ? post.brand.split(",").includes(selectedBrand) : false);
       const matchesStatus = selectedStatus === "ALL" || post.status === selectedStatus;
       
-      return matchesSearch && matchesPlatform && matchesStatus;
+      return matchesSearch && matchesBrand && matchesStatus;
     });
-  }, [posts, searchQuery, selectedPlatform, selectedStatus]);
+  }, [posts, searchQuery, selectedBrand, selectedStatus]);
 
   // Group filtered posts by date key (YYYY-MM-DD) for Month View
   const postsByDate = useMemo(() => {
     const map: Record<string, SocialPost[]> = {};
     filteredPosts.forEach((post) => {
-      const dateKey = new Date(post.scheduled_at).toISOString().split("T")[0];
+      const dateKey = getLocalDateString(new Date(post.scheduled_at));
       if (!map[dateKey]) map[dateKey] = [];
       map[dateKey].push(post);
     });
@@ -174,8 +328,7 @@ export function SocialCalendar({
 
   // Open creation modal for a specific day
   function openCreateForDate(date: Date) {
-    // Format YYYY-MM-DD
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = getLocalDateString(date);
     
     setEditingPost(null);
     setFormMode("EDIT");
@@ -183,7 +336,8 @@ export function SocialCalendar({
     setFormDescription("");
     setFormScheduledDate(dateStr);
     setFormScheduledTime("12:00");
-    setFormPlatform("INSTAGRAM");
+    setFormPlatforms(["INSTAGRAM"]);
+    setFormBrands(selectedBrand === "ALL" ? ["PARADISE"] : [selectedBrand]);
     setFormStatus("DRAFT");
     setFormCoverUrl("");
     setFormVideoUrl("");
@@ -196,7 +350,7 @@ export function SocialCalendar({
   // Open edit modal for an existing post
   function openEdit(post: SocialPost) {
     const postDate = new Date(post.scheduled_at);
-    const dateStr = postDate.toISOString().split("T")[0];
+    const dateStr = getLocalDateString(postDate);
     const hours = String(postDate.getHours()).padStart(2, "0");
     const minutes = String(postDate.getMinutes()).padStart(2, "0");
     const timeStr = `${hours}:${minutes}`;
@@ -207,7 +361,8 @@ export function SocialCalendar({
     setFormDescription(post.description || "");
     setFormScheduledDate(dateStr);
     setFormScheduledTime(timeStr);
-    setFormPlatform(post.platform);
+    setFormPlatforms(post.platform ? post.platform.split(",") : ["INSTAGRAM"]);
+    setFormBrands(post.brand ? post.brand.split(",") : ["PARADISE"]);
     setFormStatus(post.status);
     setFormCoverUrl(post.cover_url || "");
     setFormVideoUrl(post.video_url || "");
@@ -215,6 +370,9 @@ export function SocialCalendar({
     setFormError("");
     setFormSuccess("");
     setIsFormOpen(true);
+
+    // Fetch comments for this post
+    fetchComments(post.id);
   }
 
   // Cover image file upload handler
@@ -252,8 +410,12 @@ export function SocialCalendar({
   // Submit form (Create / Update)
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formTitle || !formScheduledDate || !formPlatform) {
-      setFormError("Titolo, data e piattaforma sono obbligatori.");
+    if (!formTitle || !formScheduledDate || formPlatforms.length === 0) {
+      setFormError("Titolo, data e almeno una piattaforma sono obbligatori.");
+      return;
+    }
+    if (formBrands.length === 0) {
+      setFormError("Seleziona almeno un brand.");
       return;
     }
 
@@ -268,11 +430,12 @@ export function SocialCalendar({
       title: formTitle,
       description: formDescription,
       scheduledAt: dateTimeStr,
-      platform: formPlatform,
+      platform: formPlatforms.join(","),
       status: formStatus,
       coverUrl: formCoverUrl,
       videoUrl: formVideoUrl,
       notes: formNotes,
+      brand: formBrands.join(","),
     };
 
     const method = editingPost ? "PUT" : "POST";
@@ -417,29 +580,35 @@ export function SocialCalendar({
 
         {/* Categories */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Platform selector */}
+          {/* Brand selector */}
           <div className="flex items-center gap-1 rounded-2xl bg-black/5 dark:bg-white/5 p-1 border border-black/5 dark:border-white/5">
             <button
-              onClick={() => setSelectedPlatform("ALL")}
+              onClick={() => setSelectedBrand("ALL")}
               className={cn(
                 "px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase transition",
-                selectedPlatform === "ALL" ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white" : "text-black/50 dark:text-white/50"
+                selectedBrand === "ALL" ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white" : "text-black/50 dark:text-white/50"
               )}
             >
-              Tutti
+              Tutti i Brand
             </button>
-            {PLATFORMS.map((plat) => (
-              <button
-                key={plat.id}
-                onClick={() => setSelectedPlatform(plat.id)}
-                className={cn(
-                  "px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase transition",
-                  selectedPlatform === plat.id ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white" : "text-black/50 dark:text-white/50"
-                )}
-              >
-                {plat.name}
-              </button>
-            ))}
+            <button
+              onClick={() => setSelectedBrand("FRANCESCA")}
+              className={cn(
+                "px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase transition",
+                selectedBrand === "FRANCESCA" ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white" : "text-black/50 dark:text-white/50"
+              )}
+            >
+              Francesca
+            </button>
+            <button
+              onClick={() => setSelectedBrand("PARADISE")}
+              className={cn(
+                "px-3 py-1 rounded-xl text-[10px] font-extrabold uppercase transition",
+                selectedBrand === "PARADISE" ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white" : "text-black/50 dark:text-white/50"
+              )}
+            >
+              Paradise
+            </button>
           </div>
 
           {/* Status selector */}
@@ -484,9 +653,9 @@ export function SocialCalendar({
           {/* Days Grid */}
           <div className="grid grid-cols-7 grid-rows-6 auto-rows-fr divide-x divide-y divide-black/5 dark:divide-white/5 min-h-[560px]">
             {calendarDays.map((cell) => {
-              const dateStr = cell.date.toISOString().split("T")[0];
+              const dateStr = getLocalDateString(cell.date);
               const dayPosts = postsByDate[dateStr] || [];
-              const isToday = new Date().toISOString().split("T")[0] === dateStr;
+              const isToday = getLocalDateString(new Date()) === dateStr;
 
               return (
                 <div 
@@ -498,17 +667,23 @@ export function SocialCalendar({
                       openCreateForDate(cell.date);
                     }
                   }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDragEnter={() => setDraggedOverDate(dateStr)}
+                  onDragLeave={() => {
+                    setDraggedOverDate((current) => current === dateStr ? null : current);
+                  }}
+                  onDrop={(e) => handleDrop(e, cell.date)}
                   className={cn(
                     "relative group p-2 min-h-[90px] flex flex-col gap-1.5 transition-all duration-200 cursor-pointer",
                     cell.isCurrentMonth ? "bg-white dark:bg-neutral-950" : "bg-black/[0.02] text-black/30 dark:bg-white/[0.02] dark:text-white/30",
                     isToday && "bg-paradise-nude/40 dark:bg-[#C66170]/10",
-                    "hover:bg-paradise-nude/20 dark:hover:bg-white/5"
+                    draggedOverDate === dateStr ? "bg-[#C66170]/10 border-2 border-dashed border-[#C66170]" : "hover:bg-paradise-nude/20 dark:hover:bg-white/5"
                   )}
                 >
                   {/* Day Number */}
                   <div className="flex items-center justify-between">
                     <span className={cn(
-                      "text-xs font-bold leading-none size-6 rounded-full flex items-center justify-center transition-colors",
+                       "text-xs font-bold leading-none size-6 rounded-full flex items-center justify-center transition-colors",
                       isToday ? "bg-[#C66170] text-white font-extrabold" : "text-black/60 dark:text-white/60",
                       !cell.isCurrentMonth && "opacity-40"
                     )}>
@@ -531,8 +706,8 @@ export function SocialCalendar({
                   {/* Scheduled Posts Lists */}
                   <div className="flex-1 space-y-1 overflow-y-auto max-h-[120px] luxury-scroll">
                     {dayPosts.map((post) => {
-                      const platformInfo = PLATFORMS.find((p) => p.id === post.platform);
-                      const statusInfo = STATUSES.find((s) => s.id === post.status);
+                      const postPlatforms = getPlatformsList(post.platform);
+                      const mainPlat = postPlatforms[0] || PLATFORMS[0];
                       
                       return (
                         <div
@@ -541,12 +716,14 @@ export function SocialCalendar({
                             e.stopPropagation();
                             openEdit(post);
                           }}
+                          draggable={true}
+                          onDragStart={(e) => handleDragStart(e, post.id)}
                           className={cn(
-                            "flex items-center gap-1.5 p-1 rounded-lg border border-black/5 dark:border-white/5 text-[9px] font-bold transition duration-200 hover:-translate-y-0.5 hover:shadow-xs",
-                            platformInfo?.bgLight || "bg-neutral-50 dark:bg-neutral-900",
-                            platformInfo?.text || "text-neutral-700 dark:text-neutral-300"
+                            "flex items-center gap-1.5 p-1 rounded-lg border border-black/5 dark:border-white/5 text-[9px] font-bold transition duration-200 hover:-translate-y-0.5 hover:shadow-xs cursor-grab active:cursor-grabbing",
+                            mainPlat.bgLight,
+                            mainPlat.text
                           )}
-                          title={`${post.title} (${platformInfo?.name})`}
+                          title={`${post.title} (${postPlatforms.map(p => p.name).join(" / ")})`}
                         >
                           {/* Optional tiny thumbnail preview */}
                           {post.cover_url ? (
@@ -555,6 +732,9 @@ export function SocialCalendar({
                             <Video className="size-3 shrink-0" />
                           )}
                           <span className="truncate flex-1 font-bold text-black/80 dark:text-white/90 leading-tight">
+                            <span className="text-[8px] opacity-60 uppercase mr-0.5">
+                              [{post.brand ? post.brand.split(",").map(b => b === "FRANCESCA" ? "FR" : "PB").join("&") : "PB"}]
+                            </span>
                             {post.title}
                           </span>
                           
@@ -588,9 +768,9 @@ export function SocialCalendar({
             </Card>
           ) : (
             filteredPosts.map((post) => {
-              const platformInfo = PLATFORMS.find((p) => p.id === post.platform);
               const statusInfo = STATUSES.find((s) => s.id === post.status);
               const postDate = new Date(post.scheduled_at);
+              const postPlatforms = getPlatformsList(post.platform);
               
               return (
                 <Card 
@@ -608,12 +788,20 @@ export function SocialCalendar({
                       )}
                       
                       {/* Floating Platform Badge */}
-                      <span className={cn(
-                        "absolute bottom-1 right-1 p-1 rounded-lg text-white font-extrabold text-[8px] bg-gradient-to-r shadow-sm",
-                        platformInfo?.color || "from-neutral-500 to-neutral-400"
-                      )}>
-                        {post.platform.slice(0, 2)}
-                      </span>
+                      <div className="absolute bottom-1 right-1 flex gap-0.5">
+                        {postPlatforms.map((plat) => (
+                          <span 
+                            key={plat.id}
+                            className={cn(
+                              "px-1 py-0.5 rounded text-white font-extrabold text-[7px] bg-gradient-to-r shadow-sm uppercase shrink-0",
+                              plat.color || "from-neutral-500 to-neutral-400"
+                            )}
+                            title={plat.name}
+                          >
+                            {plat.id === "ALTRO" ? "AL" : plat.id.slice(0, 2)}
+                          </span>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="min-w-0">
@@ -626,6 +814,29 @@ export function SocialCalendar({
                         <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border", statusInfo?.color)}>
                           {statusInfo?.name}
                         </span>
+
+                        {post.brand ? post.brand.split(",").map((brand) => (
+                          <span key={brand} className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200">
+                            {brand === "FRANCESCA" ? "Francesca" : "Paradise"}
+                          </span>
+                        )) : (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200">
+                            Paradise
+                          </span>
+                        )}
+
+                        {postPlatforms.map((plat) => (
+                          <span 
+                            key={plat.id}
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase border",
+                              plat.bgLight,
+                              plat.text
+                            )}
+                          >
+                            {plat.name}
+                          </span>
+                        ))}
                       </div>
 
                       <h3 className="text-sm font-extrabold text-black dark:text-white group-hover:text-[#C66170] transition-colors leading-snug">
@@ -728,13 +939,25 @@ export function SocialCalendar({
 
                   {/* Badges platform & status */}
                   <div className="flex flex-wrap gap-2">
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shadow-2xs",
-                      PLATFORMS.find((p) => p.id === editingPost.platform)?.bgLight,
-                      PLATFORMS.find((p) => p.id === editingPost.platform)?.text
-                    )}>
-                      {PLATFORMS.find((p) => p.id === editingPost.platform)?.name}
-                    </span>
+                    {editingPost.brand ? editingPost.brand.split(",").map((brand) => (
+                      <span key={brand} className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shadow-2xs bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200">
+                        Brand: {brand === "FRANCESCA" ? "Francesca" : "Paradise"}
+                      </span>
+                    )) : (
+                      <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shadow-2xs bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200">
+                        Brand: Paradise
+                      </span>
+                    )}
+
+                    {getPlatformsList(editingPost.platform).map((plat) => (
+                      <span key={plat.id} className={cn(
+                        "px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shadow-2xs",
+                        plat.bgLight,
+                        plat.text
+                      )}>
+                        {plat.name}
+                      </span>
+                    ))}
 
                     <span className={cn(
                       "px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border shadow-2xs",
@@ -794,6 +1017,97 @@ export function SocialCalendar({
                     </div>
                   )}
 
+                  {/* Comments Section */}
+                  <div className="border-t border-black/5 dark:border-white/5 pt-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h5 className="text-xs font-extrabold text-black dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <MessageSquare className="size-4 text-[#C66170]" />
+                        Commenti ({comments.length})
+                      </h5>
+                    </div>
+
+                    {/* Comments list */}
+                    <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 luxury-scroll">
+                      {loadingComments ? (
+                        <p className="text-[10px] text-black/40 dark:text-white/40 italic">Caricamento commenti...</p>
+                      ) : comments.length === 0 ? (
+                        <p className="text-[10px] text-black/40 dark:text-white/40 italic">Nessun commento presente. Aggiungi il primo!</p>
+                      ) : (
+                        comments.map((comment) => (
+                          <div key={comment.id} className="rounded-xl border border-black/5 bg-[#FAF7F9]/30 dark:bg-white/5 p-3 hover:bg-[#FAF7F9]/50 dark:hover:bg-white/10 transition animate-in fade-in duration-200">
+                            <div className="flex items-start gap-2.5">
+                              {/* Avatar */}
+                              <div className="size-7 rounded-full overflow-hidden bg-neutral-200 border border-black/5 shrink-0">
+                                {comment.user.photo_url ? (
+                                  <img src={comment.user.photo_url} alt="" className="size-full object-cover" />
+                                ) : (
+                                  <div className="size-full flex items-center justify-center text-[9px] font-bold text-neutral-600 uppercase">
+                                    {comment.user.name.slice(0, 1)}
+                                  </div>
+                                )}
+                              </div>
+                              {/* Content */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div>
+                                    <span className="text-[11px] font-bold text-black/80 dark:text-white/95">{comment.user.name}</span>
+                                    {comment.user.mansione && (
+                                      <span className="text-[8px] font-semibold text-black/40 dark:text-white/40 ml-1.5 border border-black/10 dark:border-white/10 px-1 rounded-sm">
+                                        {comment.user.mansione}
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Delete option */}
+                                  {(comment.user.id === currentUserId) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteComment(comment.id)}
+                                      className="text-black/35 hover:text-rose-500 dark:text-white/35 dark:hover:text-rose-400 transition"
+                                      title="Elimina commento"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <span className="text-[9px] text-black/40 dark:text-white/40 block mt-0.5">
+                                  {new Date(comment.created_at).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                                <p className="mt-1.5 text-[11px] leading-relaxed text-black/70 dark:text-white/80 whitespace-pre-wrap font-semibold">
+                                  {comment.message}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* New comment form */}
+                    <form onSubmit={handleAddComment} className="flex gap-2 items-end pt-1">
+                      <textarea
+                        value={newCommentMessage}
+                        onChange={(e) => setNewCommentMessage(e.target.value)}
+                        placeholder="Scrivi un commento..."
+                        rows={1}
+                        className="flex-1 min-h-[38px] max-h-[80px] rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/5 p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-[#C66170]/30 transition resize-none luxury-scroll"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAddComment(e);
+                          }
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={submittingComment || !newCommentMessage.trim()}
+                        className="inline-flex size-[38px] items-center justify-center rounded-xl bg-[#C66170] text-white hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-40 disabled:scale-100 shrink-0 shadow-sm"
+                      >
+                        <Send className="size-3.5" />
+                      </button>
+                    </form>
+                  </div>
+
                   {/* Creator details */}
                   <div className="border-t border-black/5 dark:border-white/5 pt-4 flex items-center justify-between">
                     <span className="text-[10px] text-black/40 dark:text-white/40 font-bold uppercase tracking-wider">Creato da</span>
@@ -825,25 +1139,83 @@ export function SocialCalendar({
                     />
                   </div>
 
-                  {/* Platform Selector Grid */}
+                  {/* Brand selector */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-black/50 dark:text-white/40 uppercase tracking-wider pl-1">Canale / Piattaforma</span>
+                    <span className="text-[10px] font-extrabold text-black/50 dark:text-white/40 uppercase tracking-wider pl-1">Profilo / Brand (Seleziona multipli)</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formBrands.includes("PARADISE")) {
+                            if (formBrands.length > 1) {
+                              setFormBrands(formBrands.filter(b => b !== "PARADISE"));
+                            }
+                          } else {
+                            setFormBrands([...formBrands, "PARADISE"]);
+                          }
+                        }}
+                        className={cn(
+                          "py-2 rounded-xl border text-center text-xs font-extrabold uppercase transition-all",
+                          formBrands.includes("PARADISE")
+                            ? "border-[#C66170] bg-[#C66170]/10 text-[#C66170]"
+                            : "border-black/5 bg-black/5 text-black/60 dark:border-white/5 dark:bg-white/5 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/10"
+                        )}
+                      >
+                        Paradise Beauty
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formBrands.includes("FRANCESCA")) {
+                            if (formBrands.length > 1) {
+                              setFormBrands(formBrands.filter(b => b !== "FRANCESCA"));
+                            }
+                          } else {
+                            setFormBrands([...formBrands, "FRANCESCA"]);
+                          }
+                        }}
+                        className={cn(
+                          "py-2 rounded-xl border text-center text-xs font-extrabold uppercase transition-all",
+                          formBrands.includes("FRANCESCA")
+                            ? "border-[#C66170] bg-[#C66170]/10 text-[#C66170]"
+                            : "border-black/5 bg-black/5 text-black/60 dark:border-white/5 dark:bg-white/5 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/10"
+                        )}
+                      >
+                        Francesca
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Platform Selector Grid (Multi-select) */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-extrabold text-black/50 dark:text-white/40 uppercase tracking-wider pl-1">Canali / Piattaforme (Seleziona multiple)</span>
                     <div className="grid grid-cols-3 gap-2">
-                      {PLATFORMS.map((plat) => (
-                        <button
-                          key={plat.id}
-                          type="button"
-                          onClick={() => setFormPlatform(plat.id)}
-                          className={cn(
-                            "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all text-center",
-                            formPlatform === plat.id
-                              ? "border-[#C66170] bg-[#C66170]/10 text-[#C66170] font-extrabold"
-                              : "border-black/5 bg-black/5 text-black/60 dark:border-white/5 dark:bg-white/5 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/10"
-                          )}
-                        >
-                          <span className="text-xs font-extrabold">{plat.name}</span>
-                        </button>
-                      ))}
+                      {PLATFORMS.map((plat) => {
+                        const isSelected = formPlatforms.includes(plat.id);
+                        return (
+                          <button
+                            key={plat.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                if (formPlatforms.length > 1) {
+                                  setFormPlatforms(formPlatforms.filter((p) => p !== plat.id));
+                                }
+                              } else {
+                                setFormPlatforms([...formPlatforms, plat.id]);
+                              }
+                            }}
+                            className={cn(
+                              "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all text-center",
+                              isSelected
+                                ? "border-[#C66170] bg-[#C66170]/10 text-[#C66170] font-extrabold"
+                                : "border-black/5 bg-black/5 text-black/60 dark:border-white/5 dark:bg-white/5 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/10"
+                            )}
+                          >
+                            <span className="text-xs font-extrabold">{plat.name}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 

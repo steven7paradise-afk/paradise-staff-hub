@@ -1,0 +1,295 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, PackageCheck, Search, ShoppingCart, Truck, X } from "lucide-react";
+import { Badge, Button, Card } from "@/components/ui";
+import { cn } from "@/lib/utils";
+
+type OrderResponse = {
+  id: string;
+  status: string;
+  priority?: string | null;
+  answers: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  user_location_name?: string | null;
+  user?: { name?: string | null };
+  form?: { name?: string | null; fields?: Array<{ id: string; label: string; type: string }> };
+};
+
+const ORDER_COLUMNS = [
+  { id: "NEW", label: "Nuovo ordine", icon: ShoppingCart, color: "bg-pink-50 text-[#C66170] border-pink-100" },
+  { id: "PREPARING", label: "Preparando ordine", icon: Clock3, color: "bg-amber-50 text-amber-700 border-amber-100" },
+  { id: "ORDERED", label: "Ordinato", icon: Truck, color: "bg-violet-50 text-violet-700 border-violet-100" },
+  { id: "READY", label: "Arrivato / pronto", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
+  { id: "COMPLETED", label: "Completato", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+];
+
+function answerById(order: OrderResponse, id: string) {
+  const value = order.answers?.[id];
+  if (!value) return "";
+  if (typeof value === "object") return value.name ?? "";
+  return String(value);
+}
+
+function fieldValue(order: OrderResponse, includes: string[]) {
+  const fields = order.form?.fields ?? [];
+  const field = fields.find((item) => includes.some((needle) => item.label.toLowerCase().includes(needle)));
+  if (!field) return "";
+  return answerById(order, field.id);
+}
+
+function orderTitle(order: OrderResponse) {
+  return answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || "Ordine senza titolo";
+}
+
+function orderItems(order: OrderResponse) {
+  return answerById(order, "order_items") || fieldValue(order, ["cosa", "prodot", "material", "ordinare"]);
+}
+
+function orderPriority(order: OrderResponse) {
+  return answerById(order, "order_priority") || order.priority || "Normale";
+}
+
+function orderDate(order: OrderResponse) {
+  return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(order.created_at));
+}
+
+function statusLabel(status: string) {
+  return ORDER_COLUMNS.find((column) => column.id === status)?.label ?? status;
+}
+
+export function OrderManager({ initialOrders, canManage }: { initialOrders: OrderResponse[]; canManage: boolean }) {
+  const [orders, setOrders] = useState(initialOrders);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<OrderResponse | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [mobileStatus, setMobileStatus] = useState("ALL");
+
+  const filteredOrders = useMemo(() => {
+    const clean = query.trim().toLowerCase();
+    if (!clean) return orders;
+    return orders.filter((order) => {
+      const haystack = [
+        orderTitle(order),
+        orderItems(order),
+        order.user?.name ?? "",
+        order.user_location_name ?? "",
+        JSON.stringify(order.answers ?? {}),
+      ].join(" ").toLowerCase();
+      return haystack.includes(clean);
+    });
+  }, [orders, query]);
+
+  const mobileOrders = useMemo(() => {
+    if (mobileStatus === "ALL") return filteredOrders;
+    return filteredOrders.filter((order) => (order.status || "NEW") === mobileStatus);
+  }, [filteredOrders, mobileStatus]);
+
+  async function moveOrder(order: OrderResponse, status: string) {
+    setSavingId(order.id);
+    const response = await fetch(`/api/service-forms/responses/${order.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    setSavingId(null);
+    if (!response.ok) return;
+    const updated = await response.json();
+    setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
+    setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-[32px] bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">Paradise Operations</p>
+            <h1 className="mt-2 text-4xl font-semibold tracking-tight">Ordini</h1>
+            <p className="mt-2 text-sm text-black/50">{canManage ? "Gestisci" : "Controlla"} gli ordini creati dal modulo ordine: nuovi, in preparazione, ordinati e completati.</p>
+          </div>
+          <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 lg:w-96">
+            <Search className="size-4 text-black/35" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <div className="xl:hidden space-y-4">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setMobileStatus("ALL")}
+            className={cn(
+              "shrink-0 rounded-full border px-4 py-2 text-xs font-bold transition",
+              mobileStatus === "ALL" ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white text-black/50"
+            )}
+          >
+            Tutti {filteredOrders.length}
+          </button>
+          {ORDER_COLUMNS.map((column) => {
+            const count = filteredOrders.filter((order) => (order.status || "NEW") === column.id).length;
+            return (
+              <button
+                key={column.id}
+                type="button"
+                onClick={() => setMobileStatus(column.id)}
+                className={cn(
+                  "shrink-0 rounded-full border px-4 py-2 text-xs font-bold transition",
+                  mobileStatus === column.id ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white text-black/50"
+                )}
+              >
+                {column.label} {count}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-3">
+          {mobileOrders.length === 0 ? (
+            <Card className="bg-white p-6 text-center text-sm font-semibold text-black/40">Nessun ordine in questo stato.</Card>
+          ) : null}
+          {mobileOrders.map((order) => {
+            const currentStatus = order.status || "NEW";
+            const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
+            const Icon = status.icon;
+            return (
+              <button
+                key={order.id}
+                type="button"
+                onClick={() => setSelected(order)}
+                className="w-full rounded-[24px] border border-black/5 bg-white p-4 text-left shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/35">Stato ordine</p>
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#FAF7F9] px-3 py-1.5 text-xs font-extrabold text-[#C66170]">
+                      <Icon className="size-4" />
+                      {status.label}
+                    </div>
+                  </div>
+                  <Eye className="size-4 shrink-0 text-black/30" />
+                </div>
+                <h3 className="mt-3 line-clamp-2 text-lg font-extrabold leading-6 text-black">{orderTitle(order)}</h3>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-black/40">
+                  <span>{order.user_location_name ?? "Salone non indicato"}</span>
+                  <span>·</span>
+                  <span>{order.user?.name ?? "Staff"}</span>
+                  <span>·</span>
+                  <span>{orderDate(order)}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="hidden gap-4 xl:grid xl:grid-cols-5">
+        {ORDER_COLUMNS.map((column) => {
+          const columnOrders = filteredOrders.filter((order) => (order.status || "NEW") === column.id);
+          const Icon = column.icon;
+          return (
+            <Card key={column.id} className={cn("min-h-[26rem] border p-4", column.color)}>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Icon className="size-5" />
+                  <h2 className="font-semibold">{column.label}</h2>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black/55">{columnOrders.length}</span>
+              </div>
+              <div className="grid gap-3">
+                {columnOrders.length === 0 ? (
+                  <p className="rounded-2xl bg-white/70 p-4 text-sm text-black/40">Nessun ordine.</p>
+                ) : null}
+                {columnOrders.map((order) => (
+                  <button key={order.id} onClick={() => setSelected(order)} className="rounded-2xl bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="line-clamp-2 font-semibold leading-5 text-black">{orderTitle(order)}</h3>
+                      <Eye className="size-4 shrink-0 text-black/35" />
+                    </div>
+                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
+                      {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
+                    </div>
+                    <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderDate(order)}</p>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {selected ? (
+        <div className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4">
+          <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-[32px] bg-[#F8F3F6] p-4 shadow-2xl lg:max-w-4xl lg:rounded-[32px] lg:p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <button onClick={() => setSelected(null)} className="grid size-11 place-items-center rounded-2xl bg-white shadow-sm"><ArrowLeft className="size-5" /></button>
+              <Button variant="soft" onClick={() => setSelected(null)}><X className="size-4" /> Chiudi</Button>
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
+              <Card className="bg-white">
+                <Badge tone="dark">{statusLabel(selected.status || "NEW")}</Badge>
+                <h2 className="mt-4 text-3xl font-semibold">{orderTitle(selected)}</h2>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-black/60">{orderItems(selected)}</p>
+                <div className="mt-5 grid gap-3">
+                  {(selected.form?.fields ?? []).map((field) => {
+                    const value = selected.answers?.[field.id];
+                    if (!value) return null;
+                    const isFile = typeof value === "object" && value.storagePath;
+                    return (
+                      <div key={field.id} className="rounded-2xl bg-[#FAF7F9] p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-black/35">{field.label}</p>
+                        {isFile ? (
+                          <a href={`/api/service-forms/responses/file?path=${encodeURIComponent(value.storagePath)}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]">
+                            <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
+                          </a>
+                        ) : (
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-black/65">{String(value)}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+              <div className="space-y-4">
+                <Card className="bg-white">
+                  <h3 className="font-semibold">{canManage ? "Stato ordine" : "Avanzamento ordine"}</h3>
+                  {!canManage ? <p className="mt-1 text-xs text-black/45">Puoi controllare lo stato. Le modifiche sono riservate ai responsabili.</p> : null}
+                  <div className="mt-4 grid gap-2">
+                    {ORDER_COLUMNS.map((column) => (
+                      <button
+                        key={column.id}
+                        type="button"
+                        disabled={!canManage || savingId === selected.id}
+                        onClick={() => void moveOrder(selected, column.id)}
+                        className={cn(
+                          "flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm font-semibold transition",
+                          (selected.status || "NEW") === column.id ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white",
+                          canManage && "hover:bg-[#FAF7F9]"
+                        )}
+                      >
+                        {column.label}
+                        {savingId === selected.id ? <Loader2 className="size-4 animate-spin" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+                <Card className="bg-white">
+                  <h3 className="font-semibold">Dettagli</h3>
+                  <div className="mt-4 grid gap-3 text-sm">
+                    <p><span className="text-black/40">Creato da:</span> <b>{selected.user?.name ?? "Staff"}</b></p>
+                    <p><span className="text-black/40">Salone:</span> <b>{selected.user_location_name ?? "Non indicato"}</b></p>
+                    <p className="inline-flex items-center gap-2"><CalendarDays className="size-4 text-black/40" /> {orderDate(selected)}</p>
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -23,22 +23,15 @@ export function InstantLink({
   loadingClassName = "scale-[0.98] opacity-80 ring-2 ring-paradise-pink/35",
   ...props
 }: InstantLinkProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(false);
   const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
-
-  function warmPage() {
-    router.prefetch(href);
-  }
 
   return (
     <Link
       {...props}
       href={href}
-      prefetch
-      onMouseEnter={warmPage}
-      onTouchStart={warmPage}
+      prefetch={false}
       onPointerDown={() => setLoading(true)}
       onClick={() => setLoading(true)}
       className={cn(

@@ -19,6 +19,9 @@ export async function GET() {
     where: { user_id: session.user.id, date: { gte: today, lt: tomorrow } },
     select: { id: true, type: true, timestamp: true, time: true },
     orderBy: { timestamp: "asc" },
+  }).catch((error) => {
+    console.error("Today attendance unavailable:", error);
+    return [];
   });
 
   return NextResponse.json(logs.map((log) => ({
