@@ -46,7 +46,9 @@ export function plannedHours(schedule?: ScheduleRow) {
   const startTime = schedule?.start_time ?? schedule?.category.start_time;
   const endTime = schedule?.end_time ?? schedule?.category.end_time;
   if (!startTime || !endTime) return 0;
-  return roundedHours(schedule?.category.paid_hours ?? durationHours(startTime, endTime));
+  const rawHours = schedule?.category.paid_hours ?? durationHours(startTime, endTime);
+  const expectedHours = rawHours >= 8 ? rawHours - 1 : rawHours;
+  return roundedHours(expectedHours);
 }
 
 export function monthlyPersonalHours(year: number, month: number, schedules: ScheduleRow[], logs: ClockLog[], records: StoredHours[]) {
