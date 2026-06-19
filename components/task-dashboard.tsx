@@ -241,6 +241,14 @@ function formatTimer(seconds: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
+function getTaskCurrentSeconds(task: Task) {
+  if (task.status === "ACTIVE" && task.startedAt) {
+    const elapsedSinceStart = Math.floor((Date.now() - new Date(task.startedAt).getTime()) / 1000);
+    return Math.max(0, task.timerSeconds + elapsedSinceStart);
+  }
+  return task.timerSeconds;
+}
+
 function parseFreeNotes(value?: string | null): FreeNoteBlock[] {
   if (!value) return [];
   try {
@@ -355,8 +363,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   });
 
   const baseTasks = useMemo(() => {
-    return (canAssign || role === "DIPENDENTE") ? tasks : tasks.filter((task) => task.assignedToId === userId || task.assignees?.some((a) => a.id === userId));
-  }, [tasks, canAssign, role, userId]);
+    return canAssign 
+      ? tasks 
+      : tasks.filter((task) => 
+          task.assignedToId === userId || 
+          task.assignees?.some((a) => a.id === userId) ||
+          task.createdById === userId
+        );
+  }, [tasks, canAssign, userId]);
 
   const personalTasks = useMemo(() => {
     if (assignmentFilter === "ASSIGNED_TO_ME") {
@@ -655,28 +669,36 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     }
   }
 
+  const [ticker, setTicker] = useState(0);
   useEffect(() => {
-    setTimerRunning(false);
-    setTimerPaused(false);
-  }, [selected?.id]);
-
-  useEffect(() => {
-    if (!selected || selected.status !== "ACTIVE" || !timerRunning || timerPaused) return;
+    const hasActiveTask = tasks.some(t => t.status === "ACTIVE");
+    if (!hasActiveTask) return;
     const interval = window.setInterval(() => {
-      setSelected((current) => current ? { ...current, timerSeconds: current.timerSeconds + 1 } : current);
-      setTasks((current) => current.map((item) => item.id === selected.id ? { ...item, timerSeconds: item.timerSeconds + 1 } : item));
+      setTicker((t) => t + 1);
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [selected?.id, selected?.status, timerRunning, timerPaused]);
+  }, [tasks]);
 
-  async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[] }) {
-    const nextTask = { ...task, status, timerSeconds: task.timerSeconds };
+  async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[] }) {
+    const currentSeconds = getTaskCurrentSeconds(task);
+    const nextTask = { 
+      ...task, 
+      status, 
+      timerSeconds: currentSeconds,
+      startedAt: status === "ACTIVE" ? new Date().toISOString() : (status === "WAITING" ? null : task.startedAt)
+    };
     setTasks((current) => current.map((item) => (item.id === task.id ? nextTask : item)));
     if (selected?.id === task.id) setSelected(nextTask);
     const response = await fetch("/api/tasks", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: task.id, status, timerSeconds: task.timerSeconds, ...extra }),
+      body: JSON.stringify({ 
+        id: task.id, 
+        status, 
+        timerSeconds: currentSeconds, 
+        startedAt: status === "ACTIVE" ? new Date().toISOString() : (status === "WAITING" ? null : undefined),
+        ...extra 
+      }),
     });
     if (response.ok) {
       const data = await response.json();
@@ -1477,92 +1499,94 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 <Badge tone="dark">{timelineEvents.length}</Badge>
               </div>
 
-              {/* Timeline feed */}
-              <div className="relative border-l border-black/10 pl-5 ml-3 space-y-6">
-                {timelineEvents.map((event, idx) => {
-                  const isComment = event.type === "comment";
+              {/* Timeline feed (scrollable list) */}
+              <div className="max-h-[350px] overflow-y-auto pr-3 -mr-3 scrollbar-thin">
+                <div className="relative border-l border-black/10 pl-5 ml-3 space-y-6 py-2">
+                  {timelineEvents.map((event, idx) => {
+                    const isComment = event.type === "comment";
 
-                  return (
-                    <div key={idx} className="relative">
-                      {/* Timeline dot */}
-                      <span className="absolute -left-[27px] top-1.5 size-3.5 rounded-full border-2 border-white bg-[#C66170] shadow-xs" />
+                    return (
+                      <div key={idx} className="relative">
+                        {/* Timeline dot */}
+                        <span className="absolute -left-[27px] top-1.5 size-3.5 rounded-full border-2 border-white bg-[#C66170] shadow-xs" />
 
-                      {isComment ? (
-                        /* Comment Element */
-                        <div className="rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-4 hover:bg-[#FAF7F9]/50 transition animate-in fade-in duration-200">
-                          <div className="flex items-start gap-3">
-                            <Avatar name={event.commentUser || "Collaboratore"} photoUrl={event.commentPhoto ?? null} className="size-8" />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold">{event.commentUser}</p>
-                                  <p className="text-[10px] text-black/45">{formatTaskDate(event.date.toISOString())}</p>
+                        {isComment ? (
+                          /* Comment Element */
+                          <div className="rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-4 hover:bg-[#FAF7F9]/50 transition animate-in fade-in duration-200">
+                            <div className="flex items-start gap-3">
+                              <Avatar name={event.commentUser || "Collaboratore"} photoUrl={event.commentPhoto ?? null} className="size-8" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold">{event.commentUser}</p>
+                                    <p className="text-[10px] text-black/45">{formatTaskDate(event.date.toISOString())}</p>
+                                  </div>
+                                  {event.commentUserId === userId ? (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => { 
+                                        setEditingCommentId(event.commentId || null); 
+                                        setCommentText(event.message || ""); 
+                                        setCommentFiles(event.files || []);
+                                      }} 
+                                      className="text-xs font-semibold text-[#8064D8] hover:underline"
+                                    >
+                                      Modifica
+                                    </button>
+                                  ) : null}
                                 </div>
-                                {event.commentUserId === userId ? (
-                                  <button 
-                                    type="button" 
-                                    onClick={() => { 
-                                      setEditingCommentId(event.commentId || null); 
-                                      setCommentText(event.message || ""); 
-                                      setCommentFiles(event.files || []);
-                                    }} 
-                                    className="text-xs font-semibold text-[#8064D8] hover:underline"
-                                  >
-                                    Modifica
-                                  </button>
-                                ) : null}
+                                {event.message && (
+                                  <p className="mt-2 text-sm leading-6 text-black/70 whitespace-pre-wrap">{event.message}</p>
+                                )}
+                                
+                                {/* Attached files */}
+                                {event.files && event.files.length > 0 && (
+                                  <div className="mt-3 grid gap-2">
+                                    {event.files.map((file: any, fileIdx: number) => {
+                                      const isImage = file.url?.startsWith("data:image/") || file.name?.match(/\.(jpeg|jpg|gif|png|webp)/i);
+                                      return (
+                                        <div key={fileIdx} className="max-w-md">
+                                          {isImage ? (
+                                            <ImagePreviewBlock name={file.name} url={file.url} />
+                                          ) : (
+                                            <AttachmentCard name={file.name} url={file.url} />
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
-                              {event.message && (
-                                <p className="mt-2 text-sm leading-6 text-black/70 whitespace-pre-wrap">{event.message}</p>
-                              )}
-                              
-                              {/* Attached files */}
-                              {event.files && event.files.length > 0 && (
-                                <div className="mt-3 grid gap-2">
-                                  {event.files.map((file: any, fileIdx: number) => {
-                                    const isImage = file.url?.startsWith("data:image/") || file.name?.match(/\.(jpeg|jpg|gif|png|webp)/i);
-                                    return (
-                                      <div key={fileIdx} className="max-w-md">
-                                        {isImage ? (
-                                          <ImagePreviewBlock name={file.name} url={file.url} />
-                                        ) : (
-                                          <AttachmentCard name={file.name} url={file.url} />
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        /* System Event Element */
-                        <div className="text-sm animate-in fade-in duration-200">
-                          <div className="flex items-center gap-2">
-                            {event.user ? (
-                              <Avatar name={event.user.name} photoUrl={event.user.photoUrl} className="size-5 shrink-0" />
-                            ) : null}
-                            <span className="font-semibold text-black/80">{event.title}</span>
-                            <span className="text-[10px] text-black/40 font-normal ml-auto shrink-0">{formatTaskDate(event.date.toISOString())}</span>
-                          </div>
-                          {event.description && (
-                            <p className="mt-1 text-xs text-black/50 ml-7">{event.description}</p>
-                          )}
+                        ) : (
+                          /* System Event Element */
+                          <div className="text-sm animate-in fade-in duration-200">
+                            <div className="flex items-center gap-2">
+                              {event.user ? (
+                                <Avatar name={event.user.name} photoUrl={event.user.photoUrl} className="size-5 shrink-0" />
+                              ) : null}
+                              <span className="font-semibold text-black/80">{event.title}</span>
+                              <span className="text-[10px] text-black/40 font-normal ml-auto shrink-0">{formatTaskDate(event.date.toISOString())}</span>
+                            </div>
+                            {event.description && (
+                              <p className="mt-1 text-xs text-black/50 ml-7">{event.description}</p>
+                            )}
 
-                          {/* Completion Proof Files */}
-                          {event.files && event.files.length > 0 && (
-                            <div className="mt-2 ml-7 grid gap-2 max-w-md">
-                              {event.files.map((file: any, fileIdx: number) => (
-                                <AttachmentCard key={fileIdx} name={file.name} url={file.url} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                            {/* Completion Proof Files */}
+                            {event.files && event.files.length > 0 && (
+                              <div className="mt-2 ml-7 grid gap-2 max-w-md">
+                                {event.files.map((file: any, fileIdx: number) => (
+                                  <AttachmentCard key={fileIdx} name={file.name} url={file.url} />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Comment Input Box at bottom of timeline */}
@@ -1622,22 +1646,54 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 </div>
               </div>
             </Card>
-            {selected.status === "ACTIVE" ? (
-              <button type="button" onClick={() => timerRunning && setTimerPaused((value) => !value)} className="w-full rounded-[24px] bg-white p-5 text-center shadow-sm">
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-black/45"><Timer className="size-4" /> Timer task {!timerRunning ? "non avviato" : timerPaused ? "in pausa" : "attivo"}</span>
-                <span className="mt-2 block text-4xl font-semibold tabular-nums">{formatTimer(selected.timerSeconds)}</span>
-                <span className="mt-1 block text-xs text-black/40">{timerRunning ? "Clicca sul timer per mettere in pausa o riprendere." : "Premi Avvia timer per iniziare a contare."}</span>
+            {selected.status === "ACTIVE" || selected.status === "WAITING" ? (
+              <button 
+                type="button" 
+                onClick={() => {
+                  if (selected.status === "ACTIVE") {
+                    void updateStatus(selected, "WAITING");
+                  } else {
+                    void updateStatus(selected, "ACTIVE");
+                  }
+                }} 
+                className="w-full rounded-[24px] bg-white p-5 text-center shadow-sm hover:bg-[#FAF7F9] transition"
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-black/45">
+                  <Timer className="size-4" /> Timer task {selected.status === "ACTIVE" ? "attivo" : "in pausa"}
+                </span>
+                <span className="mt-2 block text-4xl font-semibold tabular-nums">
+                  {formatTimer(getTaskCurrentSeconds(selected))}
+                </span>
+                <span className="mt-1 block text-xs text-black/40">
+                  Clicca sul timer per mettere in pausa o riprendere.
+                </span>
               </button>
             ) : selected.timerSeconds > 0 ? (
-              <Card className="bg-white"><p className="text-sm text-black/45">Tempo impiegato</p><p className="mt-2 text-3xl font-semibold tabular-nums">{formatTimer(selected.timerSeconds)}</p></Card>
+              <Card className="bg-white">
+                <p className="text-sm text-black/45">Tempo impiegato</p>
+                <p className="mt-2 text-3xl font-semibold tabular-nums">{formatTimer(getTaskCurrentSeconds(selected))}</p>
+              </Card>
             ) : null}
             {isCompletedTask(selected) ? null : (
             <div className="sticky bottom-4 z-10 grid grid-cols-2 gap-3 rounded-[24px] border border-black/5 bg-white/95 p-3 shadow-xl backdrop-blur">
               {isNewTask(selected) ? (
-                <Button className="col-span-2" onClick={() => { setTimerRunning(true); setTimerPaused(false); void updateStatus(selected, "ACTIVE"); }}><Clock3 className="size-4" /> Inizia task</Button>
+                <Button className="col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
+                  <Clock3 className="size-4" /> Inizia task
+                </Button>
               ) : (
                 <>
-                  <Button variant="soft" onClick={() => { if (!timerRunning) { setTimerRunning(true); setTimerPaused(false); } else { setTimerPaused((value) => !value); } }}>{!timerRunning ? "Avvia timer" : timerPaused ? "Riprendi timer" : "Pausa timer"}</Button>
+                  <Button 
+                    variant="soft" 
+                    onClick={() => { 
+                      if (selected.status === "ACTIVE") {
+                        void updateStatus(selected, "WAITING");
+                      } else {
+                        void updateStatus(selected, "ACTIVE");
+                      }
+                    }}
+                  >
+                    {selected.status === "ACTIVE" ? "Pausa timer" : selected.timerSeconds > 0 ? "Riprendi timer" : "Avvia timer"}
+                  </Button>
                   <Button onClick={() => setCompletionOpen(true)}><CheckCircle2 className="size-4" /> Completa task</Button>
                 </>
               )}
@@ -1683,7 +1739,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Completamento</p>
                 <h2 className="mt-2 text-2xl font-semibold">Invia prova task</h2>
-                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimer(selected.timerSeconds)}</p>
+                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimer(getTaskCurrentSeconds(selected))}</p>
               </div>
               <button onClick={() => setCompletionOpen(false)} className="grid size-10 place-items-center rounded-xl border border-black/10"><X className="size-5" /></button>
             </div>
@@ -1709,8 +1765,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               ) : null}
               <Button onClick={() => {
                 const links = completion.link.trim() ? [completion.link.trim()] : [];
-                setTimerRunning(false);
-                setTimerPaused(false);
                 void updateStatus(selected, "COMPLETED", { completionNote: completion.note, completionLinks: links, completionFiles: completion.files });
                 setCompletionOpen(false);
               }}><Send className="size-4" /> Invia e completa</Button>
