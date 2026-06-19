@@ -33,6 +33,28 @@ function formatTimer(seconds: number) {
   return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
 }
 
+function renderTextWithLinks(text: string) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (part.match(/^https?:\/\//i)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#8064D8] hover:underline break-all font-semibold"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 function weekStart(date = new Date()) {
   const start = new Date(date);
   const day = start.getDay() || 7;
@@ -285,7 +307,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Dettaglio task</p>
                     <h3 className="mt-2 text-3xl font-semibold">{selectedTask.title}</h3>
-                    <p className="mt-3 max-w-3xl leading-7 text-black/55">{selectedTask.description}</p>
+                    <p className="mt-3 max-w-3xl leading-7 text-black/55 whitespace-pre-wrap">{renderTextWithLinks(selectedTask.description)}</p>
                   </div>
                   <Badge tone={selectedTask.status === "COMPLETED" ? "green" : selectedTask.status === "ACTIVE" ? "gold" : "pink"}>{selectedTask.status === "COMPLETED" ? "Completata" : selectedTask.status === "ACTIVE" ? "In corso" : "Da iniziare"}</Badge>
                 </div>
@@ -297,7 +319,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                 {(selectedTask.completion_note || selectedTask.completion_files || selectedTask.completion_links) ? (
                   <div className="mt-6 rounded-[24px] border border-black/5 p-4">
                     <h4 className="font-semibold">Cosa ha finito</h4>
-                    {selectedTask.completion_note ? <p className="mt-3 leading-7 text-black/55">{selectedTask.completion_note}</p> : null}
+                    {selectedTask.completion_note ? <p className="mt-3 leading-7 text-black/55 whitespace-pre-wrap">{renderTextWithLinks(selectedTask.completion_note)}</p> : null}
                     <div className="mt-4 grid gap-3">
                       {normalizeFiles(selectedTask.completion_files).map((file, index) => (
                         <div key={`${file.name}-${index}`} className="rounded-2xl bg-[#FAF7F9] p-3">

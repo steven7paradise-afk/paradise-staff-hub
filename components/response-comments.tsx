@@ -11,6 +11,28 @@ type Comment = {
   createdAt: string;
 };
 
+function renderTextWithLinks(text: string) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (part.match(/^https?:\/\//i)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#8064D8] hover:underline break-all font-semibold"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 export function ResponseComments({
   responseId,
   initialComments = [],
@@ -106,7 +128,7 @@ export function ResponseComments({
                   })}
                 </span>
               </div>
-              <p className="text-black/85 dark:text-white/85 whitespace-pre-line">{c.message}</p>
+              <p className="text-black/85 dark:text-white/85 whitespace-pre-line">{renderTextWithLinks(c.message)}</p>
             </div>
           );
         })}

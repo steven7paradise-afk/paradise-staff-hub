@@ -110,6 +110,28 @@ function isWaitingTask(task: Task) {
   return ["WAITING", "ON_HOLD", "HOLD", "PENDING", "IN_ATTESA"].includes(normalizedStatus(task.status));
 }
 
+function renderTextWithLinks(text: string) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (part.match(/^https?:\/\//i)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#8064D8] hover:underline break-all font-semibold"
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 function isTodayTask(task: Task) {
   const source = taskCalendarDate(task);
   const date = new Date(source);
@@ -1398,29 +1420,41 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 ].map((row) => {
                   const Icon = row.icon;
                   return (
-                    <div key={row.label} className="flex items-center gap-3 rounded-2xl bg-[#FAF7F9] px-3 py-2.5">
-                      {row.label === "Assegnata a" ? (
-                        <div className="flex -space-x-1.5 overflow-visible">
-                          {selected.assignees && selected.assignees.length > 0 ? (
-                            selected.assignees.map((assignee) => (
-                              <div key={assignee.id} className="group relative">
-                                <Avatar name={assignee.name} photoUrl={assignee.photoUrl} className="size-8 rounded-full ring-2 ring-[#FAF7F9] transition-transform hover:z-10 hover:scale-110" />
-                                <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 scale-90 rounded bg-black/85 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-all duration-200 group-hover:scale-100 group-hover:opacity-100 whitespace-nowrap">
-                                  {assignee.name}
-                                </div>
-                              </div>
-                            ))
+                    <div key={row.label} className="flex items-center justify-between gap-3 rounded-2xl bg-[#FAF7F9] px-3 py-2.5">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex size-8 shrink-0 items-center justify-center">
+                          {row.label === "Assegnata a" ? (
+                            selected.assignees && selected.assignees.length === 1 ? (
+                              <Avatar name={selected.assignees[0].name} photoUrl={selected.assignees[0].photoUrl} className="size-8" />
+                            ) : (
+                              <Icon className="size-4.5 text-black/45" />
+                            )
                           ) : (
-                            <Avatar name="Nessuno" photoUrl={null} className="size-8" />
+                            "photo" in row ? (
+                              <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-8" />
+                            ) : (
+                              <Icon className="size-4.5 text-black/45" />
+                            )
                           )}
                         </div>
-                      ) : (
-                        "photo" in row ? <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-8" /> : <Icon className="size-4 text-black/45" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] text-black/40">{row.label}</p>
-                        <p className="truncate text-sm font-semibold">{row.value}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] text-black/40">{row.label}</p>
+                          <p className="truncate text-sm font-semibold">{row.value}</p>
+                        </div>
                       </div>
+                      
+                      {row.label === "Assegnata a" && selected.assignees && selected.assignees.length > 1 && (
+                        <div className="flex -space-x-1.5 overflow-visible shrink-0 ml-auto mr-1">
+                          {selected.assignees.map((assignee) => (
+                            <div key={assignee.id} className="group relative">
+                              <Avatar name={assignee.name} photoUrl={assignee.photoUrl} className="size-7 rounded-full ring-2 ring-[#FAF7F9] transition-transform hover:z-10 hover:scale-110" />
+                              <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 scale-90 rounded bg-black/85 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-all duration-200 group-hover:scale-100 group-hover:opacity-100 whitespace-nowrap">
+                                {assignee.name}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1434,7 +1468,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   <input type="file" accept="image/*" className="hidden" onChange={(event) => { void attachDescriptionImage(event.target.files?.[0]); event.currentTarget.value = ""; }} />
                 </label>
               </div>
-              <p className="mt-3 text-sm leading-6 text-black/55">{selected.description}</p>
+              <p className="mt-3 text-sm leading-6 text-black/55 whitespace-pre-wrap">{renderTextWithLinks(selected.description)}</p>
               {selected.photoUrl || selected.attachmentUrl || selected.attachmentName ? (
                 <div className="mt-4">
                   {selected.photoUrl ? (
@@ -1536,7 +1570,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                                   ) : null}
                                 </div>
                                 {event.message && (
-                                  <p className="mt-2 text-sm leading-6 text-black/70 whitespace-pre-wrap">{event.message}</p>
+                                  <p className="mt-2 text-sm leading-6 text-black/70 whitespace-pre-wrap">{renderTextWithLinks(event.message)}</p>
                                 )}
                                 
                                 {/* Attached files */}
