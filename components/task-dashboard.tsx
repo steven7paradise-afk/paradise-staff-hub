@@ -1357,7 +1357,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             <Card className="bg-white p-5">
               <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
               <h1 className="mt-4 text-2xl font-semibold tracking-tight">{selected.title}</h1>
-              <p className="mt-3 line-clamp-4 text-sm leading-6 text-black/55">{selected.description}</p>
               <div className="mt-5 grid gap-2">
                 {[
                   { icon: UserRound, label: "Assegnata da", value: selected.createdByName, photo: selected.createdByPhoto },
