@@ -635,6 +635,26 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setTasks((current) => current.map((task) => task.id === mapped.id ? mapped : task));
   }
 
+  async function toggleChecklistItem(index: number) {
+    if (!selected) return;
+    const nextChecklist = selected.checklist.map((item, idx) => 
+      idx === index ? { ...item, done: !item.done } : item
+    );
+    const nextTask = { ...selected, checklist: nextChecklist };
+    setSelected(nextTask);
+    setTasks((current) => current.map((task) => task.id === selected.id ? nextTask : task));
+
+    const response = await fetch("/api/tasks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: selected.id, checklist: nextChecklist }),
+    });
+    if (!response.ok) {
+      setSelected(selected);
+      setTasks((current) => current.map((task) => task.id === selected.id ? selected : task));
+    }
+  }
+
   useEffect(() => {
     setTimerRunning(false);
     setTimerPaused(false);
@@ -852,11 +872,21 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           <p className="truncate font-semibold">{task.title}</p>
           <div className="mt-1 flex items-center gap-2 text-xs text-black/45">
             <div className="flex -space-x-1 overflow-hidden">
-              {task.assignees?.map((assignee) => (
-                <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-5 rounded-full ring-1 ring-white" />
-              )) || <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-5" />}
+              {task.assignees && task.assignees.length > 0 ? (
+                task.assignees.map((assignee) => (
+                  <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-5 rounded-full ring-1 ring-white" />
+                ))
+              ) : (
+                <Avatar name="Nessuno" photoUrl={null} className="size-5" />
+              )}
             </div>
-            <span className="truncate">{task.assignedToName}</span>
+            <span className="truncate">
+              {task.assignees && task.assignees.length > 0 
+                ? task.assignees.length === 1 
+                  ? task.assignees[0].name 
+                  : `${task.assignees.length} collaboratori` 
+                : task.assignedToName || "Nessuno"}
+            </span>
             <span>·</span>
             <span>{formatTaskDate(task.dueDate)}</span>
           </div>
@@ -1133,11 +1163,21 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     <td className="px-4 py-4">
                       <span className="inline-flex items-center gap-2">
                         <div className="flex -space-x-1.5 overflow-hidden">
-                          {task.assignees?.map((assignee) => (
-                            <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-7 rounded-full ring-2 ring-white" />
-                          )) || <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-7" />}
+                          {task.assignees && task.assignees.length > 0 ? (
+                            task.assignees.map((assignee) => (
+                              <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-7 rounded-full ring-2 ring-white" />
+                            ))
+                          ) : (
+                            <Avatar name="Nessuno" photoUrl={null} className="size-7" />
+                          )}
                         </div>
-                        <span className="truncate max-w-[150px]">{task.assignedToName}</span>
+                        <span className="truncate max-w-[150px]">
+                          {task.assignees && task.assignees.length > 0 
+                            ? task.assignees.length === 1 
+                              ? task.assignees[0].name 
+                              : `${task.assignees.length} collaboratori` 
+                            : task.assignedToName || "Nessuno"}
+                        </span>
                       </span>
                     </td>
                     <td className="px-4 py-4">{formatCategoryLabel(task.category)}</td>
@@ -1191,11 +1231,21 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                       <div className="mt-4 flex items-center justify-between gap-3 text-xs text-black/45">
                         <span className="inline-flex min-w-0 items-center gap-2">
                           <div className="flex -space-x-1.5 overflow-hidden">
-                            {task.assignees?.map((assignee) => (
-                              <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-6 rounded-full ring-2 ring-white" />
-                            )) || <Avatar name={task.assignedToName} photoUrl={task.assignedToPhoto} className="size-6" />}
+                            {task.assignees && task.assignees.length > 0 ? (
+                              task.assignees.map((assignee) => (
+                                <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-6 rounded-full ring-2 ring-white" />
+                              ))
+                            ) : (
+                              <Avatar name="Nessuno" photoUrl={null} className="size-6" />
+                            )}
                           </div>
-                          <span className="truncate">{task.assignedToName}</span>
+                          <span className="truncate">
+                            {task.assignees && task.assignees.length > 0 
+                              ? task.assignees.length === 1 
+                                ? task.assignees[0].name 
+                                : `${task.assignees.length} collaboratori` 
+                              : task.assignedToName || "Nessuno"}
+                          </span>
                         </span>
                         <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" /> {formatTaskDate(task.dueDate)}</span>
                       </div>
@@ -1309,9 +1359,17 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <h1 className="mt-4 text-2xl font-semibold tracking-tight">{selected.title}</h1>
               <p className="mt-3 line-clamp-4 text-sm leading-6 text-black/55">{selected.description}</p>
               <div className="mt-5 grid gap-2">
-              {[
+                {[
                   { icon: UserRound, label: "Assegnata da", value: selected.createdByName, photo: selected.createdByPhoto },
-                  { icon: UserRound, label: "Assegnata a", value: selected.assignedToName, photo: selected.assignedToPhoto },
+                  { 
+                    icon: UserRound, 
+                    label: "Assegnata a", 
+                    value: selected.assignees && selected.assignees.length > 0
+                      ? selected.assignees.length === 1 
+                        ? selected.assignees[0].name 
+                        : `${selected.assignees.length} collaboratori`
+                      : selected.assignedToName || "Nessuno"
+                  },
                   { icon: CalendarDays, label: "Scadenza", value: formatFullDate(selected.dueDate) },
                   { icon: Flag, label: "Priorita", value: selected.priority },
                   { icon: Tag, label: "Categoria", value: formatCategoryLabel(selected.category) },
@@ -1320,7 +1378,24 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   const Icon = row.icon;
                   return (
                     <div key={row.label} className="flex items-center gap-3 rounded-2xl bg-[#FAF7F9] px-3 py-2.5">
-                      {"photo" in row ? <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-8" /> : <Icon className="size-4 text-black/45" />}
+                      {row.label === "Assegnata a" ? (
+                        <div className="flex -space-x-1.5 overflow-visible">
+                          {selected.assignees && selected.assignees.length > 0 ? (
+                            selected.assignees.map((assignee) => (
+                              <div key={assignee.id} className="group relative">
+                                <Avatar name={assignee.name} photoUrl={assignee.photoUrl} className="size-8 rounded-full ring-2 ring-[#FAF7F9] transition-transform hover:z-10 hover:scale-110" />
+                                <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 scale-90 rounded bg-black/85 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-all duration-200 group-hover:scale-100 group-hover:opacity-100 whitespace-nowrap">
+                                  {assignee.name}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <Avatar name="Nessuno" photoUrl={null} className="size-8" />
+                          )}
+                        </div>
+                      ) : (
+                        "photo" in row ? <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-8" /> : <Icon className="size-4 text-black/45" />
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] text-black/40">{row.label}</p>
                         <p className="truncate text-sm font-semibold">{row.value}</p>
@@ -1350,24 +1425,34 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               ) : null}
               {selected.linkUrl ? <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]" href={selected.linkUrl} target="_blank"><LinkIcon className="size-4" /> Apri link</a> : null}
             </Card>
+
+            {selected.checklist && selected.checklist.length > 0 ? (
+              <Card className="bg-white p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="font-semibold">Checklist</h2>
+                  <span className="text-sm font-semibold text-[#8064D8]">
+                    {selected.checklist.filter((item) => item.done).length}/{selected.checklist.length} completate
+                  </span>
+                </div>
+                <div className="grid gap-3">
+                  {selected.checklist.map((item, index) => (
+                    <button
+                      type="button"
+                      key={`${item.text}-${index}`}
+                      onClick={() => void toggleChecklistItem(index)}
+                      className="flex items-center gap-3 text-left w-full hover:bg-black/5 rounded-xl p-1 transition"
+                    >
+                      <span className={`grid size-6 place-items-center rounded-md border ${item.done ? "bg-[#8064D8] text-white" : "border-black/20"}`}>
+                        {item.done ? <Check className="size-4" /> : null}
+                      </span>
+                      <span className={item.done ? "text-black/45 line-through" : ""}>{item.text}</span>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
             </div>
             <div className="min-w-0 space-y-5">
-              {/* Checklist */}
-            <Card className="bg-white p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-semibold">Checklist</h2>
-                <span className="text-sm font-semibold text-[#8064D8]">{completedChecklist}/{selected.checklist.length} completate</span>
-              </div>
-              <div className="grid gap-3">
-                {selected.checklist.length === 0 ? <p className="text-sm text-black/45">Nessuna checklist.</p> : null}
-                {selected.checklist.map((item, index) => (
-                  <label key={`${item.text}-${index}`} className="flex items-center gap-3">
-                    <span className={`grid size-6 place-items-center rounded-md border ${item.done ? "bg-[#8064D8] text-white" : "border-black/20"}`}>{item.done ? <Check className="size-4" /> : null}</span>
-                    <span className={item.done ? "text-black/45 line-through" : ""}>{item.text}</span>
-                  </label>
-                ))}
-              </div>
-            </Card>
 
             {/* Prova completamento (se presente) */}
             {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (

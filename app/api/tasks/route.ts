@@ -112,10 +112,26 @@ export async function PATCH(request: NextRequest) {
         })
         .filter(Boolean)
     : [];
+
+  const checklist = Array.isArray(payload.checklist)
+    ? payload.checklist
+        .map((item: any) => {
+          if (item && typeof item === "object") {
+            return {
+              text: String(item.text ?? "").trim(),
+              done: Boolean(item.done)
+            };
+          }
+          return null;
+        })
+        .filter(Boolean)
+    : null;
+
   const isNotesUpdate = notes !== null && !status && !evaluation;
   const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
+  const isChecklistUpdate = checklist !== null && !status && !evaluation && notes === null && photoUrl === null;
   
-  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !["ACTIVE", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
+  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
   }
 
@@ -135,6 +151,8 @@ export async function PATCH(request: NextRequest) {
       ? { notes: notes || null }
       : isDescriptionImageUpdate
       ? { photo_url: photoUrl || null, attachment_name: attachmentName || null }
+      : isChecklistUpdate
+      ? { checklist }
       : isEvaluation
       ? { evaluation, evaluated_by_id: session.user.id, evaluated_at: new Date() }
       : {
