@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ClientControlDashboard } from "@/app/client-control/client-control-dashboard";
 import { auth } from "@/lib/auth";
-import { ensureClientControlForm, isClientControlFormName } from "@/lib/client-control-form";
+import { ensureClientControlForm, isClientControlFormName, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 
@@ -60,7 +60,14 @@ export default async function ClientControlPage() {
     },
   });
 
-  const serializedResponses = responses.map((response) => ({
+  const filteredResponses = responses.filter((response) => {
+    const answers = response.answers as Record<string, unknown> | null;
+    if (!answers) return true;
+    const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || answers.client_control_correctness || "").trim().toLowerCase();
+    return correctness !== "finito";
+  });
+
+  const serializedResponses = filteredResponses.map((response) => ({
     id: response.id,
     created_at: response.created_at.toISOString(),
     updated_at: response.updated_at.toISOString(),
