@@ -135,6 +135,8 @@ export default async function TabletClockPage({
       const savedOrders = new Set<string>();
       // Map of date string YYYY-MM-DD (in Europe/Rome) -> Set of normalized client names checked out on that day
       const savedClientNamesByDate = new Map<string, Set<string>>();
+      // Track which booking IDs have been checked out
+      const savedBookingIds = new Set<string>();
 
       for (const resp of clientControlResponses) {
         const answers = resp.answers as Record<string, any>;
@@ -152,6 +154,10 @@ export default async function TabletClockPage({
             savedClientNamesByDate.set(respDateStr, new Set());
           }
           savedClientNamesByDate.get(respDateStr)!.add(client);
+        }
+        const bId = String(answers.booking_id || "").trim();
+        if (bId) {
+          savedBookingIds.add(bId);
         }
       }
 
@@ -208,7 +214,7 @@ export default async function TabletClockPage({
           const orderMatched = (cleanOrderName && savedOrders.has(cleanOrderName)) || 
                                (cleanBookingOrder && savedOrders.has(cleanBookingOrder));
           const nameMatched = savedClientNamesByDate.get(bookingRomeDateStr)?.has(cleanClientName) || false;
-          const isSaved = orderMatched || nameMatched;
+          const isSaved = savedBookingIds.has(booking.id) || orderMatched || nameMatched;
 
           return {
             id: booking.id,

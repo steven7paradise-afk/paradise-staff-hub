@@ -214,6 +214,7 @@ export function TabletClock({
     afterMedia: false,
     products: false,
     review: false,
+    bookingId: null as string | null,
   });
   const [appointmentSubmitting, setAppointmentSubmitting] = useState(false);
   const [appointmentMessage, setAppointmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -486,6 +487,7 @@ export function TabletClock({
       }
 
       showFeedback("success", "Scheda controllo salvata ed eliminata dalla lista.");
+      router.refresh();
       setClientControlOpen(false);
       setSelectedBookingForDetails(null);
       setCurrentBookingId(null);
@@ -505,6 +507,7 @@ export function TabletClock({
         afterMedia: false,
         products: false,
         review: false,
+        bookingId: null,
       }));
       fetchAnalytics();
     } catch (err: any) {
@@ -825,6 +828,7 @@ export function TabletClock({
         afterMedia: false,
         products: false,
         review: false,
+        bookingId: booking.id,
       });
 
       setClientControlOpen(true);

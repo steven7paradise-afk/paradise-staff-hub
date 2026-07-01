@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
     afterMedia?: boolean;
     products?: boolean;
     review?: boolean;
+    bookingId?: string | null;
   } | null;
 
   const salonName = textValue(body?.salon || tabletDevice.location?.name);
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.instagramTag]: textValue(body?.instagramTag),
     [CLIENT_CONTROL_FIELD_IDS.notes]: boolValue(body?.notes),
     client_control_notes_text: textValue(body?.customNoteText),
+    booking_id: textValue(body?.bookingId),
     [CLIENT_CONTROL_FIELD_IDS.beforeMedia]: boolValue(body?.beforeMedia),
     [CLIENT_CONTROL_FIELD_IDS.afterMedia]: boolValue(body?.afterMedia),
     [CLIENT_CONTROL_FIELD_IDS.products]: boolValue(body?.products),
