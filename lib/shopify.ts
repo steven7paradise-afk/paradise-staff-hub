@@ -452,13 +452,13 @@ export async function updateShopifyOrderMetafields(
           metafields: [
             {
               namespace: "custom",
-              key: "app_stato",
+              key: "stato_ordine",
               value: status,
               type: "single_line_text_field"
             },
             {
               namespace: "custom",
-              key: "app_note",
+              key: "note_ordine",
               value: note || "Nessuna nota",
               type: "multi_line_text_field"
             }
