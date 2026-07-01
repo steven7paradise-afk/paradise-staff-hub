@@ -30,7 +30,8 @@ import {
   Edit3,
   Check,
   ShoppingBag,
-  ChevronRight
+  ChevronRight,
+  Mic
 } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
 import { cn } from "@/lib/utils";
@@ -229,6 +230,8 @@ export function TabletClock({
 
   const dashboardFrameRef = useRef<HTMLIFrameElement | null>(null);
   const kioskIdleTimerRef = useRef<any | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Leave Request form states (from 614 version)
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
@@ -500,6 +503,60 @@ export function TabletClock({
     } finally {
       setAppointmentSubmitting(false);
     }
+  };
+
+  const toggleSpeechRecognition = () => {
+    const SpeechRecognitionClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionClass) {
+      setAppointmentMessage({ type: "error", text: "La registrazione vocale non è supportata da questo browser. Usa Safari o Chrome." });
+      sound("error");
+      return;
+    }
+
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionClass();
+    recognition.lang = "it-IT";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+      sound("tap");
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setAppointmentForm((prev) => ({
+        ...prev,
+        customNoteText: prev.customNoteText
+          ? `${prev.customNoteText.trim()} ${transcript}`
+          : transcript,
+      }));
+      sound("success");
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      setIsRecording(false);
+      if (event.error !== "no-speech") {
+        setAppointmentMessage({ type: "error", text: `Errore trascrizione vocale: ${event.error}` });
+        sound("error");
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
   };
 
   function sound(kind: "tap" | "success" | "error", force = false) {
@@ -1744,12 +1801,36 @@ export function TabletClock({
 
                             {/* customNoteText Shopify textarea with warning/help text */}
                             <label className="block col-span-2">
-                              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo Nota Shopify</span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo Nota Shopify</span>
+                                <button
+                                  type="button"
+                                  onClick={toggleSpeechRecognition}
+                                  className={cn(
+                                    "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition active:scale-95",
+                                    isRecording
+                                      ? "bg-red-500 text-white animate-pulse"
+                                      : "bg-black/5 text-black/60 hover:bg-black/10"
+                                  )}
+                                >
+                                  {isRecording ? (
+                                    <>
+                                      <span className="size-1.5 rounded-full bg-white animate-ping" />
+                                      <span>Ascolto...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Mic className="size-3 text-[#ff8bb2]" />
+                                      <span>Ditta a voce</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                               <textarea
                                 value={appointmentForm.customNoteText}
                                 onChange={(e) => setAppointmentForm((prev) => ({ ...prev, customNoteText: e.target.value }))}
                                 className="mt-1 min-h-20 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
-                                placeholder="Scrivi qui la nota da aggiungere all'ordine Shopify"
+                                placeholder="Scrivi qui la nota da aggiungere o clicca 'Ditta a voce' per registrare"
                               />
                               <span className="text-[10px] font-semibold text-black/45 mt-1 block">
                                 La nota verrà firmata con i nomi dei collaboratori selezionati (es: "Staff: Aurora e Melissa").
