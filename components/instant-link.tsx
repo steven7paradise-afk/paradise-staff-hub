@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type InstantLinkProps = {
@@ -24,14 +24,21 @@ export function InstantLink({
   ...props
 }: InstantLinkProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
+
+  useEffect(() => {
+    setLoading(false);
+  }, [pathname]);
 
   return (
     <Link
       {...props}
       href={href}
-      prefetch={false}
+      prefetch
+      onMouseEnter={() => router.prefetch(href)}
+      onTouchStart={() => router.prefetch(href)}
       onPointerDown={() => setLoading(true)}
       onClick={() => setLoading(true)}
       className={cn(

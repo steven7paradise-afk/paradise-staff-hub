@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Paradise Staff Hub",
     short_name: "Paradise Hub",
     description: "App interna Paradise Beauty per staff, tablet clock, turni e documenti.",
-    start_url: "/tablet-clock",
+    start_url: "/dashboard",
     scope: "/",
     display: "standalone",
     background_color: "#FFFFFF",

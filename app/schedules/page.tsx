@@ -1,13 +1,24 @@
 import { AppShell } from "@/components/app-shell";
 import { MonthlySchedulePlanner } from "@/components/monthly-schedule-planner";
 import { auth } from "@/lib/auth";
+import { canEditPlanning, canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { prisma } from "@/lib/prisma";
+import type { Role } from "@/lib/roles";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function SchedulesPage() {
   const session = await auth();
-  const [employees, locations, categories, entries, workerOverrides] = await Promise.all([
+  if (!session?.user?.id) redirect("/login");
+  const role = session.user.role as Role;
+
+  const accessSetting = await prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } });
+  const planningAccess = normalizePlanningAccess(accessSetting?.value);
+  if (!canViewPlanning(role, session.user.id, planningAccess)) redirect("/dashboard");
+
+  const userCanEditPlanning = canEditPlanning(role);
+  const [employees, locations, categories, entries, workerOverrides, workersOrderSetting] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
@@ -29,6 +40,7 @@ export default async function SchedulesPage() {
       },
     }),
     prisma.scheduleWorkerOverride.findMany(),
+    prisma.setting.findUnique({ where: { key: "schedules_workers_order" } }),
   ]);
 
   return (
@@ -37,6 +49,7 @@ export default async function SchedulesPage() {
       subtitle="Organizza i turni come un foglio mensile: dipendenti sulle righe, giorni sulle colonne, categorie colorate e stampa PDF."
     >
       <MonthlySchedulePlanner
+        initialWorkersOrder={Array.isArray(workersOrderSetting?.value) ? (workersOrderSetting.value as string[]) : []}
         employees={employees.map((employee) => ({
           id: employee.id,
           name: employee.name,
@@ -72,8 +85,8 @@ export default async function SchedulesPage() {
           locationId: override.location_id,
           userId: override.user_id,
         }))}
-        canManageCategories={session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN"}
-        canEditPlanning={session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN"}
+        canManageCategories={userCanEditPlanning}
+        canEditPlanning={userCanEditPlanning}
       />
     </AppShell>
   );

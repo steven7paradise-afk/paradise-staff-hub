@@ -76,3 +76,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   return NextResponse.json(log);
 }
+
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.id || !allowedRoles.has(session.user.role)) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const existing = await prisma.attendanceLog.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Timbratura non trovata." }, { status: 404 });
+
+  await prisma.attendanceLog.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true, id });
+}

@@ -100,6 +100,12 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
   }, []);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      lastId.current = localStorage.getItem("last_shown_notification_id");
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function check() {
@@ -107,8 +113,16 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
       if (!response?.ok || cancelled) return;
       const data = (await response.json()) as { count: number; latest: LatestNotification | null };
       const latestId = data.latest?.id ?? null;
-      const hasNew = data.count > lastCount.current || (latestId && latestId !== lastId.current && data.count > 0);
+      const lastShownId = typeof window !== "undefined" ? localStorage.getItem("last_shown_notification_id") : null;
+
+      const hasNew = latestId && latestId !== lastId.current && latestId !== lastShownId && data.count > 0;
+
       if (hasNew && data.latest) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("last_shown_notification_id", data.latest.id);
+        }
+        lastId.current = data.latest.id;
+
         playNotificationSound();
         if ("Notification" in window && Notification.permission === "granted") {
           const browserNotification = new Notification(data.latest.title, {
@@ -123,7 +137,6 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
         }
       }
       lastCount.current = data.count;
-      lastId.current = latestId;
     }
 
     const first = window.setTimeout(check, 5000);

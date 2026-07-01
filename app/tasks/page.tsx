@@ -4,7 +4,7 @@ import { TaskDashboard } from "@/components/task-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
-import { requireServicePageAccess } from "@/lib/service-page-access";
+import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
 
 export const dynamic = "force-dynamic";
 
@@ -13,25 +13,49 @@ export default async function TasksPage() {
   if (!session?.user?.id) redirect("/login");
 
   const role = session.user.role as Role;
-  await requireServicePageAccess(role, session.user.sedeId, 2);
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, mansione: true, sede_id: true, location: { select: { name: true } } },
+  });
+  if (!hasTaskAccess(role, currentUser?.mansione, currentUser?.location?.name)) redirect("/dashboard");
+
+  const canSeeAllTaskLocations = isTaskOfficeUser(role, currentUser?.mansione, currentUser?.location?.name);
+  const canSeeAllTasks = role === "SUPER_ADMIN" || role === "ADMIN" || canSeeAllTaskLocations;
+  const taskLocationFilter = canSeeAllTaskLocations ? {} : { location_id: currentUser?.sede_id ?? undefined };
   const workerWhere =
-    role === "RESPONSABILE" || role === "DIPENDENTE"
-      ? { active: true, sede_id: session.user.sedeId ?? undefined, role: { not: "SUPER_ADMIN" as const } }
-      : { active: true, role: { not: "SUPER_ADMIN" as const } };
-  const taskWhere =
-    role === "DIPENDENTE" || role === "RESPONSABILE"
-      ? { location_id: session.user.sedeId ?? undefined }
-      : {};
+    canSeeAllTaskLocations
+      ? taskWorkerWhere()
+      : { ...taskWorkerWhere(), sede_id: currentUser?.sede_id ?? undefined };
+  const taskWhere = canSeeAllTasks
+    ? taskLocationFilter
+    : {
+        ...taskLocationFilter,
+        OR: [
+          { created_by_id: session.user.id },
+          { assignees: { some: { id: session.user.id } } },
+        ],
+      };
 
   const [workers, tasks, categorySetting] = await Promise.all([
     prisma.user.findMany({
       where: workerWhere,
+      select: { id: true, name: true, sede_id: true, photo_url: true, mansione: true, role: true },
       orderBy: [{ location: { name: "asc" } }, { name: "asc" }],
     }),
     prisma.staffTask.findMany({
       where: taskWhere,
-      include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
+      include: {
+        assignees: { select: { id: true, name: true, photo_url: true } },
+        created_by: { select: { id: true, name: true, photo_url: true } },
+        location: { select: { id: true, name: true } },
+        comments: {
+          include: { user: { select: { id: true, name: true, photo_url: true } } },
+          orderBy: { created_at: "desc" },
+          take: 30,
+        },
+      },
       orderBy: { created_at: "desc" },
+      take: 120,
     }),
     prisma.setting.findUnique({ where: { key: "task_categories" } }),
   ]);
@@ -40,13 +64,14 @@ export default async function TasksPage() {
     : ["Operativa", "Sala", "Reception", "Bar", "Cucina", "Pulizia", "Magazzino", "Clienti"];
 
   return (
-    <AppShell title="TASK" role={role} hideHeader>
+    <AppShell title="Task" role={role} hideHeader>
       <TaskDashboard
         role={role}
         userId={session.user.id}
         userName={session.user.name ?? "Paradise"}
+        canManageTasks={canSeeAllTasks}
         categories={taskCategories}
-        workers={workers.map((worker) => ({ id: worker.id, name: worker.name, locationId: worker.sede_id, photoUrl: worker.photo_url }))}
+        workers={workers.map((worker) => ({ id: worker.id, name: worker.name, locationId: worker.sede_id, photoUrl: worker.photo_url, mansione: worker.mansione, role: worker.role }))}
         initialTasks={tasks.map((task) => ({
           id: task.id,
           title: task.title,
@@ -85,7 +110,7 @@ export default async function TasksPage() {
           completedAt: task.completed_at?.toISOString() ?? null,
           createdAt: task.created_at.toISOString(),
           updatedAt: task.updated_at.toISOString(),
-          comments: task.comments.map((comment) => ({
+          comments: [...task.comments].reverse().map((comment) => ({
             id: comment.id,
             message: comment.message,
             userId: comment.user_id,

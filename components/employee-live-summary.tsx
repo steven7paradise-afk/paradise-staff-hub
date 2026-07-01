@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CalendarDays, Coffee, Users, type LucideIcon } from "lucide-react";
 import { InstantLink } from "@/components/instant-link";
 import { Card } from "@/components/ui";
@@ -70,10 +70,18 @@ function totals(logs: TodayLog[], now: number) {
   return {
     worked,
     paused,
+    activePauseStart,
     activePauseElapsed: activePauseStart === null ? 0 : Math.max(0, now - activePauseStart),
     isWorking: lastType === "ENTRATA" || lastType === "RIENTRO",
     isPaused: lastType === "PAUSA",
   };
+}
+
+function formatCountdown(milliseconds: number) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
 export function EmployeeLiveSummary({
@@ -88,7 +96,12 @@ export function EmployeeLiveSummary({
 }: ShiftSummaryProps) {
   const [logs, setLogs] = useState(initialLogs);
   const [now, setNow] = useState(Date.now());
+  const notifiedPauseKey = useRef<string | null>(null);
   const clock = useMemo(() => totals(logs, now), [logs, now]);
+  const pauseRemainingMs = clock.activePauseStart === null ? 0 : clock.activePauseStart + breakDurationMinutes * 60000 - now;
+  const isPauseWarning = clock.isPaused && pauseRemainingMs > 0 && pauseRemainingMs <= 5 * 60 * 1000;
+  const pauseValue = clock.isPaused ? formatCountdown(pauseRemainingMs) : formatElapsed(clock.paused);
+  const pauseHint = clock.isPaused ? "al rientro" : "totale oggi";
 
   useEffect(() => {
     let mounted = true;
@@ -103,6 +116,25 @@ export function EmployeeLiveSummary({
       window.clearInterval(refresh);
     };
   }, []);
+
+  useEffect(() => {
+    if (!clock.isPaused || !clock.activePauseStart) {
+      notifiedPauseKey.current = null;
+      return;
+    }
+
+    const pauseKey = String(clock.activePauseStart);
+    if (!isPauseWarning || notifiedPauseKey.current === pauseKey) return;
+    notifiedPauseKey.current = pauseKey;
+
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Fine pausa tra 5 minuti", {
+        body: "Preparati a timbrare il rientro pausa.",
+        tag: `pause-ending-${pauseKey}`,
+        icon: "/favicon.png",
+      });
+    }
+  }, [clock.activePauseStart, clock.isPaused, isPauseWarning]);
 
   return (
     <div className="grid gap-3 grid-cols-1 md:grid-cols-[1.5fr_1fr]">
@@ -141,10 +173,11 @@ export function EmployeeLiveSummary({
       <CompactLiveStatus
         icon={Coffee}
         label="Pausa"
-        value={formatElapsed(clock.paused)}
-        hint="totale oggi"
+        value={pauseValue}
+        hint={pauseHint}
         href="/my-shifts"
         active={clock.isPaused}
+        danger={isPauseWarning}
       />
     </div>
   );

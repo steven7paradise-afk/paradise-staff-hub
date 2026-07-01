@@ -3,7 +3,10 @@ import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 const PIN_CACHE_TTL_MS = 60_000;
-const workerPinCache = new Map<string, { expiresAt: number; worker: { id: string; name: string } | null }>();
+const workerPinCache = new Map<string, {
+  expiresAt: number;
+  worker: { id: string; name: string; photo_url: string | null; role: string; mansione: string | null } | null;
+}>();
 
 export function pinLookup(pin: string) {
   return createHash("sha256").update(`paradise-staff-hub-pin-v1:${pin}`).digest("hex");
@@ -33,7 +36,7 @@ export async function isPinAlreadyAssigned(pin: string, excludeUserId?: string) 
 
 export async function identifyWorkerByPin(pin: string, locationId: string, isOffice = false) {
   const lookup = pinLookup(pin);
-  const cacheKey = `${isOffice ? "global" : locationId}:${lookup}`;
+  const cacheKey = lookup;
   const cached = workerPinCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.worker;
@@ -43,12 +46,17 @@ export async function identifyWorkerByPin(pin: string, locationId: string, isOff
     where: {
       active: true,
       role: { not: "SUPER_ADMIN" },
-      ...(isOffice ? {} : { sede_id: locationId }),
       pin_lookup: lookup,
     },
-    select: { id: true, name: true, photo_url: true },
+    select: { id: true, name: true, photo_url: true, role: true, mansione: true },
   });
-  const worker = quickMatch ? { id: quickMatch.id, name: quickMatch.name, photo_url: quickMatch.photo_url } : null;
+  const worker = quickMatch ? {
+    id: quickMatch.id,
+    name: quickMatch.name,
+    photo_url: quickMatch.photo_url,
+    role: quickMatch.role,
+    mansione: quickMatch.mansione,
+  } : null;
   workerPinCache.set(cacheKey, { worker, expiresAt: Date.now() + PIN_CACHE_TTL_MS });
   return worker;
 }

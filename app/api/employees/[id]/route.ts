@@ -7,6 +7,11 @@ import { prisma } from "@/lib/prisma";
 
 const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 
+function todayUtcStart() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id || !managementRoles.has(session.user.role)) {
@@ -40,13 +45,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: "Utente non trovato." }, { status: 404 });
   }
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: {
+  const nextSedeId = data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined;
+  const baseUpdate = {
       name: String(data.name ?? current.name).trim(),
       email: String(data.email ?? current.email).trim().toLowerCase(),
       role,
-      sede_id: data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined,
+      sede_id: nextSedeId,
       birth_date: birthDate,
       fiscal_code: data.fiscalCode !== undefined ? (data.fiscalCode ? String(data.fiscalCode).trim().toUpperCase() : null) : undefined,
       contract_start: contractStart,
@@ -61,7 +65,59 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
       ...(pin ? { pin_hash: await bcrypt.hash(pin, 12), pin_lookup: pinLookup(pin) } : {}),
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {}),
-    },
+  };
+
+  const user = await prisma.$transaction(async (tx) => {
+    const updatedUser = await tx.user.update({
+      where: { id },
+      data: baseUpdate,
+    });
+
+    if (nextSedeId && nextSedeId !== current.sede_id) {
+      const futureEntries = await tx.scheduleEntry.findMany({
+        where: {
+          user_id: id,
+          date: { gte: todayUtcStart() },
+        },
+        include: { category: true },
+      });
+
+      for (const entry of futureEntries) {
+        const category = await tx.scheduleCategory.upsert({
+          where: {
+            code_location_id: {
+              code: entry.category.code,
+              location_id: nextSedeId,
+            },
+          },
+          create: {
+            name: entry.category.name,
+            code: entry.category.code,
+            location_id: nextSedeId,
+            color: entry.category.color,
+            text_color: entry.category.text_color,
+            start_time: entry.category.start_time,
+            end_time: entry.category.end_time,
+            editable_time: entry.category.editable_time,
+            paid_hours: entry.category.paid_hours,
+            active: entry.category.active,
+          },
+          update: {},
+        });
+
+        await tx.scheduleEntry.update({
+          where: { id: entry.id },
+          data: {
+            location_id: nextSedeId,
+            category_id: category.id,
+          },
+        });
+      }
+
+      await tx.scheduleWorkerOverride.deleteMany({ where: { user_id: id } });
+    }
+
+    return updatedUser;
   });
 
   return NextResponse.json({ ...user, password_hash: undefined, pin_hash: undefined, pinConfigured: Boolean(user.pin_hash) });

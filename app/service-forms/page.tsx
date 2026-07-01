@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
@@ -6,6 +7,13 @@ import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
+import { ensureCashClosingForm, isCashClosingFormName } from "@/lib/cash-closing-form";
+import { ensureClientControlForm } from "@/lib/client-control-form";
+import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
+import {
+  normalizeServiceFormsVisibility,
+  SERVICE_FORMS_VISIBILITY_KEY,
+} from "@/lib/service-form-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -17,21 +25,59 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
   await requireServicePageAccess(role, session.user.sedeId, 3, session.user.id);
-  await ensureOrderForm(session.user.id);
+  await Promise.all([
+    ensureOrderForm(session.user.id),
+    ensureCashClosingForm(session.user.id),
+    ensureClientControlForm(session.user.id),
+  ]);
 
   const locationId = session.user.sedeId;
 
-  // Retrieve active templates
-  const allActiveForms = await prisma.serviceForm.findMany({
-    where: { active: true },
-    orderBy: { created_at: "desc" },
-  });
+  const cookieStore = await cookies();
+  const headerStore = await headers();
+  const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
+  const tabletDevice = requestedDevice
+    ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore))
+    : null;
+  const isVerifiedTabletDevice = Boolean(tabletDevice);
+  const isManagementRole = role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+
+  // Retrieve active templates, visibility rules and today's latest clock state.
+  const [allActiveForms, visibilitySetting, latestAttendance] = await Promise.all([
+    prisma.serviceForm.findMany({
+      where: { active: true },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.setting.findUnique({ where: { key: SERVICE_FORMS_VISIBILITY_KEY } }).catch(() => null),
+    prisma.attendanceLog.findFirst({
+      where: {
+        user_id: session.user.id,
+        date: new Date(today),
+      },
+      orderBy: { timestamp: "desc" },
+    }).catch(() => null),
+  ]);
+
+  const visibilityRules = normalizeServiceFormsVisibility(visibilitySetting?.value);
+  const offShiftHiddenIds = new Set(visibilityRules.hideWhenOffShiftFormIds);
+  const isCurrentUserInShift = latestAttendance ? latestAttendance.type !== "USCITA" : false;
 
   // Filter forms matching the user's role and location
   const allowedForms = allActiveForms.filter((form) => {
     const allowedRoles = form.allowed_roles as string[] | null;
     const allowedLocations = form.allowed_location_ids as string[] | null;
     const isCandidacy = form.name.toUpperCase().includes("CANDIDATURA");
+    const isCashClosing = isCashClosingFormName(form.name, form.category);
+
+    if (isCashClosing && !isManagementRole && !isVerifiedTabletDevice) {
+      return false;
+    }
+
+    if (!isManagementRole && !isCurrentUserInShift && offShiftHiddenIds.has(form.id)) {
+      return false;
+    }
 
     const roleMatch = !allowedRoles || allowedRoles.length === 0 || allowedRoles.includes(role);
     const locationMatch = 
@@ -47,11 +93,19 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
 
   // Fetch all responses that this employee can see (their own, their salon's, or those they are notified about, including archived ones where nominated)
   const responses = await prisma.serviceFormResponse.findMany({
+    where: {
+      OR: [
+        { user_id: session.user.id },
+        ...(locationId ? [{ user_location_id: locationId }] : []),
+        { status: { not: "ARCHIVED" } },
+      ],
+    },
     include: {
-      user: true,
+      user: { select: { id: true, name: true, role: true, photo_url: true, sede_id: true } },
       form: true,
     },
     orderBy: { created_at: "desc" },
+    take: 300,
   });
 
   const allowedResponses = responses.filter((r) => {
@@ -92,16 +146,35 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     updated_at: r.updated_at.toISOString(),
   }));
 
-  // Retrieve active employees
-  const activeEmployees = await prisma.user.findMany({
-    where: { active: true },
-    orderBy: { name: "asc" },
-  });
+  // Retrieve active employees and their real-time presence for client-control forms.
+  const [activeEmployees, todayAttendanceLogs] = await Promise.all([
+    prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, sede_id: true, location: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.attendanceLog.findMany({
+      where: { date: new Date(today) },
+      select: { user_id: true, type: true, timestamp: true, location: { select: { name: true } } },
+      orderBy: { timestamp: "desc" },
+    }),
+  ]);
 
-  const serializedEmployees = activeEmployees.map((emp) => ({
-    id: emp.id,
-    name: emp.name,
-  }));
+  const latestLogByUser = new Map<string, (typeof todayAttendanceLogs)[number]>();
+  for (const log of todayAttendanceLogs) {
+    if (!latestLogByUser.has(log.user_id)) latestLogByUser.set(log.user_id, log);
+  }
+
+  const serializedEmployees = activeEmployees.map((emp) => {
+    const latestLog = latestLogByUser.get(emp.id);
+    return {
+      id: emp.id,
+      name: emp.name,
+      locationId: emp.sede_id,
+      locationName: latestLog?.location?.name ?? emp.location?.name ?? null,
+      isPresent: Boolean(latestLog && latestLog.type !== "USCITA"),
+    };
+  });
 
   return (
     <AppShell title="Forms" role={role} hideHeader>

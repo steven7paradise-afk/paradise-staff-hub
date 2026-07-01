@@ -4,7 +4,8 @@ import React, { useState, useMemo } from "react";
 import { 
   Plus, Trash2, Edit, ClipboardList, Eye, Check, X, 
   Sliders, User, MapPin, Calendar, Download, AlertCircle, Play,
-  Archive, Undo, Inbox, ArrowUpRight, GitBranch, ListChecks, Settings2, MonitorSmartphone
+  Archive, Undo, Inbox, ArrowUpRight, GitBranch, ListChecks, Settings2, MonitorSmartphone,
+  ShoppingCart, UserPlus, ChevronRight
 } from "lucide-react";
 import { Badge, Card, Select, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -17,7 +18,7 @@ type LocationOption = { id: string; name: string };
 type FormField = {
   id: string;
   label: string;
-  type: "text" | "textarea" | "number" | "select" | "file" | "money" | "date" | "worker";
+  type: "text" | "textarea" | "number" | "select" | "file" | "money" | "date" | "worker" | "worker_multi" | "checkbox" | "pin";
   required: boolean;
   options?: string[];
   description?: string;
@@ -26,6 +27,12 @@ type FormField = {
     operator: "equals" | "not_equals" | "contains";
     value: string;
   } | null;
+  show_ifs?: {
+    field_id: string;
+    operator: "equals" | "not_equals" | "contains";
+    value: string;
+  }[];
+  position?: { x: number; y: number };
 };
 
 type FormTemplate = {
@@ -106,6 +113,7 @@ export function AdminFormsManager({
   const [filterSearch, setFilterSearch] = useState<string>("");
 
   const [selectedResponse, setSelectedResponse] = useState<FormResponse | null>(null);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   // Derived helper variables for dynamic group participants response viewer
   const responseParticipaField = selectedResponse?.form?.fields 
@@ -304,13 +312,14 @@ export function AdminFormsManager({
                 </Link>
               )}
               {canManage && (
-                <Link
-                  href="/settings/forms/edit/new"
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateModal(true)}
                   className="inline-flex items-center gap-2 rounded-2xl bg-[#A74758] px-4 py-2.5 text-sm font-semibold text-white transition hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Plus className="size-4" />
                   Crea nuovo modulo
-                </Link>
+                </button>
               )}
             </div>
           </div>
@@ -1125,6 +1134,7 @@ export function AdminFormsManager({
                 
                 {selectedResponse.form?.fields ? (
                   (selectedResponse.form.fields as FormField[]).map((field) => {
+                    if (field.type === "pin") return null;
                     if (isResponseCorsistiForm && isResponseGroupCourse && isDefaultParticipantField(field.label)) {
                       return null;
                     }
@@ -1240,6 +1250,16 @@ export function AdminFormsManager({
                 ) : (
                   <p className="text-sm italic text-black/40">Impossibile mappare le domande (modulo eliminato).</p>
                 )}
+
+                {selectedResponse.answers?._signature ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-emerald-700">Firma PIN verificata</span>
+                    <p className="mt-1 text-sm font-bold text-emerald-950">{selectedResponse.answers._signature.user_name}</p>
+                    <p className="text-xs text-emerald-700">
+                      Firmato il {new Date(selectedResponse.answers._signature.signed_at).toLocaleString("it-IT")}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               {/* Response Comments */}
@@ -1282,6 +1302,92 @@ export function AdminFormsManager({
               </Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showTemplateModal && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm transition-all duration-300">
+          <Card className="w-full max-w-2xl shadow-2xl border border-black/10 bg-white overflow-hidden animate-in fade-in zoom-in-95 duration-200 hover:-translate-y-0">
+            <div className="mb-6 flex justify-between items-start border-b border-black/5 pb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#A74758]">Configurazione Iniziale</p>
+                <h2 className="mt-1 text-2xl font-bold text-black">Seleziona Tipo di Modulo</h2>
+              </div>
+              <button 
+                type="button"
+                className="grid size-9 place-items-center rounded-xl border border-black/10 text-black hover:bg-black/5 transition-colors" 
+                onClick={() => setShowTemplateModal(false)}
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-black/50 mb-5 leading-relaxed">
+              Scegli una preimpostazione per velocizzare la creazione del tuo modulo. Ciascun modello configurerà automaticamente i campi e le categorie necessarie.
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Option 1: Standard */}
+              <Link
+                href="/settings/forms/edit/new"
+                onClick={() => setShowTemplateModal(false)}
+                className="group relative flex flex-col justify-between rounded-[22px] border border-black/5 bg-[#FBF7F9] p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:border-[#A74758]/20"
+              >
+                <div>
+                  <div className="size-10 rounded-2xl bg-black/5 flex items-center justify-center text-black mb-4 group-hover:scale-105 transition-transform">
+                    <ClipboardList className="size-5" />
+                  </div>
+                  <h3 className="font-bold text-black text-sm">Modulo Standard</h3>
+                  <p className="text-[11px] text-black/45 mt-1.5 leading-relaxed">
+                    Crea un modulo vuoto da configurare da zero secondo le tue esigenze personali.
+                  </p>
+                </div>
+                <div className="mt-6 flex items-center gap-1 text-[11px] font-bold text-[#A74758] group-hover:gap-1.5 transition-all">
+                  Inizia <ChevronRight className="size-3.5" />
+                </div>
+              </Link>
+
+              {/* Option 2: Ordine */}
+              <Link
+                href="/settings/forms/edit/new?template=order"
+                onClick={() => setShowTemplateModal(false)}
+                className="group relative flex flex-col justify-between rounded-[22px] border border-black/5 bg-[#FBF7F9] p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:border-[#A74758]/20"
+              >
+                <div>
+                  <div className="size-10 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 mb-4 group-hover:scale-105 transition-transform">
+                    <ShoppingCart className="size-5" />
+                  </div>
+                  <h3 className="font-bold text-black text-sm">Modulo Ordine</h3>
+                  <p className="text-[11px] text-black/45 mt-1.5 leading-relaxed">
+                    Preconfigurato con campi cliente e importi. Abilita automaticamente il tracciamento nella dashboard Ordini.
+                  </p>
+                </div>
+                <div className="mt-6 flex items-center gap-1 text-[11px] font-bold text-[#A74758] group-hover:gap-1.5 transition-all">
+                  Inizia <ChevronRight className="size-3.5" />
+                </div>
+              </Link>
+
+              {/* Option 3: Talent System */}
+              <Link
+                href="/settings/forms/edit/new?template=talent"
+                onClick={() => setShowTemplateModal(false)}
+                className="group relative flex flex-col justify-between rounded-[22px] border border-black/5 bg-[#FBF7F9] p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-1 hover:border-[#A74758]/20"
+              >
+                <div>
+                  <div className="size-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-4 group-hover:scale-105 transition-transform">
+                    <UserPlus className="size-5" />
+                  </div>
+                  <h3 className="font-bold text-black text-sm">Talent System</h3>
+                  <p className="text-[11px] text-black/45 mt-1.5 leading-relaxed">
+                    Preconfigurato con tutti i campi anagrafici e professionali richiesti per la registrazione nel recruitment.
+                  </p>
+                </div>
+                <div className="mt-6 flex items-center gap-1 text-[11px] font-bold text-[#A74758] group-hover:gap-1.5 transition-all">
+                  Inizia <ChevronRight className="size-3.5" />
+                </div>
+              </Link>
+            </div>
+          </Card>
         </div>
       )}
     </div>

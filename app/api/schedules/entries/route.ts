@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest) {
       const calendarEventsToDelete = deleteFilters.length
         ? await prisma.scheduleEntry.findMany({
             where: { OR: deleteFilters },
-            select: { google_calendar_event_id: true },
+            select: { id: true, google_calendar_event_id: true },
           })
         : [];
 
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest) {
         .map((result) => (result && typeof result === "object" && "id" in result ? String(result.id) : null))
         .filter((id): id is string => Boolean(id));
       const calendarSync = await Promise.allSettled([
-        ...calendarEventsToDelete.map((entry) => deleteScheduleEventFromGoogleCalendar(entry.google_calendar_event_id)),
+        ...calendarEventsToDelete.map((entry) => deleteScheduleEventFromGoogleCalendar(entry.google_calendar_event_id, entry.id)),
         ...upsertedEntryIds.map((id) => syncScheduleEntryToGoogleCalendar(id)),
       ]);
       const calendarFailures = calendarSync.filter((result) => result.status === "rejected").length;
@@ -121,10 +121,10 @@ export async function PUT(request: NextRequest) {
   if (!categoryId) {
     const existing = await prisma.scheduleEntry.findFirst({
       where: { user_id: userId, date, location_id: locationId },
-      select: { google_calendar_event_id: true },
+      select: { id: true, google_calendar_event_id: true },
     });
     await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date, location_id: locationId } });
-    const calendarSync = await deleteScheduleEventFromGoogleCalendar(existing?.google_calendar_event_id);
+    const calendarSync = await deleteScheduleEventFromGoogleCalendar(existing?.google_calendar_event_id, existing?.id);
     return NextResponse.json({ removed: true, calendarSync });
   }
 

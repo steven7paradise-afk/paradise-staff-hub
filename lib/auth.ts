@@ -68,6 +68,7 @@ export const authConfig = {
           email: user.email,
           role: user.role,
           sedeId: user.sede_id,
+          mansione: user.mansione,
         };
       },
     }),
@@ -75,16 +76,23 @@ export const authConfig = {
   callbacks: {
     jwt({ token, user }) {
       if (user) {
+        token.sub = user.id;
+        token.name = user.name;
+        token.email = user.email;
         token.role = (user as { role: Role }).role;
         token.sedeId = (user as { sedeId?: string }).sedeId;
+        token.mansione = (user as { mansione?: string }).mansione;
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub ?? "";
+        session.user.name = token.name ?? "";
+        session.user.email = token.email ?? "";
         session.user.role = token.role as Role;
         session.user.sedeId = token.sedeId as string | undefined;
+        (session.user as any).mansione = token.mansione as string | undefined;
       }
       return session;
     },
@@ -92,7 +100,7 @@ export const authConfig = {
       const pathname = request.nextUrl.pathname;
       if (pathname === "/login") return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
-      return canAccess(pathname, auth?.user?.role as Role | undefined);
+      return canAccess(pathname, auth?.user?.role as Role | undefined, (auth?.user as any)?.mansione);
     },
   },
 } satisfies NextAuthConfig;

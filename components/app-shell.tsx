@@ -4,6 +4,9 @@ import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { roleLabels, routePermissions, visibleForRole, type Role } from "@/lib/roles";
 import { normalizeServicePage, servicePages } from "@/lib/service-pages";
+import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
+import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
+import { hasTaskAccess } from "@/lib/task-access";
 import { cn } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { InstantLink } from "@/components/instant-link";
@@ -17,26 +20,31 @@ import pkg from "@/package.json";
 const nav = [
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
-  { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["DIPENDENTE"], section: "Generale" },
-  { href: "/tasks", label: "TASK", iconName: "CheckSquare", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 
   // Section: Planning & Saloni
-  { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/cash", label: "Cassa", iconName: "ReceiptText", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
-  { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/service-forms", label: "Moduli", iconName: "ClipboardList", roles: ["RESPONSABILE"], section: "Planning & Saloni" },
 
   // Section: Gestione Staff
-  { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/recruitment", label: "Talent System", iconName: "UserPlus", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
-  { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/requests", label: "Ferie e permessi", iconName: "ShieldCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
-  { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Gestione Staff" },
-  { href: "/team", label: "Team", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
+  { href: "/team", label: "Team", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
 
   // Section: Impostazioni
   { href: "/profile", label: "Profilo", iconName: "UserRound", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Impostazioni" },
@@ -46,9 +54,46 @@ const nav = [
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
-  const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
-    ? await prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } }).catch(() => null)
-    : null;
+  const serviceSettingPromise = currentRole === "DIPENDENTE" && session?.user?.sedeId
+    ? prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } }).catch(() => null)
+    : Promise.resolve(null);
+  const formsAccessPromise = currentRole === "DIPENDENTE" && session?.user?.id
+    ? prisma.serviceForm.findMany({
+        where: { active: true },
+        select: { notify_user_ids: true, notify_roles: true }
+      }).catch(() => [])
+    : Promise.resolve([]);
+  const currentUserPromise = session?.user?.id
+    ? prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: {
+          name: true,
+          photo_url: true,
+          header_color: true,
+          sidebar_color: true,
+          mansione: true,
+          location: { select: { name: true } },
+        },
+      }).catch(() => null)
+    : Promise.resolve(null);
+  const unreadNotificationsPromise = session?.user?.id
+    ? prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
+    : Promise.resolve(0);
+  const tablesAccessPromise = session?.user?.id
+    ? prisma.setting.findUnique({ where: { key: ASSISTANCE_TABLES_ACCESS_KEY } }).catch(() => null)
+    : Promise.resolve(null);
+  const planningAccessPromise = session?.user?.id
+    ? prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }).catch(() => null)
+    : Promise.resolve(null);
+
+  const [serviceSetting, formsAccessSettings, currentUser, unreadNotifications, tablesAccessSetting, planningAccessSetting] = await Promise.all([
+    serviceSettingPromise,
+    formsAccessPromise,
+    currentUserPromise,
+    unreadNotificationsPromise,
+    tablesAccessPromise,
+    planningAccessPromise,
+  ]);
 
   let servicePageNum = 1;
   let customLabel = "";
@@ -75,10 +120,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   };
 
   const hasFormsAccess = currentRole === "DIPENDENTE" && session?.user?.id
-    ? (await prisma.serviceForm.findMany({
-        where: { active: true },
-        select: { notify_user_ids: true, notify_roles: true }
-      }).catch(() => [])).some((form) => {
+    ? formsAccessSettings.some((form) => {
         const notifyUserIds = form.notify_user_ids as string[] | null;
         const notifyRoles = form.notify_roles as string[] | null;
         return (
@@ -92,30 +134,47 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   const formsLinkItem = {
     href: "/service-forms",
-    label: "Moduli",
-    iconName: "ClipboardList",
+    label: "Cassa",
+    iconName: "ReceiptText",
     roles: ["DIPENDENTE"] as Role[],
     section: "Generale"
   };
 
-  const currentUser = session?.user?.id
-    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, photo_url: true, header_color: true, sidebar_color: true, mansione: true } }).catch(() => null)
-    : null;
-
-  const baseItems = visibleForRole(nav, currentRole);
   const userHasSocialAccess = currentUser?.mansione?.toLowerCase().includes("social");
+  const userHasAppointmentsAccess = currentUser?.mansione?.toLowerCase().includes("assistenza");
+  const userHasTaskAccess = hasTaskAccess(currentRole, currentUser?.mansione, currentUser?.location?.name);
+  const tablesAccess = normalizeAssistanceTablesAccess(tablesAccessSetting?.value);
+  const userHasTablesAccess = canUseAssistanceTables(currentRole, currentUser?.mansione, session?.user?.id, tablesAccess);
+  const planningAccess = normalizePlanningAccess(planningAccessSetting?.value);
+  const userHasPlanningAccess = canViewPlanning(currentRole, session?.user?.id, planningAccess);
+  const taskNavItem = { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: [currentRole] as Role[], section: "Generale" };
+  const tablesNavItem = { href: "/tables", label: "Tabelle", iconName: "Table2", roles: [currentRole] as Role[], section: "Generale" };
+  let baseItems = visibleForRole(nav, currentRole)
+    .filter((item) => item.href !== "/schedules" || userHasPlanningAccess)
+    .filter((item) => item.href !== "/tables" || userHasTablesAccess)
+    .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
+
+  const isDarwin = session?.user?.id === "cmpms4o9h0003l809zof30mni" || !!session?.user?.email?.toLowerCase().includes("darwin");
+
+  if (isDarwin && !baseItems.some((item) => item.href === "/cash")) {
+    baseItems = [
+      ...baseItems,
+      { href: "/cash", label: "Cassa", iconName: "ReceiptText", roles: [currentRole] as Role[], section: "Planning & Saloni" }
+    ];
+  }
 
   const items = currentRole === "DIPENDENTE"
     ? [
-        ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar"),
-        selectedServiceItem,
+        ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar" && item.href !== "/cash"),
+        ...(selectedServiceItem.href === "/tasks" ? [] : [selectedServiceItem]),
         ...(showFormsLinkSeparately ? [formsLinkItem] : []),
+        ...(userHasTaskAccess ? [taskNavItem] : []),
         ...(userHasSocialAccess ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
+        ...(userHasAppointmentsAccess ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
+        ...(userHasTablesAccess ? [tablesNavItem] : []),
+        ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "ReceiptText", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
     : baseItems;
-  const unreadNotifications = session?.user?.id
-    ? await prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
-    : 0;
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
     month: "long",
@@ -155,12 +214,18 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                   { href: "/dashboard", label: "Home", iconName: "Home" },
                   { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
                   { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
+                  ...(userHasPlanningAccess
+                    ? [{ href: "/schedules", label: "Planning", iconName: "CalendarDays" }]
+                    : []),
                   { href: "/documents", label: "Documenti", iconName: "FileText" },
-                  ...(servicePageNum === 2
-                    ? [{ href: "/tasks", label: "TASK", iconName: "CheckSquare" }]
+                  ...(userHasTaskAccess
+                    ? [{ href: "/tasks", label: "Task", iconName: "CheckSquare" }]
                     : []),
                   ...(servicePageNum === 3 || hasFormsAccess
-                    ? [{ href: "/service-forms", label: "Moduli", iconName: "ClipboardList" }]
+                    ? [{ href: "/service-forms", label: "Cassa", iconName: "ReceiptText" }]
+                    : []),
+                  ...(userHasTablesAccess
+                    ? [{ href: "/tables", label: "Tabelle", iconName: "Table2" }]
                     : []),
                   { href: "/orders", label: "Ordini", iconName: "ShoppingCart" },
                   ...(servicePageNum === 1
@@ -168,6 +233,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                     : []),
                   ...(userHasSocialAccess
                     ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
+                    : []),
+                  ...(userHasAppointmentsAccess
+                    ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" }]
                     : []),
                 ]
               : baseItems

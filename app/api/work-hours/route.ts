@@ -3,6 +3,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateClockHours } from "@/lib/work-hours";
 
+const noStoreHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 function categoryDuration(start: string | null, end: string | null) {
   if (!start || !end) return 0;
   const [startHours, startMinutes] = start.split(":").map(Number);
@@ -36,13 +42,13 @@ const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id || !managementRoles.has(session.user.role)) {
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403, headers: noStoreHeaders });
   }
 
   const year = Number(request.nextUrl.searchParams.get("year"));
   const month = Number(request.nextUrl.searchParams.get("month"));
   if (!Number.isInteger(year) || !Number.isInteger(month) || month < 0 || month > 11) {
-    return NextResponse.json({ error: "Mese non valido." }, { status: 400 });
+    return NextResponse.json({ error: "Mese non valido." }, { status: 400, headers: noStoreHeaders });
   }
 
   const start = new Date(Date.UTC(year, month, 1));
@@ -99,7 +105,7 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json(rows);
+  return NextResponse.json(rows, { headers: noStoreHeaders });
 }
 
 export async function PUT(request: NextRequest) {

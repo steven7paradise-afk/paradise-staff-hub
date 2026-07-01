@@ -1,0 +1,947 @@
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  Calculator,
+  CheckCircle2,
+  CircleDollarSign,
+  MapPin,
+  PenLine,
+  ReceiptText,
+  ShieldCheck,
+  Store,
+  UserRound,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { CashActions } from "@/components/cash-actions";
+import { CashReviewActions } from "@/components/cash-review-actions";
+import { CashDaySelector } from "@/components/cash-day-selector";
+import { Badge, Card } from "@/components/ui";
+import {
+  CASH_CLOSING_FIELD_IDS,
+  ensureCashClosingForm,
+} from "@/lib/cash-closing-form";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import type { Role } from "@/lib/roles";
+import { cashDateInput } from "@/lib/cash-records";
+import { VAULT_WITHDRAWAL_FIELD_IDS } from "@/lib/vault-withdrawal-form";
+import { calculateClockHours } from "@/lib/work-hours";
+
+export const dynamic = "force-dynamic";
+
+function monthRange(monthParam?: string) {
+  const parsed = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? new Date(`${monthParam}-01T00:00:00`) : new Date();
+  const now = parsed;
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+  return { start, end, todayStart, todayEnd, now };
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function dayKey(date: Date) {
+  return `${monthKey(date)}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getMondayDate(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+function getWeekKey(date: Date): string {
+  const monday = getMondayDate(date);
+  const yyyy = monday.getFullYear();
+  const mm = String(monday.getMonth() + 1).padStart(2, "0");
+  const dd = String(monday.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dateFromDayKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function moneyValue(value: unknown) {
+  const amount = Number(String(value ?? "0").replace(",", "."));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatMoney(value: number) {
+  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+}
+
+function answer(response: any, key: string) {
+  return (response.answers as any)?.[key];
+}
+
+function cashDate(response: any) {
+  return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(cashAccountingDate(response));
+}
+
+function cashAccountingDate(response: any) {
+  const raw = answer(response, CASH_CLOSING_FIELD_IDS.date);
+  if (typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T00:00:00`);
+  }
+  return new Date(response.created_at);
+}
+
+function vaultAccountingDate(response: any) {
+  const raw = answer(response, VAULT_WITHDRAWAL_FIELD_IDS.date);
+  if (typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T00:00:00`);
+  }
+  return new Date(response.created_at);
+}
+
+function signatureName(response: any) {
+  return (response.answers as any)?._signature?.user_name || response.user?.name || "Firma non indicata";
+}
+
+function latestClosingsByLocationDay(responses: any[]) {
+  const byLocationDay = new Map<string, any>();
+  responses.forEach((response) => {
+    const locationKey = response.user_location_id || response.user_location_name || response.id;
+    const key = `${locationKey}:${dayKey(cashAccountingDate(response))}`;
+    const current = byLocationDay.get(key);
+    if (!current || new Date(response.created_at) > new Date(current.created_at)) {
+      byLocationDay.set(key, response);
+    }
+  });
+  return Array.from(byLocationDay.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+function cashClosingRecordToResponse(record: any) {
+  return {
+    id: record.id,
+    user_id: record.user_id,
+    user_role: record.signature_role ?? record.user?.role ?? "DIPENDENTE",
+    user_location_id: record.location_id,
+    user_location_name: record.location?.name ?? null,
+    answers: {
+      [CASH_CLOSING_FIELD_IDS.date]: cashDateInput(record.date),
+      [CASH_CLOSING_FIELD_IDS.withdrawn]: record.withdrawn,
+      [CASH_CLOSING_FIELD_IDS.fund]: record.fund,
+      [CASH_CLOSING_FIELD_IDS.notes]: record.notes ?? "",
+      _signature: {
+        user_id: record.user_id,
+        user_name: record.signature_name,
+        user_role: record.signature_role,
+        signed_at: record.signed_at?.toISOString?.() ?? record.signed_at,
+      },
+    },
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+    user: record.user,
+    location: record.location,
+    review: record.review ?? null,
+  };
+}
+
+function cashReview(response: any) {
+  return response.review ?? { status: "DA_CONTROLLARE", note: "" };
+}
+
+function cashReviewLabel(status?: string) {
+  if (status === "CORRETTO") return "Corretto";
+  if (status === "ERRORE") return "Errore";
+  return "Da controllare";
+}
+
+function cashReviewClass(status?: string) {
+  if (status === "CORRETTO") return "bg-emerald-50 text-emerald-700";
+  if (status === "ERRORE") return "bg-red-50 text-red-700";
+  return "bg-amber-50 text-amber-700";
+}
+
+function vaultWithdrawalRecordToResponse(record: any) {
+  return {
+    id: record.id,
+    user_id: record.user_id,
+    user_role: record.signature_role ?? record.user?.role ?? "ADMIN",
+    user_location_id: record.location_id,
+    user_location_name: record.location?.name ?? null,
+    answers: {
+      [VAULT_WITHDRAWAL_FIELD_IDS.date]: cashDateInput(record.date),
+      [VAULT_WITHDRAWAL_FIELD_IDS.amount]: record.amount,
+      [VAULT_WITHDRAWAL_FIELD_IDS.reason]: record.reason,
+      _vault_withdrawal: true,
+      _signature: {
+        user_id: record.user_id,
+        user_name: record.signature_name,
+        user_role: record.signature_role,
+        signed_at: record.signed_at?.toISOString?.() ?? record.signed_at,
+      },
+    },
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+    user: record.user,
+    location: record.location,
+  };
+}
+
+export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string }> }) {
+  const searchParams = await props.searchParams;
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+
+  const isDarwin = session.user.id === "cmpms4o9h0003l809zof30mni" || !!session.user.email?.toLowerCase().includes("darwin");
+  const role = session.user.role as Role;
+  if (role === "DIPENDENTE" && !isDarwin) redirect("/dashboard");
+
+  await ensureCashClosingForm(session.user.id);
+
+  const { start, end, todayStart, todayEnd, now } = monthRange(searchParams.month);
+  const isResponsible = role === "RESPONSABILE" && !isDarwin;
+  const selectedMonth = monthKey(start);
+  const prevMonth = new Date(start);
+  prevMonth.setMonth(prevMonth.getMonth() - 1);
+  const nextMonth = new Date(start);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const trendStart = new Date(start);
+  trendStart.setMonth(trendStart.getMonth() - 5);
+  const requestedDay = searchParams.day ? dateFromDayKey(searchParams.day) : null;
+  const todayKey = dayKey(new Date());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = dayKey(yesterday);
+  const selectedDayKey = requestedDay && requestedDay >= start && requestedDay < end
+    ? searchParams.day!
+    : monthKey(start) === monthKey(new Date())
+      ? (yesterday >= start && yesterday < end ? yesterdayKey : todayKey)
+      : dayKey(start);
+  const selectedDayStart = dateFromDayKey(selectedDayKey)!;
+  const selectedDayEnd = new Date(selectedDayStart);
+  selectedDayEnd.setUTCDate(selectedDayEnd.getUTCDate() + 1);
+
+  const weekKey = getWeekKey(selectedDayStart);
+
+  const [locations, cashClosingRows, vaultWithdrawalRows, monthClose, selectedDayLogs, users, weekCloseSetting, scheduleEntries] = await Promise.all([
+    prisma.location.findMany({
+      where: {
+        active: true,
+        ...(isResponsible ? { id: session.user.sedeId ?? undefined } : {}),
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.cashClosing.findMany({
+      where: {
+        date: { gte: trendStart, lt: end },
+        ...(isResponsible ? { location_id: session.user.sedeId ?? undefined } : {}),
+      },
+      include: { user: true, location: true },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.cashVaultWithdrawal.findMany({
+      where: {
+        date: { gte: trendStart, lt: end },
+        ...(isResponsible ? { location_id: session.user.sedeId ?? undefined } : {}),
+      },
+      include: { user: true, location: true },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.cashMonthClose.findUnique({ where: { month: selectedMonth } }).catch(() => null),
+    prisma.attendanceLog.findMany({
+      where: {
+        date: { gte: selectedDayStart, lt: selectedDayEnd },
+        ...(isResponsible ? { location_id: session.user.sedeId ?? undefined } : {}),
+        user: { role: { not: "SUPER_ADMIN" }, active: true },
+      },
+      include: { user: true, location: true, device: true },
+      orderBy: [{ location: { name: "asc" } }, { timestamp: "asc" }],
+    }),
+    prisma.user.findMany({
+      where: {
+        active: true,
+        role: { not: "SUPER_ADMIN" },
+        ...(isResponsible ? { sede_id: session.user.sedeId ?? undefined } : {}),
+      },
+      select: { id: true, name: true, sede_id: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.setting.findUnique({ where: { key: `cash_week_close:${weekKey}` } }).catch(() => null),
+    prisma.scheduleEntry.findMany({
+      where: {
+        date: { gte: selectedDayStart, lt: selectedDayEnd },
+      },
+    }),
+  ]);
+
+  const closingReviewRows = cashClosingRows.length
+    ? await prisma.setting.findMany({
+        where: {
+          key: { in: cashClosingRows.map((record) => `cash_closing_review:${record.id}`) },
+        },
+      })
+    : [];
+  const reviewMap = new Map(
+    closingReviewRows.map((setting) => [setting.key.replace("cash_closing_review:", ""), setting.value])
+  );
+  const closingRecords = cashClosingRows
+    .map((record) => ({ ...record, review: reviewMap.get(record.id) ?? { status: "DA_CONTROLLARE", note: "" } }))
+    .map(cashClosingRecordToResponse);
+  const vaultWithdrawalRecords = vaultWithdrawalRows.map(vaultWithdrawalRecordToResponse);
+  const trendClosingRecords = closingRecords;
+  const trendVaultWithdrawalRecords = vaultWithdrawalRecords;
+
+  const vaultWithdrawals = vaultWithdrawalRecords.filter((response) => {
+    const accountingDate = vaultAccountingDate(response);
+    return accountingDate >= start && accountingDate < end;
+  });
+
+  const responses = latestClosingsByLocationDay(closingRecords.filter((response) => {
+    const accountingDate = cashAccountingDate(response);
+    return accountingDate >= start && accountingDate < end;
+  }));
+
+  const trendClosings = latestClosingsByLocationDay(trendClosingRecords.filter((response) => {
+    const accountingDate = cashAccountingDate(response);
+    return accountingDate >= trendStart && accountingDate < end;
+  }));
+
+  const trendVaultWithdrawals = trendVaultWithdrawalRecords.filter((response) => {
+    const accountingDate = vaultAccountingDate(response);
+    return accountingDate >= trendStart && accountingDate < end;
+  });
+
+  const todayResponses = responses.filter((response) => {
+    const accountingDate = cashAccountingDate(response);
+    return accountingDate >= todayStart && accountingDate < todayEnd;
+  });
+
+  const totalWithdrawn = responses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+  const totalVaultOut = vaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
+  const netCash = totalWithdrawn - totalVaultOut;
+  const todayWithdrawn = todayResponses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+  const discrepancyResponses = responses.filter((response) => Math.abs(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund)) - 50) > 0.009);
+  const signedCount = responses.filter((response) => (response.answers as any)?._signature?.signed_at).length;
+  const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(now);
+  const monthCloseValue = monthClose
+    ? {
+        month: monthClose.month,
+        closed_at: monthClose.closed_at.toISOString(),
+        closed_by_id: monthClose.closed_by_id,
+        closed_by_name: monthClose.closed_by_name,
+        closed_by_role: monthClose.closed_by_role,
+      }
+    : null;
+  const weekCloseValue = weekCloseSetting ? (weekCloseSetting.value as any) : null;
+  const monthDays = Array.from({ length: Math.round((end.getTime() - start.getTime()) / 86_400_000) }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(date.getDate() + index);
+    const key = dayKey(date);
+    const closingTotal = responses
+      .filter((response) => dayKey(cashAccountingDate(response)) === key)
+      .reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+    const vaultTotal = vaultWithdrawals
+      .filter((response) => dayKey(vaultAccountingDate(response)) === key)
+      .reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
+    return { key, date, closingTotal, vaultTotal };
+  });
+  const selectedDayLabel = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }).format(selectedDayStart);
+  const selectedDayClosings = responses.filter((response) => dayKey(cashAccountingDate(response)) === selectedDayKey);
+  const selectedDayVaults = vaultWithdrawals.filter((response) => dayKey(vaultAccountingDate(response)) === selectedDayKey);
+  const selectedDayWithdrawn = selectedDayClosings.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+  const schedLocationMap = new Map(scheduleEntries.map((s) => [s.user_id, s.location_id]));
+
+  const workersForClosing = (response: any) => {
+    const closingTime = new Date(response.created_at);
+    const targetLocationId = response.user_location_id || response.location_id;
+
+    // Filter logs for users that belong to this closing's location today (either scheduled or primary)
+    const filteredLogs = selectedDayLogs.filter((log) => {
+      const userLoc = schedLocationMap.get(log.user_id) || log.user.sede_id || null;
+      return userLoc === targetLocationId;
+    });
+
+    const groups = new Map<string, typeof selectedDayLogs>();
+    filteredLogs.forEach((log) => {
+      groups.set(log.user_id, [...(groups.get(log.user_id) ?? []), log]);
+    });
+
+    return Array.from(groups.entries()).flatMap(([userId, logs]) => {
+      const ordered = [...logs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      const latestBeforeClosing = ordered.filter((log) => log.timestamp <= closingTime).at(-1);
+      if (!latestBeforeClosing) return [];
+
+      if (latestBeforeClosing.type === "USCITA") {
+        const diffMs = closingTime.getTime() - latestBeforeClosing.timestamp.getTime();
+        const oneHour = 60 * 60 * 1000;
+        if (diffMs > oneHour) {
+          return [];
+        }
+      }
+
+      const clock = calculateClockHours(ordered.map((log) => ({ type: log.type, timestamp: log.timestamp })));
+      return [{
+        userId,
+        name: latestBeforeClosing.user.name,
+        photoUrl: latestBeforeClosing.user.photo_url || null,
+        status: latestBeforeClosing.type === "PAUSA" ? "In pausa" : (latestBeforeClosing.type === "USCITA" ? "Uscito" : "In turno"),
+        latestTime: latestBeforeClosing.time,
+        logs: ordered,
+        clock,
+      }];
+    });
+  };
+  const trendMonths = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(start);
+    date.setMonth(date.getMonth() - (5 - index));
+    const key = monthKey(date);
+    const closeTotal = trendClosings
+      .filter((response) => monthKey(cashAccountingDate(response)) === key)
+      .reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+    const vaultTotal = trendVaultWithdrawals
+      .filter((response) => monthKey(vaultAccountingDate(response)) === key)
+      .reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
+    return { key, label: new Intl.DateTimeFormat("it-IT", { month: "short" }).format(date), closeTotal, vaultTotal, net: closeTotal - vaultTotal };
+  });
+
+  const storeRows = locations.map((location) => {
+    const storeResponses = responses.filter((response) => response.user_location_id === location.id);
+    const storeToday = todayResponses.filter((response) => response.user_location_id === location.id);
+    const storeTotal = storeResponses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+    const storeVaultWithdrawals = vaultWithdrawals.filter((response) => response.user_location_id === location.id);
+    const storeVaultTotal = storeVaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
+    const storeDiscrepancies = storeResponses.filter((response) => Math.abs(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund)) - 50) > 0.009);
+    const lastClosing = storeResponses[0] ?? null;
+    return {
+      location,
+      responses: storeResponses,
+      today: storeToday,
+      total: storeTotal,
+      vaultTotal: storeVaultTotal,
+      net: storeTotal - storeVaultTotal,
+      discrepancies: storeDiscrepancies,
+      lastClosing,
+    };
+  });
+
+  const orphanResponses = responses.filter((response) => !response.user_location_id);
+  const maxTrend = Math.max(...trendMonths.map((month) => Math.abs(month.net)), 1);
+
+  return (
+    <AppShell
+      title="Cash Dashboard"
+      subtitle="Ingresso cash, chiusure cassa mensili, firme e controllo per sede."
+      role={role}
+      hideHeader
+    >
+      <div className="space-y-6">
+        <section className="relative overflow-hidden -mx-4 rounded-none sm:mx-0 sm:rounded-[36px] bg-[#050608] pt-12 pb-5 px-5 text-white shadow-2xl sm:p-8">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(167,71,88,0.36),transparent_32%),radial-gradient(circle_at_70%_20%,rgba(94,116,255,0.25),transparent_30%),linear-gradient(135deg,#050608,#101726_62%,#07111f)]" />
+          <div className="absolute -left-24 top-8 size-80 rounded-full border border-white/10" />
+          <div className="absolute -left-12 top-16 size-64 rounded-full border border-white/10" />
+          <div className="relative flex flex-col gap-6">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#C66170]">
+                <CircleDollarSign className="size-4 text-[#F7DFA7]" />
+                Cash Control
+              </div>
+              <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
+                Dashboard cassa mensile
+              </h1>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58">
+                Controllo specifico per tutti i negozi: importo prelevato, fondo cassa, firme PIN, discrepanze e chiusure registrate nel periodo.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`/cash?month=${monthKey(prevMonth)}`} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-white hover:bg-white/15">← Mese prima</Link>
+                  <span className="rounded-2xl bg-white px-4 py-2 text-xs font-black capitalize text-black">{monthLabel}</span>
+                  <Link href={`/cash?month=${monthKey(nextMonth)}`} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-white hover:bg-white/15">Mese dopo →</Link>
+                </div>
+                <div className="inline-flex items-center gap-2">
+                  <span className="text-xs font-bold text-white/50">Giorno:</span>
+                  <CashDaySelector selectedDay={selectedDayKey} month={selectedMonth} />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              <MetricCard label="Disponibilità saloni" value={formatMoney(netCash)} icon={CircleDollarSign} tone="gold" />
+              <MetricCard 
+                label={`Chiusura del ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} 
+                value={formatMoney(selectedDayWithdrawn)} 
+                icon={ReceiptText} 
+                tone="blue" 
+              />
+              <MetricCard label="Uscito cassaforte" value={formatMoney(totalVaultOut)} icon={Calculator} tone="pink" />
+              <MetricCard label="Prelevato mese" value={formatMoney(totalWithdrawn)} icon={ShieldCheck} tone="green" />
+            </div>
+          </div>
+          <div className="relative mt-6 flex flex-col gap-3 border-t border-white/10 pt-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-sm text-white/55 flex flex-wrap gap-x-4 gap-y-1">
+              <span>
+                <strong className="text-white">Netto mese:</strong> {formatMoney(netCash)}
+              </span>
+              {monthCloseValue ? (
+                <span className="text-emerald-200">Mese chiuso da {monthCloseValue.closed_by_name}</span>
+              ) : null}
+              {weekCloseValue ? (
+                <span className="text-amber-200">Settimana chiusa da {weekCloseValue.closed_by_name}</span>
+              ) : null}
+            </div>
+            <CashActions
+              month={selectedMonth}
+              monthClosed={monthCloseValue}
+              weekKey={weekKey}
+              weekClosed={weekCloseValue}
+              locations={locations.map((location) => ({ id: location.id, name: location.name }))}
+              users={users.map((user) => ({ id: user.id, name: user.name, locationId: user.sede_id }))}
+            />
+          </div>
+        </section>
+
+        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Andamento mesi precedenti</p>
+              <h2 className="mt-1 text-2xl font-black">Cash netto mensile</h2>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:gap-3 grid-cols-3 md:grid-cols-6">
+            {trendMonths.map((month) => (
+              <div key={month.key} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3">
+                <p className="text-[10px] font-black uppercase text-black/35">{month.label}</p>
+                <p className="mt-2 text-base sm:text-lg font-black">{formatMoney(month.net)}</p>
+                <div className="mt-1 text-[9px] sm:text-[11px] font-bold text-black/45 flex flex-col sm:flex-row sm:gap-1.5 leading-tight">
+                  <div>In {formatMoney(month.closeTotal)}</div>
+                  <div className="hidden sm:block">·</div>
+                  <div>Out {formatMoney(month.vaultTotal)}</div>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/5">
+                  <div
+                    className="h-full rounded-full bg-[#A74758]"
+                    style={{ width: `${Math.max(8, Math.min(100, (Math.abs(month.net) / maxTrend) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
+          <div className="border-b border-black/5 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Dettaglio giorno</p>
+            <h2 className="mt-1 text-2xl font-black capitalize">Clicca una data e controlla chiusura + timbrature</h2>
+            <p className="mt-1 text-sm text-black/45">Ogni giorno mostra chi ha chiuso la cassa e chi ha lavorato secondo le timbrature tablet.</p>
+          </div>
+          <div className="border-b border-black/5 p-4">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {monthDays.map((day) => {
+                const active = day.key === selectedDayKey;
+                return (
+                  <Link
+                    key={day.key}
+                    href={`/cash?month=${selectedMonth}&day=${day.key}`}
+                    className={`min-w-[82px] rounded-2xl border p-3 text-center transition ${active ? "border-[#A74758] bg-[#A74758] text-white shadow-lg" : "border-black/5 bg-[#FAF7F9] text-black hover:border-[#A74758]/30"}`}
+                  >
+                    <p className="text-[10px] font-black uppercase opacity-60">
+                      {new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(day.date)}
+                    </p>
+                    <p className="mt-1 text-xl font-black">{day.date.getDate()}</p>
+                    {(day.closingTotal > 0 || day.vaultTotal > 0) ? (
+                      <p className="mt-1 text-[10px] font-black opacity-75">{formatMoney(day.closingTotal - day.vaultTotal)}</p>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+          {searchParams.day ? (
+            <div className="p-5">
+              <div className="rounded-3xl border border-black/5 bg-[#FAF7F9] p-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Giorno selezionato</p>
+                <h3 className="mt-1 text-xl font-black capitalize">{selectedDayLabel}</h3>
+                <div className="mt-4 grid gap-2 grid-cols-3">
+                  <StoreValue label="Chiusure" value={String(selectedDayClosings.length)} />
+                  <StoreValue label="Cash" value={formatMoney(selectedDayClosings.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0))} />
+                  <StoreValue label="Cassaforte" value={formatMoney(selectedDayVaults.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0))} />
+                </div>
+                <div className="mt-4 space-y-3">
+                  {selectedDayClosings.map((response) => {
+                    const staffAtClosing = workersForClosing(response);
+                    return (
+                      <div key={response.id} className="rounded-[28px] bg-white p-4 shadow-sm">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Chiusura cassa</p>
+                            <p className="mt-1 text-lg font-black">{response.user_location_name || response.location?.name || "Sede non indicata"}</p>
+                            <p className="mt-1 text-xs font-semibold text-black/45">
+                              Fatta da {signatureName(response)} alle {new Date(response.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl bg-[#FAF7F9] px-4 py-3 text-right">
+                            <p className="text-[10px] font-black uppercase text-black/35">Prelevato</p>
+                            <p className="text-lg font-black text-[#A74758]">{formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 rounded-3xl border border-black/5 bg-[#111017] p-4 text-white">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#F7DFA7]">Presenti nel salone al momento della chiusura</p>
+                          <p className="mt-1 text-sm text-white/45">Mostra solo chi aveva timbrato nello stesso salone e non risultava uscito prima della chiusura.</p>
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            {staffAtClosing.map((worker) => {
+                              const tooltipContent = `${worker.name} (${worker.status})\n• Prima entrata: ${worker.clock.firstEntry || "-"}\n• Ultima uscita: ${worker.clock.lastExit || "-"}\n• Ore nette: ${worker.clock.netHours}h\n• Timbrature:\n${worker.logs.map(log => `  - ${log.type}: ${log.time}`).join("\n")}`;
+
+                              return (
+                                <div
+                                  key={worker.userId}
+                                  title={tooltipContent}
+                                  className="group relative cursor-pointer"
+                                >
+                                  {worker.photoUrl ? (
+                                    <img
+                                      src={worker.photoUrl}
+                                      alt={worker.name}
+                                      className="size-12 rounded-full object-cover border-2 border-white/20 transition hover:border-[#F39BD1] hover:scale-105"
+                                    />
+                                  ) : (
+                                    <div className="size-12 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center font-black text-white hover:border-[#F39BD1] hover:scale-105 transition text-xs">
+                                      {worker.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                    </div>
+                                  )}
+                                  
+                                  <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-2xl bg-black/95 p-3 text-xs leading-5 text-white opacity-0 shadow-xl transition-all duration-200 group-hover:opacity-100 border border-white/10 scale-95 group-hover:scale-100">
+                                    <p className="font-black text-[#F39BD1]">{worker.name}</p>
+                                    <p className="mt-1 text-[10px] font-semibold text-white/50">{worker.status} · ultima timbratura {worker.latestTime}</p>
+                                    <div className="mt-2 grid grid-cols-2 gap-1 border-t border-white/10 pt-2 text-[10px] text-white/80">
+                                      <p>Entrata: <strong>{worker.clock.firstEntry || "-"}</strong></p>
+                                      <p>Uscita: <strong>{worker.clock.lastExit || "-"}</strong></p>
+                                      <p className="col-span-2">Ore nette: <strong>{worker.clock.netHours}h</strong></p>
+                                    </div>
+                                    <div className="mt-2 max-h-24 overflow-y-auto border-t border-white/10 pt-2 text-[10px] space-y-0.5 text-white/60">
+                                      {worker.logs.map((log) => (
+                                        <p key={log.id}>• {log.type}: {log.time}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {staffAtClosing.length === 0 ? (
+                              <p className="rounded-2xl border border-dashed border-white/15 p-3 text-xs text-white/45">Nessuna persona risultava in turno in questo salone all'orario della chiusura.</p>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {answer(response, CASH_CLOSING_FIELD_IDS.notes) ? (
+                          <p className="mt-3 rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
+                        ) : null}
+                        <div className="mt-3">
+                          <CashReviewActions closingId={response.id} initialReview={cashReview(response)} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {selectedDayClosings.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-black/10 bg-white p-4 text-sm font-semibold text-black/40">Nessuna chiusura cassa in questa data.</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </Card>
+
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 -mx-4 px-4 sm:mx-0 sm:px-0">
+          <Card className="bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Periodo</p>
+            <p className="mt-2 text-2xl font-black capitalize">{monthLabel}</p>
+            <p className="mt-1 text-xs text-black/45">Accumulo mensile per data invio chiusura.</p>
+          </Card>
+          <Card className="bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Negozi</p>
+            <p className="mt-2 text-2xl font-black">{locations.length}</p>
+            <p className="mt-1 text-xs text-black/45">Sedi attive incluse nel controllo.</p>
+          </Card>
+          <Card className="bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Discrepanze fondo</p>
+            <p className="mt-2 text-2xl font-black text-[#A74758]">{discrepancyResponses.length}</p>
+            <p className="mt-1 text-xs text-black/45">Fondo cassa diverso da € 50,00.</p>
+          </Card>
+          <Card className="bg-white p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Mancano oggi</p>
+            <p className="mt-2 text-2xl font-black">{storeRows.filter((row) => row.today.length === 0).length}</p>
+            <p className="mt-1 text-xs text-black/45">Sedi senza chiusura registrata oggi.</p>
+          </Card>
+        </div>
+
+        <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
+          <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
+            <div className="border-b border-black/5 p-5">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Tutti i negozi</p>
+              <h2 className="mt-1 text-2xl font-black">Accumulo cash per sede</h2>
+            </div>
+            <div className="divide-y divide-black/5">
+              {storeRows.map((row) => (
+                <div key={row.location.id} className="flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1 lg:max-w-md">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-11 place-items-center rounded-2xl bg-[#F7E9EF] text-[#A74758] shrink-0">
+                        <Store className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="truncate text-lg font-black text-[#171717]">{row.location.name}</h3>
+                        <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-black/45">
+                          <MapPin className="size-3.5" />
+                          {row.location.address || "Indirizzo non impostato"}
+                        </p>
+                      </div>
+                    </div>
+                    {row.lastClosing ? (
+                      <p className="mt-3 text-xs text-black/48">
+                        Ultima firma: <strong>{signatureName(row.lastClosing)}</strong> · {new Date(row.lastClosing.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-xs font-semibold text-black/35">Nessuna chiusura nel mese.</p>
+                    )}
+                  </div>
+
+                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:w-[600px] shrink-0">
+                    <StoreValue label="Cash cassa" value={formatMoney(row.total)} />
+                    <StoreValue label="Cassaforte out" value={formatMoney(row.vaultTotal)} />
+                    <StoreValue label="Netto sede" value={formatMoney(row.net)} />
+                    <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3 flex flex-col justify-between">
+                      <p className="text-[10px] font-black uppercase text-black/35">Oggi</p>
+                      <div className="mt-2 flex flex-col gap-1">
+                        <div>
+                          {row.today.length > 0 ? (
+                            <Badge tone="green">{row.today.length} reg.</Badge>
+                          ) : (
+                            <Badge tone="pink">Manca</Badge>
+                          )}
+                        </div>
+                        {row.discrepancies.length > 0 ? (
+                          <span className="text-[10px] font-bold text-[#A74758]">{row.discrepancies.length} fondo diff.</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {orphanResponses.length > 0 ? (
+                <div className="p-5 text-sm font-semibold text-black/50">
+                  {orphanResponses.length} chiusure senza sede assegnata sono incluse nei totali generali.
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-[#111017] p-5 text-white">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">Oggi</p>
+            <h2 className="mt-1 text-2xl font-black">Chiusure ricevute</h2>
+            <div className="mt-5 space-y-3">
+              {todayResponses.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-white/15 p-4 text-sm text-white/45">Nessuna chiusura registrata oggi.</p>
+              ) : null}
+              {todayResponses.map((response) => {
+                const fund = moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund));
+                const hasFundIssue = Math.abs(fund - 50) > 0.009;
+                return (
+                  <div key={response.id} className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-black">{response.user_location_name || response.location?.name || "Sede non indicata"}</p>
+                        <p className="mt-1 text-xs text-white/45">{cashDate(response)}</p>
+                      </div>
+                      {hasFundIssue ? <AlertTriangle className="size-5 text-[#F7DFA7]" /> : <CheckCircle2 className="size-5 text-emerald-300" />}
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <MiniDark label="Prelevato" value={formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))} />
+                      <MiniDark label="Fondo" value={formatMoney(fund)} />
+                    </div>
+                    <div className="mt-4 rounded-2xl bg-white/5 p-3">
+                      <p className="flex items-center gap-2 text-xs font-bold text-white/70">
+                        <PenLine className="size-4 text-[#F7DFA7]" />
+                        {signatureName(response)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-white/38">Firma PIN verificata</p>
+                    </div>
+                    <div className="mt-3">
+                      <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(cashReview(response).status)}`}>
+                        {cashReviewLabel(cashReview(response).status)}
+                      </span>
+                      {cashReview(response).note ? (
+                        <p className="mt-2 rounded-2xl border border-white/10 p-3 text-xs leading-5 text-white/55">
+                          Nota responsabile: {cashReview(response).note}
+                        </p>
+                      ) : null}
+                    </div>
+                    {answer(response, CASH_CLOSING_FIELD_IDS.notes) ? (
+                      <p className="mt-3 rounded-2xl border border-white/10 p-3 text-xs leading-5 text-white/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </section>
+
+        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
+          <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Cassaforte</p>
+              <h2 className="mt-1 text-2xl font-black">Prelievi autorizzati</h2>
+              <p className="mt-1 text-sm text-black/45">Registro mensile di chi ha prelevato soldi dalla cassaforte e per quale motivo.</p>
+            </div>
+            <div className="rounded-2xl bg-[#111017] px-4 py-3 text-right text-white">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Totale uscito</p>
+              <p className="text-lg font-black">{formatMoney(totalVaultOut)}</p>
+            </div>
+          </div>
+          <div className="divide-y divide-black/5">
+            {vaultWithdrawals.map((response) => {
+              const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(vaultAccountingDate(response));
+              return (
+                <div key={response.id} className="grid gap-4 p-5 lg:grid-cols-[160px_170px_1fr_220px] lg:items-center">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-black/35">Giorno</p>
+                    <p className="mt-1 font-black">{dateLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-black/35">Somma</p>
+                    <p className="mt-1 text-lg font-black text-[#A74758]">{formatMoney(moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)))}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase text-black/35">Motivo</p>
+                    <p className="mt-1 break-words text-sm font-semibold leading-6 text-black/65">
+                      {String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "Motivo non indicato")}
+                    </p>
+                    <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-black/40">
+                      <MapPin className="size-3.5" />
+                      {response.user_location_name || response.location?.name || "Sede non indicata"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3">
+                    <p className="text-[10px] font-black uppercase text-black/35">Prelevato da</p>
+                    <p className="mt-1 flex items-center gap-2 text-sm font-black">
+                      <UserRound className="size-4 text-[#A74758]" />
+                      {signatureName(response)}
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold text-black/35">
+                      Registrato {new Date(response.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            {vaultWithdrawals.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm font-bold text-black/40">Nessun prelievo cassaforte registrato per questo mese.</p>
+              </div>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-white p-0 overflow-hidden">
+          <div className="border-b border-black/5 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
+            <h2 className="mt-1 text-2xl font-black">Dettaglio firme e chiusure</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1180px] text-left text-sm">
+              <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
+                <tr>
+                  <th className="px-5 py-3">Data</th>
+                  <th className="px-5 py-3">Sede</th>
+                  <th className="px-5 py-3">Firma</th>
+                  <th className="px-5 py-3 text-right">Prelevato</th>
+                  <th className="px-5 py-3 text-right">Fondo cassa</th>
+                  <th className="px-5 py-3">Controllo</th>
+                  <th className="px-5 py-3">Note</th>
+                  <th className="px-5 py-3">Azioni rapide</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/5">
+                {responses.map((response) => {
+                  const fund = moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund));
+                  const hasFundIssue = Math.abs(fund - 50) > 0.009;
+                  const review = cashReview(response);
+                  return (
+                    <tr key={response.id} className="align-top">
+                      <td className="px-5 py-4 font-bold">{cashDate(response)}</td>
+                      <td className="px-5 py-4">{response.user_location_name || response.location?.name || "Sede non indicata"}</td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                          <UserRound className="size-3.5" />
+                          {signatureName(response)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right font-black">{formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))}</td>
+                      <td className="px-5 py-4 text-right">
+                        <span className={hasFundIssue ? "font-black text-[#A74758]" : "font-black text-emerald-700"}>{formatMoney(fund)}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
+                          {cashReviewLabel(review.status)}
+                        </span>
+                      </td>
+                      <td className="max-w-[280px] px-5 py-4 text-xs leading-5 text-black/55">
+                        <p>{String(answer(response, CASH_CLOSING_FIELD_IDS.notes) || "-")}</p>
+                        {review.note ? <p className="mt-2 font-bold text-[#A74758]">Resp: {review.note}</p> : null}
+                      </td>
+                      <td className="px-5 py-4">
+                        <CashReviewActions closingId={response.id} initialReview={review} compact />
+                      </td>
+                    </tr>
+                  );
+                })}
+                {responses.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-5 py-10 text-center text-sm font-semibold text-black/40">Nessuna chiusura cassa nel mese corrente.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
+
+function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
+  const tones = {
+    gold: "border-[#F7DFA7]/15 bg-gradient-to-br from-[#F7DFA7]/10 to-[#F7DFA7]/2 text-[#F7DFA7]",
+    blue: "border-blue-500/15 bg-gradient-to-br from-blue-500/10 to-blue-500/2 text-blue-200",
+    pink: "border-[#A74758]/20 bg-gradient-to-br from-[#A74758]/12 to-[#A74758]/2 text-[#ff9fbd]",
+    green: "border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-emerald-500/2 text-emerald-200",
+  };
+  return (
+    <div className={`rounded-2xl border ${tones[tone]} p-4 flex flex-col justify-between transition duration-300 hover:scale-[1.02]`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">{label}</span>
+        <Icon className="size-4 opacity-80" />
+      </div>
+      <p className="mt-3 text-2xl font-black text-white tracking-tight leading-none">{value}</p>
+    </div>
+  );
+}
+
+function StoreValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3 flex flex-col justify-between">
+      <p className="text-[10px] font-black uppercase text-black/35 tracking-wider leading-none">{label}</p>
+      <p className="mt-2 text-base font-black text-[#171717] leading-none">{value}</p>
+    </div>
+  );
+}
+
+function MiniDark({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/5 p-3">
+      <p className="text-[10px] font-black uppercase text-white/35">{label}</p>
+      <p className="mt-1 text-sm font-black text-white">{value}</p>
+    </div>
+  );
+}

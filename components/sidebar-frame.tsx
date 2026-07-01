@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,11 +18,12 @@ export function SidebarFrame({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
-    const hasTabletCookie = typeof document !== "undefined" && document.cookie.includes("paradise_tablet_access");
-    setIsTablet(hasTabletCookie);
-    if (!hasTabletCookie) return;
+    const tabletRoute = pathname?.startsWith("/tablet-clock") ?? false;
+    setIsTablet(tabletRoute);
+    if (!tabletRoute) return;
 
     let timeoutId: number;
 
@@ -42,7 +44,7 @@ export function SidebarFrame({
       window.clearTimeout(timeoutId);
       events.forEach((name) => document.removeEventListener(name, resetTimer, true));
     };
-  }, []);
+  }, [pathname]);
 
   return (
     <div
@@ -56,7 +58,7 @@ export function SidebarFrame({
       <div
         className={cn(
           "relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
-          collapsed ? "xl:w-[88px] bg-transparent" : "xl:w-[280px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10"
+          collapsed ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10" : "xl:w-[280px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10"
         )}
       >
         <button

@@ -50,7 +50,25 @@ export async function getPublicVapidKey() {
   return publicKey || "";
 }
 
-export async function sendPushNotification(userId: string, title: string, message: string, actionUrl?: string) {
+type PushAction = {
+  action: string;
+  title: string;
+};
+
+type PushOptions = {
+  actions?: PushAction[];
+  tag?: string;
+  renotify?: boolean;
+  timestamp?: number;
+};
+
+export async function sendPushNotification(
+  userId: string,
+  title: string,
+  message: string,
+  actionUrl?: string,
+  options?: PushOptions,
+) {
   await initVapid();
 
   const record = await prisma.setting.findUnique({ where: { key: "push_subscriptions" } });
@@ -61,6 +79,10 @@ export async function sendPushNotification(userId: string, title: string, messag
     title,
     message,
     actionUrl,
+    actions: options?.actions,
+    tag: options?.tag,
+    renotify: options?.renotify,
+    timestamp: options?.timestamp,
   });
 
   const promises = userSubs.map(async (item: any) => {

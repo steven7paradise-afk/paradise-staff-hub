@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { CalendarDays, Download, Plus, Sparkles, Users, X, Share2 } from "lucide-react";
+import { CalendarDays, Download, Pencil, Plus, Sparkles, Users, X, Share2, ChevronUp, ChevronDown } from "lucide-react";
 import { Button, Card, Field } from "@/components/ui";
 
 type ScheduleCategory = {
@@ -44,6 +44,22 @@ type CellEditor = {
   endTime: string;
 };
 
+type CategoryForm = {
+  name: string;
+  code: string;
+  color: string;
+  textColor: string;
+  startTime: string;
+  endTime: string;
+  editableTime: boolean;
+};
+
+type CategoryMenu = {
+  categoryId: string;
+  x: number;
+  y: number;
+} | null;
+
 const monthNames = [
   "GENNAIO",
   "FEBBRAIO",
@@ -60,6 +76,15 @@ const monthNames = [
 ];
 
 const weekdayShort = ["D", "L", "M", "M", "G", "V", "S"];
+const emptyCategoryForm: CategoryForm = {
+  name: "",
+  code: "",
+  color: "#FFA8DD",
+  textColor: "#1F1F1F",
+  startTime: "",
+  endTime: "",
+  editableTime: false,
+};
 
 function daysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -135,6 +160,7 @@ export function MonthlySchedulePlanner({
   savedExtraWorkers,
   canManageCategories,
   canEditPlanning,
+  initialWorkersOrder = [],
 }: {
   employees: ScheduleWorker[];
   locations: ScheduleLocation[];
@@ -143,6 +169,7 @@ export function MonthlySchedulePlanner({
   savedExtraWorkers: SavedExtraWorker[];
   canManageCategories: boolean;
   canEditPlanning: boolean;
+  initialWorkersOrder?: string[];
 }) {
   const today = new Date();
   const initialLocationId = locations[0]?.id ?? "";
@@ -174,15 +201,54 @@ export function MonthlySchedulePlanner({
     ),
   );
   const [cellEditor, setCellEditor] = useState<CellEditor | null>(null);
-  const [newCategory, setNewCategory] = useState({
-    name: "",
-    code: "",
-    color: "#FFA8DD",
-    textColor: "#1F1F1F",
-    startTime: "",
-    endTime: "",
-    editableTime: false,
-  });
+  const [categoryFormOpen, setCategoryFormOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [categoryMenu, setCategoryMenu] = useState<CategoryMenu>(null);
+  const [newCategory, setNewCategory] = useState<CategoryForm>(emptyCategoryForm);
+  const [workersOrderList, setWorkersOrderList] = useState<string[]>(initialWorkersOrder);
+
+  const saveWorkersOrder = async (newOrder: string[]) => {
+    try {
+      await fetch("/api/settings/workers-order", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newOrder),
+      });
+    } catch (err) {
+      console.error("Errore nel salvataggio dell'ordine:", err);
+    }
+  };
+
+  const handleMoveWorker = async (workerId: string, direction: "up" | "down") => {
+    const currentActiveIds = activeWorkers.map((w) => w.id);
+    const index = currentActiveIds.indexOf(workerId);
+    if (index === -1) return;
+
+    let targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= currentActiveIds.length) return;
+
+    const otherId = currentActiveIds[targetIndex];
+
+    const allEmployeeIds = employees.map((e) => e.id);
+    const mergedOrder = [...workersOrderList];
+
+    // Ensure all employees are populated in the custom order list
+    allEmployeeIds.forEach((id) => {
+      if (!mergedOrder.includes(id)) {
+        mergedOrder.push(id);
+      }
+    });
+
+    const idxA = mergedOrder.indexOf(workerId);
+    const idxB = mergedOrder.indexOf(otherId);
+    if (idxA !== -1 && idxB !== -1) {
+      mergedOrder[idxA] = otherId;
+      mergedOrder[idxB] = workerId;
+    }
+
+    setWorkersOrderList(mergedOrder);
+    await saveWorkersOrder(mergedOrder);
+  };
 
   const [bulkWorkerId, setBulkWorkerId] = useState("all");
   const [bulkDaysMode, setBulkDaysMode] = useState("mon-sat");
@@ -210,8 +276,17 @@ export function MonthlySchedulePlanner({
     );
     const extraIds = new Set([...selectedExtraWorkerIds, ...plannedExternalIds]);
     const extra = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId !== selectedLocationId && extraIds.has(employee.id));
-    return [...base, ...extra].sort((a, b) => a.name.localeCompare(b.name));
-  }, [employees, entries, month, selectedExtraWorkerIds, selectedLocationId, year]);
+    
+    const combined = [...base, ...extra];
+    return combined.sort((a, b) => {
+      const idxA = workersOrderList.indexOf(a.id);
+      const idxB = workersOrderList.indexOf(b.id);
+      if (idxA === -1 && idxB === -1) return a.name.localeCompare(b.name);
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+  }, [employees, entries, month, selectedExtraWorkerIds, selectedLocationId, year, workersOrderList]);
   const availableExternalWorkers = useMemo(
     () =>
       employees
@@ -476,12 +551,41 @@ export function MonthlySchedulePlanner({
     setPlannerMessage("Lavoratore rimosso dalla lista del salone.");
   }
 
-  async function addCategory() {
+  function openNewCategoryForm() {
+    setEditingCategoryId(null);
+    setNewCategory(emptyCategoryForm);
+    setCategoryMenu(null);
+    setCategoryFormOpen(true);
+  }
+
+  function openEditCategoryForm(category: ScheduleCategory) {
+    setEditingCategoryId(category.id);
+    setNewCategory({
+      name: category.name,
+      code: category.code,
+      color: category.color,
+      textColor: category.textColor,
+      startTime: category.startTime ?? "",
+      endTime: category.endTime ?? "",
+      editableTime: Boolean(category.editableTime),
+    });
+    setCategoryMenu(null);
+    setCategoryFormOpen(true);
+  }
+
+  function closeCategoryForm() {
+    setCategoryFormOpen(false);
+    setEditingCategoryId(null);
+    setNewCategory(emptyCategoryForm);
+  }
+
+  async function saveCategory() {
     if (!newCategory.name.trim() || !newCategory.code.trim()) return;
+    const editingCategory = categories.find((category) => category.id === editingCategoryId);
     const response = await fetch("/api/schedules/categories", {
-      method: "POST",
+      method: editingCategoryId ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newCategory, locationId: selectedLocationId }),
+      body: JSON.stringify({ ...newCategory, id: editingCategoryId, locationId: editingCategory?.locationId ?? selectedLocationId }),
     });
     const category = await response.json();
     if (!response.ok) {
@@ -490,8 +594,8 @@ export function MonthlySchedulePlanner({
     }
     setCategories((current) => [...current.filter((item) => item.id !== category.id), category]);
     setActiveCategoryId(category.id);
-    setNewCategory({ name: "", code: "", color: "#FFA8DD", textColor: "#1F1F1F", startTime: "", endTime: "", editableTime: false });
-    setPlannerMessage("Nuova categoria salvata.");
+    closeCategoryForm();
+    setPlannerMessage(editingCategoryId ? "Categoria aggiornata." : "Nuova categoria salvata.");
   }
 
   function resetMonth() {
@@ -831,7 +935,12 @@ export function MonthlySchedulePlanner({
 
   return (
     <div className="space-y-6">
-      <div className="no-print grid gap-4 xl:grid-cols-[1fr_390px]">
+      <div className="no-print grid gap-4">
+        {!canEditPlanning ? (
+          <div className="rounded-[22px] border border-paradise-pink/25 bg-paradise-softPink/35 px-5 py-4 text-sm font-semibold text-[#8F4051]">
+            Vista sola lettura: puoi consultare la turnistica e scaricare PDF, ma non modificare celle, categorie o assegnazioni.
+          </div>
+        ) : null}
         <Card className="p-0">
           <div className="border-b border-black/5 px-6 py-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -922,8 +1031,16 @@ export function MonthlySchedulePlanner({
 
           <div className="border-t border-black/5 px-6 py-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Categorie e orari</p>
-              <p className="text-xs text-black/45">Seleziona una categoria e clicca sulle celle del mese.</p>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Categorie e orari</p>
+                <p className="mt-1 text-xs text-black/45">Seleziona una categoria e clicca sulle celle. Click destro su una categoria per modificarla.</p>
+              </div>
+              {canManageCategories ? (
+                <Button type="button" onClick={openNewCategoryForm} className="min-h-10 px-4">
+                  <Plus className="size-4" />
+                  Nuova categoria
+                </Button>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
             {visibleCategories.map((category) => (
@@ -934,13 +1051,18 @@ export function MonthlySchedulePlanner({
                 }`}
                 style={{ backgroundColor: category.color, color: category.textColor }}
                 onClick={() => setActiveCategoryId(category.id)}
+                onContextMenu={(event) => {
+                  if (!canManageCategories) return;
+                  event.preventDefault();
+                  setCategoryMenu({ categoryId: category.id, x: event.clientX, y: event.clientY });
+                }}
               >
                 <span className="grid size-6 place-items-center rounded-full bg-white/45 text-[11px] font-black">{category.code}</span>
                 {category.name}
                 {category.startTime && category.endTime ? ` ${category.startTime}-${category.endTime}` : ""}
               </button>
             ))}
-            {visibleCategories.length === 0 ? <p className="rounded-2xl bg-paradise-nude px-4 py-3 text-sm text-black/55">Nessuna categoria per questo salone. Crea il primo orario dal pannello a destra.</p> : null}
+            {visibleCategories.length === 0 ? <p className="rounded-2xl bg-paradise-nude px-4 py-3 text-sm text-black/55">Nessuna categoria per questo salone. Crea il primo orario dal pulsante “Nuova categoria”.</p> : null}
             </div>
             {canEditPlanning && availableExternalWorkers.length > 0 ? (
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-black/5 bg-white/70 p-3">
@@ -1048,42 +1170,75 @@ export function MonthlySchedulePlanner({
             )}
           </div>
         </Card>
-
-        {canManageCategories ? <Card className="p-6">
-          <div className="mb-4">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Configurazione</p>
-            <h2 className="mt-2 text-xl font-semibold">Nuova categoria / orario</h2>
-            <p className="mt-2 text-sm text-black/50 dark:text-white/50">Sara salvata solo per {selectedLocation?.name ?? "il salone selezionato"}.</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field placeholder="Nome es. Apertura" value={newCategory.name} onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })} />
-            <Field placeholder="Codice es. A" value={newCategory.code} onChange={(event) => setNewCategory({ ...newCategory, code: event.target.value })} />
-            <Field type="time" value={newCategory.startTime} onChange={(event) => setNewCategory({ ...newCategory, startTime: event.target.value })} />
-            <Field type="time" value={newCategory.endTime} onChange={(event) => setNewCategory({ ...newCategory, endTime: event.target.value })} />
-            <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-neutral-800 px-3">
-              <span className="text-xs font-semibold">Sfondo</span>
-              <input type="color" value={newCategory.color} onChange={(event) => setNewCategory({ ...newCategory, color: event.target.value })} />
-            </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-neutral-800 px-3">
-              <span className="text-xs font-semibold">Testo</span>
-              <input type="color" value={newCategory.textColor} onChange={(event) => setNewCategory({ ...newCategory, textColor: event.target.value })} />
-            </label>
-          </div>
-          <label className="mt-3 flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 dark:border-white/10 dark:bg-neutral-800 px-4 py-3 text-sm font-semibold">
-            <input
-              type="checkbox"
-              checked={newCategory.editableTime}
-              onChange={(event) => setNewCategory({ ...newCategory, editableTime: event.target.checked })}
-            />
-            Permetti modifica orario sulla singola cella
-          </label>
-          <Button className="mt-4 w-full" onClick={addCategory}>
-            <Plus className="size-4" />
-            Carica orario
-          </Button>
-        </Card> : null}
       </div>
       {plannerMessage ? <p className="no-print rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm font-medium dark:text-white">{plannerMessage}</p> : null}
+
+      {categoryMenu ? (
+        <div className="no-print fixed inset-0 z-40" onClick={() => setCategoryMenu(null)} onContextMenu={(event) => event.preventDefault()}>
+          <div
+            className="absolute min-w-52 rounded-2xl border border-black/10 bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-neutral-900"
+            style={{ left: categoryMenu.x, top: categoryMenu.y }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-paradise-noir transition hover:bg-paradise-softPink/45 dark:text-white"
+              onClick={() => {
+                const category = categories.find((item) => item.id === categoryMenu.categoryId);
+                if (category) openEditCategoryForm(category);
+              }}
+            >
+              <Pencil className="size-4 text-[#B85B68]" />
+              Modifica categoria
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {categoryFormOpen ? (
+        <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-sm" onMouseDown={closeCategoryForm}>
+          <div className="w-full max-w-xl rounded-[28px] border border-black/10 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-neutral-900" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Configurazione</p>
+                <h2 className="mt-2 text-2xl font-semibold">{editingCategoryId ? "Modifica categoria / orario" : "Nuova categoria / orario"}</h2>
+                <p className="mt-2 text-sm text-black/50 dark:text-white/50">
+                  {editingCategoryId ? "Aggiorna la categoria selezionata." : `Sara salvata solo per ${selectedLocation?.name ?? "il salone selezionato"}.`}
+                </p>
+              </div>
+              <button type="button" onClick={closeCategoryForm} className="grid size-10 shrink-0 place-items-center rounded-full bg-black/5 text-black/45 hover:bg-paradise-softPink/60">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field placeholder="Nome es. Apertura" value={newCategory.name} onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })} />
+              <Field placeholder="Codice es. A" value={newCategory.code} onChange={(event) => setNewCategory({ ...newCategory, code: event.target.value })} />
+              <Field type="time" value={newCategory.startTime} onChange={(event) => setNewCategory({ ...newCategory, startTime: event.target.value })} />
+              <Field type="time" value={newCategory.endTime} onChange={(event) => setNewCategory({ ...newCategory, endTime: event.target.value })} />
+              <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-3 dark:border-white/10 dark:bg-neutral-800">
+                <span className="text-xs font-semibold">Sfondo</span>
+                <input type="color" value={newCategory.color} onChange={(event) => setNewCategory({ ...newCategory, color: event.target.value })} />
+              </label>
+              <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-3 dark:border-white/10 dark:bg-neutral-800">
+                <span className="text-xs font-semibold">Testo</span>
+                <input type="color" value={newCategory.textColor} onChange={(event) => setNewCategory({ ...newCategory, textColor: event.target.value })} />
+              </label>
+            </div>
+            <label className="mt-3 flex items-center gap-3 rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm font-semibold dark:border-white/10 dark:bg-neutral-800">
+              <input
+                type="checkbox"
+                checked={newCategory.editableTime}
+                onChange={(event) => setNewCategory({ ...newCategory, editableTime: event.target.checked })}
+              />
+              Permetti modifica orario sulla singola cella
+            </label>
+            <Button className="mt-4 w-full" onClick={saveCategory}>
+              {editingCategoryId ? <Pencil className="size-4" /> : <Plus className="size-4" />}
+              {editingCategoryId ? "Salva categoria" : "Carica orario"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
  
       <div ref={tableRef} className="print-surface overflow-hidden rounded-[26px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-soft">
         <div className="schedule-title border-b border-black/10 dark:border-white/10 bg-[#F4D8E5] px-6 py-5 text-[#523E48]">
@@ -1100,22 +1255,26 @@ export function MonthlySchedulePlanner({
           </div>
         </div>
         <div className="schedule-scroll overflow-x-auto">
-          <table className="schedule-table w-full min-w-[1180px] border-collapse bg-white dark:bg-neutral-900 text-black dark:text-white">
+          <table
+            className="schedule-table border-collapse bg-white dark:bg-neutral-900 text-black dark:text-white"
+            style={{
+              tableLayout: "fixed",
+              width: `${220 + 65 + (days * 32)}px`,
+            }}
+          >
             <thead>
               <tr className="bg-[#f8f2f5] dark:bg-neutral-800">
-                <th className="worker-head sticky left-0 z-20 w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 px-3 py-3 text-left text-sm font-bold">Staff</th>
-                <th className="border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 px-2 py-3 text-center text-sm font-bold">Ore</th>
+                <th className="worker-head sticky left-0 z-20 w-[220px] min-w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 px-3 py-3 text-left text-sm font-bold">Staff</th>
+                <th className="border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 px-2 py-3 text-center text-sm font-bold w-[65px] min-w-[65px] max-w-[65px]">Ore</th>
                 {monthDays.map((day) => (
-                  <th key={day} className="day-head border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 text-sm font-semibold">
-                    {day}
-                  </th>
+                  <th key={day} className="day-head border border-black/10 dark:border-white/10 bg-[#f8f2f5] dark:bg-neutral-800 text-sm font-semibold w-8 min-w-[32px] max-w-[32px]">{day}</th>
                 ))}
               </tr>
               <tr className="bg-white dark:bg-neutral-900">
-                <th className="worker-head sticky left-0 z-20 w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900" />
-                <th className="border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-[10px] font-bold uppercase text-black/45 dark:text-white/45">tot.</th>
+                <th className="worker-head sticky left-0 z-20 w-[220px] min-w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900" />
+                <th className="border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-[10px] font-bold uppercase text-black/45 dark:text-white/45 w-[65px] min-w-[65px] max-w-[65px]">tot.</th>
                 {monthDays.map((day) => (
-                  <th key={day} className="day-head border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-xs font-bold text-black/50 dark:text-white/50">
+                  <th key={day} className="day-head border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 text-xs font-bold text-black/50 dark:text-white/50 w-8 min-w-[32px] max-w-[32px]">
                     {weekdayShort[new Date(year, month, day).getDay()]}
                   </th>
                 ))}
@@ -1129,23 +1288,47 @@ export function MonthlySchedulePlanner({
                   </td>
                 </tr>
               ) : null}
-              {activeWorkers.map((worker) => (
+              {activeWorkers.map((worker, idx) => (
                 <tr key={worker.id}>
-                  <th className="worker-cell sticky left-0 z-10 w-[220px] max-w-[220px] truncate border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 px-3 py-2 text-left text-sm font-semibold" title={worker.name}>
+                  <th className="worker-cell sticky left-0 z-10 w-[220px] min-w-[220px] max-w-[220px] border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-900 px-3 py-2 text-left text-sm font-semibold" title={worker.name}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate">{worker.name.toUpperCase()}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {canEditPlanning && (
+                          <div className="flex flex-col gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveWorker(worker.id, "up")}
+                              disabled={idx === 0}
+                              className={`p-0.5 rounded text-black/40 dark:text-white/40 hover:text-paradise-pink hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition ${idx === 0 ? "opacity-20 cursor-not-allowed" : "cursor-pointer"}`}
+                              title="Sposta su"
+                            >
+                              <ChevronUp className="size-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveWorker(worker.id, "down")}
+                              disabled={idx === activeWorkers.length - 1}
+                              className={`p-0.5 rounded text-black/40 dark:text-white/40 hover:text-paradise-pink hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition ${idx === activeWorkers.length - 1 ? "opacity-20 cursor-not-allowed" : "cursor-pointer"}`}
+                              title="Sposta giù"
+                            >
+                              <ChevronDown className="size-3" />
+                            </button>
+                          </div>
+                        )}
+                        <span className="truncate">{worker.name.toUpperCase()}</span>
+                      </div>
                       <a
                         href={`/schedules/card?userId=${worker.id}&month=${month + 1}&year=${year}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-black/35 dark:text-white/35 hover:text-paradise-pink transition-colors p-1 rounded hover:bg-black/[0.03] dark:hover:bg-white/[0.03]"
+                        className="text-black/35 dark:text-white/35 hover:text-paradise-pink transition-colors p-1 rounded hover:bg-black/[0.03] dark:hover:bg-white/[0.03] shrink-0"
                         title="Genera cartolina turni"
                       >
                         <Share2 className="size-3.5" />
                       </a>
                     </div>
                   </th>
-                  <td className="border border-black/10 dark:border-white/10 bg-[#fbfaf9] dark:bg-neutral-800 px-2 text-center text-sm font-black">{formatHours(workerTotalMinutes(worker.id))}</td>
+                  <td className="border border-black/10 dark:border-white/10 bg-[#fbfaf9] dark:bg-neutral-800 px-2 text-center text-sm font-black w-[65px] min-w-[65px] max-w-[65px]">{formatHours(workerTotalMinutes(worker.id))}</td>
                   {monthDays.map((day) => {
                     const assignment = assignments[assignmentKey(worker.id, day)];
                     const category = categories.find((item) => item.id === assignment?.categoryId);
@@ -1154,7 +1337,7 @@ export function MonthlySchedulePlanner({
                     return (
                       <td
                         key={`${worker.id}-${day}`}
-                        className={`schedule-cell h-8 border border-black/10 dark:border-white/10 text-center text-[10px] font-bold transition ${canEditPlanning ? "cursor-pointer hover:ring-2 hover:ring-paradise-pink/60" : ""}`}
+                        className={`schedule-cell h-8 w-8 min-w-[32px] max-w-[32px] border border-black/10 dark:border-white/10 text-center text-[10px] font-bold transition ${canEditPlanning ? "cursor-pointer hover:ring-2 hover:ring-paradise-pink/60" : ""}`}
                         style={{
                           backgroundColor: category?.color ?? "#FFFFFF",
                           color: category?.textColor ?? "#1F1F1F",

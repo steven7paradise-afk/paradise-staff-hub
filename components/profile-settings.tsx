@@ -33,6 +33,7 @@ export function ProfileSettings({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState(photoUrl);
+  const [photoLink, setPhotoLink] = useState(photoUrl ?? "");
   const [photoStatus, setPhotoStatus] = useState("");
   const [passwordStatus, setPasswordStatus] = useState("");
   const [calendarEnabled, setCalendarEnabled] = useState(calendarSync);
@@ -43,9 +44,10 @@ export function ProfileSettings({
   const [themeStatus, setThemeStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const canUseCalendar = role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManagePhoto = role === "SUPER_ADMIN" || role === "ADMIN";
 
   async function uploadPhoto(file?: File) {
-    if (!file) return;
+    if (!file || !canManagePhoto) return;
     setLoading(true);
     setPhotoStatus("");
     const form = new FormData();
@@ -55,7 +57,28 @@ export function ProfileSettings({
     setLoading(false);
     if (!response.ok) return setPhotoStatus(result.error ?? "Errore nel caricamento della foto.");
     setImage(result.photoUrl);
+    setPhotoLink(result.photoUrl ?? "");
     setPhotoStatus("Foto profilo aggiornata con successo.");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("photo-change", { detail: result.photoUrl }));
+    }
+  }
+
+  async function savePhotoLink() {
+    if (!canManagePhoto) return;
+    setLoading(true);
+    setPhotoStatus("");
+    const response = await fetch("/api/profile/photo", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photoUrl: photoLink }),
+    });
+    const result = await response.json();
+    setLoading(false);
+    if (!response.ok) return setPhotoStatus(result.error ?? "Errore nel salvataggio del link foto.");
+    setImage(result.photoUrl);
+    setPhotoLink(result.photoUrl ?? "");
+    setPhotoStatus(result.photoUrl ? "Link foto profilo salvato." : "Foto profilo rimossa.");
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("photo-change", { detail: result.photoUrl }));
     }
@@ -171,16 +194,37 @@ export function ProfileSettings({
               </div>
             </div>
             
-            <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => uploadPhoto(event.target.files?.[0])} />
-            <button 
-              type="button"
-              disabled={loading} 
-              onClick={() => inputRef.current?.click()}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-semibold shadow-sm transition-all duration-200 ease-out active:scale-[0.96] active:brightness-95 hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-paradise-pink/60 bg-white text-paradise-noir ring-1 ring-black/5 hover:bg-paradise-nude hover:shadow-sm dark:bg-white/10 dark:text-white dark:ring-white/10 dark:hover:bg-white/15"
-            >
-              <Camera className="size-4 text-[#B85B68] dark:text-paradise-pink" /> Carica Nuova Foto
-            </button>
+            {canManagePhoto ? (
+              <>
+                <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => uploadPhoto(event.target.files?.[0])} />
+                <button 
+                  type="button"
+                  disabled={loading} 
+                  onClick={() => inputRef.current?.click()}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-semibold shadow-sm transition-all duration-200 ease-out active:scale-[0.96] active:brightness-95 hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-paradise-pink/60 bg-white text-paradise-noir ring-1 ring-black/5 hover:bg-paradise-nude hover:shadow-sm dark:bg-white/10 dark:text-white dark:ring-white/10 dark:hover:bg-white/15"
+                >
+                  <Camera className="size-4 text-[#B85B68] dark:text-paradise-pink" /> Carica Nuova Foto
+                </button>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-black/5 bg-black/[0.02] px-4 py-3 text-xs font-semibold text-black/50 dark:border-white/10 dark:bg-white/5 dark:text-white/45">
+                La foto profilo può essere modificata solo da admin.
+              </div>
+            )}
           </div>
+
+          {canManagePhoto ? (
+            <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <Field
+                value={photoLink}
+                onChange={(event) => setPhotoLink(event.target.value)}
+                placeholder="https://esempio.com/foto.jpg"
+              />
+              <Button type="button" variant="soft" onClick={savePhotoLink} disabled={loading}>
+                Salva link
+              </Button>
+            </div>
+          ) : null}
 
           {photoStatus && (
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-in fade-in">
@@ -193,7 +237,7 @@ export function ProfileSettings({
         <div className="border-t border-black/5 dark:border-white/5 pt-4">
           <p className="flex items-center gap-1.5 text-[10px] text-black/45 dark:text-white/40">
             <Upload className="size-3.5" /> 
-            <span>File accettati: JPG o PNG. Dimensione massima consentita: 5 MB.</span>
+            <span>{canManagePhoto ? "File accettati: JPG o PNG. Puoi anche incollare un link immagine." : "Le foto gia caricate restano visibili. Le modifiche sono riservate agli admin."}</span>
           </p>
         </div>
       </Card>

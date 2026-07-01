@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, PackageCheck, Search, ShoppingCart, Truck, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { ResponseComments } from "@/components/response-comments";
 
 type OrderResponse = {
   id: string;
   status: string;
   priority?: string | null;
   answers: Record<string, any>;
+  comments?: any[] | null;
   created_at: string;
   updated_at: string;
   user_location_name?: string | null;
@@ -24,6 +26,24 @@ const ORDER_COLUMNS = [
   { id: "READY", label: "Arrivato / pronto", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
   { id: "COMPLETED", label: "Completato", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
 ];
+
+const monthsList = [
+  { value: 1, label: "Gennaio" },
+  { value: 2, label: "Febbraio" },
+  { value: 3, label: "Marzo" },
+  { value: 4, label: "Aprile" },
+  { value: 5, label: "Maggio" },
+  { value: 6, label: "Giugno" },
+  { value: 7, label: "Luglio" },
+  { value: 8, label: "Agosto" },
+  { value: 9, label: "Settembre" },
+  { value: 10, label: "Ottobre" },
+  { value: 11, label: "Novembre" },
+  { value: 12, label: "Dicembre" },
+];
+
+const currentYear = new Date().getFullYear();
+const yearsList = Array.from({ length: 3 }, (_, i) => currentYear - 1 + i);
 
 function answerById(order: OrderResponse, id: string) {
   const value = order.answers?.[id];
@@ -40,7 +60,11 @@ function fieldValue(order: OrderResponse, includes: string[]) {
 }
 
 function orderTitle(order: OrderResponse) {
-  return answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || "Ordine senza titolo";
+  const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
+  if (title) return title;
+  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  if (clientName) return clientName;
+  return "Ordine senza titolo";
 }
 
 function orderItems(order: OrderResponse) {
@@ -59,27 +83,47 @@ function statusLabel(status: string) {
   return ORDER_COLUMNS.find((column) => column.id === status)?.label ?? status;
 }
 
-export function OrderManager({ initialOrders, canManage }: { initialOrders: OrderResponse[]; canManage: boolean }) {
+export function OrderManager({
+  initialOrders,
+  canManage,
+  currentUserName,
+  currentUserRole,
+}: {
+  initialOrders: OrderResponse[];
+  canManage: boolean;
+  currentUserName: string;
+  currentUserRole: string;
+}) {
   const [orders, setOrders] = useState(initialOrders);
   const [query, setQuery] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selected, setSelected] = useState<OrderResponse | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [mobileStatus, setMobileStatus] = useState("ALL");
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
-    if (!clean) return orders;
+    if (clean) {
+      // Search is active on ALL orders in the list, bypassing the month filter.
+      return orders.filter((order) => {
+        const haystack = [
+          orderTitle(order),
+          orderItems(order),
+          order.user?.name ?? "",
+          order.user_location_name ?? "",
+          JSON.stringify(order.answers ?? {}),
+        ].join(" ").toLowerCase();
+        return haystack.includes(clean);
+      });
+    }
+
+    // Default board view is filtered by selected month/year.
     return orders.filter((order) => {
-      const haystack = [
-        orderTitle(order),
-        orderItems(order),
-        order.user?.name ?? "",
-        order.user_location_name ?? "",
-        JSON.stringify(order.answers ?? {}),
-      ].join(" ").toLowerCase();
-      return haystack.includes(clean);
+      const d = new Date(order.created_at);
+      return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
     });
-  }, [orders, query]);
+  }, [orders, query, selectedMonth, selectedYear]);
 
   const mobileOrders = useMemo(() => {
     if (mobileStatus === "ALL") return filteredOrders;
@@ -109,14 +153,44 @@ export function OrderManager({ initialOrders, canManage }: { initialOrders: Orde
             <h1 className="mt-2 text-4xl font-semibold tracking-tight">Ordini</h1>
             <p className="mt-2 text-sm text-black/50">{canManage ? "Gestisci" : "Controlla"} gli ordini creati dal modulo ordine: nuovi, in preparazione, ordinati e completati.</p>
           </div>
-          <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 lg:w-96">
-            <Search className="size-4 text-black/35" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-black/40">Mese:</span>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="bg-black/5 border border-black/10 text-black text-xs font-bold rounded-full px-3 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition"
+              >
+                {monthsList.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="bg-black/5 border border-black/10 text-black text-xs font-bold rounded-full px-3 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition"
+              >
+                {yearsList.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 w-full lg:w-72">
+              <Search className="size-4 text-black/35" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="xl:hidden space-y-4">
+      <div className="md:hidden space-y-4">
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button
             type="button"
@@ -185,7 +259,7 @@ export function OrderManager({ initialOrders, canManage }: { initialOrders: Orde
         </div>
       </div>
 
-      <div className="hidden gap-4 xl:grid xl:grid-cols-5">
+      <div className="hidden gap-4 md:grid md:grid-cols-5">
         {ORDER_COLUMNS.map((column) => {
           const columnOrders = filteredOrders.filter((order) => (order.status || "NEW") === column.id);
           const Icon = column.icon;
@@ -253,6 +327,23 @@ export function OrderManager({ initialOrders, canManage }: { initialOrders: Orde
                     );
                   })}
                 </div>
+
+                <ResponseComments
+                  responseId={selected.id}
+                  initialComments={selected.comments || []}
+                  currentUserName={currentUserName}
+                  currentUserRole={currentUserRole}
+                  onCommentsUpdate={(updatedComments) => {
+                    setOrders((current) =>
+                      current.map((item) =>
+                        item.id === selected.id ? { ...item, comments: updatedComments } : item
+                      )
+                    );
+                    setSelected((current) =>
+                      current?.id === selected.id ? { ...current, comments: updatedComments } : current
+                    );
+                  }}
+                />
               </Card>
               <div className="space-y-4">
                 <Card className="bg-white">

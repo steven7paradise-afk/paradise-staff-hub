@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Plus, Trash2, ArrowUp, ArrowDown, ClipboardList, Check, X, 
   GitBranch, ListChecks, Settings2, MonitorSmartphone, Eye, HelpCircle,
-  AlertCircle, Smartphone, Monitor, Info, ArrowLeft, ArrowUpRight, DollarSign, Calendar
+  AlertCircle, Smartphone, Monitor, Info, ArrowLeft, ArrowUpRight, DollarSign, Calendar,
+  ChevronRight
 } from "lucide-react";
 import { Badge, Card, Select, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
@@ -17,7 +18,7 @@ type UserOption = { id: string; name: string; role: string; mansione: string | n
 type FormField = {
   id: string;
   label: string;
-  type: "text" | "textarea" | "number" | "select" | "file" | "money" | "date" | "worker";
+  type: "text" | "textarea" | "number" | "select" | "file" | "money" | "date" | "worker" | "worker_multi" | "checkbox" | "pin";
   required: boolean;
   options?: string[];
   description?: string;
@@ -26,6 +27,12 @@ type FormField = {
     operator: "equals" | "not_equals" | "contains";
     value: string;
   } | null;
+  show_ifs?: {
+    field_id: string;
+    operator: "equals" | "not_equals" | "contains";
+    value: string;
+  }[];
+  position?: { x: number; y: number };
 };
 
 const USER_ROLES = [
@@ -46,10 +53,12 @@ export function FormBuilder({
   initialForm,
   locations,
   users,
+  template = "",
 }: {
   initialForm: any | null;
   locations: LocationOption[];
   users: UserOption[];
+  template?: string;
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"builder" | "settings" | "preview">("builder");
@@ -57,27 +66,149 @@ export function FormBuilder({
   const [errorMsg, setErrorMsg] = useState("");
 
   // Form states
-  const [formName, setFormName] = useState(initialForm?.name || "");
-  const [formDesc, setFormDesc] = useState(initialForm?.description || "");
-  const [formCategory, setFormCategory] = useState(initialForm?.category || "Generale");
+  const [formName, setFormName] = useState(() => {
+    if (initialForm?.name) return initialForm.name;
+    if (template === "talent") return "CANDIDATURA";
+    if (template === "order") return "Modulo Ordine";
+    return "";
+  });
+  const [formDesc, setFormDesc] = useState(() => {
+    if (initialForm?.description) return initialForm.description;
+    if (template === "talent") return "Registra una nuova candidatura o compila i dettagli di un potenziale dipendente.";
+    if (template === "order") return "Raccolta e gestione ordini per clienti.";
+    return "";
+  });
+  const [formCategory, setFormCategory] = useState(() => {
+    if (initialForm?.category) return initialForm.category;
+    if (template === "order") return "Ordini";
+    return "Generale";
+  });
   const [formActive, setFormActive] = useState(initialForm ? initialForm.active : true);
-  const [formIcon, setFormIcon] = useState(initialForm?.icon || "ClipboardList");
+  const [formIcon, setFormIcon] = useState(() => {
+    if (initialForm?.icon) return initialForm.icon;
+    if (template === "talent") return "UserPlus";
+    if (template === "order") return "ShoppingCart";
+    return "ClipboardList";
+  });
   const [allowedRoles, setAllowedRoles] = useState<string[]>(initialForm?.allowed_roles || []);
   const [allowedLocations, setAllowedLocations] = useState<string[]>(initialForm?.allowed_location_ids || []);
   const [notifyRoles, setNotifyRoles] = useState<string[]>(initialForm?.notify_roles || []);
   const [notifyUserIds, setNotifyUserIds] = useState<string[]>(initialForm?.notify_user_ids || []);
-  const [formFields, setFormFields] = useState<FormField[]>(
-    initialForm?.fields || [{ id: `field_${Date.now()}`, label: "Domanda 1", type: "text", required: true }]
-  );
+
+  const [formFields, setFormFields] = useState<FormField[]>(() => {
+    if (initialForm?.fields) return initialForm.fields;
+    if (template === "talent") {
+      return [
+        { id: "candidato_nome", label: "NOME E COGNOME CANDIDATO", type: "text", required: true, position: { x: 280, y: 200 } },
+        { id: "candidato_email", label: "EMAIL", type: "text", required: true, position: { x: 600, y: 200 } },
+        { id: "candidato_telefono", label: "TELEFONO / CELLULARE", type: "text", required: true, position: { x: 920, y: 200 } },
+        { id: "candidato_nascita", label: "DATA DI NASCITA", type: "date", required: false, position: { x: 1240, y: 200 } },
+        { 
+          id: "candidato_ruolo", 
+          label: "RUOLO DESIDERATO / PROFESSIONE", 
+          type: "select", 
+          required: true, 
+          options: [
+            "Estetista",
+            "Onicotecnica",
+            "Receptionist",
+            "Lashemaker",
+            "Apprendista Estetista",
+            "Massaggiatrice",
+            "Store Manager",
+            "Responsabile",
+            "Altro"
+          ],
+          position: { x: 1560, y: 200 }
+        },
+        { id: "candidato_cv", label: "CURRICULUM VITAE (PDF/Foto)", type: "file", required: false, position: { x: 1880, y: 200 } },
+        { id: "candidato_note", label: "NOTE E COMMENTI", type: "textarea", required: false, position: { x: 2200, y: 200 } }
+      ];
+    }
+    if (template === "order") {
+      return [
+        { id: "order_cliente", label: "NOME CLIENTE", type: "text", required: true, position: { x: 280, y: 200 } },
+        { id: "order_trattamento", label: "TRATTAMENTO", type: "text", required: true, position: { x: 600, y: 200 } },
+        { id: "order_importo", label: "IMPORTO", type: "money", required: true, position: { x: 920, y: 200 } },
+        { id: "order_note", label: "NOTE AGGIUNTIVE", type: "textarea", required: false, position: { x: 1240, y: 200 } }
+      ];
+    }
+    return [{ id: `field_${Date.now()}`, label: "Domanda 1", type: "text", required: true, position: { x: 280, y: 200 } }];
+  });
 
   // Inspector and Visual states
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(formFields[0]?.id || null);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
   const [previewFiles, setPreviewFiles] = useState<Record<string, File>>({});
+  const [connectingTargetId, setConnectingTargetId] = useState<string | null>(null);
+  const [activePreviewFieldIndex, setActivePreviewFieldIndex] = useState(0);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    canvasX: number;
+    canvasY: number;
+  } | null>(null);
+
+  const visiblePreviewFields = useMemo(() => {
+    return formFields.filter((field) => {
+      const conditions = field.show_ifs && field.show_ifs.length > 0
+        ? field.show_ifs
+        : field.show_if?.field_id
+          ? [field.show_if]
+          : [];
+
+      if (conditions.length === 0) return true;
+
+      return conditions.some(cond => {
+        if (!cond.field_id) return true;
+        const actualValue = String(previewAnswers[cond.field_id] ?? "").toLowerCase().trim();
+        const expectedValue = String(cond.value ?? "").toLowerCase().trim();
+        if (!expectedValue) return Boolean(actualValue);
+        if (cond.operator === "contains") return actualValue.includes(expectedValue);
+        if (cond.operator === "not_equals") return actualValue !== expectedValue;
+        return actualValue === expectedValue;
+      });
+    });
+  }, [formFields, previewAnswers]);
+
+  useEffect(() => {
+    if (activeTab === "preview") {
+      setActivePreviewFieldIndex(0);
+      setPreviewAnswers({});
+    }
+  }, [activeTab]);
+
+  const handlePreviewNext = () => {
+    const currentIdx = Math.min(activePreviewFieldIndex, Math.max(0, visiblePreviewFields.length - 1));
+    const field = visiblePreviewFields[currentIdx];
+    if (!field) return;
+    
+    if (field.required) {
+      const val = previewAnswers[field.id];
+      if (val === undefined || val === null || String(val).trim() === "") {
+        alert(`Il campo "${field.label || `Domanda ${currentIdx + 1}`}" è obbligatorio.`);
+        return;
+      }
+    }
+    
+    if (activePreviewFieldIndex < visiblePreviewFields.length - 1) {
+      setActivePreviewFieldIndex(activePreviewFieldIndex + 1);
+    }
+  };
 
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [svgLines, setSvgLines] = useState<Array<{ d: string; fromId: string; toId: string }>>([]);
+  const [svgLines, setSvgLines] = useState<Array<{ 
+    d: string; 
+    fromId: string; 
+    toId: string;
+    mx: number;
+    my: number;
+    targetFieldId: string;
+    conditionIndex?: number;
+  }>>([]);
+
+  const [canvasDimensions, setCanvasDimensions] = useState({ width: 2000, height: 2000 });
 
   const selectedFieldIndex = formFields.findIndex(f => f.id === selectedFieldId);
   const selectedField = selectedFieldIndex !== -1 ? formFields[selectedFieldIndex] : null;
@@ -96,7 +227,6 @@ export function FormBuilder({
     setNotifyUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  // Add / Remove fields
   const addField = () => {
     const newId = `field_${Date.now()}`;
     const newField: FormField = {
@@ -107,6 +237,41 @@ export function FormBuilder({
     };
     setFormFields([...formFields, newField]);
     setSelectedFieldId(newId);
+  };
+
+  const addTemplateField = (label: string, type: FormField["type"], options?: string[]) => {
+    if (!contextMenu) return;
+    const newId = `field_${Date.now()}`;
+    const newField: FormField = {
+      id: newId,
+      label,
+      type,
+      required: true,
+      options,
+      position: {
+        x: Math.round(contextMenu.canvasX),
+        y: Math.round(contextMenu.canvasY)
+      }
+    };
+    setFormFields(prev => [...prev, newField]);
+    setSelectedFieldId(newId);
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const canvasX = mouseX + canvasRef.current.scrollLeft;
+    const canvasY = mouseY + canvasRef.current.scrollTop;
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      canvasX,
+      canvasY
+    });
   };
 
   const removeField = (id: string) => {
@@ -126,11 +291,22 @@ export function FormBuilder({
   };
 
   // Update fields helper
+  const updateFieldProperties = (updates: Partial<FormField>) => {
+    if (selectedFieldIndex === -1) return;
+    setFormFields((prevFields) => {
+      const updated = [...prevFields];
+      updated[selectedFieldIndex] = { ...updated[selectedFieldIndex], ...updates };
+      return updated;
+    });
+  };
+
   const updateFieldProperty = (key: keyof FormField, value: any) => {
     if (selectedFieldIndex === -1) return;
-    const updated = [...formFields];
-    updated[selectedFieldIndex] = { ...updated[selectedFieldIndex], [key]: value };
-    setFormFields(updated);
+    setFormFields((prevFields) => {
+      const updated = [...prevFields];
+      updated[selectedFieldIndex] = { ...updated[selectedFieldIndex], [key]: value };
+      return updated;
+    });
   };
 
   const moveFieldUp = (index: number) => {
@@ -151,39 +327,218 @@ export function FormBuilder({
     setFormFields(updated);
   };
 
+  const handleMouseDown = (e: React.MouseEvent, fieldId: string, index: number) => {
+    // Only drag with left mouse click
+    if (e.button !== 0) return;
+    
+    // Don't drag if clicking buttons, selects, inputs, or handles
+    const target = e.target as HTMLElement;
+    if (target.closest("button") || target.closest("input") || target.closest("select") || target.closest("textarea")) {
+      return;
+    }
+
+    e.preventDefault();
+    setSelectedFieldId(fieldId);
+
+    const initialX = formFields[index].position?.x ?? (280 + index * 320);
+    const initialY = formFields[index].position?.y ?? 200;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+
+      // Update positions
+      setFormFields(prev => {
+        return prev.map(f => {
+          if (f.id === fieldId) {
+            return {
+              ...f,
+              position: {
+                x: Math.max(20, initialX + dx),
+                y: Math.max(20, initialY + dy)
+              }
+            };
+          }
+          return f;
+        });
+      });
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
+
   // Connect visual nodes layout (SVG calculation)
   const calculateLines = () => {
     if (!canvasRef.current || activeTab !== "builder") return;
 
-    const containerRect = canvasRef.current.getBoundingClientRect();
-    const newLines: Array<{ d: string; fromId: string; toId: string }> = [];
+    const container = canvasRef.current;
+    const newLines: Array<{ 
+      d: string; 
+      fromId: string; 
+      toId: string;
+      mx: number;
+      my: number;
+      targetFieldId: string;
+      conditionIndex?: number;
+    }> = [];
 
+    // Helper to get coordinates relative to the canvas viewport container
+    const getRelativeCoords = (element: HTMLElement, containerEl: HTMLElement) => {
+      let x = 0;
+      let y = 0;
+      let el: HTMLElement | null = element;
+      while (el && el !== containerEl) {
+        x += el.offsetLeft;
+        y += el.offsetTop;
+        el = el.offsetParent as HTMLElement | null;
+      }
+      return { x, y };
+    };
+
+    // 1. Connection from Start node to Q1
+    const startEl = document.getElementById("node-start");
+    const firstField = formFields[0];
+    if (startEl && firstField) {
+      const firstEl = document.getElementById(`node-${firstField.id}`);
+      if (firstEl) {
+        const startCoords = getRelativeCoords(startEl, container);
+        const firstCoords = getRelativeCoords(firstEl, container);
+        const x1 = startCoords.x + startEl.offsetWidth;
+        const y1 = startCoords.y + (startEl.offsetHeight / 2);
+        const x2 = firstCoords.x;
+        const y2 = firstCoords.y + (firstEl.offsetHeight / 2);
+        const controlOffset = Math.max(Math.abs(x2 - x1) * 0.5, 40);
+        const d = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
+        
+        newLines.push({ 
+          d, 
+          fromId: "start", 
+          toId: firstField.id, 
+          mx: (x1 + x2) / 2, 
+          my: (y1 + y2) / 2, 
+          targetFieldId: "" 
+        });
+      }
+    }
+
+    // 2. Connection between sequential nodes and merge paths
+    for (let i = 1; i < formFields.length; i++) {
+      const currField = formFields[i];
+      const hasCondition = currField.show_if || (currField.show_ifs && currField.show_ifs.length > 0);
+      if (!hasCondition) {
+        // Draw lines from preceding questions that merge into this always-visible question
+        // We look at the immediate predecessor, and scan backwards through consecutive conditional questions
+        let k = i - 1;
+        while (k >= 0) {
+          const sourceField = formFields[k];
+          const sourceHasCondition = sourceField.show_if || (sourceField.show_ifs && sourceField.show_ifs.length > 0);
+          
+          // We only draw the line from the non-conditional field if it is the immediate predecessor (k === i - 1)
+          const isImmediate = k === i - 1;
+          const shouldDraw = sourceHasCondition || isImmediate;
+          
+          if (shouldDraw) {
+            const sourceEl = document.getElementById(`node-${sourceField.id}`);
+            const currEl = document.getElementById(`node-${currField.id}`);
+            if (sourceEl && currEl) {
+              const sourceCoords = getRelativeCoords(sourceEl, container);
+              const currCoords = getRelativeCoords(currEl, container);
+              const x1 = sourceCoords.x + sourceEl.offsetWidth;
+              const y1 = sourceCoords.y + (sourceEl.offsetHeight / 2);
+              const x2 = currCoords.x;
+              const y2 = currCoords.y + (currEl.offsetHeight / 2);
+              const controlOffset = Math.max(Math.abs(x2 - x1) * 0.5, 40);
+              const d = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
+              
+              const exists = newLines.some(l => l.fromId === sourceField.id && l.toId === currField.id);
+              if (!exists) {
+                newLines.push({ 
+                  d, 
+                  fromId: sourceField.id, 
+                  toId: currField.id, 
+                  mx: (x1 + x2) / 2, 
+                  my: (y1 + y2) / 2, 
+                  targetFieldId: "" 
+                });
+              }
+            }
+          }
+          
+          // If the source question is NOT conditional, we stop scanning backwards
+          if (!sourceHasCondition) {
+            break;
+          }
+          k--;
+        }
+      }
+    }
+
+    // 3. Connection for custom conditional lines (show_ifs / show_if)
     formFields.forEach((field) => {
-      if (field.show_if?.field_id) {
-        const sourceEl = document.getElementById(`node-${field.show_if.field_id}`);
+      const conditions = field.show_ifs && field.show_ifs.length > 0 
+        ? field.show_ifs 
+        : field.show_if?.field_id 
+          ? [field.show_if] 
+          : [];
+
+      conditions.forEach((cond, condIdx) => {
+        if (!cond.field_id) return;
+        const sourceEl = document.getElementById(`node-${cond.field_id}`);
         const targetEl = document.getElementById(`node-${field.id}`);
 
         if (sourceEl && targetEl) {
-          const sourceRect = sourceEl.getBoundingClientRect();
-          const targetRect = targetEl.getBoundingClientRect();
+          const sourceCoords = getRelativeCoords(sourceEl, container);
+          const targetCoords = getRelativeCoords(targetEl, container);
 
           // Connect from right center of source node to left center of target node
-          const x1 = sourceRect.right - containerRect.left;
-          const y1 = sourceRect.top + (sourceRect.height / 2) - containerRect.top;
+          const x1 = sourceCoords.x + sourceEl.offsetWidth;
+          const y1 = sourceCoords.y + (sourceEl.offsetHeight / 2);
 
-          const x2 = targetRect.left - containerRect.left;
-          const y2 = targetRect.top + (targetRect.height / 2) - containerRect.top;
+          const x2 = targetCoords.x;
+          const y2 = targetCoords.y + (targetEl.offsetHeight / 2);
 
           // Draw a smooth bezier curve
           const controlOffset = Math.max(Math.abs(x2 - x1) * 0.5, 40);
           const d = `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
 
-          newLines.push({ d, fromId: field.show_if.field_id, toId: field.id });
+          // Midpoint of curve
+          const mx = (x1 + x2) / 2;
+          const my = (y1 + y2) / 2;
+
+          newLines.push({ 
+            d, 
+            fromId: cond.field_id, 
+            toId: field.id, 
+            mx, 
+            my, 
+            targetFieldId: field.id,
+            conditionIndex: condIdx
+          });
         }
-      }
+      });
     });
 
     setSvgLines(newLines);
+
+    // Calculate required SVG canvas size based on node positions to cover the entire scrollable area
+    let maxX = 2000;
+    let maxY = 2000;
+    formFields.forEach((field, index) => {
+      const posX = field.position?.x ?? (280 + index * 320);
+      const posY = field.position?.y ?? 220;
+      if (posX + 600 > maxX) maxX = posX + 600;
+      if (posY + 400 > maxY) maxY = posY + 400;
+    });
+    setCanvasDimensions({ width: maxX, height: maxY });
   };
 
   useLayoutEffect(() => {
@@ -254,14 +609,23 @@ export function FormBuilder({
 
   // Preview form logical validation
   const isFieldVisibleInPreview = (field: FormField) => {
-    if (!field.show_if?.field_id) return true;
-    const actualValue = String(previewAnswers[field.show_if.field_id] ?? "").toLowerCase().trim();
-    const expectedValue = String(field.show_if.value ?? "").toLowerCase().trim();
-    
-    if (!expectedValue) return Boolean(actualValue);
-    if (field.show_if.operator === "contains") return actualValue.includes(expectedValue);
-    if (field.show_if.operator === "not_equals") return actualValue !== expectedValue;
-    return actualValue === expectedValue;
+    const conditions = field.show_ifs && field.show_ifs.length > 0
+      ? field.show_ifs
+      : field.show_if?.field_id
+        ? [field.show_if]
+        : [];
+
+    if (conditions.length === 0) return true;
+
+    return conditions.some(cond => {
+      if (!cond.field_id) return true;
+      const actualValue = String(previewAnswers[cond.field_id] ?? "").toLowerCase().trim();
+      const expectedValue = String(cond.value ?? "").toLowerCase().trim();
+      if (!expectedValue) return Boolean(actualValue);
+      if (cond.operator === "contains") return actualValue.includes(expectedValue);
+      if (cond.operator === "not_equals") return actualValue !== expectedValue;
+      return actualValue === expectedValue;
+    });
   };
 
   return (
@@ -342,41 +706,135 @@ export function FormBuilder({
             {/* Visual Canvas Area (Left) */}
             <div 
               ref={canvasRef}
+              onContextMenu={handleContextMenu}
+              onClick={(e) => {
+                // Only deselect if clicking directly on the canvas background
+                if (e.target === canvasRef.current || (e.target as HTMLElement).id === "canvas-grid") {
+                  setSelectedFieldId(null);
+                }
+              }}
+              id="canvas-grid"
               className="flex-1 overflow-auto bg-[#111017] p-8 relative min-w-0"
               style={{
                 backgroundImage: "radial-gradient(rgba(255, 255, 255, 0.08) 1.2px, transparent 1.2px)",
                 backgroundSize: "24px 24px"
               }}
             >
+              {/* Context Menu Tutorial Hint */}
+              <div className="absolute top-4 right-4 z-10 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-[10px] text-white/50 flex items-center gap-1.5 pointer-events-none select-none">
+                <Info className="size-3.5 text-[#A74758]" />
+                <span>Tasto destro per inserimento rapido</span>
+              </div>
+
+              {/* Connection Mode Instruction Banner */}
+              {connectingTargetId && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-neutral-900 border border-[#A74758] rounded-2xl px-5 py-3.5 shadow-2xl flex items-center gap-4 animate-in slide-in-from-top-4 duration-300">
+                  <div className="size-2 rounded-full bg-[#A74758] animate-ping" />
+                  <span className="text-xs font-bold text-white">
+                    Seleziona la domanda d'origine per collegare Q{formFields.findIndex(f => f.id === connectingTargetId) + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setConnectingTargetId(null)}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition"
+                  >
+                    Annulla
+                  </button>
+                </div>
+              )}
+
               {/* Connection overlay lines */}
-              <svg className="absolute inset-0 size-full pointer-events-none z-0">
+              <svg 
+                className="absolute inset-0 pointer-events-none z-0"
+                style={{
+                  width: `${canvasDimensions.width}px`,
+                  height: `${canvasDimensions.height}px`,
+                }}
+              >
                 <defs>
                   <linearGradient id="glow-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#A74758" stopOpacity="0.4" />
-                    <stop offset="50%" stopColor="#ff8bb2" stopOpacity="0.8" />
-                    <stop offset="100%" stopColor="#A74758" stopOpacity="0.4" />
+                    <stop offset="0%" stopColor="#FF1493" stopOpacity="0.8" />
+                    <stop offset="50%" stopColor="#FF69B4" stopOpacity="1.0" />
+                    <stop offset="100%" stopColor="#FF1493" stopOpacity="0.8" />
                   </linearGradient>
                   <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feGaussianBlur stdDeviation="4" result="blur" />
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                   </filter>
                 </defs>
-                {svgLines.map((line, idx) => (
-                  <path
-                    key={idx}
-                    d={line.d}
-                    fill="none"
-                    stroke="url(#glow-grad)"
-                    strokeWidth="3.5"
-                    filter="url(#glow)"
-                    strokeDasharray="4 2"
-                    className="animate-[dash_30s_linear_infinite]"
-                    style={{
-                      strokeDashoffset: 100,
-                    }}
-                  />
-                ))}
+                {svgLines.map((line, idx) => {
+                  const isConditional = line.targetFieldId !== "";
+                  return (
+                    <React.Fragment key={idx}>
+                      {/* Black shadow path under line to make it clearly visible */}
+                      <path
+                        d={line.d}
+                        fill="none"
+                        stroke="#000000"
+                        strokeWidth="7.5"
+                        strokeOpacity="0.65"
+                      />
+                      {isConditional ? (
+                        <path
+                          d={line.d}
+                          fill="none"
+                          stroke="url(#glow-grad)"
+                          strokeWidth="5"
+                          filter="url(#glow)"
+                          strokeDasharray="4 2"
+                          className="animate-[dash_30s_linear_infinite]"
+                          style={{
+                            strokeDashoffset: 100,
+                          }}
+                        />
+                      ) : (
+                        <path
+                          d={line.d}
+                          fill="none"
+                          stroke="rgba(255, 255, 255, 0.35)"
+                          strokeWidth="2.5"
+                          strokeDasharray="5 5"
+                        />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </svg>
+
+              {/* Disconnect buttons overlay */}
+              {!connectingTargetId && svgLines.map((line, idx) => {
+                if (!line.targetFieldId) return null;
+                return (
+                  <button
+                    key={`del-btn-${idx}`}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const updatedFields = formFields.map(f => {
+                        if (f.id === line.targetFieldId) {
+                          const currentShowIfs = f.show_ifs || (f.show_if ? [f.show_if] : []);
+                          const updatedShowIfs = currentShowIfs.filter((_, condIdx) => condIdx !== line.conditionIndex);
+                          return {
+                            ...f,
+                            show_if: updatedShowIfs[0] || null,
+                            show_ifs: updatedShowIfs
+                          };
+                        }
+                        return f;
+                      });
+                      setFormFields(updatedFields);
+                    }}
+                    className="absolute z-30 size-6 rounded-full bg-red-600 border border-red-500 text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                    style={{
+                      left: line.mx - 12,
+                      top: line.my - 12,
+                    }}
+                    title="Rimuovi collegamento logico"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                );
+              })}
 
               <style jsx global>{`
                 @keyframes dash {
@@ -386,125 +844,372 @@ export function FormBuilder({
                 }
               `}</style>
 
-              <div className="relative z-10 flex flex-col items-center gap-16 min-w-max py-10 px-6">
-                
-                {/* Start node */}
-                <div className="w-48 rounded-[20px] bg-white/5 border border-white/10 p-3 text-center text-white/50 text-xs font-bold tracking-wider uppercase select-none">
-                  Avvio Formulario
-                </div>
+              {/* Start node */}
+              <div 
+                id="node-start"
+                className="absolute rounded-[20px] bg-white/5 border border-white/10 p-3 text-center text-white/50 text-xs font-bold tracking-wider uppercase select-none w-48"
+                style={{
+                  left: "40px",
+                  top: "220px",
+                }}
+              >
+                Avvio Formulario
+              </div>
 
-                {/* Nodes Stack */}
-                <div className="flex flex-row items-center gap-24">
-                  {formFields.map((field, index) => {
-                    const isSelected = field.id === selectedFieldId;
-                    const isConditional = Boolean(field.show_if?.field_id);
-                    const sourceIndex = formFields.findIndex(f => f.id === field.show_if?.field_id);
+              {/* Nodes */}
+              {formFields.map((field, index) => {
+                const isSelected = field.id === selectedFieldId;
+                const isConditional = Boolean(field.show_if?.field_id) || (field.show_ifs && field.show_ifs.length > 0);
+                const sourceIndex = formFields.findIndex(f => f.id === field.show_if?.field_id);
 
-                    return (
-                      <div key={field.id} className="flex items-center">
-                        <div
-                          id={`node-${field.id}`}
-                          onClick={() => setSelectedFieldId(field.id)}
+                // Connection logic derived variables
+                const isConnectingMode = connectingTargetId !== null;
+                const targetIndex = isConnectingMode ? formFields.findIndex(f => f.id === connectingTargetId) : -1;
+                const isValidSource = isConnectingMode && index < targetIndex;
+                const isSelfOrAfterTarget = isConnectingMode && index >= targetIndex;
+
+                const posX = field.position?.x ?? (280 + index * 320);
+                const posY = field.position?.y ?? 220;
+
+                return (
+                  <div 
+                    key={field.id} 
+                    id={`node-${field.id}`}
+                    onMouseDown={(e) => handleMouseDown(e, field.id, index)}
+                    className="absolute cursor-grab active:cursor-grabbing transition-shadow duration-150"
+                    style={{
+                      left: `${posX}px`,
+                      top: `${posY}px`,
+                      zIndex: isSelected ? 30 : 10,
+                    }}
+                  >
+                    <div className="flex items-center relative group/node">
+                      {/* LEFT INPUT CONNECTOR HANDLE (index > 0) */}
+                      {index > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConnectingTargetId(field.id);
+                          }}
                           className={cn(
-                            "w-64 rounded-[24px] border p-4 shadow-xl text-white cursor-pointer select-none transition-all duration-300",
-                            isSelected 
-                              ? "bg-slate-900 border-[#A74758] shadow-[#A74758]/10 ring-2 ring-[#A74758]/20 scale-[1.03]" 
-                              : isConditional 
-                                ? "bg-[#1E1A22] border-[#A74758]/35 hover:border-[#A74758]/70"
-                                : "bg-[#1B1A20] border-white/10 hover:border-white/30"
+                            "absolute -left-3 top-1/2 -translate-y-1/2 size-6 rounded-full border bg-neutral-950 flex items-center justify-center cursor-pointer transition-all z-20 hover:scale-110 shadow-lg",
+                            isConditional 
+                              ? "border-[#FF1493] text-[#FF1493] hover:border-red-500 hover:text-red-500" 
+                              : "border-white/20 text-white/30 hover:border-white/60 hover:text-white"
                           )}
+                          title={isConditional ? "Modifica / Scollega logica" : "Collega a una domanda precedente"}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="rounded-lg bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/70">
-                              Q{index + 1}
-                            </span>
-                            <span className={cn(
-                              "rounded-lg px-2 py-0.5 text-[9px] font-bold",
-                              isConditional ? "bg-[#A74758]/20 text-[#ff8bb2]" : "bg-white/10 text-white/40"
-                            )}>
-                              {isConditional ? `Da Q${sourceIndex + 1}` : "Sempre visibile"}
+                          <div className={cn("size-2.5 rounded-full transition-colors", isConditional ? "bg-[#FF1493] animate-pulse" : "bg-white/20")} />
+                        </button>
+                      )}
+
+                      {/* RIGHT OUTPUT CONNECTOR HANDLE */}
+                      <div 
+                        className="absolute -right-3 top-1/2 -translate-y-1/2 size-6 rounded-full border border-white/20 bg-neutral-950 flex items-center justify-center z-20 shadow-lg pointer-events-none"
+                        title="Origine per condizioni successive"
+                      >
+                        <div className="size-2.5 rounded-full bg-white/40" />
+                      </div>
+
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isConnectingMode) {
+                            if (isValidSource) {
+                              const updatedFields = formFields.map(f => {
+                                if (f.id === connectingTargetId) {
+                                  const newCond = {
+                                    field_id: field.id,
+                                    operator: "equals" as const,
+                                    value: field.options?.[0] || ""
+                                  };
+                                  const currentShowIfs = f.show_ifs || (f.show_if ? [f.show_if] : []);
+                                  const alreadyExists = currentShowIfs.some(c => c.field_id === field.id);
+                                  const updatedShowIfs = alreadyExists 
+                                    ? currentShowIfs 
+                                    : [...currentShowIfs, newCond];
+                                  
+                                  return {
+                                    ...f,
+                                    show_if: updatedShowIfs[0] || null,
+                                    show_ifs: updatedShowIfs
+                                  };
+                                }
+                                return f;
+                              });
+                              setFormFields(updatedFields);
+                              setSelectedFieldId(connectingTargetId);
+                              setConnectingTargetId(null);
+                            }
+                          } else {
+                            setSelectedFieldId(field.id);
+                          }
+                        }}
+                        className={cn(
+                          "w-64 rounded-[24px] border p-4 shadow-xl text-white cursor-pointer select-none transition-all duration-300 relative",
+                          isSelected 
+                            ? "bg-slate-900 border-[#FF1493] shadow-[#FF1493]/15 ring-2 ring-[#FF1493]/35 scale-[1.03]" 
+                            : isConditional 
+                              ? "bg-[#1E1A22] border-[#FF1493]/40 hover:border-[#FF1493]/70"
+                              : "bg-[#1B1A20] border-white/10 hover:border-white/30",
+                          isValidSource && "border-emerald-500/60 bg-[#12221A] ring-2 ring-emerald-500/20 hover:scale-[1.03] hover:border-emerald-400",
+                          isSelfOrAfterTarget && "opacity-30 pointer-events-none"
+                        )}
+                      >
+                        {/* Connection Help Overlay */}
+                        {isValidSource && (
+                          <div className="absolute inset-0 bg-emerald-950/20 rounded-[24px] flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/40 z-10">
+                            <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400 bg-neutral-900/90 px-3 py-1.5 rounded-xl border border-emerald-500/30 shadow-md animate-bounce">
+                              Imposta origine
                             </span>
                           </div>
+                        )}
 
-                          <h4 className="mt-3 text-sm font-extrabold leading-tight line-clamp-2 min-h-[36px] text-white">
-                            {field.label || `Domanda ${index + 1}`}
-                          </h4>
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="rounded-lg bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/70">
+                            Q{index + 1}
+                          </span>
+                          <span className={cn(
+                            "rounded-lg px-2 py-0.5 text-[9px] font-bold",
+                            isConditional ? "bg-[#A74758]/20 text-[#ff8bb2]" : "bg-white/10 text-white/40"
+                          )}>
+                            {isConditional ? `Da Q${sourceIndex + 1}` : "Sempre visibile"}
+                          </span>
+                        </div>
 
-                          <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3 text-[10px] font-bold text-white/45">
-                            <span className="uppercase">{field.type}</span>
-                            <span>{field.required ? "Obbligatoria" : "Facoltativa"}</span>
-                          </div>
+                        <h4 className="mt-3 text-sm font-extrabold leading-tight line-clamp-2 min-h-[36px] text-white">
+                          {field.label || `Domanda ${index + 1}`}
+                        </h4>
 
-                          {/* Node action buttons inside canvas */}
-                          <div className="mt-4 flex items-center justify-end gap-1.5 border-t border-white/5 pt-3">
+                        <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3 text-[10px] font-bold text-white/45">
+                          <span className="uppercase">{field.type}</span>
+                          <span>{field.required ? "Obbligatoria" : "Facoltativa"}</span>
+                        </div>
+
+                        {/* Node action buttons inside canvas */}
+                        <div className="mt-4 flex items-center justify-end gap-1.5 border-t border-white/5 pt-3">
+                          {index > 0 && (
                             <button
                               type="button"
                               onClick={(e) => {
+                                e.stopPropagation();
+                                setConnectingTargetId(field.id);
+                              }}
+                              className={cn(
+                                "mr-auto px-2 py-0.5 rounded-lg text-[9px] font-bold transition flex items-center gap-1 shrink-0",
+                                isConditional 
+                                  ? "bg-[#FF1493]/20 text-[#FF1493] border border-[#FF1493]/35" 
+                                  : "bg-white/5 text-white/50 border border-white/5 hover:bg-white/10 hover:text-white"
+                              )}
+                              title={isConditional ? "Modifica Logica" : "Collega a un'altra domanda"}
+                            >
+                              <GitBranch className="size-3" />
+                              {isConditional ? "Logica" : "Collega"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
                                 e.stopPropagation();
                                 moveFieldUp(index);
-                              }}
-                              disabled={index === 0}
-                              className="p-1 text-white/40 hover:text-white disabled:opacity-20 transition"
-                              title="Sposta a sinistra/prima"
-                            >
-                              <ArrowUp className="-rotate-90 size-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
+                            }}
+                            disabled={index === 0}
+                            className="p-1 text-white/40 hover:text-white disabled:opacity-20 transition"
+                            title="Sposta prima (nella sequenza)"
+                          >
+                            <ArrowUp className="-rotate-90 size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
                                 e.stopPropagation();
                                 moveFieldDown(index);
-                              }}
-                              disabled={index === formFields.length - 1}
-                              className="p-1 text-white/40 hover:text-white disabled:opacity-20 transition"
-                              title="Sposta a destra/dopo"
-                            >
-                              <ArrowDown className="-rotate-90 size-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeField(field.id);
-                              }}
-                              disabled={formFields.length <= 1}
-                              className="p-1 text-red-400 hover:text-red-300 disabled:opacity-20 transition ml-2"
-                              title="Elimina domanda"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </div>
+                            }}
+                            disabled={index === formFields.length - 1}
+                            className="p-1 text-white/40 hover:text-white disabled:opacity-20 transition"
+                            title="Sposta dopo (nella sequenza)"
+                          >
+                            <ArrowDown className="-rotate-90 size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeField(field.id);
+                            }}
+                            disabled={formFields.length <= 1}
+                            className="p-1 text-red-400 hover:text-red-300 disabled:opacity-20 transition ml-2"
+                            title="Elimina domanda"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  </div>
+                );
+              })}
 
-                {/* Quick actions bar */}
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={addField}
-                    className="inline-flex h-11 items-center gap-2 rounded-full bg-paradise-softPink border border-paradise-pink/25 px-6 text-xs font-bold text-[#A74758] transition hover:scale-[1.02]"
-                  >
-                    <Plus className="size-4 text-[#A74758]" />
-                    Aggiungi Nuova Domanda
-                  </button>
-                </div>
-
+              {/* Quick actions bar */}
+              <div 
+                className="absolute flex gap-3 animate-in fade-in duration-300"
+                style={{
+                  left: `${280 + formFields.length * 320}px`,
+                  top: "270px"
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={addField}
+                  className="inline-flex h-11 items-center gap-2 rounded-full bg-paradise-softPink border border-paradise-pink/25 px-6 text-xs font-bold text-[#A74758] transition hover:scale-[1.02] shadow-lg"
+                >
+                  <Plus className="size-4 text-[#A74758]" />
+                  Aggiungi Domanda
+                </button>
               </div>
+              {/* Context menu overlay */}
+              {contextMenu && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-[100]" 
+                    onClick={() => setContextMenu(null)} 
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu(null);
+                    }}
+                  />
+                  <div 
+                    className="fixed z-[101] w-60 rounded-2xl bg-neutral-900 border border-white/10 shadow-2xl py-2 text-xs font-semibold text-white/95 animate-in fade-in zoom-in-95 duration-100"
+                    style={{
+                      top: `${contextMenu.y}px`,
+                      left: `${contextMenu.x}px`
+                    }}
+                  >
+                    <div className="px-3.5 py-1.5 text-[9px] font-bold text-[#F4A3C4] uppercase tracking-wider border-b border-white/5 mb-1.5">
+                      Inserimento Rapido
+                    </div>
+                    
+                    {/* Anagrafica */}
+                    <div className="px-3 py-1 text-[9px] text-white/30 font-bold uppercase tracking-wider">Anagrafica</div>
+                    <button
+                      type="button"
+                      onClick={() => addTemplateField("Nome Cliente", "text")}
+                      className="w-full text-left px-4 py-2 hover:bg-[#A74758]/20 hover:text-white transition flex items-center gap-2"
+                    >
+                      <span className="size-1.5 rounded-full bg-emerald-500" />
+                      Nome Cliente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addTemplateField("Cognome", "text")}
+                      className="w-full text-left px-4 py-2 hover:bg-[#A74758]/20 hover:text-white transition flex items-center gap-2"
+                    >
+                      <span className="size-1.5 rounded-full bg-emerald-500" />
+                      Cognome
+                    </button>
+
+                    {/* Contatti */}
+                    <div className="px-3 py-1 text-[9px] text-white/30 font-bold uppercase tracking-wider mt-1.5">Contatti</div>
+                    <button
+                      type="button"
+                      onClick={() => addTemplateField("Telefono", "text")}
+                      className="w-full text-left px-4 py-2 hover:bg-[#A74758]/20 hover:text-white transition flex items-center gap-2"
+                    >
+                      <span className="size-1.5 rounded-full bg-sky-500" />
+                      Numero Telefono
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addTemplateField("Email", "text")}
+                      className="w-full text-left px-4 py-2 hover:bg-[#A74758]/20 hover:text-white transition flex items-center gap-2"
+                    >
+                      <span className="size-1.5 rounded-full bg-sky-500" />
+                      Indirizzo Email
+                    </button>
+
+                    {/* Scelte e Tipi */}
+                    <div className="px-3 py-1 text-[9px] text-white/30 font-bold uppercase tracking-wider mt-1.5">Scelta</div>
+                    <button
+                      type="button"
+                      onClick={() => addTemplateField("Opzione", "select", ["Sì", "No"])}
+                      className="w-full text-left px-4 py-2 hover:bg-[#A74758]/20 hover:text-white transition flex items-center gap-2"
+                    >
+                      <span className="size-1.5 rounded-full bg-amber-500" />
+                      Scelta Singola (Sì/No)
+                    </button>
+
+                    {/* Generici */}
+                    <div className="px-3 py-1 text-[9px] text-white/30 font-bold uppercase tracking-wider mt-1.5">Altri Campi</div>
+                    <div className="grid grid-cols-2 gap-0.5 px-2 pb-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => addTemplateField("Testo Breve", "text")}
+                        className="text-left px-2 py-1 rounded-lg hover:bg-white/5 hover:text-white transition"
+                      >
+                        Testo Breve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addTemplateField("Testo Lungo", "textarea")}
+                        className="text-left px-2 py-1 rounded-lg hover:bg-white/5 hover:text-white transition"
+                      >
+                        Testo Lungo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addTemplateField("Importo (€)", "money")}
+                        className="text-left px-2 py-1 rounded-lg hover:bg-white/5 hover:text-white transition"
+                      >
+                        Importo (€)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addTemplateField("Data", "date")}
+                        className="text-left px-2 py-1 rounded-lg hover:bg-white/5 hover:text-white transition"
+                      >
+                        Data
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addTemplateField("Collaboratore", "worker")}
+                        className="text-left px-2 py-1 rounded-lg hover:bg-white/5 hover:text-white transition"
+                      >
+                        Collaboratore
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addTemplateField("File", "file")}
+                        className="text-left px-2 py-1 rounded-lg hover:bg-white/5 hover:text-white transition"
+                      >
+                        File/Allegato
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Question Inspector Panel (Right) */}
-            <div className="w-80 overflow-y-auto bg-white p-5 shrink-0 flex flex-col justify-between">
-              {selectedField ? (
+            {selectedFieldId && selectedField && (
+              <div className="w-80 overflow-y-auto bg-white p-5 shrink-0 flex flex-col justify-between border-l border-black/5 animate-in slide-in-from-right duration-200">
                 <div className="space-y-5">
                   <div className="flex items-center justify-between pb-3 border-b border-black/5">
                     <div>
                       <p className="text-[10px] font-bold text-black/35 uppercase tracking-wider">Proprietà Domanda</p>
                       <h4 className="text-sm font-bold text-black">Domanda Q{selectedFieldIndex + 1}</h4>
                     </div>
-                    <Badge tone="dark">{selectedField.id.slice(0, 8)}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge tone="dark">{selectedField.id.slice(0, 8)}</Badge>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFieldId(null)}
+                        className="p-1 rounded-lg text-black/40 hover:text-black hover:bg-black/5 transition"
+                        title="Chiudi pannello"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Text Label */}
@@ -539,12 +1244,16 @@ export function FormBuilder({
                       value={selectedField.type}
                       onChange={(e) => {
                         const newType = e.target.value as any;
-                        updateFieldProperty("type", newType);
-                        if (newType === "select") {
-                          updateFieldProperty("options", ["Sì", "No"]);
-                        } else {
-                          updateFieldProperty("options", undefined);
-                        }
+                        if (selectedFieldIndex === -1) return;
+                        setFormFields((prevFields) => {
+                          const updated = [...prevFields];
+                          updated[selectedFieldIndex] = {
+                            ...updated[selectedFieldIndex],
+                            type: newType,
+                            options: newType === "select" ? ["Sì", "No"] : undefined,
+                          };
+                          return updated;
+                        });
                       }}
                       className="mt-1.5 h-9 w-full rounded-xl border border-black/10 px-2 text-xs"
                     >
@@ -555,25 +1264,55 @@ export function FormBuilder({
                       <option value="money">Importo (€)</option>
                       <option value="date">Data</option>
                       <option value="worker">Collaboratore</option>
+                      <option value="worker_multi">Collaboratori multipli</option>
+                      <option value="checkbox">Check / fatto</option>
+                      <option value="pin">PIN Firma</option>
                       <option value="file">File (PDF/Foto)</option>
                     </Select>
                   </div>
 
                   {/* Select Options */}
                   {selectedField.type === "select" && (
-                    <div>
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-black/50 block">Opzioni a Scelta (Virgola)</label>
-                      <input
-                        type="text"
-                        required
-                        value={selectedField.options?.join(", ") || ""}
-                        onChange={(e) => updateFieldProperty(
-                          "options", 
-                          e.target.value.split(",").map(s => s.trim()).filter(Boolean)
-                        )}
-                        placeholder="Es. Sì, No, Forse"
-                        className="mt-1.5 h-9 w-full rounded-xl border border-black/10 px-3 text-xs outline-none focus:border-[#A74758]"
-                      />
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-black/50 block">Opzioni a Scelta</label>
+                      <div className="space-y-2">
+                        {(selectedField.options || []).map((option, optIdx) => (
+                          <div key={optIdx} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={option}
+                              onChange={(e) => {
+                                const newOpts = [...(selectedField.options || [])];
+                                newOpts[optIdx] = e.target.value;
+                                updateFieldProperty("options", newOpts);
+                              }}
+                              placeholder={`Opzione ${optIdx + 1}`}
+                              className="h-9 flex-1 rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#A74758]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newOpts = (selectedField.options || []).filter((_, idx) => idx !== optIdx);
+                                updateFieldProperty("options", newOpts);
+                              }}
+                              className="p-2 text-black/40 hover:text-[#A74758] hover:bg-black/5 rounded-lg transition animate-in fade-in duration-200"
+                              title="Rimuovi opzione"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newOpts = [...(selectedField.options || []), ""];
+                          updateFieldProperty("options", newOpts);
+                        }}
+                        className="w-full mt-2 inline-flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-black/10 hover:border-[#A74758]/55 bg-black/5 hover:bg-[#A74758]/5 py-2 text-xs font-semibold text-[#A74758] transition active:scale-[0.98]"
+                      >
+                        <Plus className="size-3.5" /> Aggiungi Opzione
+                      </button>
                     </div>
                   )}
 
@@ -591,7 +1330,7 @@ export function FormBuilder({
                     </label>
                   </div>
 
-                  {/* Conditional Logic (show_if) */}
+                  {/* Conditional Logic (show_if & show_ifs) */}
                   <div className="border-t border-black/5 pt-4 mt-2">
                     <h5 className="text-[11px] font-bold uppercase tracking-wider text-black/50 mb-2">Visibilità Condizionale</h5>
                     
@@ -601,117 +1340,201 @@ export function FormBuilder({
                       </p>
                     ) : (
                       <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            id="cond-toggle"
-                            type="checkbox"
-                            checked={Boolean(selectedField.show_if)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                // Default to previous question
-                                const prevField = formFields[selectedFieldIndex - 1];
-                                updateFieldProperty("show_if", {
-                                  field_id: prevField.id,
-                                  operator: "equals",
-                                  value: ""
-                                });
-                              } else {
-                                updateFieldProperty("show_if", null);
-                              }
-                            }}
-                            className="size-4 rounded border-black/10 text-[#A74758] focus:ring-[#A74758]"
-                          />
-                          <label htmlFor="cond-toggle" className="text-xs font-semibold cursor-pointer text-black/80">
-                            Imposta condizioni
-                          </label>
-                        </div>
+                        {(() => {
+                          const currentShowIfs = selectedField.show_ifs || (selectedField.show_if ? [selectedField.show_if] : []);
+                          const hasConditions = currentShowIfs.length > 0;
 
-                        {selectedField.show_if && (
-                          <div className="space-y-3 bg-[#FBF7F9] p-3 rounded-2xl border border-black/5">
-                            {/* Source Question Select */}
-                            <div>
-                              <label className="text-[9px] font-bold uppercase text-black/45 block mb-1">Mostra se risponde a</label>
-                              <Select
-                                value={selectedField.show_if.field_id}
-                                onChange={(e) => {
-                                  const updatedCond = { ...selectedField.show_if!, field_id: e.target.value, value: "" };
-                                  updateFieldProperty("show_if", updatedCond);
-                                }}
-                                className="h-8.5 w-full rounded-lg border border-black/10 px-2 text-xs"
-                              >
-                                {formFields.slice(0, selectedFieldIndex).map((f, i) => (
-                                  <option key={f.id} value={f.id}>Q{i + 1} - {f.label}</option>
-                                ))}
-                              </Select>
-                            </div>
-
-                            {/* Operator */}
-                            <div>
-                              <label className="text-[9px] font-bold uppercase text-black/45 block mb-1">Logica</label>
-                              <Select
-                                value={selectedField.show_if.operator}
-                                onChange={(e) => {
-                                  const updatedCond = { ...selectedField.show_if!, operator: e.target.value as any };
-                                  updateFieldProperty("show_if", updatedCond);
-                                }}
-                                className="h-8.5 w-full rounded-lg border border-black/10 px-2 text-xs"
-                              >
-                                <option value="equals">è uguale a</option>
-                                <option value="not_equals">è diverso da</option>
-                                <option value="contains">contiene</option>
-                              </Select>
-                            </div>
-
-                            {/* Expected Value */}
-                            <div>
-                              <label className="text-[9px] font-bold uppercase text-black/45 block mb-1">Valore della risposta</label>
-                              {(() => {
-                                const sourceField = formFields.find(f => f.id === selectedField.show_if?.field_id);
-                                if (sourceField?.type === "select" && sourceField.options?.length) {
-                                  return (
-                                    <Select
-                                      value={selectedField.show_if.value}
-                                      onChange={(e) => {
-                                        const updatedCond = { ...selectedField.show_if!, value: e.target.value };
-                                        updateFieldProperty("show_if", updatedCond);
-                                      }}
-                                      className="h-8.5 w-full rounded-lg border border-black/10 px-2 text-xs"
-                                    >
-                                      <option value="">Qualsiasi opzione</option>
-                                      {sourceField.options.map(o => (
-                                        <option key={o} value={o}>{o}</option>
-                                      ))}
-                                    </Select>
-                                  );
-                                }
-                                return (
+                          return (
+                            <>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
                                   <input
-                                    type="text"
-                                    value={selectedField.show_if.value}
+                                    id="cond-toggle"
+                                    type="checkbox"
+                                    checked={hasConditions}
                                     onChange={(e) => {
-                                      const updatedCond = { ...selectedField.show_if!, value: e.target.value };
-                                      updateFieldProperty("show_if", updatedCond);
+                                      if (e.target.checked) {
+                                        const prevField = formFields[selectedFieldIndex - 1];
+                                        const defaultCond = {
+                                          field_id: prevField.id,
+                                          operator: "equals" as const,
+                                          value: ""
+                                        };
+                                        updateFieldProperties({
+                                          show_if: defaultCond,
+                                          show_ifs: [defaultCond]
+                                        });
+                                      } else {
+                                        updateFieldProperties({
+                                          show_if: null,
+                                          show_ifs: []
+                                        });
+                                      }
                                     }}
-                                    placeholder="Lascia vuoto per qualsiasi valore"
-                                    className="h-8.5 w-full rounded-lg border border-black/10 px-2.5 text-xs outline-none focus:border-[#A74758]"
+                                    className="size-4 rounded border-black/10 text-[#FF1493] focus:ring-[#FF1493]"
                                   />
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        )}
+                                  <label htmlFor="cond-toggle" className="text-xs font-semibold cursor-pointer text-black/80">
+                                    Attiva logica
+                                  </label>
+                                </div>
+
+                                {hasConditions && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const prevField = formFields[selectedFieldIndex - 1];
+                                      const newCond = {
+                                        field_id: prevField.id,
+                                        operator: "equals" as const,
+                                        value: ""
+                                      };
+                                      const updatedList = [...currentShowIfs, newCond];
+                                      updateFieldProperties({
+                                        show_if: updatedList[0],
+                                        show_ifs: updatedList
+                                      });
+                                    }}
+                                    className="text-[10px] font-bold text-[#FF1493] hover:text-[#FF1493]/80 flex items-center gap-1 transition"
+                                  >
+                                    + Aggiungi
+                                  </button>
+                                )}
+                              </div>
+
+                              {hasConditions && (
+                                <div className="space-y-4">
+                                  {currentShowIfs.map((cond, condIdx) => {
+                                    const sourceField = formFields.find(f => f.id === cond.field_id);
+                                    return (
+                                      <div key={condIdx} className="space-y-3 bg-[#FBF7F9] p-3 rounded-2xl border border-[#FF1493]/15 relative">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const updatedList = currentShowIfs.filter((_, idx) => idx !== condIdx);
+                                            updateFieldProperties({
+                                              show_if: updatedList[0] || null,
+                                              show_ifs: updatedList
+                                            });
+                                          }}
+                                          className="absolute top-2 right-2 text-black/35 hover:text-red-500 transition"
+                                          title="Rimuovi condizione"
+                                        >
+                                          <X className="size-3.5" />
+                                        </button>
+
+                                        {/* Source Question Select */}
+                                        <div className="pr-4">
+                                          <label className="text-[9px] font-bold uppercase text-black/45 block mb-1">Mostra se risponde a</label>
+                                          <Select
+                                            value={cond.field_id}
+                                            onChange={(e) => {
+                                              const updatedList = currentShowIfs.map((c, idx) => {
+                                                if (idx === condIdx) {
+                                                  return { ...c, field_id: e.target.value, value: "" };
+                                                }
+                                                return c;
+                                              });
+                                              updateFieldProperties({
+                                                show_if: updatedList[0],
+                                                show_ifs: updatedList
+                                              });
+                                            }}
+                                            className="h-8 w-full rounded-lg border border-black/10 px-2 text-[11px]"
+                                          >
+                                            {formFields.slice(0, selectedFieldIndex).map((f, i) => (
+                                              <option key={f.id} value={f.id}>Q{i + 1} - {f.label}</option>
+                                            ))}
+                                          </Select>
+                                        </div>
+
+                                        {/* Operator */}
+                                        <div>
+                                          <label className="text-[9px] font-bold uppercase text-black/45 block mb-1">Logica</label>
+                                          <Select
+                                            value={cond.operator}
+                                            onChange={(e) => {
+                                              const updatedList = currentShowIfs.map((c, idx) => {
+                                                if (idx === condIdx) {
+                                                  return { ...c, operator: e.target.value as any };
+                                                }
+                                                return c;
+                                              });
+                                              updateFieldProperties({
+                                                show_if: updatedList[0],
+                                                show_ifs: updatedList
+                                              });
+                                            }}
+                                            className="h-8 w-full rounded-lg border border-black/10 px-2 text-[11px]"
+                                          >
+                                            <option value="equals">è uguale a</option>
+                                            <option value="not_equals">è diverso da</option>
+                                            <option value="contains">contiene</option>
+                                          </Select>
+                                        </div>
+
+                                        {/* Expected Value */}
+                                        <div>
+                                          <label className="text-[9px] font-bold uppercase text-black/45 block mb-1">Valore della risposta</label>
+                                          {(() => {
+                                            if (sourceField?.type === "select" && sourceField.options?.length) {
+                                              return (
+                                                <Select
+                                                  value={cond.value}
+                                                  onChange={(e) => {
+                                                    const updatedList = currentShowIfs.map((c, idx) => {
+                                                      if (idx === condIdx) {
+                                                        return { ...c, value: e.target.value };
+                                                      }
+                                                      return c;
+                                                    });
+                                                    updateFieldProperties({
+                                                      show_if: updatedList[0],
+                                                      show_ifs: updatedList
+                                                    });
+                                                  }}
+                                                  className="h-8 w-full rounded-lg border border-black/10 px-2 text-[11px]"
+                                                >
+                                                  <option value="">Qualsiasi opzione</option>
+                                                  {sourceField.options.map(o => (
+                                                    <option key={o} value={o}>{o}</option>
+                                                  ))}
+                                                </Select>
+                                              );
+                                            }
+                                            return (
+                                              <input
+                                                type="text"
+                                                value={cond.value}
+                                                onChange={(e) => {
+                                                  const updatedList = currentShowIfs.map((c, idx) => {
+                                                    if (idx === condIdx) {
+                                                      return { ...c, value: e.target.value };
+                                                    }
+                                                    return c;
+                                                  });
+                                                  updateFieldProperties({
+                                                    show_if: updatedList[0],
+                                                    show_ifs: updatedList
+                                                  });
+                                                }}
+                                                placeholder="Lascia vuoto per qualsiasi valore"
+                                                className="h-8 w-full rounded-lg border border-black/10 px-2 text-[11px] outline-none focus:border-[#FF1493]"
+                                              />
+                                            );
+                                          })()}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
                 </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center text-black/40">
-                  <Info className="size-8 text-black/20 mb-2" />
-                  <p className="font-semibold text-xs">Nessuna domanda selezionata</p>
-                  <p className="text-[10px] mt-0.5">Clicca su un blocco domanda per regolarne le impostazioni.</p>
-                </div>
-              )}
-
               {/* Bottom stats summary */}
               <div className="border-t border-black/5 pt-4 mt-4">
                 <div className="flex items-center justify-between text-xs font-semibold text-black/50">
@@ -724,6 +1547,7 @@ export function FormBuilder({
                 </div>
               </div>
             </div>
+          )}
           </div>
         )}
 
@@ -989,112 +1813,297 @@ export function FormBuilder({
                 )}
               </div>
 
+              {/* Progress Bar (no "Step" text) */}
+              {visiblePreviewFields.length > 0 && (
+                <div className="w-full bg-white/5 h-1 mb-5 relative overflow-hidden rounded-full">
+                  <div 
+                    className="h-full bg-gradient-to-r from-[#A74758] to-[#ff6b8b] transition-all duration-300 ease-out" 
+                    style={{ width: `${Math.round(((Math.min(activePreviewFieldIndex, visiblePreviewFields.length - 1) + 1) / visiblePreviewFields.length) * 100)}%` }}
+                  />
+                </div>
+              )}
+
               {/* Dynamic form preview rendering */}
               <div className="flex-1 space-y-5 overflow-y-auto pr-1">
-                {formFields.filter(isFieldVisibleInPreview).map((field, idx) => (
-                  <div key={field.id} className="space-y-1.5">
-                    <label className="text-xs font-bold text-white/70 block">
-                      {field.label || `Domanda ${idx + 1}`} {field.required && <span className="text-red-500">*</span>}
-                    </label>
-                    {field.description && (
-                      <p className="text-[11px] text-white/45 -mt-0.5 leading-relaxed">{field.description}</p>
-                    )}
-
-                    {field.type === "text" && (
-                      <input
-                        type="text"
-                        value={previewAnswers[field.id] || ""}
-                        onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                      />
-                    )}
-
-                    {field.type === "textarea" && (
-                      <textarea
-                        rows={2}
-                        value={previewAnswers[field.id] || ""}
-                        onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                        className="w-full rounded-lg bg-white/5 border border-white/10 p-2.5 text-xs text-white outline-none focus:border-[#A74758] resize-none"
-                      />
-                    )}
-
-                    {field.type === "number" && (
-                      <input
-                        type="number"
-                        value={previewAnswers[field.id] || ""}
-                        onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                      />
-                    )}
-
-                    {field.type === "select" && (
-                      <select
-                        value={previewAnswers[field.id] || ""}
-                        onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                        className="w-full h-9 rounded-lg bg-neutral-800 border border-white/10 px-2 text-xs text-white outline-none focus:border-[#A74758]"
-                      >
-                        <option value="">Seleziona un'opzione...</option>
-                        {field.options?.map(o => (
-                          <option key={o} value={o}>{o}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {field.type === "money" && (
-                      <div className="relative flex items-center">
-                        <span className="absolute left-3 text-xs font-semibold text-white/45">€</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={previewAnswers[field.id] || ""}
-                          onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                          className="w-full h-9 rounded-lg bg-white/5 border border-white/10 pl-7 pr-3 text-xs text-white outline-none focus:border-[#A74758]"
-                        />
+                {(() => {
+                  const currentIdx = Math.min(activePreviewFieldIndex, Math.max(0, visiblePreviewFields.length - 1));
+                  const field = visiblePreviewFields[currentIdx];
+                  if (!field) return <div className="text-center text-white/40 text-xs py-8">Nessuna domanda definita.</div>;
+                  
+                  return (
+                    <div key={field.id} className="space-y-3.5 animate-in fade-in slide-in-from-right-5 duration-300">
+                      <div className="space-y-1.5">
+                        <label className="text-base font-extrabold text-white block leading-snug">
+                          {field.label || `Domanda ${currentIdx + 1}`} {field.required && <span className="text-red-500">*</span>}
+                        </label>
+                        {field.description && (
+                          <p className="text-xs text-white/60 leading-relaxed">{field.description}</p>
+                        )}
                       </div>
-                    )}
 
-                    {field.type === "date" && (
-                      <input
-                        type="date"
-                        value={previewAnswers[field.id] || ""}
-                        onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                      />
-                    )}
+                      <div className="pt-2">
+                        {field.type === "text" && (
+                          <input
+                            type="text"
+                            value={previewAnswers[field.id] || ""}
+                            onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handlePreviewNext();
+                              }
+                            }}
+                            className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm text-white outline-none focus:border-[#A74758]"
+                          />
+                        )}
 
-                    {field.type === "worker" && (
-                      <select
-                        value={previewAnswers[field.id] || ""}
-                        onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
-                        className="w-full h-9 rounded-lg bg-neutral-800 border border-white/10 px-2 text-xs text-white outline-none focus:border-[#A74758]"
-                      >
-                        <option value="">Seleziona un collaboratore...</option>
-                        {users.map(u => (
-                          <option key={u.id} value={u.name}>{u.name} ({u.role.slice(0, 4)})</option>
-                        ))}
-                      </select>
-                    )}
+                        {field.type === "textarea" && (
+                          <textarea
+                            rows={3}
+                            value={previewAnswers[field.id] || ""}
+                            onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                            className="w-full rounded-xl bg-white/5 border border-white/10 p-3.5 text-sm text-white outline-none focus:border-[#A74758] resize-none"
+                          />
+                        )}
 
-                    {field.type === "file" && (
-                      <div className="rounded-lg border border-dashed border-white/20 p-3 text-center bg-white/5">
-                        <p className="text-[10px] text-white/60">Simula caricamento file (.png, .pdf...)</p>
+                        {field.type === "number" && (
+                          <input
+                            type="number"
+                            value={previewAnswers[field.id] || ""}
+                            onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handlePreviewNext();
+                              }
+                            }}
+                            className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm text-white outline-none focus:border-[#A74758]"
+                          />
+                        )}
+
+                        {field.type === "select" && (
+                          <div className="space-y-2.5 w-full">
+                            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                              {field.options?.map((opt: string) => {
+                                const isSelected = previewAnswers[field.id] === opt;
+                                return (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewAnswers(prev => ({ ...prev, [field.id]: opt }));
+                                      if (opt && opt !== "Altro") {
+                                        setTimeout(() => {
+                                          setActivePreviewFieldIndex(prev => {
+                                            if (prev < visiblePreviewFields.length - 1) return prev + 1;
+                                            return prev;
+                                          });
+                                        }, 350);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "w-full p-4 rounded-2xl border text-left text-sm font-semibold transition-all duration-200 flex items-center justify-between hover:scale-[1.01] active:scale-[0.99]",
+                                      isSelected
+                                        ? "bg-[#A74758]/20 border-[#A74758] text-[#ff8bb2] shadow-md shadow-[#A74758]/10"
+                                        : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10 hover:border-white/20"
+                                    )}
+                                  >
+                                    <span>{opt}</span>
+                                    <div className={cn(
+                                      "size-5 rounded-full border flex items-center justify-center transition-all",
+                                      isSelected 
+                                        ? "border-[#ff8bb2] bg-[#ff8bb2]/20 text-[#ff8bb2]" 
+                                        : "border-white/20 bg-white/5"
+                                    )}>
+                                      {isSelected && <Check className="size-3" />}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {previewAnswers[field.id] === "Altro" && (
+                              <input
+                                type="text"
+                                placeholder="Specifica..."
+                                value={previewAnswers[field.id + "_altro"] || ""}
+                                onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id + "_altro"]: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handlePreviewNext();
+                                  }
+                                }}
+                                className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm text-white outline-none focus:border-[#A74758] mt-2"
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {field.type === "money" && (
+                          <div className="relative flex items-center">
+                            <span className="absolute left-4 text-sm font-semibold text-white/45">€</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={previewAnswers[field.id] || ""}
+                              onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handlePreviewNext();
+                                }
+                              }}
+                              className="w-full h-11 rounded-xl bg-white/5 border border-white/10 pl-8 pr-4 text-sm text-white outline-none focus:border-[#A74758]"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        )}
+
+                        {field.type === "date" && (
+                          <input
+                            type="date"
+                            value={previewAnswers[field.id] || ""}
+                            onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handlePreviewNext();
+                              }
+                            }}
+                            className="w-full h-11 rounded-xl bg-white/5 border border-white/10 px-4 text-sm text-white outline-none focus:border-[#A74758]"
+                          />
+                        )}
+
+                        {field.type === "worker" && (
+                          <select
+                            value={previewAnswers[field.id] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPreviewAnswers(prev => ({ ...prev, [field.id]: val }));
+                              if (val) {
+                                setTimeout(() => {
+                                  setActivePreviewFieldIndex(prev => {
+                                    if (prev < visiblePreviewFields.length - 1) return prev + 1;
+                                    return prev;
+                                  });
+                                }, 350);
+                              }
+                            }}
+                            className="w-full h-11 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                          >
+                            <option value="">Seleziona collaboratore...</option>
+                            {users.map(u => (
+                              <option key={u.id} value={u.name}>{u.name}</option>
+                            ))}
+                          </select>
+                        )}
+
+                        {field.type === "worker_multi" && (
+                          <div className="grid max-h-60 gap-2 overflow-y-auto sm:grid-cols-2">
+                            {users.map((u) => {
+                              const selected = Array.isArray(previewAnswers[field.id]) && previewAnswers[field.id].includes(u.name);
+                              return (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setPreviewAnswers((prev) => {
+                                      const current = Array.isArray(prev[field.id]) ? prev[field.id] as string[] : [];
+                                      return {
+                                        ...prev,
+                                        [field.id]: current.includes(u.name) ? current.filter((name) => name !== u.name) : [...current, u.name],
+                                      };
+                                    });
+                                  }}
+                                  className={cn(
+                                    "rounded-xl border px-3 py-2 text-left text-xs font-bold transition",
+                                    selected ? "border-[#ff8bb2] bg-[#A74758]/25 text-[#ffb7cf]" : "border-white/10 bg-white/5 text-white/75"
+                                  )}
+                                >
+                                  {u.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {field.type === "checkbox" && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewAnswers((prev) => ({ ...prev, [field.id]: prev[field.id] !== true }))}
+                            className={cn(
+                              "flex min-h-12 w-full items-center justify-between rounded-xl border px-4 text-left text-sm font-bold transition",
+                              previewAnswers[field.id] === true ? "border-emerald-300 bg-emerald-500/20 text-emerald-100" : "border-white/10 bg-white/5 text-white/75"
+                            )}
+                          >
+                            <span>{field.description || field.label}</span>
+                            <span>{previewAnswers[field.id] === true ? "OK" : ""}</span>
+                          </button>
+                        )}
+
+                        {field.type === "pin" && (
+                          <input
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={previewAnswers[field.id] || ""}
+                            onChange={(e) => setPreviewAnswers(prev => ({ ...prev, [field.id]: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handlePreviewNext();
+                              }
+                            }}
+                            placeholder="PIN personale"
+                            className="h-11 w-full rounded-xl border border-white/10 bg-neutral-800 px-4 text-center text-lg font-black tracking-[0.3em] text-white outline-none focus:border-[#A74758]"
+                          />
+                        )}
+
+                        {field.type === "file" && (
+                          <div className="rounded-xl border border-dashed border-white/20 p-5 text-center bg-white/5">
+                            <p className="text-xs text-white/60">Simula caricamento file (.png, .pdf...)</p>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Submit simulation */}
-              <div className="border-t border-white/10 pt-4 mt-4">
-                <button
-                  type="button"
-                  onClick={() => alert("Simulazione invio completata! I dati sono corretti.")}
-                  className="w-full h-10 rounded-xl bg-[#A74758] text-xs font-bold hover:scale-[0.98] transition"
-                >
-                  Simula Invio Modulo
-                </button>
+              {/* Bottom buttons inside device preview */}
+              <div className="border-t border-white/10 pt-4 mt-4 flex items-center justify-between">
+                <div>
+                  {activePreviewFieldIndex > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActivePreviewFieldIndex(prev => prev - 1)}
+                      className="inline-flex h-9 items-center justify-center rounded-xl bg-white/5 border border-white/10 px-4 text-xs font-bold text-white transition hover:bg-white/10"
+                    >
+                      Indietro
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  {activePreviewFieldIndex < visiblePreviewFields.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={handlePreviewNext}
+                      className="inline-flex h-9 items-center gap-1 rounded-xl bg-[#A74758] px-4 text-xs font-bold text-white transition hover:scale-[1.02]"
+                    >
+                      Continua <ChevronRight className="size-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => alert("Simulazione invio completata! I dati sono corretti.")}
+                      className="inline-flex h-9 items-center rounded-xl bg-[#A74758] px-4 text-xs font-bold text-white transition hover:scale-[1.02]"
+                    >
+                      Simula Invio
+                    </button>
+                  )}
+                </div>
               </div>
-
             </div>
           </div>
         )}

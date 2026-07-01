@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpRight, CheckCircle2, ClipboardList, FilePenLine } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, FilePenLine, ReceiptText } from "lucide-react";
 import { Badge, Card, Select } from "@/components/ui";
 import { InstantLink } from "@/components/instant-link";
 import type { Role } from "@/lib/roles";
@@ -19,6 +19,7 @@ const availableIcons = [
   { value: "Smartphone", label: "Tablet" },
   { value: "ShieldCheck", label: "Ferie/Richieste" },
   { value: "FileText", label: "Documenti" },
+  { value: "ReceiptText", label: "Registratore / Cassa" },
   { value: "Calculator", label: "Calcolatrice" },
   { value: "LayoutDashboard", label: "Dashboard" },
   { value: "Settings", label: "Ingranaggio" },
@@ -35,8 +36,8 @@ const availableIcons = [
 
 const pageInfo = {
   1: { title: "NOTE", text: "Note operative", href: "/service-notes", icon: FilePenLine },
-  2: { title: "TASK", text: "Task operative", href: "/tasks", icon: CheckCircle2 },
-  3: { title: "FORMS", text: "Richieste e moduli", href: "/service-forms", icon: ClipboardList },
+  2: { title: "Task", text: "Task operative", href: "/tasks", icon: CheckCircle2 },
+  3: { title: "Cassa", text: "Chiusura cassa, ordini e moduli", href: "/service-forms", icon: ReceiptText },
 };
 
 function normalizePage(page: number | undefined) {
@@ -104,8 +105,8 @@ export function SalonServicePages({
                       onChange={(event) => save(location.id, Number(event.target.value), settings[location.id]?.customName ?? "", settings[location.id]?.customIcon ?? "")}
                     >
                       <option value={1}>NOTE</option>
-                      <option value={2}>TASK</option>
-                      <option value={3}>FORMS</option>
+                      <option value={2}>Task</option>
+                      <option value={3}>Cassa</option>
                     </Select>
                   </div>
                   <div>

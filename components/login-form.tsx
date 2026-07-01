@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { AlertCircle, Loader2, KeyRound, Mail } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 
@@ -13,42 +13,54 @@ export function LoginForm() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
   const router = useRouter();
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
+
+    submittingRef.current = true;
     setError("");
     setLoading(true);
 
-    const callbackUrl =
-      new URLSearchParams(window.location.search).get("callbackUrl") ?? "/dashboard";
+    try {
+      const callbackUrl =
+        new URLSearchParams(window.location.search).get("callbackUrl") ?? "/dashboard";
 
-    let result;
-    if (loginMode === "pin") {
-      result = await signIn("credentials", {
-        pin,
-        redirect: false,
-        callbackUrl,
-      });
-    } else {
-      result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl,
-      });
+      await signOut({ redirect: false });
+
+      let result;
+      if (loginMode === "pin") {
+        result = await signIn("credentials", {
+          pin,
+          redirect: false,
+          callbackUrl,
+        });
+      } else {
+        result = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+          callbackUrl,
+        });
+      }
+
+      if (result?.error) {
+        submittingRef.current = false;
+        setLoading(false);
+        setError(loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
+        return;
+      }
+
+      const destination = result?.url ?? callbackUrl;
+      router.prefetch(destination);
+      window.location.replace(destination);
+    } catch {
+      submittingRef.current = false;
+      setLoading(false);
+      setError("Accesso non completato. Controlla la connessione e riprova.");
     }
-
-    setLoading(false);
-
-    if (result?.error) {
-      setError(loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
-      return;
-    }
-
-    router.prefetch(result?.url ?? callbackUrl);
-    router.replace(result?.url ?? callbackUrl);
-    router.refresh();
   }
 
   return (
@@ -56,24 +68,26 @@ export function LoginForm() {
       <div className="flex rounded-2xl bg-paradise-nude/45 p-1 border border-black/5 dark:border-white/5">
         <button
           type="button"
+          disabled={loading}
           onClick={() => { setLoginMode("pin"); setError(""); }}
           className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition ${
             loginMode === "pin"
               ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white"
               : "text-black/55 hover:text-black dark:text-white/60 dark:hover:text-white"
-          }`}
+          } disabled:pointer-events-none disabled:opacity-50`}
         >
           <KeyRound className="size-3.5" />
           Accedi con PIN
         </button>
         <button
           type="button"
+          disabled={loading}
           onClick={() => { setLoginMode("email"); setError(""); }}
           className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition ${
             loginMode === "email"
               ? "bg-white text-black shadow-sm dark:bg-neutral-800 dark:text-white"
               : "text-black/55 hover:text-black dark:text-white/60 dark:hover:text-white"
-          }`}
+          } disabled:pointer-events-none disabled:opacity-50`}
         >
           <Mail className="size-3.5" />
           Accedi con Email
@@ -92,6 +106,7 @@ export function LoginForm() {
             autoComplete="current-password"
             value={pin}
             onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            disabled={loading}
             required
           />
         ) : (
@@ -106,6 +121,7 @@ export function LoginForm() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               onBlur={() => setEmail((current) => current.trim().toLowerCase())}
+              disabled={loading}
               required
             />
             <Field
@@ -115,6 +131,7 @@ export function LoginForm() {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              disabled={loading}
               required
             />
           </>
@@ -128,9 +145,10 @@ export function LoginForm() {
         ) : null}
 
         <Button
-          className="w-full transition active:scale-[0.97]"
+          className="w-full transition active:scale-[0.97] disabled:pointer-events-none disabled:cursor-wait disabled:opacity-70"
           type="submit"
           disabled={loading}
+          aria-busy={loading}
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">

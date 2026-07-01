@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, Download, RefreshCw, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award } from "lucide-react";
 import { Badge, Button, Card, Field } from "@/components/ui";
 
 type Worker = {
@@ -66,6 +66,37 @@ export function WorkHoursManager({
   const selectedWorker = workers.find((worker) => worker.id === selectedWorkerId);
   const days = useMemo(() => daysInMonth(year, month), [year, month]);
 
+  const loadRecords = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoadingRecords(true);
+    const response = await fetch(`/api/work-hours?year=${year}&month=${month}`, {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-store" },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.error ?? "Ore non caricate.");
+      setLoadingRecords(false);
+      return;
+    }
+    const map: Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }> = {};
+    (data as (WorkRecord & { scheduledHours?: number })[]).forEach((record) => {
+      map[`${record.userId}-${record.date.slice(0, 10)}`] = {
+        hours: record.hours,
+        note: record.note,
+        paidBreak: record.paidBreak,
+        manualOverride: record.manualOverride,
+        grossHours: record.grossHours,
+        breakHours: record.breakHours,
+        netHours: record.netHours,
+        firstEntry: record.firstEntry,
+        lastExit: record.lastExit,
+        scheduledHours: record.scheduledHours ?? 0,
+      };
+    });
+    setRecords(map);
+    setLoadingRecords(false);
+  }, [month, year]);
+
   // Calculate statistics (Worked, Due, Missing, Overtime)
   const stats = useMemo(() => {
     let worked = 0;
@@ -106,40 +137,31 @@ export function WorkHoursManager({
   const totalHours = stats.worked;
 
   useEffect(() => {
-    let active = true;
-    async function loadRecords() {
-      setLoadingRecords(true);
-      const response = await fetch(`/api/work-hours?year=${year}&month=${month}`);
-      const data = await response.json();
-      if (!active) return;
-      if (!response.ok) {
-        setMessage(data.error ?? "Ore non caricate.");
-        setLoadingRecords(false);
-        return;
-      }
-      const map: Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }> = {};
-      (data as (WorkRecord & { scheduledHours?: number })[]).forEach((record) => {
-        map[`${record.userId}-${record.date.slice(0, 10)}`] = {
-          hours: record.hours,
-          note: record.note,
-          paidBreak: record.paidBreak,
-          manualOverride: record.manualOverride,
-          grossHours: record.grossHours,
-          breakHours: record.breakHours,
-          netHours: record.netHours,
-          firstEntry: record.firstEntry,
-          lastExit: record.lastExit,
-          scheduledHours: record.scheduledHours ?? 0,
-        };
-      });
-      setRecords(map);
-      setLoadingRecords(false);
-    }
     void loadRecords();
-    return () => {
-      active = false;
+  }, [loadRecords]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      void loadRecords(false);
     };
-  }, [year, month]);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void loadRecords(false);
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadRecords(false);
+      }
+    }, 30000);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(interval);
+    };
+  }, [loadRecords]);
 
   useEffect(() => {
     if (filteredWorkers.length > 0 && !filteredWorkers.some((worker) => worker.id === selectedWorkerId)) {
@@ -213,6 +235,7 @@ export function WorkHoursManager({
       },
     }));
     setMessage("Ore aggiornate.");
+    void loadRecords(false);
   }
 
   async function exportPdf(pdfWorkers: Worker[], filename: string) {
@@ -325,7 +348,7 @@ export function WorkHoursManager({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
       <Card className="p-0 border border-black/5 bg-white/80 dark:bg-neutral-900/80 shadow-md backdrop-blur-md">
         <div className="border-b border-black/5 dark:border-white/5 p-5">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Personale</p>
@@ -342,8 +365,28 @@ export function WorkHoursManager({
             <Search className="size-4 text-black/40 dark:text-white/40" />
             <input className="h-11 flex-1 bg-transparent text-sm outline-none dark:text-white" placeholder="Cerca lavoratore..." value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
+
+          <div className="mt-4 md:hidden">
+            <select
+              className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink"
+              value={selectedWorkerId}
+              onChange={(event) => setSelectedWorkerId(event.target.value)}
+            >
+              {filteredWorkers.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.name} - {worker.location}
+                </option>
+              ))}
+            </select>
+            {selectedWorker ? (
+              <div className="mt-3 rounded-2xl border border-paradise-pink/20 bg-paradise-softPink/20 px-3 py-2">
+                <p className="text-sm font-semibold">{selectedWorker.name}</p>
+                <p className="text-xs text-black/50">{selectedWorker.location}</p>
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="max-h-[620px] overflow-y-auto p-3">
+        <div className="hidden max-h-[620px] overflow-y-auto p-3 md:block">
           {filteredWorkers.length === 0 ? <p className="p-4 text-sm text-black/45 dark:text-white/45">Nessun lavoratore presente.</p> : null}
           {filteredWorkers.map((worker) => (
             <button
@@ -358,9 +401,6 @@ export function WorkHoursManager({
                 <div>
                   <p className="font-semibold text-sm">{worker.name}</p>
                   <p className="text-xs text-black/45 dark:text-white/45">{worker.location}</p>
-                  <div className="mt-1.5">
-                    <Badge tone={worker.active ? "green" : "dark"}>{worker.active ? "Attivo" : "Disattivato"}</Badge>
-                  </div>
                 </div>
               </div>
             </button>
@@ -378,6 +418,15 @@ export function WorkHoursManager({
               <p className="text-xs text-black/45 dark:text-white/45">{selectedWorker?.email} &bull; {selectedWorker?.location}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                variant="soft"
+                className="h-10 text-xs px-4"
+                onClick={() => void loadRecords(true)}
+                disabled={loadingRecords}
+              >
+                <RefreshCw className={`size-3.5 ${loadingRecords ? "animate-spin" : ""}`} />
+                Aggiorna
+              </Button>
               <Button variant="soft" className="h-10 text-xs px-4" onClick={exportSelectedPdf} disabled={exporting || !selectedWorker}>
                 <Download className="size-3.5" />
                 PDF Lavoratore
@@ -450,8 +499,109 @@ export function WorkHoursManager({
           </div>
         </div>
 
-        {/* Tabella timbrature */}
-        <div className="overflow-x-auto">
+        <div className="lg:hidden space-y-3 p-4">
+          {days.map((day) => {
+            const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+            const record = records[recordKey] ?? emptyRecord();
+            const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+            return (
+              <div
+                key={`mobile-${recordKey}`}
+                className={`rounded-[24px] border p-4 shadow-sm ${isWeekend ? "border-paradise-nude bg-paradise-nude/15" : "border-black/5 bg-white"}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold">
+                      {new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "2-digit", month: "long" }).format(day)}
+                    </p>
+                    <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+                      {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
+                    </p>
+                  </div>
+                  <Badge tone={record.scheduledHours > 0 ? "pink" : "dark"}>
+                    {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h dovute` : "Riposo / libero"}
+                  </Badge>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Lavorate</p>
+                    <input
+                      className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03] disabled:text-black/50"
+                      disabled={!record.manualOverride}
+                      type="number"
+                      min="0"
+                      max="24"
+                      step="0.01"
+                      value={record.hours}
+                      onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                    />
+                  </div>
+                  <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Sistema</p>
+                    <div className="mt-2 space-y-2 text-xs font-semibold text-black/70">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded border-black/10 text-paradise-pink focus:ring-paradise-pink"
+                          checked={record.paidBreak}
+                          onChange={(event) => updateLocal(day, "paidBreak", event.target.checked)}
+                        />
+                        Pausa pagata
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded border-black/10 text-paradise-pink focus:ring-paradise-pink"
+                          checked={record.manualOverride}
+                          onChange={(event) => updateLocal(day, "manualOverride", event.target.checked)}
+                        />
+                        Correzione manuale
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-2xl border border-black/5 bg-neutral-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Note</p>
+                  <input
+                    className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-paradise-pink"
+                    value={record.note}
+                    onChange={(event) => updateLocal(day, "note", event.target.value)}
+                    placeholder="Riposo, festivo, malattia..."
+                  />
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-2xl border border-black/5 bg-white p-3">
+                    <p className="font-bold uppercase tracking-[0.14em] text-black/35">Entrata</p>
+                    <p className="mt-1 font-semibold">{record.firstEntry ?? "--"}</p>
+                  </div>
+                  <div className="rounded-2xl border border-black/5 bg-white p-3">
+                    <p className="font-bold uppercase tracking-[0.14em] text-black/35">Uscita</p>
+                    <p className="mt-1 font-semibold">{record.lastExit ?? "--"}</p>
+                  </div>
+                  <div className="rounded-2xl border border-black/5 bg-white p-3">
+                    <p className="font-bold uppercase tracking-[0.14em] text-black/35">Pausa</p>
+                    <p className="mt-1 font-semibold">{record.breakHours ? `${record.breakHours} h` : "--"}</p>
+                  </div>
+                </div>
+
+                <Button
+                  variant="soft"
+                  className="mt-4 h-11 w-full text-sm"
+                  onClick={() => saveDay(day)}
+                  disabled={!selectedWorkerId || savingKey === recordKey}
+                >
+                  <Save className="size-4" />
+                  {savingKey === recordKey ? "Salvo..." : "Salva giornata"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[1040px] border-collapse text-sm">
             <thead>
               <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-black/5 dark:border-white/5 text-left">
@@ -550,4 +700,3 @@ export function WorkHoursManager({
     </div>
   );
 }
-

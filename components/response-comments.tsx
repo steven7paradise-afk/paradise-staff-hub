@@ -39,12 +39,14 @@ export function ResponseComments({
   currentUserName,
   currentUserRole,
   onCommentsUpdate,
+  readOnly = false,
 }: {
   responseId: string;
   initialComments?: any[];
   currentUserName: string;
   currentUserRole: string;
   onCommentsUpdate: (updatedComments: any[]) => void;
+  readOnly?: boolean;
 }) {
   const [comments, setComments] = useState<Comment[]>(() => {
     if (!initialComments) return [];
@@ -140,28 +142,33 @@ export function ResponseComments({
         )}
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSendComment} className="flex gap-2">
-        <input
-          type="text"
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="Scrivi una risposta o annotazione..."
-          className="flex-1 h-9 rounded-xl border border-black/10 dark:border-white/10 px-3 text-xs focus:border-[#A74758] bg-white dark:bg-neutral-800 text-black dark:text-white outline-none"
-          disabled={submitting}
-        />
-        <button
-          type="submit"
-          disabled={submitting || !newComment.trim()}
-          className="grid size-9 place-items-center rounded-xl bg-[#A74758] text-white hover:scale-105 active:scale-95 transition disabled:opacity-40"
-        >
-          {submitting ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Send className="size-4" />
-          )}
-        </button>
-      </form>
+      {readOnly ? (
+        <p className="rounded-xl bg-black/5 px-3 py-2 text-xs font-semibold text-black/45 dark:bg-white/5 dark:text-white/40">
+          Solo visualizzazione: puoi leggere aggiornamenti e allegati, ma non modificare questo modulo.
+        </p>
+      ) : (
+        <form onSubmit={handleSendComment} className="flex gap-2">
+          <input
+            type="text"
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Scrivi una risposta o annotazione..."
+            className="flex-1 h-9 rounded-xl border border-black/10 dark:border-white/10 px-3 text-xs focus:border-[#A74758] bg-white dark:bg-neutral-800 text-black dark:text-white outline-none"
+            disabled={submitting}
+          />
+          <button
+            type="submit"
+            disabled={submitting || !newComment.trim()}
+            className="grid size-9 place-items-center rounded-xl bg-[#A74758] text-white hover:scale-105 active:scale-95 transition disabled:opacity-40"
+          >
+            {submitting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+          </button>
+        </form>
+      )}
     </div>
   );
 }

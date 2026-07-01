@@ -2,15 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
 
 const managerRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
-const assignRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"]);
+
+async function getAuthorizedTaskUser(userId: string, role: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, mansione: true, sede_id: true, location: { select: { name: true } } },
+  });
+  if (!hasTaskAccess(role, user?.mansione, user?.location?.name)) return null;
+  return user;
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || !assignRoles.has(session.user.role)) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
+  const currentUser = await getAuthorizedTaskUser(session.user.id, session.user.role);
+  if (!currentUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
 
   const payload = await request.json();
   const title = String(payload.title ?? "").trim();
@@ -35,7 +46,7 @@ export async function POST(request: NextRequest) {
   }
 
   const workers = await prisma.user.findMany({
-    where: { id: { in: workerIds }, active: true, role: { not: "SUPER_ADMIN" } }
+    where: { ...taskWorkerWhere(), id: { in: workerIds } }
   });
   if (workers.length === 0) {
     return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
@@ -46,7 +57,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "I lavoratori selezionati devono essere assegnati a un salone." }, { status: 400 });
   }
   
-  if ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && session.user.sedeId !== firstLocationId) {
+  if (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== firstLocationId) {
     return NextResponse.json({ error: "Puoi assegnare task solo al tuo salone." }, { status: 403 });
   }
 
@@ -87,6 +98,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  const currentUser = await getAuthorizedTaskUser(session.user.id, session.user.role);
+  if (!currentUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
 
   const payload = await request.json();
   const id = String(payload.id ?? "");
@@ -131,7 +144,7 @@ export async function PATCH(request: NextRequest) {
   const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
   const isChecklistUpdate = checklist !== null && !status && !evaluation && notes === null && photoUrl === null;
   
-  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
+  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "WAITING", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
   }
 
@@ -140,8 +153,8 @@ export async function PATCH(request: NextRequest) {
   const isEvaluation = ["LIKE", "OK", "DISLIKE"].includes(evaluation) && !status;
   
   const isAssignee = task.assignees.some(u => u.id === session.user.id);
-  const canEdit = isEvaluation ? managerRoles.has(session.user.role) : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
-  if (!canEdit || ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && session.user.sedeId !== task.location_id)) {
+  const canEdit = isEvaluation ? managerRoles.has(session.user.role) : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id || hasTaskAccess(session.user.role, currentUser.mansione, currentUser.location?.name);
+  if (!canEdit || (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== task.location_id)) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
 
@@ -181,9 +194,11 @@ export async function PATCH(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || !assignRoles.has(session.user.role)) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
+  const currentUser = await getAuthorizedTaskUser(session.user.id, session.user.role);
+  if (!currentUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
 
   const payload = await request.json();
   const id = String(payload.id ?? "");
@@ -209,7 +224,7 @@ export async function PUT(request: NextRequest) {
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
 
   const workers = await prisma.user.findMany({
-    where: { id: { in: workerIds }, active: true, role: { not: "SUPER_ADMIN" } }
+    where: { ...taskWorkerWhere(), id: { in: workerIds } }
   });
   if (workers.length === 0) {
     return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
@@ -220,7 +235,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Lavoratori senza salone." }, { status: 400 });
   }
   
-  if ((session.user.role === "RESPONSABILE" || session.user.role === "DIPENDENTE") && (session.user.sedeId !== task.location_id || session.user.sedeId !== firstLocationId)) {
+  if (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && (currentUser.sede_id !== task.location_id || currentUser.sede_id !== firstLocationId)) {
     return NextResponse.json({ error: "Puoi modificare task solo nel tuo salone." }, { status: 403 });
   }
 

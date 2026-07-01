@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { 
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, UserCog, ToggleLeft, ToggleRight, ListCheck,
-  Plus
+  Archive, Plus, UserPlus, Printer
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -61,6 +62,7 @@ export function StaffDirectory({
   const [filterStatus, setFilterStatus] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterManager, setFilterManager] = useState("");
+  const [archiveMode, setArchiveMode] = useState(false);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   
@@ -80,9 +82,14 @@ export function StaffDirectory({
   const [submitting, setSubmitting] = useState(false);
 
   const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
+  const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
+  const archivedCount = staff.filter(isArchivedEmployee).length;
 
   // Filters
   const filteredStaff = staff.filter((emp) => {
+    const archived = isArchivedEmployee(emp);
+    if (archiveMode ? !archived : archived) return false;
+
     const fullName = emp.name.toLowerCase();
     const query = searchQuery.toLowerCase();
     
@@ -97,6 +104,107 @@ export function StaffDirectory({
 
     return matchesSearch && matchesLocation && matchesStatus && matchesRole && matchesManager;
   });
+
+  async function printStaffListPdf() {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const rows = staff
+      .filter((emp) => archiveMode ? isArchivedEmployee(emp) : !isArchivedEmployee(emp))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const generatedAt = new Intl.DateTimeFormat("it-IT", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date());
+
+    const columns = [
+      { label: "Nome", x: 12, width: 42 },
+      { label: "Mansione", x: 56, width: 32 },
+      { label: "Salone", x: 90, width: 38 },
+      { label: "Ruolo", x: 130, width: 28 },
+      { label: "Telefono", x: 160, width: 32 },
+      { label: "Email", x: 194, width: 48 },
+      { label: "PIN", x: 244, width: 34 },
+    ];
+
+    function drawHeader(page: number) {
+      doc.setFillColor(255, 214, 234);
+      doc.rect(0, 0, 297, 22, "F");
+      doc.setTextColor(31, 31, 31);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("Paradise Staff Hub - Lista lavoratori", 12, 12);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`${archiveMode ? "Archivio staff" : "Personale attivo"} - Generato ${generatedAt}`, 12, 18);
+      doc.text(`Pagina ${page}`, 274, 18);
+    }
+
+    function cellText(value: string, width: number) {
+      return doc.splitTextToSize(value || "-", width);
+    }
+
+    let page = 1;
+    let y = 34;
+    drawHeader(page);
+
+    const drawTableHead = () => {
+      doc.setFillColor(248, 239, 244);
+      doc.rect(10, y - 6, 274, 9, "F");
+      doc.setTextColor(120, 55, 80);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      columns.forEach((column) => doc.text(column.label.toUpperCase(), column.x, y));
+      y += 8;
+      doc.setTextColor(31, 31, 31);
+      doc.setFont("helvetica", "normal");
+    };
+
+    drawTableHead();
+    rows.forEach((emp, index) => {
+      const pinInfo = emp.hasPin ? "Configurato" : "Da impostare";
+      const values = [
+        emp.name,
+        emp.mansione || "Collaboratore",
+        emp.location,
+        emp.role.replace("_", " "),
+        emp.whatsappPhone || "-",
+        emp.email,
+        pinInfo,
+      ];
+      const wrapped = values.map((value, valueIndex) => cellText(value, columns[valueIndex].width));
+      const rowHeight = Math.max(8, ...wrapped.map((line) => line.length * 4.2));
+
+      if (y + rowHeight > 194) {
+        doc.addPage();
+        page += 1;
+        y = 34;
+        drawHeader(page);
+        drawTableHead();
+      }
+
+      if (index % 2 === 0) {
+        doc.setFillColor(252, 249, 251);
+        doc.rect(10, y - 5, 274, rowHeight, "F");
+      }
+
+      doc.setFontSize(8);
+      wrapped.forEach((lines, valueIndex) => {
+        doc.text(lines, columns[valueIndex].x, y, { maxWidth: columns[valueIndex].width });
+      });
+      y += rowHeight;
+    });
+
+    if (rows.length === 0) {
+      doc.setFontSize(11);
+      doc.text("Nessun lavoratore da stampare.", 12, y + 4);
+    }
+
+    doc.setProperties({ title: "Lista lavoratori Paradise" });
+    doc.save(`paradise-lista-lavoratori-${archiveMode ? "archivio" : "attivi"}.pdf`);
+  }
 
   // Handle Save Update
   async function handleSaveEmployee(e: React.FormEvent) {
@@ -330,37 +438,67 @@ export function StaffDirectory({
               className="pl-11 min-h-11"
             />
           </div>
-          {isAuthorizedToEdit && (
-            <Button 
-              onClick={() => {
-                setShowCreateModal(true);
-                setNewEmployeeForm({
-                  name: "",
-                  email: "",
-                  role: "DIPENDENTE",
-                  sedeId: locations[0]?.id ?? "",
-                  birthDate: "",
-                  fiscalCode: "",
-                  contractStart: new Date().toISOString().slice(0, 10),
-                  contractEnd: "",
-                  photoUrl: "",
-                  whatsappPhone: "",
-                  mansione: "",
-                  employeeStatus: "Attivo",
-                  managerId: "",
-                  hrNotes: "",
-                  accessList: []
-                });
-                setCreationMessage("");
-                setErrorMsg("");
-                setPinInput("");
-                setPasswordInput("");
-              }}
-              className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300 rounded-2xl min-h-11 shrink-0"
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Link
+              href="/recruitment"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-paradise-noir shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-neutral-900 dark:text-white"
             >
-              <Plus className="size-4" /> Nuovo Dipendente
+              <UserPlus className="size-4" /> Talent System
+            </Link>
+            <Button
+              type="button"
+              variant="soft"
+              onClick={printStaffListPdf}
+              className="min-h-11 shrink-0 rounded-2xl bg-white text-paradise-noir"
+            >
+              <Printer className="size-4" /> Stampa lista
             </Button>
-          )}
+            <Button
+              type="button"
+              variant={archiveMode ? "dark" : "soft"}
+              onClick={() => {
+                setArchiveMode((current) => !current);
+                setFilterStatus("");
+              }}
+              className={cn(
+                "min-h-11 shrink-0 rounded-2xl",
+                archiveMode ? "bg-neutral-900 text-white hover:bg-neutral-800" : "bg-white text-paradise-noir"
+              )}
+            >
+              <Archive className="size-4" /> Archivio {archivedCount > 0 ? `(${archivedCount})` : ""}
+            </Button>
+            {isAuthorizedToEdit && (
+              <Button 
+                onClick={() => {
+                  setShowCreateModal(true);
+                  setNewEmployeeForm({
+                    name: "",
+                    email: "",
+                    role: "DIPENDENTE",
+                    sedeId: locations[0]?.id ?? "",
+                    birthDate: "",
+                    fiscalCode: "",
+                    contractStart: new Date().toISOString().slice(0, 10),
+                    contractEnd: "",
+                    photoUrl: "",
+                    whatsappPhone: "",
+                    mansione: "",
+                    employeeStatus: "Attivo",
+                    managerId: "",
+                    hrNotes: "",
+                    accessList: []
+                  });
+                  setCreationMessage("");
+                  setErrorMsg("");
+                  setPinInput("");
+                  setPasswordInput("");
+                }}
+                className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300 rounded-2xl min-h-11 shrink-0"
+              >
+                <Plus className="size-4" /> Nuovo Dipendente
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -415,6 +553,21 @@ export function StaffDirectory({
           {successMsg}
         </div>
       )}
+
+      {archiveMode ? (
+        <div className="rounded-3xl border border-violet-200 bg-violet-50 p-5 text-sm text-violet-800 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-100">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-500">Archivio staff</p>
+              <h2 className="mt-1 text-lg font-black">Account bloccati ed ex dipendenti</h2>
+              <p className="mt-1 text-xs opacity-75">Qui trovi solo profili disattivati o segnati come ex dipendente.</p>
+            </div>
+            <Button type="button" variant="soft" onClick={() => setArchiveMode(false)} className="bg-white">
+              Torna allo staff attivo
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Grid of employee cards */}
       {filteredStaff.length === 0 ? (

@@ -16,6 +16,7 @@ import { LiveTeamStatus } from "@/components/live-team-status";
 import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
+import { CASH_CLOSING_FIELD_IDS } from "@/lib/cash-closing-form";
 import { monthlyPersonalHours, type PersonalDayHours } from "@/lib/personal-hours";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
@@ -155,7 +156,7 @@ export default async function DashboardPage() {
   let todayShiftAssignedHours = 0;
   let todaySalonWorkers: any[] = [];
 
-  const [personalSchedule, personalMonthLogs, personalHourRecords, salonSchedule, salonWorkers, personalDocuments, personalNotifications, liveTeamWorkers, activeAbsences, locationsOverview, contractDeadlines, liveClockSettings, rawNewResponses] = await Promise.all([
+  const [personalSchedule, personalMonthLogs, personalHourRecords, salonSchedule, salonWorkers, personalDocuments, personalNotifications, liveTeamWorkers, activeAbsences, locationsOverview, contractDeadlines, liveClockSettings, rawNewResponses, todayCashClosings] = await Promise.all([
     role === "DIPENDENTE"
       ? safe(prisma.scheduleEntry.findMany({ where: { user_id: currentUser.id, date: { gte: month, lt: nextMonth } }, include: { category: true }, orderBy: { date: "asc" } }), [] as ScheduleWithCategory[])
       : Promise.resolve([]),
@@ -229,9 +230,30 @@ export default async function DashboardPage() {
       },
       include: {
         form: true,
-        user: true,
+        user: { select: { id: true, name: true, role: true, photo_url: true, sede_id: true } },
       },
+      orderBy: { created_at: "desc" },
+      take: 30,
     }), []),
+    role !== "DIPENDENTE"
+      ? safe(prisma.serviceFormResponse.findMany({
+          where: {
+            created_at: { gte: start, lt: end },
+            ...(role === "RESPONSABILE" ? { user_location_id: currentUser.sede_id ?? undefined } : {}),
+            form: {
+              is: {
+                OR: [
+                  { name: { contains: "chiusura cassa", mode: "insensitive" } },
+                  { category: { contains: "cassa", mode: "insensitive" } },
+                ],
+              },
+            },
+          },
+          include: { form: true, user: { select: { id: true, name: true, role: true, photo_url: true, sede_id: true } } },
+          orderBy: { created_at: "desc" },
+          take: 20,
+        }), [])
+      : Promise.resolve([]),
   ]);
   const allowedNewResponses = rawNewResponses.filter((r: any) => {
     // Exclude own submissions
@@ -432,6 +454,7 @@ export default async function DashboardPage() {
         currentUserName={currentUser.name}
         currentUserRole={role}
       />
+      {role !== "DIPENDENTE" ? <CashClosingTodayDashboard responses={todayCashClosings as any[]} /> : null}
 
       {role !== "DIPENDENTE" ? (
         <>
@@ -829,6 +852,86 @@ function PanelHeader({ title, href, icon: Icon }: PanelHeaderProps) {
 
 function EmptyText({ text }: { text: string }) {
   return <p className="mt-4 text-sm text-black/50 dark:text-white/45">{text}</p>;
+}
+
+function moneyValue(value: unknown) {
+  const amount = Number(String(value ?? "0").replace(",", "."));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatMoney(value: number) {
+  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+}
+
+function CashClosingTodayDashboard({ responses }: { responses: any[] }) {
+  const totalWithdrawn = responses.reduce((sum, response) => sum + moneyValue(response.answers?.[CASH_CLOSING_FIELD_IDS.withdrawn]), 0);
+  const differentFundCount = responses.filter((response) => Math.abs(moneyValue(response.answers?.[CASH_CLOSING_FIELD_IDS.fund]) - 50) > 0.009).length;
+
+  return (
+    <Card className="mb-6 overflow-hidden border-l-4 border-l-[#d4af37] p-0">
+      <div className="flex flex-col gap-3 border-b border-black/5 bg-gradient-to-r from-[#FFF7DF] to-white p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid size-11 place-items-center rounded-2xl bg-[#d4af37]/20 text-[#9E7A3B] dark:text-[#F7DFA7]">
+            <Calculator className="size-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#9E7A3B] dark:text-[#F7DFA7]">Cassa oggi</p>
+            <h2 className="text-lg font-black text-black dark:text-white">Chiusure cassa di oggi</h2>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+          <div className="rounded-2xl bg-white p-3 shadow-sm dark:bg-white/10">
+            <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Chiusure</p>
+            <p className="mt-1 text-xl font-black text-black dark:text-white">{responses.length}</p>
+          </div>
+          <div className="rounded-2xl bg-white p-3 shadow-sm dark:bg-white/10">
+            <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Prelevato</p>
+            <p className="mt-1 text-sm font-black text-[#9E7A3B] dark:text-[#F7DFA7]">{formatMoney(totalWithdrawn)}</p>
+          </div>
+          <div className="rounded-2xl bg-white p-3 shadow-sm dark:bg-white/10">
+            <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Fondi != 50</p>
+            <p className="mt-1 text-xl font-black text-black dark:text-white">{differentFundCount}</p>
+          </div>
+        </div>
+      </div>
+
+      {responses.length === 0 ? (
+        <p className="p-5 text-sm font-semibold text-black/45 dark:text-white/45">Nessuna chiusura cassa registrata oggi.</p>
+      ) : (
+        <div className="divide-y divide-black/5 dark:divide-white/10">
+          {responses.map((response) => {
+            const answers = response.answers ?? {};
+            const signature = answers._signature;
+            const fund = moneyValue(answers[CASH_CLOSING_FIELD_IDS.fund]);
+            const fundDifferent = Math.abs(fund - 50) > 0.009;
+            return (
+              <div key={response.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div>
+                  <p className="text-sm font-black text-black dark:text-white">{response.user_location_name || response.user?.location?.name || "Sede non indicata"}</p>
+                  <p className="mt-1 text-xs text-black/50 dark:text-white/45">
+                    Firmata da <strong>{signature?.user_name || response.user?.name || "Dipendente"}</strong> · {new Date(response.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                  {answers[CASH_CLOSING_FIELD_IDS.notes] ? (
+                    <p className="mt-2 rounded-xl bg-black/[0.03] px-3 py-2 text-xs text-black/60 dark:bg-white/5 dark:text-white/55">{String(answers[CASH_CLOSING_FIELD_IDS.notes])}</p>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-right sm:min-w-[260px]">
+                  <div className="rounded-2xl bg-paradise-nude/60 p-3 dark:bg-white/5">
+                    <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Prelevato</p>
+                    <p className="font-black text-black dark:text-white">{formatMoney(moneyValue(answers[CASH_CLOSING_FIELD_IDS.withdrawn]))}</p>
+                  </div>
+                  <div className={`rounded-2xl p-3 ${fundDifferent ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200"}`}>
+                    <p className="text-[10px] font-bold uppercase opacity-70">Fondo</p>
+                    <p className="font-black">{formatMoney(fund)}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
 }
 
 function TodayClockList({ logs }: { logs: Array<{ type: AttendanceType; timestamp: Date; time: string }> }) {

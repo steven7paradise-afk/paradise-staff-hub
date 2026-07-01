@@ -10,6 +10,9 @@ type ScheduleEntryForCalendar = ScheduleEntry & {
 };
 
 const DEFAULT_CALENDAR_ID = "fee99b51672c8f5b5079181522a68a2f3a1e3791bd9af73c926d3feb109eab9d@group.calendar.google.com";
+const DEFAULT_EXTRA_LEAVE_CALENDAR_IDS = [
+  "cd56578ac3f02b555abd38d368d5f4a97aa91cf8ca74995f921baec95a8bada9@group.calendar.google.com",
+];
 
 function getPrivateKey() {
   if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
@@ -31,6 +34,72 @@ function addDays(value: Date, days: number) {
 function eventDate(date: Date, time?: string | null) {
   if (!time) return { date: dateOnly(date) };
   return { dateTime: `${dateOnly(date)}T${time}:00`, timeZone: "Europe/Rome" };
+}
+
+function resolveExtraLeaveCalendarIds(primaryCalendarId: string) {
+  const configured = process.env.GOOGLE_LEAVE_EXTRA_CALENDAR_IDS?.split(",") ?? [];
+  return Array.from(new Set([...DEFAULT_EXTRA_LEAVE_CALENDAR_IDS, ...configured]
+    .map((id) => id.trim())
+    .filter((id) => id && id !== primaryCalendarId)));
+}
+
+function addLeaveTracking(event: ReturnType<typeof buildLeaveEvent>, leaveRequestId: string) {
+  return {
+    ...event,
+    extendedProperties: {
+      private: {
+        paradiseSource: "leave-request",
+        leaveRequestId,
+      },
+    },
+  };
+}
+
+async function findTrackedLeaveEventId(calendar: any, calendarId: string, leaveRequestId: string) {
+  const response = await calendar.events.list({
+    calendarId,
+    privateExtendedProperty: [`leaveRequestId=${leaveRequestId}`],
+    maxResults: 1,
+    showDeleted: false,
+    singleEvents: false,
+  });
+  return response.data.items?.[0]?.id ?? null;
+}
+
+async function upsertTrackedLeaveEvent(calendar: any, calendarId: string, leaveRequestId: string, event: ReturnType<typeof buildLeaveEvent>) {
+  const trackedEvent = addLeaveTracking(event, leaveRequestId);
+  const existingEventId = await findTrackedLeaveEventId(calendar, calendarId, leaveRequestId);
+
+  if (existingEventId) {
+    await calendar.events.update({
+      calendarId,
+      eventId: existingEventId,
+      requestBody: trackedEvent,
+      sendUpdates: "none",
+    });
+    return { calendarId, eventId: existingEventId, updated: true };
+  }
+
+  const response = await calendar.events.insert({
+    calendarId,
+    requestBody: trackedEvent,
+    sendUpdates: "none",
+  });
+  return { calendarId, eventId: response.data.id ?? null, updated: false };
+}
+
+async function deleteTrackedLeaveEvent(calendar: any, calendarId: string, leaveRequestId: string) {
+  const existingEventId = await findTrackedLeaveEventId(calendar, calendarId, leaveRequestId);
+  if (!existingEventId) {
+    return { calendarId, skipped: true, reason: "No tracked leave event" };
+  }
+
+  await calendar.events.delete({
+    calendarId,
+    eventId: existingEventId,
+    sendUpdates: "none",
+  });
+  return { calendarId, deleted: true, eventId: existingEventId };
 }
 
 async function resolveCalendarId() {
@@ -93,6 +162,22 @@ function scheduleColorId(category: ScheduleCategory) {
   return undefined;
 }
 
+/**
+ * Returns true if the schedule category represents a leave type
+ * (permesso, ferie, riposo, malattia) that should also be mirrored
+ * to the extra leave calendars.
+ */
+function isLeaveCategory(category: ScheduleCategory): boolean {
+  const code = category.code.toUpperCase();
+  const name = category.name.toLowerCase();
+  return (
+    code === "P" || code === "PE" || name.includes("permesso") ||
+    code === "F" || code === "FE" || name.includes("ferie") ||
+    code === "R" || code === "RI" || name.includes("riposo") ||
+    code === "M" || code === "MA" || code === "ML" || name.includes("malattia")
+  );
+}
+
 function buildScheduleEvent(entry: ScheduleEntryForCalendar) {
   const startTime = entry.start_time ?? entry.category.start_time;
   const endTime = entry.end_time ?? entry.category.end_time;
@@ -130,56 +215,109 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
 
   const event = buildScheduleEvent(entry);
 
-  if (entry.google_calendar_event_id) {
+  // ── Primary calendar ──────────────────────────────────────────────
+  let primaryEventId = entry.google_calendar_event_id;
+  let updated = false;
+
+  if (primaryEventId) {
     try {
       await setup.calendar.events.update({
         calendarId: setup.calendarId,
-        eventId: entry.google_calendar_event_id,
+        eventId: primaryEventId,
         requestBody: event,
         sendUpdates: "none",
       });
-      return { skipped: false, eventId: entry.google_calendar_event_id, updated: true };
+      updated = true;
     } catch (error) {
       console.warn("Schedule event update failed, re-inserting:", error);
+      primaryEventId = null; // fall through to insert
     }
   }
 
-  const response = await setup.calendar.events.insert({
-    calendarId: setup.calendarId,
-    requestBody: event,
-    sendUpdates: "none",
-  });
-  const eventId = response.data.id;
-
-  if (eventId) {
-    await prisma.scheduleEntry.update({
-      where: { id: entry.id },
-      data: { google_calendar_event_id: eventId },
+  if (!primaryEventId) {
+    const response = await setup.calendar.events.insert({
+      calendarId: setup.calendarId,
+      requestBody: event,
+      sendUpdates: "none",
     });
+    primaryEventId = response.data.id ?? null;
+    updated = false;
+
+    if (primaryEventId) {
+      await prisma.scheduleEntry.update({
+        where: { id: entry.id },
+        data: { google_calendar_event_id: primaryEventId },
+      });
+    }
   }
 
-  return { skipped: false, eventId, updated: false };
+  // ── Extra leave calendars (ferie, permesso, riposo, malattia) ─────
+  // Mirror the event to the extra calendars using the schedule entry id
+  // as a stable tracking key so we can upsert/delete correctly.
+  let extraCalendars: Array<{ calendarId: string; skipped?: boolean; error?: boolean; message?: string }> = [];
+  if (isLeaveCategory(entry.category)) {
+    const extraCalendarIds = resolveExtraLeaveCalendarIds(setup.calendarId);
+    const results = await Promise.allSettled(
+      extraCalendarIds.map((extraCalendarId) =>
+        upsertTrackedLeaveEvent(setup.calendar, extraCalendarId, `schedule-${entry.id}`, event)
+      )
+    );
+    extraCalendars = results.map((r) =>
+      r.status === "fulfilled"
+        ? r.value
+        : { calendarId: "", error: true, message: r.reason instanceof Error ? r.reason.message : "Extra calendar sync failed" }
+    );
+  }
+
+  return { skipped: false, eventId: primaryEventId, updated, extraCalendars };
 }
 
-export async function deleteScheduleEventFromGoogleCalendar(eventId?: string | null) {
-  if (!eventId) {
-    return { skipped: true, reason: "No schedule event to delete" };
-  }
-
+export async function deleteScheduleEventFromGoogleCalendar(
+  eventId?: string | null,
+  scheduleEntryId?: string | null,
+) {
   const setup = await getCalendarClient();
   if (setup.skipped) return setup;
 
-  try {
-    await setup.calendar.events.delete({
-      calendarId: setup.calendarId,
-      eventId,
-      sendUpdates: "none",
-    });
-    return { deleted: true, eventId };
-  } catch (error) {
-    console.error("Failed to delete schedule calendar event:", error);
-    return { error: true, message: error instanceof Error ? error.message : "Delete failed" };
+  // ── Primary calendar ──────────────────────────────────────────────
+  let primaryResult: { deleted?: boolean; skipped?: boolean; reason?: string; error?: boolean; message?: string } = {
+    skipped: true,
+    reason: "No schedule event to delete",
+  };
+
+  if (eventId) {
+    try {
+      await setup.calendar.events.delete({
+        calendarId: setup.calendarId,
+        eventId,
+        sendUpdates: "none",
+      });
+      primaryResult = { deleted: true };
+    } catch (error) {
+      console.error("Failed to delete schedule calendar event:", error);
+      primaryResult = { error: true, message: error instanceof Error ? error.message : "Delete failed" };
+    }
   }
+
+  // ── Extra leave calendars ─────────────────────────────────────────
+  // Remove the mirrored event from the extra leave calendars if the
+  // schedule entry was a leave category (permesso/ferie/riposo/malattia).
+  let extraCalendars: Array<unknown> = [];
+  if (scheduleEntryId) {
+    const extraCalendarIds = resolveExtraLeaveCalendarIds(setup.calendarId);
+    const results = await Promise.allSettled(
+      extraCalendarIds.map((extraCalendarId) =>
+        deleteTrackedLeaveEvent(setup.calendar, extraCalendarId, `schedule-${scheduleEntryId}`)
+      )
+    );
+    extraCalendars = results.map((r) =>
+      r.status === "fulfilled"
+        ? r.value
+        : { error: true, message: r.reason instanceof Error ? r.reason.message : "Extra calendar delete failed" }
+    );
+  }
+
+  return { ...primaryResult, eventId, extraCalendars };
 }
 
 export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
@@ -224,9 +362,14 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
     scopes: ["https://www.googleapis.com/auth/calendar.events"],
   });
   const calendar = google.calendar({ version: "v3", auth });
+  const extraCalendarIds = resolveExtraLeaveCalendarIds(calendarId);
 
   // If rejected, delete the event from Google Calendar if it exists
   if (leave.status === "REJECTED") {
+    const extraCalendars = await Promise.allSettled(
+      extraCalendarIds.map((extraCalendarId) => deleteTrackedLeaveEvent(calendar, extraCalendarId, leave.id))
+    );
+
     if (leave.google_calendar_event_id) {
       try {
         await calendar.events.delete({
@@ -238,31 +381,40 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
           where: { id: leave.id },
           data: { google_calendar_event_id: null },
         });
-        return { deleted: true, eventId: leave.google_calendar_event_id };
+        return {
+          deleted: true,
+          eventId: leave.google_calendar_event_id,
+          extraCalendars: extraCalendars.map((result) => result.status === "fulfilled" ? result.value : { error: true, message: result.reason instanceof Error ? result.reason.message : "Delete failed" }),
+        };
       } catch (error) {
         console.error("Failed to delete calendar event:", error);
         return { error: true, message: error instanceof Error ? error.message : "Delete failed" };
       }
     }
-    return { skipped: true, reason: "Request rejected and no calendar event existed" };
+    return {
+      skipped: true,
+      reason: "Request rejected and no calendar event existed",
+      extraCalendars: extraCalendars.map((result) => result.status === "fulfilled" ? result.value : { error: true, message: result.reason instanceof Error ? result.reason.message : "Delete failed" }),
+    };
   }
 
   const event = buildLeaveEvent(leave);
+  let primaryResult: { skipped: boolean; eventId: string | null | undefined; updated: boolean };
 
   if (leave.google_calendar_event_id) {
     try {
       await calendar.events.update({
         calendarId,
         eventId: leave.google_calendar_event_id,
-        requestBody: event,
+        requestBody: addLeaveTracking(event, leave.id),
         sendUpdates: "none",
       });
-      return { skipped: false, eventId: leave.google_calendar_event_id, updated: true };
+      primaryResult = { skipped: false, eventId: leave.google_calendar_event_id, updated: true };
     } catch (error) {
       console.warn("Event update failed, re-inserting new event:", error);
       const response = await calendar.events.insert({ 
         calendarId, 
-        requestBody: event,
+        requestBody: addLeaveTracking(event, leave.id),
         sendUpdates: "none"
       });
       const newEventId = response.data.id;
@@ -272,24 +424,37 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
           data: { google_calendar_event_id: newEventId },
         });
       }
-      return { skipped: false, eventId: newEventId, updated: false };
+      primaryResult = { skipped: false, eventId: newEventId, updated: false };
     }
-  }
-
-  const response = await calendar.events.insert({ 
-    calendarId, 
-    requestBody: event,
-    sendUpdates: "none"
-  });
-  const eventId = response.data.id;
-  if (eventId) {
-    await prisma.leaveRequest.update({
-      where: { id: leave.id },
-      data: { google_calendar_event_id: eventId },
+  } else {
+    const response = await calendar.events.insert({ 
+      calendarId, 
+      requestBody: addLeaveTracking(event, leave.id),
+      sendUpdates: "none"
     });
+    const eventId = response.data.id;
+    if (eventId) {
+      await prisma.leaveRequest.update({
+        where: { id: leave.id },
+        data: { google_calendar_event_id: eventId },
+      });
+    }
+
+    primaryResult = { skipped: false, eventId, updated: false };
   }
 
-  return { skipped: false, eventId, updated: false };
+  const extraCalendars = leave.status === "APPROVED"
+    ? await Promise.allSettled(
+        extraCalendarIds.map((extraCalendarId) => upsertTrackedLeaveEvent(calendar, extraCalendarId, leave.id, event))
+      )
+    : await Promise.allSettled(
+        extraCalendarIds.map((extraCalendarId) => deleteTrackedLeaveEvent(calendar, extraCalendarId, leave.id))
+      );
+
+  return {
+    ...primaryResult,
+    extraCalendars: extraCalendars.map((result) => result.status === "fulfilled" ? result.value : { error: true, message: result.reason instanceof Error ? result.reason.message : "Google Calendar extra non sincronizzato" }),
+  };
 }
 
 function buildLeaveEvent(leave: LeaveRequestWithUser) {
@@ -580,4 +745,3 @@ export async function deleteSocialPostFromGoogleCalendar(eventId?: string | null
     return { deleted: false, error };
   }
 }
-

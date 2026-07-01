@@ -30,7 +30,7 @@ export default async function AttendancePage() {
     <AppShell title="Timbrature" subtitle="Registro ufficiale delle presenze salvate dai tablet autorizzati.">
       <AttendanceManager
         readOnly={session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN"}
-        workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone" }))}
+        workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", photoUrl: worker.photo_url }))}
         initialLogs={logs.map((log) => ({
           id: log.id,
           userId: log.user_id,
@@ -41,6 +41,7 @@ export default async function AttendancePage() {
           timestamp: log.timestamp.toISOString(),
           time: log.time,
           note: log.note ?? "",
+          photoUrl: log.user.photo_url,
         }))}
       />
     </AppShell>

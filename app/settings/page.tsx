@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { 
-  CheckSquare, Download, Mail, Palette, PanelsTopLeft, 
+  CalendarDays, CheckSquare, Download, Mail, Palette, PanelsTopLeft, 
   ShieldCheck, Smartphone, Table2, ClipboardList 
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -15,8 +15,10 @@ const allSettings = [
   { href: "/settings/email", title: "Email", text: "Provider e template notifiche.", icon: Mail, superAdminOnly: true },
   { href: "/settings/roles", title: "Ruoli", text: "Permessi per Super Admin, Admin, Responsabili e Dipendenti.", icon: ShieldCheck, superAdminOnly: true },
   { href: "/settings/forms", title: "Gestione Moduli", text: "Crea e configura moduli operativi per lo staff e visualizza le risposte.", icon: ClipboardList, superAdminOnly: false },
+  { href: "/settings/planning", title: "Permessi Planning", text: "Scegli chi può vedere la turnistica in sola lettura.", icon: CalendarDays, superAdminOnly: false },
+  { href: "/settings/tables", title: "Tabelle Assistenza", text: "Permessi per vedere e usare la pagina Tabelle.", icon: Table2, superAdminOnly: false },
   { href: "/settings/app", title: "App Android", text: "Installa l'app sul tablet o scarica l'APK ufficiale.", icon: Download, superAdminOnly: true },
-  { href: "/settings/services", title: "Pagine salone", text: "Assegna NOTE, TASK o FORMS come pagina visibile per ogni salone.", icon: PanelsTopLeft, superAdminOnly: true },
+  { href: "/settings/services", title: "Pagine salone", text: "Assegna Note, Task o Cassa come pagina visibile per ogni salone.", icon: PanelsTopLeft, superAdminOnly: true },
   { href: "/settings/tasks", title: "Task", text: "Categorie predefinite, commenti e impostazioni operative task.", icon: CheckSquare, superAdminOnly: true },
 ];
 

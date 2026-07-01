@@ -1,11 +1,13 @@
 - `[x]` Creare la rotta server `/settings/forms/edit/[id]/page.tsx`
 - `[x]` Creare il componente client `FormBuilder` in `components/form-builder.tsx`
-  - `[x]` Struttura a tab (Builder, Settings, Preview) ed Inspector laterale
-  - `[x]` Visual Canvas con griglia a punti e blocchi/nodi domanda
-  - `[x]` Calcolo e rendering delle curve SVG di collegamento condizionale
-  - `[x]` Tab Settings (integrazione categoria "Ordini", notifiche, ruoli e sedi)
-  - `[x]` Tab Preview con simulatore desktop/mobile e calcolo logiche in real-time
-  - `[x]` Chiamate API per il salvataggio (POST/PUT) e reindirizzamento
-- `[x]` Modificare `components/admin-forms-manager.tsx` per reindirizzare le azioni "Edita/Crea" al builder di pagina e pulire il vecchio codice modal
-- `[x]` Eseguire build di verifica (`npm run build`)
-- `[x]` Aggiornare `walkthrough.md`
+  - `[x]` Aggiungere stati `activeFieldIndex` e gestori di navigazione in `components/staff-forms-viewer.tsx`
+- `[x]` Calcolare l'array `visibleFields` tenendo conto delle logiche condizionali
+- `[x]` Implementare la validazione `isCurrentFieldValid` per ogni tipo di campo
+- `[x]` Raggruppare i log per dipendente e data in `groupedLogs` in `components/attendance-manager.tsx`
+- `[ ] Riscrivere il rendering della tabella Desktop per mostrare le colonne Dipendente, Data, Ora Entrata, Ora Pausa, Ora Uscita, Azioni
+- `[ ] Riscrivere il rendering della card Mobile per mostrare la vista giornaliera collassata
+- `[ ] Implementare il menu a comparsa "Gestisci" / dropdown per le azioni di riga (modifica esistenti, aggiunta mancanti)
+- `[ ] Eseguire il controllo dei tipi con `npx tsc --noEmit`
+- `[ ] Eseguire la build locale con `npm run build`
+- `[ ] Creare/aggiornare il walkthrough.md
+- `[ ] Effettuare il deploy su Netlify

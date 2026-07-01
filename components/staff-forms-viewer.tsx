@@ -1,16 +1,22 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
 
+const CLIENT_CONTROL_FIELD_IDS = {
+  serviceOwner: "client_control_service_owner",
+  serviceStaff: "client_control_service_staff",
+  correctness: "client_control_correctness",
+} as const;
+
 type FormField = {
   id: string;
   label: string;
-  type: "text" | "textarea" | "number" | "select" | "file" | "money" | "date" | "worker";
+  type: "text" | "textarea" | "number" | "select" | "file" | "money" | "date" | "worker" | "worker_multi" | "checkbox" | "pin";
   required: boolean;
   options?: string[];
   description?: string;
@@ -19,6 +25,12 @@ type FormField = {
     operator: "equals" | "not_equals" | "contains";
     value: string;
   } | null;
+  show_ifs?: {
+    field_id: string;
+    operator: "equals" | "not_equals" | "contains";
+    value: string;
+  }[];
+  position?: { x: number; y: number };
 };
 
 type FormTemplate = {
@@ -42,7 +54,7 @@ export function StaffFormsViewer({
   autoFillFormName,
 }: {
   forms: FormTemplate[];
-  employees?: Array<{ id: string; name: string }>;
+  employees?: Array<{ id: string; name: string; locationId?: string | null; locationName?: string | null; isPresent?: boolean }>;
   initialResponses?: any[];
   currentUserId: string;
   currentUserName: string;
@@ -54,6 +66,37 @@ export function StaffFormsViewer({
   const [selectedFormForHistory, setSelectedFormForHistory] = useState<FormTemplate | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
   const [responses, setResponses] = useState<any[]>(initialResponses);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>("");
+  const [customSelectValue, setCustomSelectValue] = useState<string>("");
+
+  const handleSaveAnswer = async (fieldId: string, newValue: string) => {
+    if (!selectedResponse) return;
+    try {
+      const updatedAnswers = {
+        ...selectedResponse.answers,
+        [fieldId]: newValue,
+      };
+      const res = await fetch(`/api/service-forms/responses/${selectedResponse.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: updatedAnswers }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedResponse(data);
+        setResponses((prev) =>
+          prev.map((item) => (item.id === data.id ? data : item))
+        );
+        setEditingFieldId(null);
+      } else {
+        alert("Errore durante il salvataggio.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Si è verificato un errore, riprova.");
+    }
+  };
   const [expandedFormId, setExpandedFormId] = useState<string | null>(forms[0]?.id ?? null);
 
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -79,19 +122,144 @@ export function StaffFormsViewer({
   // Input answer states (mapped by field ID)
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [files, setFiles] = useState<Record<string, File>>({});
+  const [activeFieldIndex, setActiveFieldIndex] = useState(0);
 
   // Derived helper variables for dynamic group participants form
   const candidaturaForm = forms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
   const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
+  const cashClosingForm = forms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
+  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id].filter(Boolean));
+  const regularForms = forms.filter((form) => !primaryFormIds.has(form.id));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
   const isGroupCourse = String(participaValue || "").toUpperCase().includes("GRUP");
   const isCorsistiForm = selectedForm?.name.toUpperCase().includes("CORSISTI");
   const groupCount = parseInt(answers["group_participants_count"] || "2", 10);
+  const isCashClosingForm = selectedForm
+    ? selectedForm.name.toUpperCase().includes("CHIUSURA CASSA") || selectedForm.category.toUpperCase().includes("CASSA")
+    : false;
+  const isSelectedClientControlForm = selectedForm
+    ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
+    : false;
+  const autoClientControlFieldIds = new Set<string>([
+    CLIENT_CONTROL_FIELD_IDS.serviceOwner,
+    CLIENT_CONTROL_FIELD_IDS.serviceStaff,
+  ]);
 
   const isDefaultParticipantField = (fieldLabel: string) => {
     const labelUpper = fieldLabel.toUpperCase();
     return labelUpper === "NOME CORSISTA" || labelUpper === "EMAIL CORSISTA" || labelUpper === "NUMERO CORSISTA";
+  };
+
+  const isFieldVisible = (field: FormField, sourceAnswers = answers) => {
+    const conditions = field.show_ifs && field.show_ifs.length > 0
+      ? field.show_ifs
+      : field.show_if?.field_id
+        ? [field.show_if]
+        : [];
+
+    if (conditions.length === 0) return true;
+
+    return conditions.some(cond => {
+      if (!cond.field_id) return true;
+      const actualValue = String(sourceAnswers[cond.field_id] ?? "").toLowerCase().trim();
+      const expectedValue = String(cond.value ?? "").toLowerCase().trim();
+      if (!expectedValue) return Boolean(actualValue);
+      if (cond.operator === "contains") return actualValue.includes(expectedValue);
+      if (cond.operator === "not_equals") return actualValue !== expectedValue;
+      return actualValue === expectedValue;
+    });
+  };
+
+  const visibleFields = useMemo(() => {
+    if (!selectedForm) return [];
+    return selectedForm.fields.filter((field) => {
+      const isVisible = isFieldVisible(field);
+      if (!isVisible) return false;
+      if (isSelectedClientControlForm && autoClientControlFieldIds.has(field.id)) {
+        return false;
+      }
+      if (isCorsistiForm && isGroupCourse && isDefaultParticipantField(field.label)) {
+        return false;
+      }
+      return true;
+    });
+  }, [selectedForm, answers, isCorsistiForm, isGroupCourse]);
+
+  const currentActiveIndex = Math.min(activeFieldIndex, Math.max(0, visibleFields.length - 1));
+  const progressPercentage = visibleFields.length > 0
+    ? Math.round(((currentActiveIndex + 1) / visibleFields.length) * 100)
+    : 0;
+  const answeredVisibleCount = visibleFields.filter((field) => {
+    if (field.type === "file") return Boolean(files[field.id]);
+    if (field.type === "checkbox") return answers[field.id] === true;
+    if (field.type === "worker_multi") return Array.isArray(answers[field.id]) && answers[field.id].length > 0;
+    const value = answers[field.id];
+    return value !== undefined && value !== null && String(value).trim() !== "";
+  }).length;
+
+  const isCurrentFieldValid = (field: FormField) => {
+    if (!field.required) return true;
+
+    // Special case: group course participants details validation
+    if (field.id === participaField?.id && isGroupCourse) {
+      const count = parseInt(answers["group_participants_count"] || "2", 10);
+      for (let i = 1; i <= count; i++) {
+        const name = answers[`participant_${i}_name`]?.trim();
+        if (!name) return false;
+      }
+    }
+
+    if (field.type === "file") {
+      return !!files[field.id];
+    }
+
+    if (field.type === "checkbox") {
+      return answers[field.id] === true;
+    }
+
+    if (field.type === "worker_multi") {
+      return Array.isArray(answers[field.id]) && answers[field.id].length > 0;
+    }
+
+    const val = answers[field.id];
+    if (val === undefined || val === null || String(val).trim() === "") {
+      return false;
+    }
+
+    if (val === "Altro") {
+      const altroVal = answers[field.id + "_altro"];
+      if (altroVal === undefined || altroVal === null || String(altroVal).trim() === "") {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleNextOrSubmit = () => {
+    const currentField = visibleFields[currentActiveIndex];
+    if (!currentField) return;
+
+    if (!isCurrentFieldValid(currentField)) {
+      setErrorMsg("Per favore, compila questo campo obbligatorio prima di procedere.");
+      return;
+    }
+
+    setErrorMsg("");
+
+    if (currentActiveIndex < visibleFields.length - 1) {
+      setActiveFieldIndex(currentActiveIndex + 1);
+    } else {
+      handleSubmit();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, fieldType: string) => {
+    if (e.key === "Enter" && fieldType !== "textarea") {
+      e.preventDefault();
+      handleNextOrSubmit();
+    }
   };
 
   const responseParticipaField = selectedResponse?.form?.fields 
@@ -192,11 +360,25 @@ export function StaffFormsViewer({
   };
 
   const handleOpenForm = (form: FormTemplate) => {
+    const isCashClosing = form.name.toUpperCase().includes("CHIUSURA CASSA") || form.category.toUpperCase().includes("CASSA");
+    const isClientControl = form.name.toUpperCase().includes("CONTROLLO CLIENTE") || form.category.toUpperCase().includes("QUALITA");
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
     setSelectedForm(form);
-    setAnswers({});
+    setAnswers(
+      isCashClosing
+        ? { cash_date: today, cash_fund: "50.00" }
+        : isClientControl
+          ? {
+              [CLIENT_CONTROL_FIELD_IDS.correctness]: "Da controllare",
+              [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: currentUserName,
+              [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: [currentUserName],
+            }
+          : {}
+    );
     setFiles({});
     setSuccess(false);
     setErrorMsg("");
+    setActiveFieldIndex(0);
   };
 
   React.useEffect(() => {
@@ -217,16 +399,6 @@ export function StaffFormsViewer({
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
   };
 
-  const isFieldVisible = (field: FormField, sourceAnswers = answers) => {
-    if (!field.show_if?.field_id) return true;
-    const actualValue = String(sourceAnswers[field.show_if.field_id] ?? "").toLowerCase().trim();
-    const expectedValue = String(field.show_if.value ?? "").toLowerCase().trim();
-    if (!expectedValue) return Boolean(actualValue);
-    if (field.show_if.operator === "contains") return actualValue.includes(expectedValue);
-    if (field.show_if.operator === "not_equals") return actualValue !== expectedValue;
-    return actualValue === expectedValue;
-  };
-
   const handleFileChange = (fieldId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -234,9 +406,58 @@ export function StaffFormsViewer({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSelectChange = (fieldId: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [fieldId]: value }));
+    setErrorMsg("");
+
+    if (value && value !== "Altro") {
+      setTimeout(() => {
+        setActiveFieldIndex((prevIndex) => {
+          if (prevIndex < visibleFields.length - 1) {
+            return prevIndex + 1;
+          }
+          return prevIndex;
+        });
+      }, 350);
+    }
+  };
+
+  const toggleWorkerMulti = (fieldId: string, workerName: string) => {
+    setAnswers((prev) => {
+      const current = Array.isArray(prev[fieldId]) ? prev[fieldId] as string[] : [];
+      const next = current.includes(workerName)
+        ? current.filter((name) => name !== workerName)
+        : [...current, workerName];
+      return { ...prev, [fieldId]: next };
+    });
+    setErrorMsg("");
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedForm || submitting) return;
+
+    // Double check all fields validity
+    const invalidField = visibleFields.find((f) => !isCurrentFieldValid(f));
+    if (invalidField) {
+      setErrorMsg(`Il campo "${invalidField.label}" è obbligatorio.`);
+      const idx = visibleFields.indexOf(invalidField);
+      if (idx !== -1) {
+        setActiveFieldIndex(idx);
+      }
+      return;
+    }
+
+    if (isCashClosingForm) {
+      const fundValue = Number(String(answers.cash_fund ?? "").replace(",", "."));
+      const notesValue = String(answers.cash_notes ?? "").trim();
+      if (Number.isFinite(fundValue) && Math.abs(fundValue - 50) > 0.009 && !notesValue) {
+        setErrorMsg("Il fondo cassa e diverso da € 50,00: inserisci una nota di giustificazione.");
+        const notesIndex = visibleFields.findIndex((field) => field.id === "cash_notes" || field.label.toUpperCase().includes("NOTE"));
+        if (notesIndex !== -1) setActiveFieldIndex(notesIndex);
+        return;
+      }
+    }
 
     setSubmitting(true);
     setErrorMsg("");
@@ -244,9 +465,15 @@ export function StaffFormsViewer({
     const formData = new FormData();
     formData.append("formId", selectedForm.id);
 
-    const visibleFieldIds = new Set(selectedForm.fields.filter((field) => isFieldVisible(field)).map((field) => field.id));
+    const visibleFieldIds = new Set(visibleFields.map((field) => field.id));
     const answersPayload = Object.fromEntries(
-      Object.entries(answers).filter(([key]) => visibleFieldIds.has(key) || key.includes("_altro") || key.startsWith("participant_") || key === "group_participants_count")
+      Object.entries(answers).filter(([key]) =>
+        visibleFieldIds.has(key) ||
+        (isSelectedClientControlForm && autoClientControlFieldIds.has(key)) ||
+        key.includes("_altro") ||
+        key.startsWith("participant_") ||
+        key === "group_participants_count"
+      )
     );
     // Replace "Altro" select options with the custom text value typed in the specified input
     Object.keys(answersPayload).forEach((key) => {
@@ -255,12 +482,6 @@ export function StaffFormsViewer({
         delete answersPayload[key + "_altro"];
       }
     });
-
-    const isGroupCourse = selectedForm.name.toUpperCase().includes("CORSISTI") &&
-      Object.entries(answers).some(([key, val]) => {
-        const field = selectedForm.fields.find(f => f.id === key);
-        return field?.label.toUpperCase().includes("PARTICIPA") && String(val || "").toUpperCase().includes("GRUP");
-      });
 
     if (isGroupCourse && !answersPayload["group_participants_count"]) {
       answersPayload["group_participants_count"] = "2";
@@ -307,72 +528,120 @@ export function StaffFormsViewer({
   return (
     <div className="space-y-6 dark staff-forms-page">
       <style dangerouslySetInnerHTML={{__html: `
-        body,
-        .paradise-theme-root {
-          background-color: #0A0A0A !important;
-          background: #0A0A0A !important;
-        }
-        div:has(> .staff-forms-page),
-        div:has(> * > .staff-forms-page),
-        div:has(> * > * > .staff-forms-page),
-        div:has(> * > * > * > .staff-forms-page) {
-          background-color: #0A0A0A !important;
-          border-color: rgba(255, 255, 255, 0.1) !important;
-        }
-        div:has(> .staff-forms-page) footer {
-          border-top-color: rgba(255, 255, 255, 0.1) !important;
-          color: rgba(255, 255, 255, 0.35) !important;
+        .staff-forms-page {
+          color-scheme: dark;
         }
       `}} />
 
 
-      {/* Header Card with shortcuts */}
-      <div className="flex flex-col gap-4 bg-white/5 border border-white/10 rounded-[28px] p-6 mb-2 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-white">Moduli & Form</h1>
-          <p className="text-xs sm:text-sm text-white/65 mt-0.5">Compila moduli operativi, crea nuovi ordini o registra una nuova candidatura.</p>
+      {/* Tablet cash-register shortcuts */}
+      <div className="rounded-[32px] border border-white/10 bg-[#101010] p-5 shadow-2xl sm:p-6">
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E8C98B]">Terminale operativo</p>
+            <h1 className="mt-1 text-2xl font-black text-white sm:text-3xl">Cassa & Moduli</h1>
+          </div>
+          <p className="max-w-xl text-xs font-semibold text-white/45 sm:text-right">Schermata rapida per tablet: chiusura cassa, ordini e pagamenti fornitore.</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {cashClosingForm && (
+            <button
+              type="button"
+              onClick={() => handleOpenForm(cashClosingForm)}
+              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-5 text-left text-[#111827] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
+                  <Calculator className="size-6" />
+                </div>
+                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
+                  <ArrowUpRight className="size-5" />
+                </span>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Cassa</p>
+                <h2 className="mt-1 text-xl font-black">Chiusura Cassa</h2>
+              </div>
+            </button>
+          )}
+
           {orderForm && (
-            <Button 
+            <button
+              type="button"
               onClick={() => handleOpenForm(orderForm)}
-              className="bg-gradient-to-r from-[#E8C98B] via-[#F7DFA7] to-[#FFE8B9] text-paradise-noir shadow-soft hover:shadow-luxury hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 rounded-2xl min-h-12 shrink-0 font-extrabold text-sm"
+              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-5 text-left text-[#10251c] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
             >
-              <ShoppingCart className="size-5 text-paradise-noir" /> Nuovo Ordine
-            </Button>
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
+                  <ShoppingCart className="size-6" />
+                </div>
+                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
+                  <Plus className="size-5" />
+                </span>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Ordini</p>
+                <h2 className="mt-1 text-xl font-black">Nuovo Ordine</h2>
+              </div>
+            </button>
           )}
+
+          <a
+            href="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#FDCB82] to-[#FFE8B9] p-5 text-left text-[#211407] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
+                <CreditCard className="size-6" />
+              </div>
+              <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
+                <ArrowUpRight className="size-5" />
+              </span>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Fornitori</p>
+              <h2 className="mt-1 text-xl font-black">Pagamento Link</h2>
+            </div>
+          </a>
+
           {candidaturaForm && (
-            <Button 
+            <button
+              type="button"
               onClick={() => handleOpenForm(candidaturaForm)}
-              className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 rounded-2xl min-h-12 shrink-0 font-extrabold text-sm"
+              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#F7A1C4] to-[#ffd5e7] p-5 text-left text-[#2b1020] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
             >
-              <Plus className="size-5 text-paradise-noir" /> Nuova Candidatura
-            </Button>
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
+                  <Plus className="size-6" />
+                </div>
+                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
+                  <ArrowUpRight className="size-5" />
+                </span>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Generale</p>
+                <h2 className="mt-1 text-xl font-black">Candidatura</h2>
+              </div>
+            </button>
           )}
         </div>
+
+        {orderForm && (
+          <a
+            href="/orders"
+            className="mt-4 flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-black text-white transition hover:bg-white/10"
+          >
+            <ShoppingCart className="size-5 text-[#E8C98B]" /> Stato ordini
+            <ArrowUpRight className="size-4" />
+          </a>
+        )}
       </div>
 
-      {orderForm && (
-        <a
-          href="/orders"
-          className="group grid w-full gap-4 rounded-[28px] border border-[#E8C98B]/40 bg-gradient-to-br from-[#1F1B13] via-[#171412] to-[#0F0F0F] p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#E8C98B] hover:shadow-xl md:grid-cols-[auto_1fr_auto] md:items-center"
-        >
-          <div className="grid size-14 place-items-center rounded-2xl bg-[#E8C98B] text-paradise-noir">
-            <ShoppingCart className="size-7" />
-          </div>
-          <div>
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-[#E8C98B]">Ordini salone</p>
-            <h2 className="mt-1 text-xl font-extrabold text-white">Controlla tutti gli ordini</h2>
-            <p className="mt-1 text-sm text-white/60">Vedi lo stato degli ordini del salone: nuovi, in preparazione, ordinati, arrivati e completati.</p>
-          </div>
-          <span className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-paradise-noir transition group-hover:translate-x-1">
-            Apri ordini <ArrowUpRight className="size-4" />
-          </span>
-        </a>
-      )}
-
       {/* Prossimi Eventi */}
-      {upcomingEvents.length > 0 && (
+      {false && upcomingEvents.length > 0 && (
         <Card className="bg-white/5 border border-white/10 border-l-4 border-l-[#E8C98B] p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2 border-b border-white/10 pb-3">
             <Calendar className="size-5 text-[#A74758]" />
@@ -462,13 +731,14 @@ export function StaffFormsViewer({
       )}
 
       {/* Templates List (Desktop/Tablet) */}
+      {regularForms.length > 0 && (
       <div className="hidden sm:grid gap-6 md:grid-cols-2">
-        {forms.map((form, idx) => {
+        {regularForms.map((form, idx) => {
           const colors = [
-            { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+            { bg: "from-[#E8EDFF] to-[#C7D2FE]", accent: "#6366F1", glow: "rgba(99,102,241,0.15)", iconBg: "bg-indigo-100", iconText: "text-indigo-600", btnBg: "bg-indigo-600 hover:bg-indigo-700", borderAccent: "border-indigo-200/60" },
+            { bg: "from-[#FFF3E0] to-[#FFE0B2]", accent: "#F59E0B", glow: "rgba(245,158,11,0.15)", iconBg: "bg-amber-100", iconText: "text-amber-600", btnBg: "bg-amber-600 hover:bg-amber-700", borderAccent: "border-amber-200/60" },
+            { bg: "from-[#E0F7ED] to-[#A7F3D0]", accent: "#10B981", glow: "rgba(16,185,129,0.15)", iconBg: "bg-emerald-100", iconText: "text-emerald-600", btnBg: "bg-emerald-600 hover:bg-emerald-700", borderAccent: "border-emerald-200/60" },
+            { bg: "from-[#FDE8F0] to-[#FBCFE8]", accent: "#EC4899", glow: "rgba(236,72,153,0.15)", iconBg: "bg-pink-100", iconText: "text-pink-600", btnBg: "bg-pink-600 hover:bg-pink-700", borderAccent: "border-pink-200/60" },
           ];
           const color = colors[idx % colors.length];
           const isExpanded = expandedFormId === form.id;
@@ -478,52 +748,56 @@ export function StaffFormsViewer({
               key={form.id}
               onClick={() => setExpandedFormId(isExpanded ? null : form.id)}
               className={cn(
-                "w-full rounded-[32px] p-6 transition-all duration-300 cursor-pointer shadow-md relative overflow-hidden select-none",
-                color.bg,
-                color.text,
-                isExpanded ? "flex flex-col gap-5 animate-in fade-in-50 duration-200" : "h-[96px] flex items-center justify-between"
+                "group w-full rounded-[32px] p-6 transition-all duration-400 cursor-pointer relative overflow-hidden select-none border",
+                `bg-gradient-to-br ${color.bg}`,
+                color.borderAccent,
+                isExpanded
+                  ? "flex flex-col gap-5 shadow-xl"
+                  : "h-[96px] flex items-center justify-between shadow-md hover:shadow-lg hover:-translate-y-0.5"
               )}
+              style={{ boxShadow: isExpanded ? `0 20px 60px ${color.glow}, 0 4px 20px rgba(0,0,0,0.04)` : undefined }}
             >
+              {/* Decorative corner elements */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/30 to-transparent rounded-bl-full pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-20 h-20 bg-gradient-to-tr from-black/[0.02] to-transparent rounded-tr-full pointer-events-none" />
+
               {isExpanded ? (
-                <div className="flex flex-col justify-between w-full h-full">
+                <div className="flex flex-col justify-between w-full h-full relative z-10">
                   <div>
                     <div className="flex justify-between items-start gap-4">
                       <div>
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider opacity-60">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-full bg-white/50 backdrop-blur-sm" style={{ color: color.accent }}>
                           {form.category}
                         </span>
-                        <h3 className="text-xl font-extrabold mt-0.5 leading-tight">{form.name}</h3>
+                        <h3 className="text-xl font-black mt-2.5 leading-tight text-gray-900">{form.name}</h3>
                       </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenForm(form);
                         }}
-                        className={cn(
-                          "size-12 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform shrink-0",
-                          color.arrowBg,
-                          color.arrowText
-                        )}
+                        className="size-12 rounded-full flex items-center justify-center bg-white shadow-lg active:scale-95 transition-all duration-200 shrink-0 hover:shadow-xl hover:scale-105"
+                        style={{ color: color.accent }}
                       >
-                        <ArrowUpRight className="size-5.5" />
+                        <ArrowUpRight className="size-5" />
                       </button>
                     </div>
 
-                    <p className="mt-3.5 text-sm font-semibold opacity-85 leading-relaxed">
+                    <p className="mt-4 text-sm font-medium text-gray-600 leading-relaxed">
                       {form.description || "Nessuna descrizione specificata per questo modulo."}
                     </p>
                   </div>
 
-                  <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t border-black/15">
+                  <div className="mt-6 grid grid-cols-2 gap-3 pt-4 border-t border-black/[0.06]">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedFormForHistory(form);
                       }}
-                      className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-white/40 backdrop-blur-sm text-base font-extrabold text-current border border-black/5 active:scale-95 transition"
+                      className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-white/60 backdrop-blur-sm text-sm font-black text-gray-700 border border-white/80 shadow-sm hover:bg-white/80 hover:shadow-md active:scale-[0.97] transition-all duration-200"
                     >
-                      <Clock className="size-5" />
+                      <Clock className="size-4.5" />
                       Invii
                     </button>
                     <button
@@ -532,32 +806,31 @@ export function StaffFormsViewer({
                         e.stopPropagation();
                         handleOpenForm(form);
                       }}
-                      className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-slate-900 text-white text-base font-extrabold active:scale-95 transition"
+                      className={cn("inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl text-white text-sm font-black shadow-lg hover:shadow-xl active:scale-[0.97] transition-all duration-200", color.btnBg)}
                     >
-                      <Plus className="size-5" />
+                      <Plus className="size-4.5" />
                       Compila
                     </button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-4 truncate">
-                    <DynamicIcon name={form.icon || "ClipboardList"} className="size-6 shrink-0 opacity-70" />
+                  <div className="flex items-center gap-4 truncate relative z-10">
+                    <div className={cn("grid size-11 place-items-center rounded-2xl", color.iconBg, color.iconText)}>
+                      <DynamicIcon name={form.icon || "ClipboardList"} className="size-5" />
+                    </div>
                     <div className="truncate">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-50 block">
+                      <span className="text-[10px] font-black uppercase tracking-[0.18em] block" style={{ color: color.accent }}>
                         {form.category}
                       </span>
-                      <h3 className="text-base sm:text-lg font-extrabold truncate">{form.name}</h3>
+                      <h3 className="text-base sm:text-lg font-black truncate text-gray-900">{form.name}</h3>
                     </div>
                   </div>
                   <div
-                    className={cn(
-                      "size-12 rounded-full flex items-center justify-center shadow-md shrink-0",
-                      color.arrowBg,
-                      color.arrowText
-                    )}
+                    className="size-11 rounded-full flex items-center justify-center bg-white shadow-md shrink-0 relative z-10 group-hover:shadow-lg group-hover:scale-105 transition-all duration-200"
+                    style={{ color: color.accent }}
                   >
-                    <ArrowUpRight className="size-5.5" />
+                    <ArrowUpRight className="size-5" />
                   </div>
                 </>
               )}
@@ -565,7 +838,7 @@ export function StaffFormsViewer({
           );
         })}
 
-        {forms.length === 0 && (
+        {regularForms.length === 0 && (
           <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-white/40 bg-white/5 rounded-3xl border border-dashed border-white/10">
             <AlertCircle className="size-10 text-white/30 mb-3" />
             <p className="font-semibold text-lg">Nessun modulo disponibile</p>
@@ -573,15 +846,17 @@ export function StaffFormsViewer({
           </div>
         )}
       </div>
+      )}
 
       {/* Mobile Stacked Cards Layout (sm:hidden) */}
+      {regularForms.length > 0 && (
       <div className="space-y-4 sm:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
-        {forms.map((form, idx) => {
+        {regularForms.map((form, idx) => {
           const colors = [
-            { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+            { bg: "from-[#E8EDFF] to-[#C7D2FE]", accent: "#6366F1", iconBg: "bg-indigo-100", iconText: "text-indigo-600", btnBg: "bg-indigo-600", borderAccent: "border-indigo-200/60" },
+            { bg: "from-[#FFF3E0] to-[#FFE0B2]", accent: "#F59E0B", iconBg: "bg-amber-100", iconText: "text-amber-600", btnBg: "bg-amber-600", borderAccent: "border-amber-200/60" },
+            { bg: "from-[#E0F7ED] to-[#A7F3D0]", accent: "#10B981", iconBg: "bg-emerald-100", iconText: "text-emerald-600", btnBg: "bg-emerald-600", borderAccent: "border-emerald-200/60" },
+            { bg: "from-[#FDE8F0] to-[#FBCFE8]", accent: "#EC4899", iconBg: "bg-pink-100", iconText: "text-pink-600", btnBg: "bg-pink-600", borderAccent: "border-pink-200/60" },
           ];
           const color = colors[idx % colors.length];
           const isExpanded = expandedFormId === form.id;
@@ -591,50 +866,50 @@ export function StaffFormsViewer({
               key={form.id}
               onClick={() => setExpandedFormId(isExpanded ? null : form.id)}
               className={cn(
-                "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
-                color.bg,
-                color.text,
-                isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[72px] flex items-center justify-between"
+                "group w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer relative overflow-hidden select-none border",
+                `bg-gradient-to-br ${color.bg}`,
+                color.borderAccent,
+                isExpanded ? "flex flex-col gap-4 shadow-lg" : "h-[72px] flex items-center justify-between shadow-sm"
               )}
             >
+              {/* Decorative corner */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-white/25 to-transparent rounded-bl-full pointer-events-none" />
+
               {isExpanded ? (
-                <div className="flex flex-col justify-between w-full">
+                <div className="flex flex-col justify-between w-full relative z-10">
                   <div>
                     <div className="flex justify-between items-start gap-3">
                       <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-60">
+                        <span className="inline-flex text-[9px] font-black uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-white/50 backdrop-blur-sm" style={{ color: color.accent }}>
                           {form.category}
                         </span>
-                        <h3 className="text-base font-extrabold mt-0.5 leading-tight">{form.name}</h3>
+                        <h3 className="text-base font-black mt-2 leading-tight text-gray-900">{form.name}</h3>
                       </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenForm(form);
                         }}
-                        className={cn(
-                          "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
-                          color.arrowBg,
-                          color.arrowText
-                        )}
+                        className="size-9 rounded-full flex items-center justify-center bg-white shadow-md active:scale-95 transition-all shrink-0"
+                        style={{ color: color.accent }}
                       >
-                        <ArrowUpRight className="size-4.5" />
+                        <ArrowUpRight className="size-4" />
                       </button>
                     </div>
 
-                    <p className="mt-3 text-xs font-semibold opacity-85 leading-relaxed">
+                    <p className="mt-3 text-xs font-medium text-gray-600 leading-relaxed">
                       {form.description || "Nessuna descrizione specificata per questo modulo."}
                     </p>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
+                  <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/[0.06]">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedFormForHistory(form);
                       }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/60 backdrop-blur-sm text-sm font-black text-gray-700 border border-white/80 active:scale-[0.97] transition-all"
                     >
                       <Clock className="size-4" />
                       Invii
@@ -645,7 +920,7 @@ export function StaffFormsViewer({
                         e.stopPropagation();
                         handleOpenForm(form);
                       }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                      className={cn("inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl text-white text-sm font-black shadow-md active:scale-[0.97] transition-all", color.btnBg)}
                     >
                       <Plus className="size-4" />
                       Compila
@@ -654,16 +929,15 @@ export function StaffFormsViewer({
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-3 truncate">
-                    <DynamicIcon name={form.icon || "ClipboardList"} className="size-4 shrink-0 opacity-70" />
-                    <h3 className="text-sm font-extrabold truncate">{form.name}</h3>
+                  <div className="flex items-center gap-3 truncate relative z-10">
+                    <div className={cn("grid size-9 place-items-center rounded-xl", color.iconBg, color.iconText)}>
+                      <DynamicIcon name={form.icon || "ClipboardList"} className="size-4" />
+                    </div>
+                    <h3 className="text-sm font-black truncate text-gray-900">{form.name}</h3>
                   </div>
                   <div
-                    className={cn(
-                      "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
-                      color.arrowBg,
-                      color.arrowText
-                    )}
+                    className="size-9 rounded-full flex items-center justify-center bg-white shadow-sm shrink-0 relative z-10"
+                    style={{ color: color.accent }}
                   >
                     <ArrowUpRight className="size-4" />
                   </div>
@@ -673,296 +947,512 @@ export function StaffFormsViewer({
           );
         })}
 
-        {forms.length === 0 && (
-          <div className="py-12 flex flex-col items-center justify-center text-center text-white/45 border border-dashed border-white/10 rounded-[28px]">
-            <AlertCircle className="size-8 text-white/20 mb-2" />
-            <p className="font-bold text-sm">Nessun modulo disponibile</p>
-          </div>
-        )}
       </div>
+      )}
 
       {/* FILL OUT MODAL */}
       {selectedForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="flex flex-col max-h-[85vh] w-full max-w-xl rounded-[28px] bg-neutral-900 text-white shadow-2xl overflow-hidden border border-white/10 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-6 py-4">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#A74758]">
-                  {selectedForm.category}
-                </span>
-                <h3 className="text-lg font-bold text-white">{selectedForm.name}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5">
+          <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[#121212] text-white shadow-[0_35px_120px_rgba(0,0,0,0.55)] animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.35),transparent_34%),linear-gradient(135deg,#202020,#121212_60%)] px-5 py-5 sm:px-7">
+              <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 gap-3">
+                  <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 shadow-inner">
+                    <DynamicIcon name={selectedForm.icon || "ClipboardList"} className="size-6 text-[#ff8bb2]" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="inline-flex rounded-full border border-[#A74758]/35 bg-[#A74758]/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#ff8bb2]">
+                      {selectedForm.category}
+                    </span>
+                    <h3 className="mt-2 truncate text-xl font-black text-white sm:text-2xl">{selectedForm.name}</h3>
+                    <p className="mt-1 text-xs font-medium text-white/50">
+                      {visibleFields.length > 0
+                        ? `Domanda ${currentActiveIndex + 1} di ${visibleFields.length} · ${answeredVisibleCount} compilate`
+                        : "Modulo pronto per la compilazione"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !submitting && setSelectedForm(null)}
+                  className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-white/55 transition hover:bg-white/15 hover:text-white"
+                >
+                  <X className="size-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => !submitting && setSelectedForm(null)}
-                className="grid size-8 place-items-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:bg-white/10 hover:text-white transition"
-              >
-                <X className="size-4" />
-              </button>
+
+              {!success && visibleFields.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-white/45">
+                    <span>Progresso compilazione</span>
+                    <span>{progressPercentage}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <div 
+                      className="h-full rounded-full bg-gradient-to-r from-[#A74758] via-[#ff7fb0] to-[#F7DFA7] transition-all duration-500 ease-out" 
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {visibleFields.map((field, index) => {
+                      const isActive = index === currentActiveIndex;
+                      const isDone = field.type === "file"
+                        ? Boolean(files[field.id])
+                        : Boolean(answers[field.id] !== undefined && answers[field.id] !== null && String(answers[field.id]).trim() !== "");
+                      return (
+                        <button
+                          key={field.id}
+                          type="button"
+                          onClick={() => {
+                            setErrorMsg("");
+                            setActiveFieldIndex(index);
+                          }}
+                          className={cn(
+                            "grid size-8 shrink-0 place-items-center rounded-full border text-[11px] font-black transition",
+                            isActive
+                              ? "border-[#ff8bb2] bg-[#ff8bb2] text-black"
+                              : isDone
+                                ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-200"
+                                : "border-white/10 bg-white/5 text-white/35"
+                          )}
+                          title={field.label}
+                        >
+                          {isDone && !isActive ? <Check className="size-3.5" /> : index + 1}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {success ? (
-              <div className="flex flex-col items-center justify-center p-12 text-center flex-1">
-                <CheckCircle2 className="size-16 text-emerald-500 animate-bounce" />
-                <h3 className="text-xl font-bold mt-4 text-white">Inviato con Successo!</h3>
-                <p className="text-sm text-white/60 mt-1">Il modulo è stato salvato e sincronizzato.</p>
+              <div className="flex flex-1 flex-col items-center justify-center p-12 text-center">
+                <div className="grid size-20 place-items-center rounded-full border border-emerald-400/25 bg-emerald-400/15">
+                  <CheckCircle2 className="size-10 text-emerald-300" />
+                </div>
+                <h3 className="mt-5 text-2xl font-black text-white">Inviato con successo</h3>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/55">Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.</p>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-                {selectedForm.description && (
-                  <div className="rounded-xl bg-white/5 border border-white/10 p-3.5 text-xs text-white/60 leading-relaxed">
-                    {selectedForm.description}
-                  </div>
-                )}
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleNextOrSubmit();
+                }} 
+                className="flex min-h-[430px] flex-1 flex-col justify-between overflow-y-auto p-5 sm:p-7"
+              >
+                <div className="space-y-5 flex-1">
+                  {selectedForm.description && currentActiveIndex === 0 && (
+                    <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4 text-sm leading-relaxed text-white/60">
+                      {selectedForm.description}
+                    </div>
+                  )}
 
-                {errorMsg && (
-                  <div className="flex items-center gap-2 rounded-xl bg-red-950/45 border border-red-500/30 p-3.5 text-sm text-red-200">
-                    <AlertCircle className="size-4 flex-shrink-0" />
-                    <span>{errorMsg}</span>
-                  </div>
-                )}
+                  {errorMsg && (
+                    <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-950/45 p-3.5 text-sm text-red-200">
+                      <AlertCircle className="size-4 flex-shrink-0" />
+                      <span>{errorMsg}</span>
+                    </div>
+                  )}
 
-                {selectedForm.fields.filter((field) => isFieldVisible(field)).map((field) => {
-                  if (isCorsistiForm && isGroupCourse && isDefaultParticipantField(field.label)) {
-                    return null;
-                  }
+                  {visibleFields.length > 0 && (() => {
+                    const field = visibleFields[currentActiveIndex];
+                    if (!field) return null;
 
-                  return (
-                    <div key={field.id} className="space-y-1.5">
-                      <label className="text-sm font-bold text-white/70 block">
-                        {field.label} {field.required && <span className="text-red-500">*</span>}
-                      </label>
-                      {field.description && (
-                        <p className="text-xs text-white/45 -mt-0.5 mb-1 leading-relaxed">{field.description}</p>
-                      )}
+                    return (
+                      <div 
+                        key={field.id} 
+                        className="animate-in fade-in slide-in-from-right-5 duration-300"
+                      >
+                        <div className="rounded-[28px] border border-white/10 bg-[#181818] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6">
+                          <div className="mb-5 space-y-2">
+                            <span className="inline-flex rounded-full bg-white/7 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white/40">
+                              Campo {currentActiveIndex + 1}
+                            </span>
+                            <label className="block text-xl font-black leading-tight text-white sm:text-2xl">
+                              {field.label} {field.required && <span className="text-[#ff7fa5]">*</span>}
+                            </label>
+                            {field.description && (
+                              <p className="text-sm leading-relaxed text-white/55">{field.description}</p>
+                            )}
+                          </div>
 
-                      {field.type === "text" && (
-                        <input
-                          type="text"
-                          required={field.required}
-                          value={answers[field.id] || ""}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                        />
-                      )}
-
-                      {field.type === "textarea" && (
-                        <textarea
-                          required={field.required}
-                          value={answers[field.id] || ""}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          rows={3}
-                          className="w-full rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-white outline-none focus:border-[#A74758] resize-none"
-                        />
-                      )}
-
-                      {field.type === "number" && (
-                        <input
-                          type="number"
-                          required={field.required}
-                          value={answers[field.id] || ""}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                        />
-                      )}
-
-                      {field.type === "select" && (
-                        <div className="space-y-2 w-full">
-                          <select
-                            required={field.required}
-                            value={answers[field.id] || ""}
-                            onChange={(e) => handleTextChange(field.id, e.target.value)}
-                            className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
-                          >
-                            <option value="" className="bg-neutral-800 text-white">Seleziona un'opzione...</option>
-                            {field.options?.map((opt) => (
-                              <option key={opt} value={opt} className="bg-neutral-800 text-white">{opt}</option>
-                            ))}
-                          </select>
-                          {answers[field.id] === "Altro" && (
+                          <div>
+                          {field.type === "text" && (
                             <input
                               type="text"
                               required={field.required}
-                              placeholder="Specifica ruolo..."
-                              value={answers[field.id + "_altro"] || ""}
-                              onChange={(e) => handleTextChange(field.id + "_altro", e.target.value)}
-                              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
+                              value={answers[field.id] || ""}
+                              onChange={(e) => handleTextChange(field.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, field.type)}
+                              placeholder="Scrivi qui..."
+                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
                             />
                           )}
-                        </div>
-                      )}
 
-                      {field.type === "money" && (
-                        <div className="relative flex items-center">
-                          <span className="absolute left-3.5 text-sm font-semibold text-white/45">€</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            required={field.required}
-                            value={answers[field.id] || ""}
-                            onChange={(e) => handleTextChange(field.id, e.target.value)}
-                            className="w-full h-10 rounded-xl bg-white/5 border border-white/10 pl-8 pr-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                            placeholder="0.00"
-                          />
-                        </div>
-                      )}
+                          {field.type === "textarea" && (
+                            <textarea
+                              required={field.required}
+                              value={answers[field.id] || ""}
+                              onChange={(e) => handleTextChange(field.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, field.type)}
+                              rows={5}
+                              placeholder="Aggiungi dettagli..."
+                              className="w-full resize-none rounded-2xl border border-white/10 bg-[#101010] p-4 text-base font-medium text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                            />
+                          )}
 
-                      {field.type === "date" && (
-                        <input
-                          type="date"
-                          required={field.required}
-                          value={answers[field.id] || ""}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3.5 text-sm text-white outline-none focus:border-[#A74758]"
-                        />
-                      )}
+                          {field.type === "number" && (
+                            <input
+                              type="number"
+                              required={field.required}
+                              value={answers[field.id] || ""}
+                              onChange={(e) => handleTextChange(field.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, field.type)}
+                              placeholder="0"
+                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                            />
+                          )}
 
-                      {field.type === "worker" && (
-                        <select
-                          required={field.required}
-                          value={answers[field.id] || ""}
-                          onChange={(e) => handleTextChange(field.id, e.target.value)}
-                          className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
-                        >
-                          <option value="" className="bg-neutral-800 text-white">Seleziona collaboratore...</option>
-                          {employees.map((emp) => (
-                            <option key={emp.id} value={emp.name} className="bg-neutral-800 text-white">
-                              {emp.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                          {field.type === "select" && (
+                            <div className="space-y-2.5 w-full">
+                              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                                {field.options?.map((opt) => {
+                                  const isSelected = answers[field.id] === opt;
+                                  return (
+                                    <button
+                                      key={opt}
+                                      type="button"
+                                      onClick={() => handleSelectChange(field.id, opt)}
+                                      className={cn(
+                                        "flex min-h-14 w-full items-center justify-between rounded-2xl border p-4 text-left text-sm font-bold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                                        isSelected
+                                          ? "bg-[#A74758]/20 border-[#A74758] text-[#ff8bb2] shadow-md shadow-[#A74758]/10"
+                                          : "bg-white/5 border-white/10 text-white/85 hover:bg-white/10 hover:border-white/20"
+                                      )}
+                                    >
+                                      <span>{opt}</span>
+                                      <div className={cn(
+                                        "size-5 rounded-full border flex items-center justify-center transition-all",
+                                        isSelected 
+                                          ? "border-[#ff8bb2] bg-[#ff8bb2]/20 text-[#ff8bb2]" 
+                                          : "border-white/20 bg-white/5"
+                                      )}>
+                                        {isSelected && <Check className="size-3" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {answers[field.id] === "Altro" && (
+                                <input
+                                  type="text"
+                                  required={field.required}
+                                  placeholder="Specifica..."
+                                  value={answers[field.id + "_altro"] || ""}
+                                  onChange={(e) => handleTextChange(field.id + "_altro", e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, "text")}
+                                  className="mt-2 h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                                />
+                              )}
+                            </div>
+                          )}
 
-                      {field.type === "file" && (
-                        <div className="relative flex items-center justify-center w-full min-h-24 border border-dashed border-white/20 rounded-xl bg-white/5 hover:bg-[#A74758]/10 transition group">
-                          <input
-                            type="file"
-                            required={field.required && !files[field.id]}
-                            onChange={(e) => handleFileChange(field.id, e)}
-                            accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                          />
-                          <div className="flex flex-col items-center p-4 text-center pointer-events-none">
-                            <Upload className="size-6 text-white/40 group-hover:text-[#A74758] transition" />
-                            <span className="text-xs font-semibold text-white/70 mt-1.5">
-                              {files[field.id] ? files[field.id].name : "Carica o trascina un file"}
-                            </span>
-                            {!files[field.id] && (
-                              <span className="text-[10px] text-white/40 mt-0.5">Dimensione max: 15 MB</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                          {field.type === "money" && (
+                            <div className="relative flex items-center">
+                              <span className="absolute left-4 text-base font-black text-white/45">€</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                required={field.required}
+                                value={answers[field.id] || ""}
+                                onChange={(e) => handleTextChange(field.id, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, field.type)}
+                                className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] pl-9 pr-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                                placeholder="0.00"
+                              />
+                            </div>
+                          )}
 
-                      {field.id === participaField?.id && isGroupCourse && (
-                        <div className="mt-4 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
-                          <label className="text-sm font-bold text-white/70 block">
-                            Numero di Corsisti (Partecipanti) <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={answers["group_participants_count"] || "2"}
-                            onChange={(e) => {
-                              handleTextChange("group_participants_count", e.target.value);
-                            }}
-                            className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
-                          >
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                              <option key={num} value={String(num)} className="bg-neutral-800 text-white">
-                                {num} {num === 1 ? "Corsista" : "Corsisti"}
-                              </option>
-                            ))}
-                          </select>
+                          {field.type === "date" && (
+                            <input
+                              type="date"
+                              required={field.required}
+                              value={answers[field.id] || ""}
+                              onChange={(e) => handleTextChange(field.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, field.type)}
+                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                            />
+                          )}
 
-                          <div className="space-y-6 pt-4 border-t border-white/10">
-                            {Array.from({ length: groupCount }).map((_, idx) => {
-                              const pIndex = idx + 1;
-                              return (
-                                <div key={pIndex} className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3 text-left">
-                                  <h5 className="text-xs font-bold uppercase tracking-wider text-[#A74758]">
-                                    Dati Corsista {pIndex}
-                                  </h5>
+                          {field.type === "pin" && (
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={6}
+                              autoComplete="one-time-code"
+                              required={field.required}
+                              value={answers[field.id] || ""}
+                              onChange={(e) => handleTextChange(field.id, e.target.value.replace(/\D/g, "").slice(0, 6))}
+                              onKeyDown={(e) => handleKeyDown(e, field.type)}
+                              placeholder="Inserisci PIN personale"
+                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-center text-2xl font-black tracking-[0.35em] text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                            />
+                          )}
 
-                                  <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-white/60">
-                                      Nome Corsista {pIndex} <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                      type="text"
-                                      required={isGroupCourse}
-                                      value={answers[`participant_${pIndex}_name`] || ""}
-                                      onChange={(e) => handleTextChange(`participant_${pIndex}_name`, e.target.value)}
-                                      className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                                      placeholder={`Nome completo corsista ${pIndex}`}
-                                    />
-                                  </div>
+                          {field.type === "worker" && (
+                            <select
+                              required={field.required}
+                              value={answers[field.id] || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setAnswers((prev) => ({ ...prev, [field.id]: val }));
+                                if (val) {
+                                  setTimeout(() => {
+                                    setActiveFieldIndex((prevIndex) => {
+                                      if (prevIndex < visibleFields.length - 1) {
+                                        return prevIndex + 1;
+                                      }
+                                      return prevIndex;
+                                    });
+                                  }, 350);
+                                }
+                              }}
+                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                            >
+                              <option value="" className="bg-neutral-800 text-white">Seleziona collaboratore...</option>
+                              {employees.map((emp) => (
+                                <option key={emp.id} value={emp.name} className="bg-neutral-800 text-white">
+                                  {emp.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
 
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1">
-                                      <label className="text-xs font-semibold text-white/60">Email</label>
-                                      <input
-                                        type="email"
-                                        value={answers[`participant_${pIndex}_email`] || ""}
-                                        onChange={(e) => handleTextChange(`participant_${pIndex}_email`, e.target.value)}
-                                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                                        placeholder="Email (opzionale)"
-                                      />
+                          {field.type === "worker_multi" && (
+                            <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                              {employees.map((emp) => {
+                                const selected = Array.isArray(answers[field.id]) && answers[field.id].includes(emp.name);
+                                return (
+                                  <button
+                                    key={emp.id}
+                                    type="button"
+                                    onClick={() => toggleWorkerMulti(field.id, emp.name)}
+                                    className={cn(
+                                      "flex min-h-12 items-center justify-between rounded-2xl border px-4 text-left text-sm font-black transition active:scale-[0.99]",
+                                      selected
+                                        ? "border-[#ff8bb2] bg-[#A74758]/25 text-[#ffb7cf]"
+                                        : "border-white/10 bg-white/5 text-white/80 hover:border-white/20 hover:bg-white/10"
+                                    )}
+                                  >
+                                    <span>{emp.name}</span>
+                                    <span className={cn(
+                                      "grid size-5 place-items-center rounded-full border",
+                                      selected ? "border-[#ff8bb2] bg-[#ff8bb2] text-[#171717]" : "border-white/25"
+                                    )}>
+                                      {selected && <Check className="size-3.5" />}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {field.type === "checkbox" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = answers[field.id] !== true;
+                                setAnswers((prev) => ({ ...prev, [field.id]: next }));
+                                setErrorMsg("");
+                              }}
+                              className={cn(
+                                "flex min-h-16 w-full items-center justify-between rounded-2xl border p-4 text-left transition active:scale-[0.99]",
+                                answers[field.id] === true
+                                  ? "border-emerald-300 bg-emerald-500/18 text-emerald-100"
+                                  : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                              )}
+                            >
+                              <span className="text-sm font-black">{field.description || field.label}</span>
+                              <span className={cn(
+                                "grid size-7 place-items-center rounded-full border",
+                                answers[field.id] === true ? "border-emerald-200 bg-emerald-300 text-emerald-950" : "border-white/25"
+                              )}>
+                                {answers[field.id] === true && <Check className="size-4" />}
+                              </span>
+                            </button>
+                          )}
+
+                          {field.type === "file" && (
+                            <div className="group relative flex min-h-40 w-full items-center justify-center rounded-3xl border border-dashed border-white/20 bg-[#101010] transition hover:border-[#ff8bb2]/60 hover:bg-[#A74758]/10">
+                              <input
+                                type="file"
+                                required={field.required && !files[field.id]}
+                                onChange={(e) => handleFileChange(field.id, e)}
+                                accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                              />
+                              <div className="flex flex-col items-center p-5 text-center pointer-events-none">
+                                <Upload className="size-9 text-white/40 transition group-hover:text-[#ff8bb2]" />
+                                <span className="mt-3 text-sm font-bold text-white/75">
+                                  {files[field.id] ? files[field.id].name : "Carica o trascina un file"}
+                                </span>
+                                {!files[field.id] && (
+                                  <span className="text-[10px] text-white/40 mt-1">Dimensione max: 15 MB</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {field.id === participaField?.id && isGroupCourse && (
+                            <div className="mt-5 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                              <label className="text-sm font-bold text-white/70 block">
+                                Numero di Corsisti (Partecipanti) <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={answers["group_participants_count"] || "2"}
+                                onChange={(e) => {
+                                  handleTextChange("group_participants_count", e.target.value);
+                                }}
+                                className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                              >
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                                  <option key={num} value={String(num)} className="bg-neutral-800 text-white">
+                                    {num} {num === 1 ? "Corsista" : "Corsisti"}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <div className="space-y-6 pt-4 border-t border-white/10">
+                                {Array.from({ length: groupCount }).map((_, idx) => {
+                                  const pIndex = idx + 1;
+                                  return (
+                                    <div key={pIndex} className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3 text-left">
+                                      <h5 className="text-xs font-bold uppercase tracking-wider text-[#A74758]">
+                                        Dati Corsista {pIndex}
+                                      </h5>
+
+                                      <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-white/60">
+                                          Nome Corsista {pIndex} <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                          type="text"
+                                          required={isGroupCourse}
+                                          value={answers[`participant_${pIndex}_name`] || ""}
+                                          onChange={(e) => handleTextChange(`participant_${pIndex}_name`, e.target.value)}
+                                          onKeyDown={(e) => handleKeyDown(e, "text")}
+                                          className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
+                                          placeholder={`Nome completo corsista ${pIndex}`}
+                                        />
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                          <label className="text-xs font-semibold text-white/60">Email</label>
+                                          <input
+                                            type="email"
+                                            value={answers[`participant_${pIndex}_email`] || ""}
+                                            onChange={(e) => handleTextChange(`participant_${pIndex}_email`, e.target.value)}
+                                            onKeyDown={(e) => handleKeyDown(e, "text")}
+                                            className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
+                                            placeholder="Email (opzionale)"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <label className="text-xs font-semibold text-white/60">Telefono</label>
+                                          <input
+                                            type="text"
+                                            value={answers[`participant_${pIndex}_phone`] || ""}
+                                            onChange={(e) => handleTextChange(`participant_${pIndex}_phone`, e.target.value)}
+                                            onKeyDown={(e) => handleKeyDown(e, "text")}
+                                            className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
+                                            placeholder="Telefono (opzionale)"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-white/60">Dati Professionali e Altre Info</label>
+                                        <textarea
+                                          value={answers[`participant_${pIndex}_notes`] || ""}
+                                          onChange={(e) => handleTextChange(`participant_${pIndex}_notes`, e.target.value)}
+                                          rows={2}
+                                          className="w-full rounded-lg bg-white/5 border border-white/10 p-2 text-xs text-white outline-none focus:border-[#A74758] resize-none"
+                                          placeholder="Dati professionali, mansione o altre informazioni..."
+                                        />
+                                      </div>
                                     </div>
-                                    <div className="space-y-1">
-                                      <label className="text-xs font-semibold text-white/60">Telefono</label>
-                                      <input
-                                        type="text"
-                                        value={answers[`participant_${pIndex}_phone`] || ""}
-                                        onChange={(e) => handleTextChange(`participant_${pIndex}_phone`, e.target.value)}
-                                        className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                                        placeholder="Telefono (opzionale)"
-                                      />
-                                    </div>
-                                  </div>
-
-                                  <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-white/60">Dati Professionali e Altre Info</label>
-                                    <textarea
-                                      value={answers[`participant_${pIndex}_notes`] || ""}
-                                      onChange={(e) => handleTextChange(`participant_${pIndex}_notes`, e.target.value)}
-                                      rows={2}
-                                      className="w-full rounded-lg bg-white/5 border border-white/10 p-2 text-xs text-white outline-none focus:border-[#A74758] resize-none"
-                                      placeholder="Dati professionali, mansione o altre informazioni..."
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
 
-                <div className="flex items-center justify-end gap-3 border-t border-white/10 pt-4 bg-neutral-900 mt-6">
-                  <Button
-                    type="button"
-                    variant="soft"
-                    disabled={submitting}
-                    onClick={() => setSelectedForm(null)}
-                    className="bg-white/5 text-white hover:bg-white/10"
-                  >
-                    Annulla
-                  </Button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#A74758] px-5 py-2 text-sm font-semibold text-white transition hover:scale-[1.02] disabled:opacity-50"
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Invio in corso...
-                      </>
-                    ) : (
-                      "Invia Risposte"
+                {/* Footer buttons */}
+                <div className="sticky bottom-0 -mx-5 mt-6 flex items-center justify-between border-t border-white/10 bg-[#121212]/95 px-5 pt-4 backdrop-blur sm:-mx-7 sm:px-7">
+                  <div>
+                    {currentActiveIndex > 0 && (
+                      <Button
+                        type="button"
+                        variant="soft"
+                        onClick={() => {
+                          setErrorMsg("");
+                          setActiveFieldIndex(currentActiveIndex - 1);
+                        }}
+                        className="rounded-2xl bg-white/5 text-white hover:bg-white/10"
+                      >
+                        Indietro
+                      </Button>
                     )}
-                  </button>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="soft"
+                      disabled={submitting}
+                      onClick={() => setSelectedForm(null)}
+                      className="rounded-2xl bg-white/5 text-white hover:bg-white/10"
+                    >
+                      Annulla
+                    </Button>
+
+                    {currentActiveIndex < visibleFields.length - 1 ? (
+                      <Button
+                        type="submit"
+                        className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-[#A74758] px-5 py-2 text-sm font-extrabold text-white transition hover:scale-[1.02]"
+                      >
+                        Continua
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => handleNextOrSubmit()}
+                        className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-[#A74758] to-[#c6556c] px-5 py-2 text-sm font-extrabold text-white shadow-lg shadow-[#A74758]/20 transition hover:scale-[1.02] disabled:opacity-50"
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="size-4 animate-spin" />
+                            Invio in corso...
+                          </>
+                        ) : (
+                          "Invia Risposte"
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </form>
             )}
@@ -1160,50 +1650,175 @@ export function StaffFormsViewer({
                         <span className="block text-xs font-bold text-white/40">{field.label}</span>
                         
                         <div className="mt-1 text-sm text-white">
-                          {answer === undefined || answer === null || answer === "" ? (
-                            <span className="text-white/30 italic">Nessuna risposta</span>
-                          ) : field.type === "file" && typeof answer === "object" ? (
-                            <div className="space-y-3 mt-1.5">
-                              {/\.(jpg|jpeg|png|webp|gif)$/i.test(answer.name) && (
-                                <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5 max-w-sm aspect-video flex items-center justify-center group/img">
-                                  <img
-                                    src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
-                                    alt={answer.name}
-                                    className="object-contain max-h-48 w-full transition group-hover/img:scale-[1.02]"
-                                  />
+                          {editingFieldId === field.id ? (
+                            <div className="space-y-2 mt-1">
+                              {field.type === "textarea" ? (
+                                <textarea
+                                  value={editingValue}
+                                  onChange={(e) => setEditingValue(e.target.value)}
+                                  className="w-full rounded-xl bg-white border border-[#A74758] p-3 text-sm text-black outline-none focus:border-[#A74758] min-h-[80px]"
+                                  autoFocus
+                                />
+                              ) : field.type === "select" ? (
+                                <div className="space-y-2.5 w-full">
+                                  <select
+                                    value={editingValue}
+                                    onChange={(e) => {
+                                      setEditingValue(e.target.value);
+                                      if (e.target.value !== "Altro") {
+                                        setCustomSelectValue("");
+                                      }
+                                    }}
+                                    className="w-full h-11 rounded-xl bg-white border border-[#A74758] px-3 text-sm text-black outline-none focus:border-[#A74758]"
+                                    autoFocus
+                                  >
+                                    <option value="">Seleziona un'opzione...</option>
+                                    {field.options?.map((opt: string) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                    <option value="Altro">Altro...</option>
+                                  </select>
+                                  {editingValue === "Altro" && (
+                                    <input
+                                      type="text"
+                                      placeholder="Specifica..."
+                                      value={customSelectValue}
+                                      onChange={(e) => setCustomSelectValue(e.target.value)}
+                                      className="w-full h-11 rounded-xl bg-white border border-[#A74758] px-4 text-sm text-black outline-none focus:border-[#A74758]"
+                                    />
+                                  )}
+                                </div>
+                              ) : (
+                                <input
+                                  type={field.type === "number" || field.type === "money" ? "number" : field.type === "date" ? "date" : "text"}
+                                  step={field.type === "money" ? "0.01" : undefined}
+                                  value={editingValue}
+                                  onChange={(e) => setEditingValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      const finalVal = editingValue === "Altro" ? customSelectValue : editingValue;
+                                      handleSaveAnswer(field.id, finalVal);
+                                    } else if (e.key === "Escape") {
+                                      setEditingFieldId(null);
+                                    }
+                                  }}
+                                  className="w-full h-11 rounded-xl bg-white border border-[#A74758] px-4 text-sm text-black outline-none focus:border-[#A74758]"
+                                  autoFocus
+                                />
+                              )}
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingFieldId(null)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white/50 hover:text-white rounded-lg bg-white/5 border border-white/10 transition"
+                                >
+                                  <X className="size-3.5" /> Annulla
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const finalVal = editingValue === "Altro" ? customSelectValue : editingValue;
+                                    handleSaveAnswer(field.id, finalVal);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white rounded-lg bg-[#A74758] transition hover:scale-[1.02]"
+                                >
+                                  <Check className="size-3.5" /> Salva
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div 
+                              onClick={() => {
+                                if (field.type !== "file") {
+                                  setEditingFieldId(field.id);
+                                  setEditingValue(answer === undefined || answer === null ? "" : String(answer));
+                                  setCustomSelectValue("");
+                                }
+                              }}
+                              className={cn(
+                                "group/answer relative transition-all duration-200 rounded-xl",
+                                field.type !== "file" && "cursor-pointer hover:ring-1 hover:ring-[#A74758]/50"
+                              )}
+                            >
+                              {answer === undefined || answer === null || answer === "" ? (
+                                <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex items-center justify-between text-white">
+                                  <span className="text-white/30 italic">Nessuna risposta</span>
+                                  {field.type !== "file" && <Pencil className="size-3.5 text-white/0 group-hover/answer:text-white/30 transition-colors animate-in fade-in duration-200" />}
+                                </div>
+                              ) : field.type === "file" && typeof answer === "object" ? (
+                                <div className="space-y-3 mt-1.5">
+                                  {(String(answer.type ?? "").startsWith("image/") || /\.(jpg|jpeg|png|webp|gif)$/i.test(answer.name)) && (
+                                    <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5 max-w-sm aspect-video flex items-center justify-center group/img">
+                                      <img
+                                        src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                        alt={answer.name}
+                                        className="object-contain max-h-48 w-full transition group-hover/img:scale-[1.02]"
+                                      />
+                                    </div>
+                                  )}
+                                  {(String(answer.type ?? "").startsWith("video/") || /\.(mp4|mov|webm|m4v)$/i.test(answer.name)) && (
+                                    <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black max-w-sm aspect-video flex items-center justify-center">
+                                      <video
+                                        src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                        controls
+                                        playsInline
+                                        className="max-h-48 w-full"
+                                      />
+                                    </div>
+                                  )}
+                                  <a
+                                    href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-white/10 transition"
+                                  >
+                                    <Download className="size-3.5" />
+                                    Scarica: {answer.name}
+                                  </a>
+                                </div>
+                              ) : field.type === "checkbox" ? (
+                                <div className="whitespace-pre-line leading-relaxed font-semibold bg-white/5 p-3 rounded-xl border border-white/10 text-white flex items-center justify-between">
+                                  <span>{answer === true ? "Si, fatto" : "No"}</span>
+                                  <Pencil className="size-3.5 text-white/0 group-hover/answer:text-white/30 transition-colors animate-in fade-in duration-200" />
+                                </div>
+                              ) : field.type === "worker_multi" && Array.isArray(answer) ? (
+                                <div className="flex flex-wrap gap-2 bg-white/5 p-3 rounded-xl border border-white/10">
+                                  {answer.length > 0 ? answer.map((name: string) => (
+                                    <span key={name} className="rounded-full bg-[#A74758]/20 px-3 py-1 text-xs font-black text-[#ffb7cf]">{name}</span>
+                                  )) : <span className="text-white/30 italic">Nessuna risposta</span>}
+                                  <Pencil className="ml-auto size-3.5 text-white/0 group-hover/answer:text-white/30 transition-colors animate-in fade-in duration-200" />
+                                </div>
+                              ) : field.type === "money" ? (
+                                <div className="whitespace-pre-line leading-relaxed font-semibold bg-white/5 p-3 rounded-xl border border-white/10 text-[#A74758] flex items-center justify-between">
+                                  <span>
+                                    € {(() => {
+                                      const val = parseFloat(answer);
+                                      return isNaN(val) ? String(answer) : val.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                    })()}
+                                  </span>
+                                  <Pencil className="size-3.5 text-white/0 group-hover/answer:text-[#A74758]/65 transition-colors animate-in fade-in duration-200" />
+                                </div>
+                              ) : field.type === "date" ? (
+                                <div className="whitespace-pre-line leading-relaxed font-medium bg-white/5 p-3 rounded-xl border border-white/10 text-white flex items-center justify-between">
+                                  <span>
+                                    {(() => {
+                                      const parts = String(answer).split("-");
+                                      if (parts.length === 3) {
+                                        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                      }
+                                      return String(answer);
+                                    })()}
+                                  </span>
+                                  <Pencil className="size-3.5 text-white/0 group-hover/answer:text-white/30 transition-colors animate-in fade-in duration-200" />
+                                </div>
+                              ) : (
+                                <div className="whitespace-pre-line leading-relaxed font-medium bg-white/5 p-3 rounded-xl border border-white/10 text-white flex items-center justify-between">
+                                  <span>{String(answer)}</span>
+                                  <Pencil className="size-3.5 text-white/0 group-hover/answer:text-white/30 transition-colors animate-in fade-in duration-200" />
                                 </div>
                               )}
-                              <a
-                                href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-white/10 transition"
-                              >
-                                <Download className="size-3.5" />
-                                Scarica: {answer.name}
-                              </a>
                             </div>
-                          ) : field.type === "money" ? (
-                            <p className="whitespace-pre-line leading-relaxed font-semibold bg-white/5 p-3 rounded-xl border border-white/10 text-[#A74758]">
-                              € {(() => {
-                                const val = parseFloat(answer);
-                                return isNaN(val) ? String(answer) : val.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                              })()}
-                            </p>
-                          ) : field.type === "date" ? (
-                            <p className="whitespace-pre-line leading-relaxed font-medium bg-white/5 p-3 rounded-xl border border-white/10 text-white">
-                              {(() => {
-                                const parts = String(answer).split("-");
-                                if (parts.length === 3) {
-                                  return `${parts[2]}/${parts[1]}/${parts[0]}`;
-                                }
-                                return String(answer);
-                              })()}
-                            </p>
-                          ) : (
-                            <p className="whitespace-pre-line leading-relaxed font-medium bg-white/5 p-3 rounded-xl border border-white/10 text-white">
-                              {String(answer)}
-                            </p>
                           )}
                         </div>
 

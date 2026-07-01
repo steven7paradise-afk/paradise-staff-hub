@@ -7,9 +7,14 @@ import type { Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsFormEditPage(props: { params: Promise<{ id: string }> }) {
+export default async function SettingsFormEditPage(props: { 
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ template?: string }>;
+}) {
   const params = await props.params;
   const id = params.id;
+  const searchParams = await props.searchParams;
+  const template = searchParams.template || "";
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -77,6 +82,7 @@ export default async function SettingsFormEditPage(props: { params: Promise<{ id
         initialForm={initialForm}
         locations={serializedLocations}
         users={serializedUsers}
+        template={template}
       />
     </AppShell>
   );

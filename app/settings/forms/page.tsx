@@ -1,9 +1,16 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { AdminFormsManager } from "@/components/admin-forms-manager";
+import { ServiceFormsVisibilitySettings } from "@/components/service-forms-visibility-settings";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
+import { ensureCashClosingForm } from "@/lib/cash-closing-form";
+import { ensureOrderForm } from "@/lib/order-form";
+import {
+  normalizeServiceFormsVisibility,
+  SERVICE_FORMS_VISIBILITY_KEY,
+} from "@/lib/service-form-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +27,13 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
     redirect("/dashboard");
   }
 
+  await Promise.all([
+    ensureOrderForm(session.user.id),
+    ensureCashClosingForm(session.user.id),
+  ]);
+
   // Fetch all templates, locations, responses, and active users
-  const [forms, locations, responses, users] = await Promise.all([
+  const [forms, locations, responses, users, visibilitySetting] = await Promise.all([
     prisma.serviceForm.findMany({
       orderBy: { created_at: "desc" },
     }).catch((error) => {
@@ -54,6 +66,7 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
       console.error("Users list unavailable:", error);
       return [];
     }),
+    prisma.setting.findUnique({ where: { key: SERVICE_FORMS_VISIBILITY_KEY } }).catch(() => null),
   ]);
 
   // Clean data types for serialization
@@ -81,6 +94,13 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
     mansione: u.mansione,
   }));
 
+  const visibilityForms = forms.map((form) => ({
+    id: form.id,
+    name: form.name,
+    category: form.category,
+    active: form.active,
+  }));
+
   return (
     <AppShell 
       title="Gestione Moduli" 
@@ -88,6 +108,10 @@ export default async function SettingsFormsPage(props: { searchParams: Promise<{
       role={role}
       hidePageHeaderOnMobile
     >
+      <ServiceFormsVisibilitySettings
+        forms={visibilityForms}
+        initialVisibility={normalizeServiceFormsVisibility(visibilitySetting?.value)}
+      />
       <AdminFormsManager
         role={role}
         initialForms={serializedForms}

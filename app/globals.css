@@ -71,8 +71,8 @@ textarea {
   }
 
   .sidebar-collapsed aside {
-    background: transparent !important;
-    border-right: none !important;
+    background: var(--user-sidebar-color, var(--sidebar)) !important;
+    border-right: 1px solid rgba(0, 0, 0, 0.05) !important;
   }
 
   .sidebar-collapsed .sidebar-nav-link {

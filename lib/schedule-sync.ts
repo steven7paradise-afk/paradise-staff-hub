@@ -96,7 +96,7 @@ export async function syncApprovedLeaveToSchedule(
   const timeNote = leaveRequest.start_time && leaveRequest.end_time ? ` (${leaveRequest.start_time}-${leaveRequest.end_time})` : "";
   const note = `Richiesta ${categorySeed.name.toLowerCase()}${timeNote} approvata da ${approverId}`;
 
-  await prisma.$transaction(
+  await Promise.all(
     days.map((date) =>
       prisma.scheduleEntry.upsert({
         where: {

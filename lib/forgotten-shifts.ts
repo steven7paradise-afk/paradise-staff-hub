@@ -39,16 +39,27 @@ export async function closeForgottenShifts(now = new Date()) {
   const openLogs = Array.from(latestByUser.values()).filter((log) => log.type !== "USCITA");
 
   for (const log of openLogs) {
+    const entryTime = new Date(log.timestamp);
+    const exitTime = new Date(entryTime.getTime() + 8 * 60 * 60 * 1000);
+    const timeString = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Europe/Rome"
+    }).format(exitTime);
+    const formattedExitTime = timeString.slice(0, 5);
+
     await prisma.attendanceLog.create({
       data: {
         user_id: log.user_id,
         location_id: log.location_id,
         device_id: log.device_id,
         type: "USCITA",
-        timestamp: cutoff,
+        timestamp: exitTime,
         date: dateOnly,
-        time: "22:00:00",
-        note: "Uscita automatica: timbratura di uscita dimenticata.",
+        time: timeString,
+        note: "Uscita automatica: timbratura di uscita dimenticata (default 8 ore).",
       },
     });
 
@@ -57,8 +68,8 @@ export async function closeForgottenShifts(now = new Date()) {
       select: { id: true, email: true },
     });
     await createNotifications([
-        { user_id: log.user_id, title: "Timbratura uscita automatica", message: `Il turno del ${day} e stato chiuso automaticamente alle 22:00 per uscita mancante.`, type: "TIMBRATURA", action_url: "/dashboard" },
-        ...admins.map((admin) => ({ user_id: admin.id, title: "Uscita dimenticata", message: `${log.user.name} non ha timbrato l'uscita: turno chiuso alle 22:00.`, type: "TIMBRATURA", action_url: "/attendance" })),
+        { user_id: log.user_id, title: "Timbratura uscita automatica", message: `Il turno del ${day} è stato chiuso automaticamente alle ${formattedExitTime} (default 8 ore) per uscita mancante.`, type: "TIMBRATURA", action_url: "/dashboard" },
+        ...admins.map((admin) => ({ user_id: admin.id, title: "Uscita dimenticata", message: `${log.user.name} non ha timbrato l'uscita: turno chiuso alle ${formattedExitTime} (default 8 ore).`, type: "TIMBRATURA", action_url: "/attendance" })),
     ]);
     const template = emailTemplates.missingClock(day);
     await Promise.allSettled([sendEmail({ to: log.user.email, ...template }), ...admins.map((admin) => sendEmail({ to: admin.email, ...template }))]);

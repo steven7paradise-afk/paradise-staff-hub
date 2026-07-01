@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { uploadPrivateDocument } from "@/lib/supabase-storage";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
+import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
+import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
+import { isPinValidForUser } from "@/lib/pin";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -28,6 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const answersObj = JSON.parse(answersStr);
+    const isCashClosing = isCashClosingFormName(form.name, form.category);
 
     // Process file fields and upload them to Supabase
     const fields = form.fields as Array<{ id: string; label: string; type: string; required?: boolean }>;
@@ -35,8 +39,8 @@ export async function POST(request: NextRequest) {
       if (field.type === "file") {
         const file = data.get(field.id);
         if (file && file instanceof File && file.size > 0) {
-          if (file.size > 15 * 1024 * 1024) {
-            return NextResponse.json({ error: `File per "${field.label}" supera il limite di 15 MB.` }, { status: 400 });
+          if (file.size > 80 * 1024 * 1024) {
+            return NextResponse.json({ error: `File per "${field.label}" supera il limite di 80 MB.` }, { status: 400 });
           }
           const storagePath = await uploadPrivateDocument(session.user.id, file);
           // Store the path, original name, and mime type
@@ -55,6 +59,85 @@ export async function POST(request: NextRequest) {
     const location = session.user.sedeId
       ? await prisma.location.findUnique({ where: { id: session.user.sedeId } })
       : null;
+
+    if (isCashClosing) {
+      const pinField = fields.find((field) => field.type === "pin" || field.id === CASH_CLOSING_FIELD_IDS.pin || field.label.toUpperCase().includes("PIN"));
+      const pinValue = pinField ? String(answersObj[pinField.id] ?? "").trim() : "";
+      if (!/^\d{4,6}$/.test(pinValue)) {
+        return NextResponse.json({ error: "Inserisci il PIN personale per firmare la chiusura cassa." }, { status: 400 });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { id: true, name: true, role: true, pin_hash: true, pin_lookup: true },
+      });
+
+      if (!user?.pin_hash || !(await isPinValidForUser(user.id, pinValue, user.pin_hash, user.pin_lookup))) {
+        return NextResponse.json({ error: "PIN personale non valido. La chiusura cassa non e stata firmata." }, { status: 401 });
+      }
+
+      const fundValue = Number(String(answersObj[CASH_CLOSING_FIELD_IDS.fund] ?? "").replace(",", "."));
+      const notesValue = String(answersObj[CASH_CLOSING_FIELD_IDS.notes] ?? "").trim();
+      if (Number.isFinite(fundValue) && Math.abs(fundValue - 50) > 0.009 && !notesValue) {
+        return NextResponse.json({ error: "Il fondo cassa e diverso da € 50,00: inserisci una nota di giustificazione." }, { status: 400 });
+      }
+
+      if (pinField) {
+        delete answersObj[pinField.id];
+      }
+
+      if (!location || !session.user.sedeId) {
+        return NextResponse.json({ error: "Sede non assegnata: impossibile registrare la chiusura cassa." }, { status: 400 });
+      }
+
+      const accountingDate = cashDateFromInput(answersObj[CASH_CLOSING_FIELD_IDS.date]);
+      const withdrawn = moneyNumber(answersObj[CASH_CLOSING_FIELD_IDS.withdrawn]);
+      const fund = moneyNumber(answersObj[CASH_CLOSING_FIELD_IDS.fund]);
+      if (!accountingDate || withdrawn < 0 || !Number.isFinite(fund)) {
+        return NextResponse.json({ error: "Data, importo prelevato e fondo cassa sono obbligatori." }, { status: 400 });
+      }
+
+      const signedAt = new Date();
+      const cashClosing = await prisma.cashClosing.create({
+        data: {
+          user_id: user.id,
+          location_id: session.user.sedeId,
+          date: accountingDate,
+          withdrawn,
+          fund,
+          notes: notesValue || null,
+          signature_name: user.name,
+          signature_role: user.role,
+          signed_at: signedAt,
+        },
+        include: { user: true, location: true },
+      });
+
+      return NextResponse.json({
+        response: {
+          id: cashClosing.id,
+          form_id: formId,
+          user_id: cashClosing.user_id,
+          user_role: user.role,
+          user_location_id: cashClosing.location_id,
+          user_location_name: cashClosing.location.name,
+          answers: {
+            ...answersObj,
+            _signature: {
+              user_id: user.id,
+              user_name: user.name,
+              user_role: user.role,
+              signed_at: signedAt.toISOString(),
+            },
+          },
+          status: "COMPLETED",
+          created_at: cashClosing.created_at,
+          updated_at: cashClosing.updated_at,
+          user: cashClosing.user,
+        },
+        googleSheetSync: { success: true, skipped: true, target: "cash_closings" },
+      });
+    }
 
     const response = await prisma.serviceFormResponse.create({
       data: {

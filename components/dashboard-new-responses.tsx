@@ -84,6 +84,11 @@ export function DashboardNewResponses({
               prev.map((item) => (item.id === archivedId ? { ...item, status: "ARCHIVED" } : item))
             );
           }}
+          onUpdateSuccess={(updatedResponse) => {
+            setResponses((prev) =>
+              prev.map((item) => (item.id === updatedResponse.id ? updatedResponse : item))
+            );
+          }}
         />
       )}
     </div>

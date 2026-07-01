@@ -32,7 +32,7 @@ import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
-type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null };
+type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
 type ChecklistItem = { text: string; done: boolean };
 type CompletionFile = { name: string; url?: string | null };
 type FreeNoteBlock =
@@ -89,6 +89,7 @@ type TaskComment = {
 type TaskView = "HOME" | "TABLE" | "BOARD" | "CALENDAR" | "LIST";
 type TaskFilter = "TODAY" | "ACTIVE" | "NEW" | "WAITING" | "COMPLETED";
 type AttachmentPreview = { name: string; url: string; kind: "image" | "file" };
+type TodayAttendanceLog = { type: "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA"; timestamp: string; time: string };
 
 function isNewTask(task: Task) {
   return task.status === "NEW";
@@ -157,10 +158,10 @@ function startOfWeek(date: Date) {
 }
 
 function statusLabel(status: string) {
-  if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "Completata";
+  if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "Completato";
   if (normalizedStatus(status) === "ACTIVE") return "In corso";
-  if (isWaitingTask({ status } as Task)) return "In attesa";
-  return "Da iniziare";
+  if (isWaitingTask({ status } as Task)) return "Fermo";
+  return "Da fare";
 }
 
 function formatCategoryLabel(value: string) {
@@ -212,17 +213,16 @@ function priorityTone(priority: string): "pink" | "gold" | "green" {
 
 function statusClasses(status: string) {
   if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "bg-emerald-100 text-emerald-800";
-  if (normalizedStatus(status) === "ACTIVE") return "bg-orange-100 text-orange-800";
+  if (normalizedStatus(status) === "ACTIVE") return "bg-yellow-100 text-yellow-800";
   if (isWaitingTask({ status } as Task)) return "bg-violet-100 text-violet-800";
-  return "bg-blue-100 text-blue-800";
+  return "bg-red-100 text-red-800";
 }
 
 function calendarClasses(task: Task) {
-  if (task.priority === "ALTA" && !isCompletedTask(task)) return "border-red-200 bg-red-50 text-red-700";
   if (isCompletedTask(task)) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (isActiveTask(task)) return "border-orange-200 bg-orange-50 text-orange-800";
+  if (isActiveTask(task)) return "border-yellow-200 bg-yellow-50 text-yellow-800";
   if (isWaitingTask(task)) return "border-violet-200 bg-violet-50 text-violet-800";
-  return "border-blue-200 bg-blue-50 text-blue-800";
+  return "border-red-200 bg-red-50 text-red-700";
 }
 
 function fileToDataUrl(file: File) {
@@ -263,10 +263,53 @@ function formatTimer(seconds: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-function getTaskCurrentSeconds(task: Task) {
+function formatTimerWithDays(seconds: number) {
+  const safe = Math.max(0, Math.floor(seconds));
+  const days = Math.floor(safe / 86400);
+  const rest = safe % 86400;
+  const time = formatTimer(rest);
+  return days > 0 ? `${days}g ${time}` : time;
+}
+
+function totalTaskDays(task: Task) {
+  const start = new Date(task.startedAt ?? task.createdAt);
+  const end = task.completedAt ? new Date(task.completedAt) : new Date();
+  if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) return 1;
+  return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
+}
+
+function activeWorkSecondsSince(startedAt: string, logs: TodayAttendanceLog[]) {
+  const started = new Date(startedAt).getTime();
+  const ordered = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  let activeFrom: number | null = null;
+  let total = 0;
+
+  ordered.forEach((log) => {
+    const time = new Date(log.timestamp).getTime();
+    if (log.type === "ENTRATA" || log.type === "RIENTRO") {
+      activeFrom = Math.max(time, started);
+    }
+    if ((log.type === "PAUSA" || log.type === "USCITA") && activeFrom !== null) {
+      total += Math.max(0, time - activeFrom);
+      activeFrom = null;
+    }
+  });
+
+  if (activeFrom !== null) total += Math.max(0, Date.now() - activeFrom);
+  return Math.floor(total / 1000);
+}
+
+function attendanceTimerState(logs: TodayAttendanceLog[]) {
+  const latest = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).at(-1);
+  if (!latest) return { isWorking: false, label: "Timer fermo: nessuna entrata timbrata oggi.", tone: "muted" as const };
+  if (latest.type === "PAUSA") return { isWorking: false, label: `Timer fermo: pausa dalle ${latest.time}.`, tone: "pause" as const };
+  if (latest.type === "USCITA") return { isWorking: false, label: `Timer fermo: uscita alle ${latest.time}.`, tone: "muted" as const };
+  return { isWorking: true, label: `Timer attivo dalle timbrature: ultima ${latest.type.toLowerCase()} alle ${latest.time}.`, tone: "work" as const };
+}
+
+function getTaskCurrentSeconds(task: Task, attendanceLogs: TodayAttendanceLog[] = []) {
   if (task.status === "ACTIVE" && task.startedAt) {
-    const elapsedSinceStart = Math.floor((Date.now() - new Date(task.startedAt).getTime()) / 1000);
-    return Math.max(0, task.timerSeconds + elapsedSinceStart);
+    return Math.max(0, task.timerSeconds + activeWorkSecondsSince(task.startedAt, attendanceLogs));
   }
   return task.timerSeconds;
 }
@@ -336,8 +379,8 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, workers, categories: initialCategories, initialTasks }: { role: Role; userId: string; userName: string; workers: Worker[]; categories: string[]; initialTasks: Task[] }) {
-  const canAssign = role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+export function TaskDashboard({ role, userId, userName, workers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; workers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
+  const canAssign = canManageTasks || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   
   const currentUserSedeId = workers.find((w) => w.id === userId)?.locationId ?? null;
   const initialAllowedWorkers = (role === "SUPER_ADMIN" || role === "ADMIN")
@@ -352,7 +395,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Task | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
-  const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ALL");
+  const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ASSIGNED_TO_ME");
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -369,6 +412,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [commentFiles, setCommentFiles] = useState<{ name: string; url: string }[]>([]);
   const [commentUploading, setCommentUploading] = useState(false);
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [todayAttendanceLogs, setTodayAttendanceLogs] = useState<TodayAttendanceLog[]>([]);
   const [completion, setCompletion] = useState({ note: "", link: "", files: [] as CompletionFile[] });
   const [form, setForm] = useState({
     title: "",
@@ -404,6 +449,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     return baseTasks;
   }, [baseTasks, assignmentFilter, userId]);
 
+  const assignedToMeCount = baseTasks.filter((task) => task.assignedToId === userId || task.assignees?.some((a) => a.id === userId)).length;
+  const assignedByMeCount = baseTasks.filter((task) => task.createdById === userId).length;
+
   const activeTasks = personalTasks.filter(isActiveTask);
   const completedTasks = personalTasks.filter(isCompletedTask);
   const newTasks = personalTasks.filter(isNewTask);
@@ -412,7 +460,31 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const todayTasks = openTasks.filter(isTodayTask);
   const visibleTasks = filter === "TODAY" ? todayTasks : filter === "COMPLETED" ? completedTasks : filter === "WAITING" ? waitingTasks : filter === "NEW" ? newTasks : activeTasks;
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
+  const timerAttendance = attendanceTimerState(todayAttendanceLogs);
+  const activeMentionQuery = getActiveMentionQuery(commentText);
+  const mentionSuggestions = activeMentionQuery === null
+    ? []
+    : workers
+        .filter((worker) => worker.name.toLowerCase().includes(activeMentionQuery.toLowerCase()) || workerMentionSlug(worker.name).toLowerCase().includes(activeMentionQuery.toLowerCase()))
+        .slice(0, 5);
+  const mentionedWorkers = extractMentionedWorkers(commentText, workers);
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
+
+  useEffect(() => {
+    let alive = true;
+    async function loadTodayAttendance() {
+      const response = await fetch("/api/attendance/my-today", { cache: "no-store" }).catch(() => null);
+      if (!response?.ok) return;
+      const data = await response.json().catch(() => []);
+      if (alive && Array.isArray(data)) setTodayAttendanceLogs(data);
+    }
+    void loadTodayAttendance();
+    const interval = window.setInterval(loadTodayAttendance, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+    };
+  }, []);
   const timelineEvents = useMemo(() => {
     if (!selected) return [];
     const events: {
@@ -514,10 +586,10 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const metrics = useMemo(
     () => [
       { filter: "TODAY" as TaskFilter, label: "Tasks di oggi", shortLabel: "Oggi", value: todayTasks.length, icon: CalendarDays, color: "text-[#C66170]" },
-      { filter: "ACTIVE" as TaskFilter, label: "In corso", shortLabel: "In corso", value: activeTasks.length, icon: ListChecks, color: "text-[#8B78D6]" },
-      { filter: "NEW" as TaskFilter, label: "Da iniziare", shortLabel: "Da fare", value: newTasks.length, icon: Clock3, color: "text-[#E2B719]" },
-      { filter: "COMPLETED" as TaskFilter, label: "Completate", shortLabel: "Fatte", value: completedTasks.length, icon: CheckCircle2, color: "text-[#42A85E]" },
-      { filter: "WAITING" as TaskFilter, label: "In attesa", shortLabel: "Attesa", value: waitingTasks.length, icon: Timer, color: "text-[#9B80DE]" },
+      { filter: "NEW" as TaskFilter, label: "Da fare", shortLabel: "Da fare", value: newTasks.length, icon: Clock3, color: "text-red-600" },
+      { filter: "ACTIVE" as TaskFilter, label: "In corso", shortLabel: "In corso", value: activeTasks.length, icon: ListChecks, color: "text-yellow-600" },
+      { filter: "COMPLETED" as TaskFilter, label: "Completato", shortLabel: "Fatte", value: completedTasks.length, icon: CheckCircle2, color: "text-emerald-600" },
+      { filter: "WAITING" as TaskFilter, label: "Fermo", shortLabel: "Fermo", value: waitingTasks.length, icon: Timer, color: "text-violet-600" },
     ],
     [activeTasks, completedTasks.length, newTasks.length, todayTasks.length, waitingTasks.length],
   );
@@ -694,15 +766,15 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [ticker, setTicker] = useState(0);
   useEffect(() => {
     const hasActiveTask = tasks.some(t => t.status === "ACTIVE");
-    if (!hasActiveTask) return;
+    if (!hasActiveTask || !timerAttendance.isWorking) return;
     const interval = window.setInterval(() => {
       setTicker((t) => t + 1);
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [tasks]);
+  }, [tasks, timerAttendance.isWorking]);
 
   async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[] }) {
-    const currentSeconds = getTaskCurrentSeconds(task);
+    const currentSeconds = getTaskCurrentSeconds(task, todayAttendanceLogs);
     const nextTask = { 
       ...task, 
       status, 
@@ -824,8 +896,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   async function saveComment() {
     if (!selected) return;
     const trimmed = commentText.trim();
-    if (!trimmed && commentFiles.length === 0) return;
+    if (commentSaving || (!trimmed && commentFiles.length === 0)) return;
     const isEdit = Boolean(editingCommentId);
+    setCommentSaving(true);
     const response = await fetch("/api/tasks/comments", {
       method: isEdit ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
@@ -835,7 +908,10 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           : { taskId: selected.id, message: trimmed, files: commentFiles }
       ),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      setCommentSaving(false);
+      return;
+    }
     const data = await response.json();
     const comment: TaskComment = {
       id: data.id,
@@ -847,7 +923,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       updatedAt: data.updated_at,
       files: data.files ? (typeof data.files === "string" ? JSON.parse(data.files) : data.files) : []
     };
-    const comments = isEdit
+    const commentAlreadyExists = selected.comments.some((item) => item.id === comment.id);
+    const comments = isEdit || commentAlreadyExists
       ? selected.comments.map((item) => item.id === comment.id ? comment : item)
       : [...selected.comments, comment];
     const updated = { ...selected, comments };
@@ -856,6 +933,12 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setCommentText("");
     setCommentFiles([]);
     setEditingCommentId(null);
+    setCommentSaving(false);
+  }
+
+  function insertMention(worker: Worker) {
+    const tag = `@${workerMentionSlug(worker.name)}`;
+    setCommentText((current) => current.replace(/(^|\s)@([a-zA-Z0-9_]*)$/, `$1${tag} `));
   }
 
   function AttachmentCard({ name, url }: { name: string; url?: string | null }) {
@@ -968,16 +1051,16 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     : new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(monthStart);
   const listSections: { filter: TaskFilter; label: string; tasks: Task[]; color: string }[] = [
     { filter: "TODAY", label: "Tasks di oggi", tasks: todayTasks, color: "text-[#C66170]" },
-    { filter: "ACTIVE", label: "In corso", tasks: activeTasks, color: "text-[#8B78D6]" },
-    { filter: "NEW", label: "Da iniziare", tasks: newTasks, color: "text-[#E2B719]" },
-    { filter: "WAITING", label: "In attesa", tasks: waitingTasks, color: "text-[#9B80DE]" },
-    { filter: "COMPLETED", label: "Completate", tasks: completedTasks, color: "text-[#42A85E]" },
+    { filter: "NEW", label: "Da fare", tasks: newTasks, color: "text-red-600" },
+    { filter: "ACTIVE", label: "In corso", tasks: activeTasks, color: "text-yellow-600" },
+    { filter: "COMPLETED", label: "Completato", tasks: completedTasks, color: "text-emerald-600" },
+    { filter: "WAITING", label: "Fermo", tasks: waitingTasks, color: "text-violet-600" },
   ];
   const boardColumns = [
-    { label: "Da fare", tasks: filteredTasks.filter(isNewTask), color: "bg-[#FFF4F8]", text: "text-[#C66170]", filter: "NEW" as TaskFilter },
-    { label: "In corso", tasks: filteredTasks.filter(isActiveTask), color: "bg-[#F5F1FF]", text: "text-[#8064D8]", filter: "ACTIVE" as TaskFilter },
-    { label: "In attesa", tasks: filteredTasks.filter(isWaitingTask), color: "bg-[#FFF9EA]", text: "text-[#B66B11]", filter: "WAITING" as TaskFilter },
-    { label: "Completate", tasks: filteredTasks.filter(isCompletedTask), color: "bg-[#EFFAF2]", text: "text-[#2D8C43]", filter: "COMPLETED" as TaskFilter },
+    { label: "Da fare", tasks: filteredTasks.filter(isNewTask), color: "bg-red-50", text: "text-red-700", filter: "NEW" as TaskFilter },
+    { label: "In corso", tasks: filteredTasks.filter(isActiveTask), color: "bg-yellow-50", text: "text-yellow-800", filter: "ACTIVE" as TaskFilter },
+    { label: "Completato", tasks: filteredTasks.filter(isCompletedTask), color: "bg-emerald-50", text: "text-emerald-700", filter: "COMPLETED" as TaskFilter },
+    { label: "Fermo", tasks: filteredTasks.filter(isWaitingTask), color: "bg-violet-50", text: "text-violet-700", filter: "WAITING" as TaskFilter },
   ];
 
   return (
@@ -986,7 +1069,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-black/35">{view === "HOME" ? "Paradise Staff Hub" : "Task"}</p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight">{view === "HOME" ? `Ciao ${userName.split(" ")[0]}` : "TASK"}</h1>
+            <h1 className="mt-3 text-4xl font-semibold tracking-tight">{view === "HOME" ? `Ciao ${userName.split(" ")[0]}` : "Task"}</h1>
             <p className="mt-2 text-sm text-black/50">{view === "HOME" ? "Ecco cosa c'e da fare oggi." : "Gestisci e organizza tutte le attivita del team."}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1028,17 +1111,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
           <div className="flex flex-wrap items-center gap-1 rounded-2xl bg-black/[0.03] p-1 dark:bg-white/[0.03] border border-black/5 dark:border-white/5">
             <button
               type="button"
-              onClick={() => setAssignmentFilter("ALL")}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 active:scale-95 ${
-                assignmentFilter === "ALL"
-                  ? "bg-white text-paradise-noir shadow-sm border border-black/5 dark:bg-white/10 dark:text-white dark:border-white/5"
-                  : "text-black/50 hover:text-black hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5"
-              }`}
-            >
-              Tutte le task ({baseTasks.length})
-            </button>
-            <button
-              type="button"
               onClick={() => setAssignmentFilter("ASSIGNED_TO_ME")}
               className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 active:scale-95 ${
                 assignmentFilter === "ASSIGNED_TO_ME"
@@ -1046,7 +1118,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   : "text-black/50 hover:text-black hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5"
               }`}
             >
-              Assegnate a me ({baseTasks.filter((t) => t.assignedToId === userId).length})
+              Assegnate a me ({assignedToMeCount})
             </button>
             <button
               type="button"
@@ -1057,7 +1129,18 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   : "text-black/50 hover:text-black hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5"
               }`}
             >
-              Assegnate da me ({baseTasks.filter((t) => t.createdById === userId).length})
+              Assegnate da me ({assignedByMeCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignmentFilter("ALL")}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all duration-200 active:scale-95 ${
+                assignmentFilter === "ALL"
+                  ? "bg-white text-paradise-noir shadow-sm border border-black/5 dark:bg-white/10 dark:text-white dark:border-white/5"
+                  : "text-black/50 hover:text-black hover:bg-black/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5"
+              }`}
+            >
+              Tutte le task ({baseTasks.length})
             </button>
           </div>
         </div>
@@ -1140,7 +1223,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div className="mt-5 grid gap-3">
                 {recentActivity.map((task) => (
                   <button key={task.id} onClick={() => setSelected(task)} className="flex items-center gap-3 rounded-2xl bg-[#FAF7F9] p-4 text-left">
-                    <span className={`size-3 rounded-full ${isCompletedTask(task) ? "bg-emerald-500" : isActiveTask(task) ? "bg-orange-500" : "bg-violet-500"}`} />
+                    <span className={`size-3 rounded-full ${isCompletedTask(task) ? "bg-emerald-500" : isActiveTask(task) ? "bg-yellow-500" : isWaitingTask(task) ? "bg-violet-500" : "bg-red-500"}`} />
                     <div>
                       <p className="font-semibold">{task.title}</p>
                       <p className="text-sm text-black/45">{statusLabel(task.status)} · {formatShortDateTime(task.updatedAt)}</p>
@@ -1176,7 +1259,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cerca task..." className="w-full bg-transparent text-sm outline-none" />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-auto min-w-36"><option value="ALL">Tutti stati</option><option value="IN CORSO">In corso</option><option value="DA INIZIARE">Da iniziare</option><option value="IN ATTESA">In attesa</option><option value="COMPLETATA">Completate</option></Select>
+              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-auto min-w-36"><option value="ALL">Tutti stati</option><option value="DA FARE">Da fare</option><option value="IN CORSO">In corso</option><option value="COMPLETATO">Completato</option><option value="FERMO">Fermo</option></Select>
               <Select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="w-auto min-w-32"><option value="ALL">Priorita</option><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select>
               <Select value={sortKey} onChange={(event) => setSortKey(event.target.value as typeof sortKey)} className="w-auto min-w-32"><option value="updated">Aggiornate</option><option value="due">Scadenza</option><option value="priority">Priorita</option><option value="title">Titolo</option></Select>
               <Button variant="soft"><SlidersHorizontal className="size-4" /> Filtra</Button>
@@ -1385,8 +1468,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 backdrop-blur-sm md:block md:overflow-y-auto md:bg-[#F8F3F6] md:p-4">
-          <div className="max-h-[92dvh] w-full space-y-5 overflow-y-auto rounded-t-[36px] bg-[#F8F3F6] p-4 pb-32 shadow-2xl md:mx-auto md:max-h-none md:max-w-5xl md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-32 md:shadow-none">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 backdrop-blur-sm md:block md:overflow-y-auto md:bg-[#F8F3F6] md:px-6 md:py-6">
+          <div className="max-h-[92dvh] w-full space-y-5 overflow-y-auto rounded-t-[36px] bg-[#F8F3F6] p-4 pb-32 shadow-2xl md:mx-auto md:max-h-none md:max-w-6xl md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-40 md:shadow-none">
             <div className="mx-auto mb-2 h-1.5 w-14 rounded-full bg-black/15 md:hidden" />
             <div className="flex items-center justify-between pt-2 md:pt-4">
               <button onClick={() => setSelected(null)} className="grid size-12 place-items-center rounded-2xl bg-white shadow-sm"><ArrowLeft className="size-5" /></button>
@@ -1414,9 +1497,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                       : selected.assignedToName || "Nessuno"
                   },
                   { icon: CalendarDays, label: "Scadenza", value: formatFullDate(selected.dueDate) },
-                  { icon: Flag, label: "Priorita", value: selected.priority },
-                  { icon: Tag, label: "Categoria", value: formatCategoryLabel(selected.category) },
-                  { icon: CalendarDays, label: "Salone", value: selected.locationName },
                 ].map((row) => {
                   const Icon = row.icon;
                   return (
@@ -1553,7 +1633,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-semibold">{event.commentUser}</p>
-                                    <p className="text-[10px] text-black/45">{formatTaskDate(event.date.toISOString())}</p>
+                                    <p className="text-[10px] text-black/45">{formatShortDateTime(event.date.toISOString())}</p>
                                   </div>
                                   {event.commentUserId === userId ? (
                                     <button 
@@ -1601,7 +1681,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                                 <Avatar name={event.user.name} photoUrl={event.user.photoUrl} className="size-5 shrink-0" />
                               ) : null}
                               <span className="font-semibold text-black/80">{event.title}</span>
-                              <span className="text-[10px] text-black/40 font-normal ml-auto shrink-0">{formatTaskDate(event.date.toISOString())}</span>
+                              <span className="text-[10px] text-black/40 font-normal ml-auto shrink-0">{formatShortDateTime(event.date.toISOString())}</span>
                             </div>
                             {event.description && (
                               <p className="mt-1 text-xs text-black/50 ml-7">{event.description}</p>
@@ -1633,8 +1713,26 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     className="min-h-20 w-full resize-none rounded-xl border border-black/5 px-3 py-2 text-sm outline-none bg-white shadow-xs focus:border-[#8064D8] transition" 
                     value={commentText} 
                     onChange={(event) => setCommentText(event.target.value)} 
-                    placeholder="Scrivi un aggiornamento, nota o commento..." 
+                    placeholder="Scrivi un aggiornamento, nota o commento... usa @nome per taggare una persona" 
                   />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @nome oppure scegli</span>
+                    {mentionSuggestions.map((worker) => (
+                      <button
+                        key={worker.id}
+                        type="button"
+                        onClick={() => insertMention(worker)}
+                        className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-[#8064D8] ring-1 ring-black/5 hover:bg-[#F5F1FF]"
+                      >
+                        @{workerMentionSlug(worker.name)}
+                      </button>
+                    ))}
+                    {mentionedWorkers.map((worker) => (
+                      <span key={worker.id} className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700">
+                        Notifica a {worker.name}
+                      </span>
+                    ))}
+                  </div>
                   
                   {/* File Upload Previews */}
                   {commentFiles.length > 0 && (
@@ -1672,47 +1770,50 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                           Annulla
                         </Button>
                       )}
-                      <Button className="h-9 text-xs" disabled={commentUploading} onClick={saveComment}>
-                        <Send className="size-3.5" /> {editingCommentId ? "Salva" : "Invia"}
+                      <Button className="h-9 text-xs" disabled={commentUploading || commentSaving} onClick={saveComment}>
+                        <Send className="size-3.5" /> {commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
                       </Button>
                     </div>
                   </div>
                 </div>
               </div>
             </Card>
-            {selected.status === "ACTIVE" || selected.status === "WAITING" ? (
-              <button 
-                type="button" 
-                onClick={() => {
-                  if (selected.status === "ACTIVE") {
-                    void updateStatus(selected, "WAITING");
-                  } else {
-                    void updateStatus(selected, "ACTIVE");
-                  }
-                }} 
-                className="w-full rounded-[24px] bg-white p-5 text-center shadow-sm hover:bg-[#FAF7F9] transition"
-              >
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-black/45">
-                  <Timer className="size-4" /> Timer task {selected.status === "ACTIVE" ? "attivo" : "in pausa"}
-                </span>
-                <span className="mt-2 block text-4xl font-semibold tabular-nums">
-                  {formatTimer(getTaskCurrentSeconds(selected))}
-                </span>
-                <span className="mt-1 block text-xs text-black/40">
-                  Clicca sul timer per mettere in pausa o riprendere.
-                </span>
-              </button>
-            ) : selected.timerSeconds > 0 ? (
-              <Card className="bg-white">
-                <p className="text-sm text-black/45">Tempo impiegato</p>
-                <p className="mt-2 text-3xl font-semibold tabular-nums">{formatTimer(getTaskCurrentSeconds(selected))}</p>
+            {(selected.status === "ACTIVE" || selected.status === "WAITING" || selected.timerSeconds > 0) ? (
+              <Card className="bg-white p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="inline-flex items-center gap-2 text-sm font-semibold text-black/45">
+                      <Timer className="size-4 text-[#C66170]" />
+                      Cronometro lavorativo
+                    </p>
+                    <p className="mt-2 text-4xl font-black tabular-nums tracking-tight text-black">
+                      {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs))}
+                    </p>
+                    <p className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold ${timerAttendance.tone === "work" ? "bg-emerald-50 text-emerald-700" : timerAttendance.tone === "pause" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/45"}`}>
+                      {timerAttendance.label}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:min-w-60">
+                    <div className="rounded-2xl bg-[#FAF7F9] p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Giorni totali</p>
+                      <p className="mt-1 text-2xl font-black">{totalTaskDays(selected)}</p>
+                    </div>
+                    <div className="rounded-2xl bg-[#FAF7F9] p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Stato task</p>
+                      <p className="mt-1 text-sm font-black">{statusLabel(selected.status)}</p>
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-4 rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/45">
+                  Conta solo quando la timbratura risulta in lavoro. In pausa o dopo uscita il cronometro resta fermo.
+                </p>
               </Card>
             ) : null}
             {isCompletedTask(selected) ? null : (
             <div className="sticky bottom-4 z-10 grid grid-cols-2 gap-3 rounded-[24px] border border-black/5 bg-white/95 p-3 shadow-xl backdrop-blur">
               {isNewTask(selected) ? (
                 <Button className="col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
-                  <Clock3 className="size-4" /> Inizia task
+                  <Clock3 className="size-4" /> Metti in corso
                 </Button>
               ) : (
                 <>
@@ -1726,7 +1827,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                       }
                     }}
                   >
-                    {selected.status === "ACTIVE" ? "Pausa timer" : selected.timerSeconds > 0 ? "Riprendi timer" : "Avvia timer"}
+                    {selected.status === "ACTIVE" ? "Metti fermo" : selected.timerSeconds > 0 ? "Riprendi in corso" : "Metti in corso"}
                   </Button>
                   <Button onClick={() => setCompletionOpen(true)}><CheckCircle2 className="size-4" /> Completa task</Button>
                 </>
@@ -1773,7 +1874,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Completamento</p>
                 <h2 className="mt-2 text-2xl font-semibold">Invia prova task</h2>
-                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimer(getTaskCurrentSeconds(selected))}</p>
+                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs))}</p>
               </div>
               <button onClick={() => setCompletionOpen(false)} className="grid size-10 place-items-center rounded-xl border border-black/10"><X className="size-5" /></button>
             </div>
@@ -1855,23 +1956,6 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     })}
                   </div>
                 </div>
-                <label className="space-y-2">
-                  <span className="text-sm font-semibold">Categoria</span>
-                  <Select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-                    {categories.map((category) => <option key={category} value={category}>{category}</option>)}
-                  </Select>
-                </label>
-              </div>
-              <div className="rounded-2xl border border-black/10 bg-[#FAF7F9] p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-black/40">Categorie predefinite</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {categories.map((category) => (
-                    <button key={category} type="button" onClick={() => setForm({ ...form, category })} className={`rounded-full px-3 py-1.5 text-xs font-bold ${form.category === category ? "bg-paradise-pink text-black" : "bg-white text-black/60 ring-1 ring-black/10"}`}>
-                      {category}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-black/45">Le categorie si modificano da Impostazioni &gt; Task.</p>
               </div>
               <label className="space-y-2"><span className="text-sm font-semibold">Checklist</span><textarea className="min-h-28 w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm outline-none" value={form.checklistText} onChange={(event) => setForm({ ...form, checklistText: event.target.value })} placeholder={"Controllare tavoli VIP\nVerificare richieste speciali"} /></label>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1879,6 +1963,22 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 <label className="grid cursor-pointer place-items-center gap-2 rounded-2xl border border-black/10 p-4 text-sm font-semibold"><FileImage className="size-5" />Foto<input type="file" accept="image/*" className="hidden" onChange={(event) => void attachPhoto(event.target.files?.[0])} /></label>
                 <label className="col-span-2 space-y-2"><span className="sr-only">Link</span><Field value={form.linkUrl} onChange={(event) => setForm({ ...form, linkUrl: event.target.value })} placeholder="https:// link" /></label>
               </div>
+              {form.attachmentName ? (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <CheckCircle2 className="size-4 shrink-0" />
+                    <span className="truncate">File caricato: {form.attachmentName}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, attachmentName: "", photoUrl: "" })}
+                    className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-emerald-900 shadow-sm ring-1 ring-emerald-200"
+                    aria-label="Rimuovi file caricato"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ) : null}
               {form.photoUrl ? (
                 <div className="overflow-hidden rounded-[24px] border border-black/10 bg-[#FAF7F9]">
                   <img src={form.photoUrl} alt={form.attachmentName || "Foto task"} className="max-h-80 w-full object-contain" />

@@ -89,6 +89,9 @@ model User {
   work_hour_records WorkHourRecord[]
   created_service_forms ServiceForm[] @relation("CreatedServiceForms")
   service_form_responses ServiceFormResponse[]
+  cash_closings    CashClosing[]
+  cash_vault_withdrawals CashVaultWithdrawal[]
+  cash_month_closings CashMonthClose[]
   social_posts      SocialPost[]     @relation("CreatedSocialPosts")
   social_post_comments SocialPostComment[]
 
@@ -111,6 +114,8 @@ model Location {
   schedule_overrides ScheduleWorkerOverride[]
   staff_tasks        StaffTask[]
   service_form_responses ServiceFormResponse[]
+  cash_closings      CashClosing[]
+  cash_vault_withdrawals CashVaultWithdrawal[]
 
   @@map("locations")
 }
@@ -383,6 +388,63 @@ model ServiceFormResponse {
   @@map("service_form_responses")
 }
 
+model CashClosing {
+  id             String   @id @default(cuid())
+  user_id        String
+  location_id    String
+  date           DateTime
+  withdrawn      Float
+  fund           Float
+  notes          String?
+  signature_name String
+  signature_role String?
+  signed_at      DateTime @default(now())
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  user           User     @relation(fields: [user_id], references: [id])
+  location       Location @relation(fields: [location_id], references: [id])
+
+  @@index([date])
+  @@index([location_id, date])
+  @@index([user_id])
+  @@map("cash_closings")
+}
+
+model CashVaultWithdrawal {
+  id             String   @id @default(cuid())
+  user_id        String
+  location_id    String
+  date           DateTime
+  amount         Float
+  reason         String
+  signature_name String
+  signature_role String?
+  signed_at      DateTime @default(now())
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  user           User     @relation(fields: [user_id], references: [id])
+  location       Location @relation(fields: [location_id], references: [id])
+
+  @@index([date])
+  @@index([location_id, date])
+  @@index([user_id])
+  @@map("cash_vault_withdrawals")
+}
+
+model CashMonthClose {
+  id             String   @id @default(cuid())
+  month          String   @unique
+  closed_by_id   String
+  closed_by_name String
+  closed_by_role String?
+  closed_at      DateTime @default(now())
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  closed_by      User     @relation(fields: [closed_by_id], references: [id])
+
+  @@map("cash_month_closings")
+}
+
 model Setting {
   id    String @id @default(cuid())
   key   String @unique
@@ -530,4 +592,25 @@ model SocialPostComment {
 
   @@map("social_post_comments")
 }
+
+model ShopifyOrderCache {
+  order_id   String   @id
+  order_name String
+  created_at DateTime @default(now())
+
+  @@map("shopify_order_cache")
+}
+
+model ShopifyOrderComment {
+  id         String   @id @default(cuid())
+  order_name String
+  user_name  String
+  user_role  String
+  message    String
+  created_at DateTime @default(now())
+
+  @@index([order_name])
+  @@map("shopify_order_comments")
+}
+
 

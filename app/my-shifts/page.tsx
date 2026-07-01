@@ -1,14 +1,15 @@
 import Link from "next/link";
-import { CalendarDays, CalendarClock, CalendarCheck, ChevronLeft, ChevronRight, Clock3, Coffee, Timer, Sparkles, Share2, ShieldCheck } from "lucide-react";
+import { CalendarDays, CalendarClock, CalendarCheck, ChevronLeft, ChevronRight, Clock3, Coffee, Timer, ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
+import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { monthlyPersonalHours, plannedHours } from "@/lib/personal-hours";
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 import { calculateClockHours } from "@/lib/work-hours";
-import { MonthSelector, CurrentlyAtWork, DailyDetailCard, DailyTableRow } from "./client-components";
+import { MonthSelector, CurrentlyAtWork, TodayShiftCountdown, MonthlyWorkCalendar } from "./client-components";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ function timeRange(entry?: { category: { start_time: string | null; end_time: st
 export default async function MyShiftsPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string; weekOffset?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (session.user.role !== "DIPENDENTE") redirect("/dashboard");
+  if (!["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(session.user.role)) redirect("/dashboard");
 
   const values = await searchParams;
   const today = new Date();
@@ -51,11 +52,16 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const [user, schedules, logs, records] = await Promise.all([
     prisma.user.findUnique({ where: { id: session.user.id }, include: { location: true } }),
     prisma.scheduleEntry.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } }, include: { category: true }, orderBy: { date: "asc" } }),
-    prisma.attendanceLog.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } }),
+    prisma.attendanceLog.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
     prisma.workHourRecord.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } } }),
   ]);
   
   if (!user) redirect("/login");
+
+  const clockRuleSetting = user.sede_id
+    ? await prisma.setting.findUnique({ where: { key: clockRuleKey(user.sede_id) } }).catch(() => null)
+    : null;
+  const breakDurationMinutes = parseClockRule(clockRuleSetting?.value).breakDurationMinutes;
 
   // Calculations for current month view
   const rows = monthlyPersonalHours(year, month, schedules, logs, records);
@@ -80,8 +86,29 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
     return isPast && hasPlanned && isNotRest && didNotWork;
   }).length;
 
+  const monthlyCalendarDays = rows.map((row) => {
+    const cat = row.schedule?.category;
+    return {
+      dateIso: row.date.toISOString(),
+      dayName: new Intl.DateTimeFormat("it-IT", { weekday: "long" }).format(row.date),
+      dayNum: new Intl.DateTimeFormat("it-IT", { day: "2-digit" }).format(row.date),
+      monthName: new Intl.DateTimeFormat("it-IT", { month: "short" }).format(row.date).slice(0, 3).toUpperCase(),
+      shiftName: cat?.name ?? "Non programmato",
+      shiftTime: timeRange(row.schedule),
+      firstEntry: row.firstEntry,
+      lastExit: row.lastExit,
+      workedHours: row.workedHours,
+      plannedHours: row.plannedHours,
+      breakHours: row.breakHours,
+      note: row.note ?? undefined,
+      categoryColor: cat?.color ?? null,
+      categoryTextColor: cat?.text_color ?? null,
+    };
+  });
+
   // Active clock-in check
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(today);
+  const todaySchedule = schedules.find((schedule) => schedule.date.toISOString().slice(0, 10) === todayStr);
   const todayLogs = logs.filter(log => log.date.toISOString().slice(0, 10) === todayStr);
   const latestEntrataLog = [...todayLogs]
     .reverse()
@@ -290,6 +317,21 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
     <CurrentlyAtWork activeClockInTime={activeClockInTime} />
   );
 
+  const mobileShiftCountdownWidget = (
+    <TodayShiftCountdown
+      shiftName={todaySchedule?.category.name ?? "Non programmato"}
+      shiftTime={timeRange(todaySchedule)}
+      startTime={todaySchedule?.start_time ?? todaySchedule?.category.start_time ?? null}
+      endTime={todaySchedule?.end_time ?? todaySchedule?.category.end_time ?? null}
+      breakDurationMinutes={breakDurationMinutes}
+      initialLogs={todayLogs.map((log) => ({
+        type: log.type as "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA",
+        timestamp: log.timestamp.toISOString(),
+        time: log.time,
+      }))}
+    />
+  );
+
   // 4. Weekly strip calendar JSX
   const weeklyCalendarStrip = (
     <div className="space-y-2.5">
@@ -387,151 +429,13 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
     </div>
   );
 
-  // 5. Dettaglio del Mese Card JSX
-  const dettaglioDelMeseCard = (
-    <Card className="overflow-hidden border border-white/50 bg-white/90 p-0 shadow-soft">
-      <div className="border-b border-black/5 bg-gradient-to-b from-white to-neutral-50/50 px-6 py-5 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-paradise-pink/15 text-[#B85B68] shadow-sm">
-            <Sparkles className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-paradise-noir">Dettaglio del Mese</h2>
-            <p className="text-xs text-black/45">Le ore lavorate arrivano dalle timbrature; eventuali correzioni degli amministratori sono incluse.</p>
-          </div>
-        </div>
-        <Link
-          href={`/schedules/card?userId=${session.user.id}&month=${month + 1}&year=${year}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-paradise-softPink text-[#B85B68] border border-paradise-pink/20 px-4 py-2 text-xs font-bold shadow-sm transition-all duration-200 hover:scale-[1.02] hover:bg-[#F2D0D9] active:scale-[0.98]"
-        >
-          <Share2 className="size-3.5" /> Condividi Cartolina
-        </Link>
-      </div>
-
-      {/* Desktop tabular view */}
-      <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead>
-            <tr className="bg-gradient-to-r from-paradise-softPink/15 via-paradise-nude/10 to-paradise-softPink/5 text-left border-b border-black/5">
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-black/60">Giorno</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-black/60">Turno Assegnato</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-black/60">Timbratura</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-black/60 text-right">Previste</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-black/60 text-right">Lavorate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const isWeekend = row.date.getDay() === 0 || row.date.getDay() === 6;
-              const cat = row.schedule?.category;
-
-              let statusLabel = "Non prog.";
-              let statusType: "completed" | "absent" | "inprogress" | "unprogrammed" = "unprogrammed";
-
-              if (row.workedHours > 0) {
-                if (row.lastExit) {
-                  statusLabel = "✓ Completato";
-                  statusType = "completed";
-                } else {
-                  statusLabel = "In corso";
-                  statusType = "inprogress";
-                }
-              } else if (row.plannedHours > 0 && row.date < todayStart && cat?.code !== "RIPOSO") {
-                statusLabel = "✗ Assente";
-                statusType = "absent";
-              } else if (cat?.code === "RIPOSO") {
-                statusLabel = "Riposo";
-                statusType = "unprogrammed";
-              }
-
-              return (
-                <DailyTableRow
-                  key={row.date.toISOString()}
-                  dateIso={row.date.toISOString()}
-                  dayName={new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(row.date).slice(0, 3).toUpperCase()}
-                  dayNum={new Intl.DateTimeFormat("it-IT", { day: "2-digit" }).format(row.date)}
-                  monthName={new Intl.DateTimeFormat("it-IT", { month: "short" }).format(row.date).slice(0, 3).toUpperCase()}
-                  shiftName={cat?.name ?? "Non programmato"}
-                  shiftTime={timeRange(row.schedule)}
-                  firstEntry={row.firstEntry}
-                  lastExit={row.lastExit}
-                  workedHours={row.workedHours}
-                  plannedHours={row.plannedHours}
-                  note={row.note}
-                  categoryColor={cat?.color}
-                  categoryTextColor={cat?.text_color}
-                  statusLabel={statusLabel}
-                  statusType={statusType}
-                  isWeekend={isWeekend}
-                />
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile card list view */}
-      <div className="lg:hidden p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-extrabold text-paradise-noir uppercase tracking-wider">Dettaglio giornaliero</h3>
-          <span className="text-xs font-bold text-[#E0529C]">Vedi tutto</span>
-        </div>
-
-        <div className="space-y-3 pb-4">
-          {rows.map((row) => {
-            const dayName = new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(row.date).slice(0, 3).toUpperCase();
-            const dayNum = new Intl.DateTimeFormat("it-IT", { day: "2-digit" }).format(row.date);
-            const monthName = new Intl.DateTimeFormat("it-IT", { month: "short" }).format(row.date).slice(0, 3).toUpperCase();
-            const cat = row.schedule?.category;
-
-            let statusLabel = "Non prog.";
-            let statusType: "completed" | "absent" | "inprogress" | "unprogrammed" = "unprogrammed";
-
-            if (row.workedHours > 0) {
-              if (row.lastExit) {
-                statusLabel = "✓ Completato";
-                statusType = "completed";
-              } else {
-                statusLabel = "In corso";
-                statusType = "inprogress";
-              }
-            } else if (row.plannedHours > 0 && row.date < todayStart && cat?.code !== "RIPOSO") {
-              statusLabel = "✗ Assente";
-              statusType = "absent";
-            } else if (cat?.code === "RIPOSO") {
-              statusLabel = "Riposo";
-              statusType = "unprogrammed";
-            }
-
-            return (
-              <DailyDetailCard
-                key={row.date.toISOString()}
-                dateIso={row.date.toISOString()}
-                dayName={dayName}
-                dayNum={dayNum}
-                monthName={monthName}
-                shiftName={cat?.name ?? "Non programmato"}
-                shiftTime={timeRange(row.schedule)}
-                firstEntry={row.firstEntry}
-                lastExit={row.lastExit}
-                workedHours={row.workedHours}
-                plannedHours={row.plannedHours}
-                note={row.note}
-                categoryColor={cat?.color}
-                statusLabel={statusLabel}
-                statusType={statusType}
-              />
-            );
-          })}
-        </div>
-      </div>
-    </Card>
+  // 5. Calendario mensile cliccabile
+  const monthlyWorkCalendar = (
+    <MonthlyWorkCalendar monthLabel={`${monthNames[month]} ${year}`} days={monthlyCalendarDays} />
   );
 
   return (
-    <AppShell title="I miei turni" role="DIPENDENTE" hideHeader>
+    <AppShell title="I miei turni" role={session.user.role} hideHeader>
       <div className="mx-auto w-full max-w-7xl space-y-5 pb-8">
       <div className="mt-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -548,38 +452,41 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-[26px] border border-white/70 bg-gradient-to-r from-paradise-softPink/20 via-white/90 to-paradise-nude/30 p-3 backdrop-blur-xl shadow-soft">
-        <Link 
-          className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10" 
-          href={`/my-shifts?month=${previous.getUTCMonth() + 1}&year=${previous.getUTCFullYear()}`} 
-          aria-label="Mese precedente"
-        >
-          <ChevronLeft className="size-5 text-paradise-noir/70" />
-        </Link>
-        
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] font-extrabold tracking-[0.18em] text-[#B85B68] uppercase">Calendario turni</span>
-          <p className="text-base font-extrabold text-paradise-noir tracking-wide sm:text-lg">
-            {monthNames[month]} {year}
-          </p>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex items-center justify-between rounded-[26px] border border-white/70 bg-gradient-to-r from-paradise-softPink/20 via-white/90 to-paradise-nude/30 p-3 backdrop-blur-xl shadow-soft">
+          <Link
+            className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
+            href={`/my-shifts?month=${previous.getUTCMonth() + 1}&year=${previous.getUTCFullYear()}`}
+            aria-label="Mese precedente"
+          >
+            <ChevronLeft className="size-5 text-paradise-noir/70" />
+          </Link>
+
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] font-extrabold tracking-[0.18em] text-[#B85B68] uppercase">Calendario turni</span>
+            <p className="text-base font-extrabold text-paradise-noir tracking-wide sm:text-lg">
+              {monthNames[month]} {year}
+            </p>
+          </div>
+
+          <Link
+            className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
+            href={`/my-shifts?month=${next.getUTCMonth() + 1}&year=${next.getUTCFullYear()}`}
+            aria-label="Mese successivo"
+          >
+            <ChevronRight className="size-5 text-paradise-noir/70" />
+          </Link>
         </div>
-        
-        <Link 
-          className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10" 
-          href={`/my-shifts?month=${next.getUTCMonth() + 1}&year=${next.getUTCFullYear()}`} 
-          aria-label="Mese successivo"
-        >
-          <ChevronRight className="size-5 text-paradise-noir/70" />
-        </Link>
+        {currentlyAtWorkWidget}
       </div>
 
       {/* Mobile Layout (lg:hidden) */}
       <div className="space-y-5 lg:hidden">
         {workedHoursCard}
         {metricsContainer}
-        {currentlyAtWorkWidget}
+        {mobileShiftCountdownWidget}
         {weeklyCalendarStrip}
-        {dettaglioDelMeseCard}
+        {monthlyWorkCalendar}
       </div>
 
       {/* Desktop Layout */}
@@ -593,11 +500,9 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           {/* Right Column (span 1) */}
           <div className="min-w-0 space-y-5">
             {metricsContainer}
-            {currentlyAtWorkWidget}
           </div>
         </div>
-
-        {dettaglioDelMeseCard}
+        {monthlyWorkCalendar}
       </div>
       </div>
     </AppShell>

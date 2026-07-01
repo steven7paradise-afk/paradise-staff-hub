@@ -26,6 +26,18 @@ export async function ensureOrderForm(createdById?: string | null) {
   });
 
   if (existing) {
+    const roles = existing.allowed_roles as string[] | null;
+    const notifyRoles = existing.notify_roles as string[] | null;
+    const expectedRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+    const expectedNotifyRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+    const alreadyReady =
+      existing.category === ORDER_FORM_CATEGORY &&
+      existing.active &&
+      JSON.stringify(roles ?? []) === JSON.stringify(expectedRoles) &&
+      JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles);
+
+    if (alreadyReady) return existing;
+
     return prisma.serviceForm.update({
       where: { id: existing.id },
       data: {

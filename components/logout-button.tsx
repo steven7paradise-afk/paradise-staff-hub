@@ -2,10 +2,13 @@
 
 import { LogOut } from "lucide-react";
 import { signOut } from "next-auth/react";
+import { usePathname } from "next/navigation";
 
 export function LogoutButton({ className }: { className?: string }) {
+  const pathname = usePathname();
+
   const handleLogout = () => {
-    const isTablet = typeof document !== "undefined" && document.cookie.includes("paradise_tablet_access");
+    const isTablet = pathname?.startsWith("/tablet-clock");
     void signOut({ callbackUrl: isTablet ? "/tablet-clock" : "/login" });
   };
 

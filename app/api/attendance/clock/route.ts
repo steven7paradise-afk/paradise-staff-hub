@@ -45,9 +45,6 @@ export async function POST(request: NextRequest) {
   }
 
   const isOffice = device.location.name.toLowerCase().includes("ufficio");
-  if (!isOffice && user.sede_id && user.sede_id !== device.location_id) {
-    return NextResponse.json({ error: "Dipendente non associato alla sede del tablet" }, { status: 403 });
-  }
 
   const logLocationId = (isOffice && user.sede_id) ? user.sede_id : device.location_id;
   const logLocationName = (isOffice && user.location) ? user.location.name : device.location.name;
@@ -94,7 +91,8 @@ export async function POST(request: NextRequest) {
     : type === "USCITA" && rule.entranceRoundingMinutes > 0 && actualTime !== time
     ? `Ora rilevata ${actualTime}; arrotondamento uscita ${rule.entranceRoundingMinutes} min.`
     : null;
-  const storedNote = [note, roundedNote].filter(Boolean).join(" - ") || null;
+  const tabletNote = `Timbrato su: ${device.device_name} (${device.location.name})`;
+  const storedNote = [note, roundedNote, tabletNote].filter(Boolean).join(" - ") || null;
 
   const log = await prisma.attendanceLog.create({
     data: {
@@ -185,5 +183,5 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ id: log.id, type, time, adjusted: Boolean(roundedNote), actualTime });
+  return NextResponse.json({ id: log.id, type, time, timestamp: log.timestamp.toISOString(), adjusted: Boolean(roundedNote), actualTime });
 }
