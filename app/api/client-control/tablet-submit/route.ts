@@ -58,13 +58,15 @@ export async function POST(request: NextRequest) {
     products?: boolean;
     review?: boolean;
     bookingId?: string | null;
+    isFinito?: boolean;
   } | null;
 
+  const isFinito = !!body?.isFinito;
   const salonName = textValue(body?.salon || tabletDevice.location?.name);
   const clientName = textValue(body?.clientName);
   const staffIds = Array.isArray(body?.staffIds) ? body!.staffIds.filter(Boolean) : [];
 
-  if (!salonName || !clientName || staffIds.length === 0) {
+  if (!isFinito && (!salonName || !clientName || staffIds.length === 0)) {
     return NextResponse.json({ error: "Completa sede, nome cliente e collaboratore." }, { status: 400 });
   }
 
@@ -73,24 +75,27 @@ export async function POST(request: NextRequest) {
     await prisma.location.findFirst({ where: { active: true, name: { contains: salonName.replace(/^Salone\s+/i, ""), mode: "insensitive" } } }) ??
     tabletDevice.location;
 
-  const selectedStaff = await prisma.user.findMany({
-    where: {
-      id: { in: staffIds },
-      active: true,
-      role: { not: "SUPER_ADMIN" },
-    },
-    select: {
-      id: true,
-      name: true,
-      sede_id: true,
-      location: { select: { name: true } },
-    },
-    orderBy: { name: "asc" },
-  });
+  let staffForSalon: any[] = [];
+  if (!isFinito) {
+    const selectedStaff = await prisma.user.findMany({
+      where: {
+        id: { in: staffIds },
+        active: true,
+        role: { not: "SUPER_ADMIN" },
+      },
+      select: {
+        id: true,
+        name: true,
+        sede_id: true,
+        location: { select: { name: true } },
+      },
+      orderBy: { name: "asc" },
+    });
 
-  const staffForSalon = selectedStaff.filter((employee) => sameSalon(employee.location?.name, location.name));
-  if (staffForSalon.length === 0) {
-    return NextResponse.json({ error: "Scegli almeno un collaboratore del salone selezionato." }, { status: 400 });
+    staffForSalon = selectedStaff.filter((employee) => sameSalon(employee.location?.name, location.name));
+    if (staffForSalon.length === 0) {
+      return NextResponse.json({ error: "Scegli almeno un collaboratore del salone selezionato." }, { status: 400 });
+    }
   }
 
   const submitter = await prisma.user.findFirst({
@@ -108,7 +113,13 @@ export async function POST(request: NextRequest) {
 
   const form = await ensureClientControlForm(submitter.id);
   const staffNames = staffForSalon.map((employee) => employee.name);
-  const answers = {
+  const answers = isFinito ? {
+    [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
+    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || "Finito",
+    [CLIENT_CONTROL_FIELD_IDS.correctness]: "Finito",
+    booking_id: textValue(body?.bookingId),
+    client_control_created_from: "Tablet Clock Finito",
+  } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName,
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),

@@ -1612,6 +1612,22 @@ export function TabletClock({
                                             return next;
                                           });
                                           sound("success");
+                                          
+                                          // Save Finito status in background database response
+                                          void fetch("/api/client-control/tablet-submit", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({
+                                              isFinito: true,
+                                              bookingId: booking.id,
+                                              clientName: booking.customerName,
+                                              salon: device?.locationName,
+                                            }),
+                                          }).then(() => {
+                                            router.refresh();
+                                          }).catch((err) => {
+                                            console.error("Error saving Finito status:", err);
+                                          });
                                         }}
                                         className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm"
                                       >
