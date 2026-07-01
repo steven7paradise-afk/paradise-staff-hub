@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ month: key, salons: [], totals: { responses: 0, staff: 0 } });
   }
 
-  const responses = await prisma.serviceFormResponse.findMany({
+  const rawResponses = await prisma.serviceFormResponse.findMany({
     where: {
       form_id: { in: clientFormIds },
       created_at: { gte: start, lt: end },
@@ -78,6 +78,14 @@ export async function GET(request: NextRequest) {
       created_at: true,
       user: { select: { name: true } },
     },
+  });
+
+  // Filter out any "Finito" (dismissed/skipped) responses so they do not pollute analytics stats
+  const responses = rawResponses.filter((resp) => {
+    const answers = resp.answers as Record<string, unknown> | null;
+    if (!answers) return true;
+    const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || answers.client_control_correctness || "").trim().toLowerCase();
+    return correctness !== "finito";
   });
 
   const employees = await prisma.user.findMany({
