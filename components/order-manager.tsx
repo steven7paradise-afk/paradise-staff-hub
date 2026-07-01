@@ -449,6 +449,24 @@ export function OrderManager({
                   <div className="mt-4 grid gap-3 text-sm">
                     <p><span className="text-black/40">Creato da:</span> <b>{selected.user?.name ?? "Staff"}</b></p>
                     <p><span className="text-black/40">Salone:</span> <b>{selected.user_location_name ?? "Non indicato"}</b></p>
+                    {(() => {
+                      const shopifyOrderField = (selected.form?.fields ?? []).find(f => 
+                        f.label?.toLowerCase().includes("ordine shopify") || 
+                        f.label?.toLowerCase().includes("numero ordine") || 
+                        f.label?.toLowerCase().includes("codice")
+                      );
+                      const shopifyOrderVal = shopifyOrderField ? selected.answers?.[shopifyOrderField.id] : null;
+                      const finalOrderVal = selected.answers?.field_1782221517924 || shopifyOrderVal;
+                      return (
+                        <p>
+                          <span className="text-black/40">Ordine Shopify:</span>{" "}
+                          <b className="text-[#C66170] font-mono select-all bg-pink-50/50 px-1 py-0.5 rounded border border-pink-100/55">
+                            {String(finalOrderVal || "Non inserito")}
+                          </b>
+                        </p>
+                      );
+                    })()}
+                    <p><span className="text-black/40">ID Scheda:</span> <span className="font-mono text-xs text-black/60 bg-black/5 px-1.5 py-0.5 rounded select-all">{selected.id}</span></p>
                     <p className="inline-flex items-center gap-2"><CalendarDays className="size-4 text-black/40" /> {orderDate(selected)}</p>
                   </div>
                 </Card>

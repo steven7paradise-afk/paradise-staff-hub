@@ -367,4 +367,117 @@ export async function getShopifyOrderNoteText(orderName: string): Promise<string
   return null;
 }
 
+/**
+ * Updates status and note metafields on a Shopify order.
+ * Handles inputs representing either order name (e.g. #22910) or direct order ID.
+ */
+export async function updateShopifyOrderMetafields(
+  orderName: string,
+  status: string,
+  note: string
+): Promise<boolean> {
+  try {
+    const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+    const token = process.env.SHOPIFY_ACCESS_TOKEN;
+
+    if (!shop || !token) {
+      console.warn("Shopify shop domain or access token not configured.");
+      return false;
+    }
+
+    const cleanName = orderName.trim();
+    if (!cleanName) return false;
+
+    let orderId: string | number | null = null;
+
+    // 1. Try direct ID query
+    if (/^\d{12,}$/.test(cleanName.replace("#", ""))) {
+      orderId = cleanName.replace("#", "");
+    }
+
+    // 2. Search by order name
+    if (!orderId) {
+      let searchQuery = cleanName;
+      if (!searchQuery.startsWith("#") && /^\d+$/.test(searchQuery)) {
+        searchQuery = `#${searchQuery}`;
+      }
+
+      const searchRes = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(searchQuery)}&status=any`, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        const orders = searchData?.orders || [];
+        if (orders.length > 0) {
+          orderId = orders[0].id;
+        } else {
+          // Try searching without the '#' prefix
+          const nameWithoutHash = searchQuery.replace("#", "");
+          const searchResNoHash = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(nameWithoutHash)}&status=any`, {
+            headers: {
+              "X-Shopify-Access-Token": token,
+              "Content-Type": "application/json",
+            },
+          });
+          if (searchResNoHash.ok) {
+            const searchDataNoHash = await searchResNoHash.json();
+            const ordersNoHash = searchDataNoHash?.orders || [];
+            if (ordersNoHash.length > 0) {
+              orderId = ordersNoHash[0].id;
+            }
+          }
+        }
+      }
+    }
+
+    if (!orderId) {
+      console.warn(`No Shopify order found to update metafields for ${cleanName}`);
+      return false;
+    }
+
+    // 3. Update the order metafields in Shopify
+    const updateRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderId}.json`, {
+      method: "PUT",
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        order: {
+          id: orderId,
+          metafields: [
+            {
+              namespace: "custom",
+              key: "app_stato",
+              value: status,
+              type: "single_line_text_field"
+            },
+            {
+              namespace: "custom",
+              key: "app_note",
+              value: note || "Nessuna nota",
+              type: "multi_line_text_field"
+            }
+          ]
+        },
+      }),
+    });
+
+    if (!updateRes.ok) {
+      console.error(`Failed to update Shopify order metafields for order ${cleanName} (${orderId}): ${updateRes.status} ${await updateRes.text()}`);
+      return false;
+    }
+
+    console.log(`Successfully updated Shopify order metafields for order ${cleanName}`);
+    return true;
+  } catch (error) {
+    console.error(`Error updating Shopify order metafields for ${orderName}:`, error);
+    return false;
+  }
+}
+
 

@@ -82,7 +82,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     });
 
     // Automatically sync status change notes to the matching Shopify order
-    if (status && statusNote && statusNote.trim()) {
+    if (status) {
       const title = String((updatedResponse.answers as any)?.order_title || "").trim();
       let shopifyOrderName: string | null = null;
       const titleMatch = title.match(/#\d+/);
@@ -108,7 +108,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
 
       if (shopifyOrderName) {
-        const { appendShopifyOrderNote } = await import("@/lib/shopify");
+        const { appendShopifyOrderNote, updateShopifyOrderMetafields } = await import("@/lib/shopify");
         const STATUS_LABELS: Record<string, string> = {
           NEW: "Nuovo ordine",
           PREPARING: "Preparando ordine",
@@ -117,11 +117,22 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           COMPLETED: "Completato",
         };
         const statusLabelText = STATUS_LABELS[status] || status;
-        await appendShopifyOrderNote(
+        
+        // 1. Sync custom status note as an order note (comment history on Shopify)
+        if (statusNote && statusNote.trim()) {
+          await appendShopifyOrderNote(
+            shopifyOrderName,
+            session.user.name || "Staff",
+            `Stato cambiato in "${statusLabelText}": ${statusNote.trim()}`
+          ).catch((err) => console.error("Failed to sync note to Shopify:", err));
+        }
+
+        // 2. Sync status and latest custom note as Shopify Metafields!
+        await updateShopifyOrderMetafields(
           shopifyOrderName,
-          session.user.name || "Staff",
-          `Stato cambiato in "${statusLabelText}": ${statusNote.trim()}`
-        ).catch((err) => console.error("Failed to sync note to Shopify:", err));
+          statusLabelText,
+          statusNote || ""
+        ).catch((err) => console.error("Failed to update Shopify metafields:", err));
       }
     }
 
