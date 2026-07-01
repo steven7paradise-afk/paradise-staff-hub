@@ -12,6 +12,7 @@ type OrderResponse = {
   priority?: string | null;
   answers: Record<string, any>;
   comments?: any[] | null;
+  activity_log?: any[] | null;
   created_at: string;
   updated_at: string;
   user_location_name?: string | null;
@@ -101,6 +102,8 @@ export function OrderManager({
   const [selected, setSelected] = useState<OrderResponse | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [mobileStatus, setMobileStatus] = useState("ALL");
+  const [changingStatusTo, setChangingStatusTo] = useState<string | null>(null);
+  const [statusNoteText, setStatusNoteText] = useState("");
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -118,8 +121,10 @@ export function OrderManager({
       });
     }
 
-    // Default board view is filtered by selected month/year.
+    // Default board view: active columns show all active orders, completed column only shows those of selected month/year.
     return orders.filter((order) => {
+      const status = order.status || "NEW";
+      if (status !== "COMPLETED") return true;
       const d = new Date(order.created_at);
       return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
     });
@@ -130,12 +135,12 @@ export function OrderManager({
     return filteredOrders.filter((order) => (order.status || "NEW") === mobileStatus);
   }, [filteredOrders, mobileStatus]);
 
-  async function moveOrder(order: OrderResponse, status: string) {
+  async function moveOrder(order: OrderResponse, status: string, note?: string) {
     setSavingId(order.id);
     const response = await fetch(`/api/service-forms/responses/${order.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, statusNote: note }),
     });
     setSavingId(null);
     if (!response.ok) return;
@@ -328,6 +333,38 @@ export function OrderManager({
                   })}
                 </div>
 
+                {/* Log attività / cambi di stato */}
+                {Array.isArray(selected.activity_log) && (selected.activity_log as any[]).length > 0 && (
+                  <div className="mt-6 space-y-4 border-t border-black/5 pt-6">
+                    <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-black/40">Cronologia Stati e Note</h3>
+                    <div className="grid gap-3">
+                      {(selected.activity_log as any[]).map((log: any, idx: number) => {
+                        const colFrom = ORDER_COLUMNS.find((c) => c.id === log.from);
+                        const colTo = ORDER_COLUMNS.find((c) => c.id === log.to);
+                        return (
+                          <div key={idx} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-4 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-extrabold text-black/75">
+                                Stato cambiato da {colFrom?.label ?? log.from} a {colTo?.label ?? log.to}
+                              </span>
+                              <span className="text-[11px] text-black/40">
+                                {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(log.at))}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-black/45">Modificato da: {log.by}</p>
+                            {log.note && (
+                              <div className="mt-3 rounded-xl bg-white p-3 border border-black/5">
+                                <p className="text-xs font-bold text-black/35 mb-1">Nota stato:</p>
+                                <p className="text-sm text-black/80 whitespace-pre-wrap">{log.note}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <ResponseComments
                   responseId={selected.id}
                   initialComments={selected.comments || []}
@@ -349,24 +386,63 @@ export function OrderManager({
                 <Card className="bg-white">
                   <h3 className="font-semibold">{canManage ? "Stato ordine" : "Avanzamento ordine"}</h3>
                   {!canManage ? <p className="mt-1 text-xs text-black/45">Puoi controllare lo stato. Le modifiche sono riservate ai responsabili.</p> : null}
-                  <div className="mt-4 grid gap-2">
-                    {ORDER_COLUMNS.map((column) => (
-                      <button
-                        key={column.id}
-                        type="button"
-                        disabled={!canManage || savingId === selected.id}
-                        onClick={() => void moveOrder(selected, column.id)}
-                        className={cn(
-                          "flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm font-semibold transition",
-                          (selected.status || "NEW") === column.id ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white",
-                          canManage && "hover:bg-[#FAF7F9]"
-                        )}
-                      >
-                        {column.label}
-                        {savingId === selected.id ? <Loader2 className="size-4 animate-spin" /> : null}
-                      </button>
-                    ))}
-                  </div>
+                  {changingStatusTo ? (
+                    <div className="mt-4 rounded-2xl border border-black/10 bg-black/5 p-4 space-y-3">
+                      <h4 className="text-xs font-bold uppercase text-black/60">
+                        Nota per cambio in: {statusLabel(changingStatusTo)}
+                      </h4>
+                      <textarea
+                        value={statusNoteText}
+                        onChange={(e) => setStatusNoteText(e.target.value)}
+                        placeholder="Inserisci una nota facoltativa..."
+                        rows={3}
+                        className="w-full rounded-xl border border-black/10 bg-white p-3 text-sm outline-none resize-none focus:border-paradise-pink"
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="soft"
+                          onClick={() => {
+                            setChangingStatusTo(null);
+                            setStatusNoteText("");
+                          }}
+                        >
+                          Annulla
+                        </Button>
+                        <Button
+                          variant="primary"
+                          onClick={() => {
+                            void moveOrder(selected, changingStatusTo, statusNoteText);
+                            setChangingStatusTo(null);
+                            setStatusNoteText("");
+                          }}
+                        >
+                          Conferma
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-2">
+                      {ORDER_COLUMNS.map((column) => (
+                        <button
+                          key={column.id}
+                          type="button"
+                          disabled={!canManage || savingId === selected.id}
+                          onClick={() => {
+                            setChangingStatusTo(column.id);
+                            setStatusNoteText("");
+                          }}
+                          className={cn(
+                            "flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm font-semibold transition",
+                            (selected.status || "NEW") === column.id ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white",
+                            canManage && "hover:bg-[#FAF7F9]"
+                          )}
+                        >
+                          {column.label}
+                          {savingId === selected.id ? <Loader2 className="size-4 animate-spin" /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </Card>
                 <Card className="bg-white">
                   <h3 className="font-semibold">Dettagli</h3>

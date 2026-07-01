@@ -43,7 +43,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { status, comments, answers } = body;
+    const { status, comments, answers, statusNote } = body;
 
     const response = await prisma.serviceFormResponse.findUnique({
       where: { id },
@@ -54,7 +54,21 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const dataToUpdate: any = {};
-    if (status) dataToUpdate.status = status;
+    if (status) {
+      dataToUpdate.status = status;
+
+      // Track status changes in the activity log field
+      const currentLog = Array.isArray(response.activity_log) ? (response.activity_log as any[]) : [];
+      const newLogEntry = {
+        type: "STATUS_CHANGE",
+        from: response.status,
+        to: status,
+        note: statusNote || "",
+        by: session.user.name || "Staff",
+        at: new Date().toISOString(),
+      };
+      dataToUpdate.activity_log = [...currentLog, newLogEntry];
+    }
     if (comments) dataToUpdate.comments = comments; // JSON array of comments
     if (answers) dataToUpdate.answers = answers; // JSON object of answers
 
@@ -66,6 +80,50 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         form: true,
       }
     });
+
+    // Automatically sync status change notes to the matching Shopify order
+    if (status && statusNote && statusNote.trim()) {
+      const title = String((updatedResponse.answers as any)?.order_title || "").trim();
+      let shopifyOrderName: string | null = null;
+      const titleMatch = title.match(/#\d+/);
+      if (titleMatch) {
+        shopifyOrderName = titleMatch[0];
+      } else if (/^22\d{3}$/.test(title)) {
+        shopifyOrderName = `#${title}`;
+      } else {
+        const answersObj = (updatedResponse.answers as Record<string, any>) || {};
+        for (const val of Object.values(answersObj)) {
+          if (typeof val === "string") {
+            const match = val.match(/#\d+/);
+            if (match) {
+              shopifyOrderName = match[0];
+              break;
+            }
+            if (/^22\d{3}$/.test(val)) {
+              shopifyOrderName = `#${val}`;
+              break;
+            }
+          }
+        }
+      }
+
+      if (shopifyOrderName) {
+        const { appendShopifyOrderNote } = await import("@/lib/shopify");
+        const STATUS_LABELS: Record<string, string> = {
+          NEW: "Nuovo ordine",
+          PREPARING: "Preparando ordine",
+          ORDERED: "Ordinato",
+          READY: "Arrivato / pronto",
+          COMPLETED: "Completato",
+        };
+        const statusLabelText = STATUS_LABELS[status] || status;
+        await appendShopifyOrderNote(
+          shopifyOrderName,
+          session.user.name || "Staff",
+          `Stato cambiato in "${statusLabelText}": ${statusNote.trim()}`
+        ).catch((err) => console.error("Failed to sync note to Shopify:", err));
+      }
+    }
 
     return NextResponse.json(updatedResponse);
   } catch (error) {
