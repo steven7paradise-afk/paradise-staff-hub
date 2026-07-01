@@ -8,7 +8,7 @@ import {
 import type { AttendanceType, Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { DashboardNewResponses } from "@/components/dashboard-new-responses";
+
 import { EmployeeLiveSummary } from "@/components/employee-live-summary";
 import { InstantLink } from "@/components/instant-link";
 import { LiveAttendance } from "@/components/live-attendance";
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
     role !== "DIPENDENTE"
       ? safe(prisma.serviceFormResponse.findMany({
           where: {
-            created_at: { gte: start, lt: end },
+            created_at: { gte: statusToday, lt: statusTomorrow },
             ...(role === "RESPONSABILE" ? { user_location_id: currentUser.sede_id ?? undefined } : {}),
             form: {
               is: {
@@ -256,6 +256,13 @@ export default async function DashboardPage() {
       : Promise.resolve([]),
   ]);
   const allowedNewResponses = rawNewResponses.filter((r: any) => {
+    // Exclude cash closing or safe prelievo forms
+    const isCashForm = r.form?.name?.toLowerCase().includes("cassa") || 
+                       r.form?.category?.toLowerCase().includes("cassa") ||
+                       r.form?.name?.toLowerCase().includes("prelievo") || 
+                       r.form?.category?.toLowerCase().includes("cassaforte");
+    if (isCashForm) return false;
+
     // Exclude own submissions
     if (r.user_id === currentUser.id) return false;
 
@@ -448,12 +455,17 @@ export default async function DashboardPage() {
           </div>
         </div>
       ) : null}
-      <DashboardNewResponses
-        initialResponses={allowedNewResponses}
-        currentUserId={currentUser.id}
-        currentUserName={currentUser.name}
-        currentUserRole={role}
-      />
+      {newResponsesCount > 0 && (role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE") && (
+        <div className="mb-6 flex items-center justify-between rounded-[20px] border border-[#e8b1bf]/45 bg-[#FFF7F9] p-4 text-sm font-semibold text-[#A74758] shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <ClipboardList className="size-4.5 animate-pulse text-[#C66170]" />
+            <span>Hai {newResponsesCount} {newResponsesCount === 1 ? "modulo compilato" : "moduli compilati"} da verificare</span>
+          </div>
+          <Link href="/service-forms/to-verify" className="inline-flex items-center gap-1 text-xs font-extrabold uppercase hover:underline">
+            Verifica ora <ArrowRight className="size-3.5" />
+          </Link>
+        </div>
+      )}
       {role !== "DIPENDENTE" ? <CashClosingTodayDashboard responses={todayCashClosings as any[]} /> : null}
 
       {role !== "DIPENDENTE" ? (

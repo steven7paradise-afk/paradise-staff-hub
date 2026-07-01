@@ -258,40 +258,50 @@ export function AdminFormsManager({
   return (
     <div className="space-y-6">
       {/* Navigation tabs */}
-      <div className="flex flex-wrap sm:flex-nowrap gap-2 rounded-2xl bg-black/5 p-1.5 w-full sm:w-fit">
-        <button
-          onClick={() => setActiveTab("templates")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            activeTab === "templates" 
-              ? "bg-white text-black shadow-sm" 
-              : "text-black/50 hover:text-black/80"
-          }`}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between w-full">
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 rounded-2xl bg-black/5 p-1.5 w-full sm:w-fit">
+          <button
+            onClick={() => setActiveTab("templates")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "templates" 
+                ? "bg-white text-black shadow-sm" 
+                : "text-black/50 hover:text-black/80"
+            }`}
+          >
+            <ClipboardList className="size-4" />
+            Moduli disponibili ({forms.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("responses")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "responses" 
+                ? "bg-white text-black shadow-sm" 
+                : "text-black/50 hover:text-black/80"
+            }`}
+          >
+            <Sliders className="size-4" />
+            Risposte ricevute ({responses.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("upcoming")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              activeTab === "upcoming" 
+                ? "bg-white text-black shadow-sm" 
+                : "text-black/50 hover:text-black/80"
+            }`}
+          >
+            <Calendar className="size-4" />
+            Prossimi eventi ({upcomingEvents.length})
+          </button>
+        </div>
+
+        <Link 
+          href="/service-forms/to-verify"
+          className="inline-flex items-center gap-1.5 rounded-2xl border border-[#e8b1bf]/45 bg-[#FFF7F9] px-4 py-2.5 text-xs font-black text-[#A74758] shadow-sm hover:bg-white hover:border-black/10 transition duration-200"
         >
-          <ClipboardList className="size-4" />
-          Moduli disponibili ({forms.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("responses")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            activeTab === "responses" 
-              ? "bg-white text-black shadow-sm" 
-              : "text-black/50 hover:text-black/80"
-          }`}
-        >
-          <Sliders className="size-4" />
-          Risposte ricevute ({responses.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("upcoming")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-            activeTab === "upcoming" 
-              ? "bg-white text-black shadow-sm" 
-              : "text-black/50 hover:text-black/80"
-          }`}
-        >
-          <Calendar className="size-4" />
-          Prossimi eventi ({upcomingEvents.length})
-        </button>
+          <ClipboardList className="size-3.5 animate-pulse text-[#C66170]" />
+          Moduli da verificare ➔
+        </Link>
       </div>
 
       {activeTab === "templates" ? (

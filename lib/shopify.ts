@@ -439,41 +439,53 @@ export async function updateShopifyOrderMetafields(
       return false;
     }
 
-    // 3. Update the order metafields in Shopify
-    const updateRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderId}.json`, {
-      method: "PUT",
-      headers: {
-        "X-Shopify-Access-Token": token,
-        "Content-Type": "application/json",
-      },
+    // 3. Update the order metafields in Shopify using the POST metafields endpoint
+    const headers = {
+      "X-Shopify-Access-Token": token,
+      "Content-Type": "application/json",
+    };
+
+    // Update Stato
+    const statoRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderId}/metafields.json`, {
+      method: "POST",
+      headers,
       body: JSON.stringify({
-        order: {
-          id: orderId,
-          metafields: [
-            {
-              namespace: "custom",
-              key: "stato_ordine",
-              value: status,
-              type: "single_line_text_field"
-            },
-            {
-              namespace: "custom",
-              key: "note_ordine",
-              value: note || "Nessuna nota",
-              type: "multi_line_text_field"
-            }
-          ]
-        },
-      }),
+        metafield: {
+          namespace: "custom",
+          key: "stato_ordine",
+          value: status,
+          type: "single_line_text_field"
+        }
+      })
     });
 
-    if (!updateRes.ok) {
-      console.error(`Failed to update Shopify order metafields for order ${cleanName} (${orderId}): ${updateRes.status} ${await updateRes.text()}`);
-      return false;
+    if (!statoRes.ok) {
+      console.error(`Failed to update Shopify order stato_ordine for ${cleanName}: ${statoRes.status} ${await statoRes.text()}`);
     }
 
-    console.log(`Successfully updated Shopify order metafields for order ${cleanName}`);
-    return true;
+    // Update Note
+    const noteRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderId}/metafields.json`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        metafield: {
+          namespace: "custom",
+          key: "note_ordine",
+          value: note || "Nessuna nota",
+          type: "multi_line_text_field"
+        }
+      })
+    });
+
+    if (!noteRes.ok) {
+      console.error(`Failed to update Shopify order note_ordine for ${cleanName}: ${noteRes.status} ${await noteRes.text()}`);
+    }
+
+    const success = statoRes.ok || noteRes.ok;
+    if (success) {
+      console.log(`Successfully updated Shopify order metafields for order ${cleanName}`);
+    }
+    return success;
   } catch (error) {
     console.error(`Error updating Shopify order metafields for ${orderName}:`, error);
     return false;
