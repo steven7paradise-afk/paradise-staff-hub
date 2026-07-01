@@ -232,6 +232,7 @@ export function TabletClock({
   const kioskIdleTimerRef = useRef<any | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
 
   // Leave Request form states (from 614 version)
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
@@ -468,10 +469,7 @@ export function TabletClock({
       if (!res.ok) {
         throw new Error(data.error || "Errore durante il salvataggio.");
       }
-      setAppointmentMessage({ type: "success", text: "Appuntamento salvato. Lo trovi nella cronologia Controllo Cliente." });
-      sound("success");
-      
-      // Auto-filter from appointments tray list if pre-filled from drawer
+      // Auto-filter from appointments tray list if pre-filled from drawer or direct list buttons
       if (selectedBookingForDetails) {
         setCompletedAppointments((prev) => {
           const next = new Set(prev);
@@ -479,6 +477,18 @@ export function TabletClock({
           return next;
         });
       }
+      if (currentBookingId) {
+        setCompletedAppointments((prev) => {
+          const next = new Set(prev);
+          next.add(currentBookingId);
+          return next;
+        });
+      }
+
+      showFeedback("success", "Scheda controllo salvata ed eliminata dalla lista.");
+      setClientControlOpen(false);
+      setSelectedBookingForDetails(null);
+      setCurrentBookingId(null);
 
       setAppointmentForm((prev) => ({
         ...prev,
@@ -765,6 +775,7 @@ export function TabletClock({
       sound("success");
       setAppointmentMode("create");
       setAppointmentMessage(null);
+      setCurrentBookingId(booking.id);
 
       let employees = clientAnalytics?.employees;
       let analyticsData = clientAnalytics;
@@ -1699,6 +1710,7 @@ export function TabletClock({
                     onClick={() => {
                       setClientControlOpen(false);
                       setAppointmentMessage(null);
+                      setCurrentBookingId(null);
                     }}
                     className="grid size-11 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm active:scale-95 hover:bg-black/[0.02]"
                   >
