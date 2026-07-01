@@ -213,7 +213,17 @@ export default async function TabletClockPage({
           
           const orderMatched = (cleanOrderName && savedOrders.has(cleanOrderName)) || 
                                (cleanBookingOrder && savedOrders.has(cleanBookingOrder));
-          const nameMatched = savedClientNamesByDate.get(bookingRomeDateStr)?.has(cleanClientName) || false;
+          
+          let nameMatched = false;
+          const savedNames = savedClientNamesByDate.get(bookingRomeDateStr);
+          if (savedNames && cleanClientName) {
+            for (const savedName of savedNames) {
+              if (savedName.includes(cleanClientName) || cleanClientName.includes(savedName)) {
+                nameMatched = true;
+                break;
+              }
+            }
+          }
           const isSaved = savedBookingIds.has(booking.id) || orderMatched || nameMatched;
 
           return {
