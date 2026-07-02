@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Download, RefreshCw, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award } from "lucide-react";
+import { CalendarDays, Download, RefreshCw, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award, Check } from "lucide-react";
 import { Badge, Button, Card, Field } from "@/components/ui";
 
 type Worker = {
@@ -65,6 +65,40 @@ export function WorkHoursManager({
   });
   const selectedWorker = workers.find((worker) => worker.id === selectedWorkerId);
   const days = useMemo(() => daysInMonth(year, month), [year, month]);
+
+  const weeks = useMemo(() => {
+    const weeksList: Date[][] = [];
+    let currentWeek: Date[] = [];
+    
+    days.forEach((day) => {
+      currentWeek.push(day);
+      // Sunday is getUTCDay() === 0
+      if (day.getUTCDay() === 0) {
+        weeksList.push(currentWeek);
+        currentWeek = [];
+      }
+    });
+    
+    if (currentWeek.length > 0) {
+      weeksList.push(currentWeek);
+    }
+    
+    return weeksList;
+  }, [days]);
+
+  const getWeekTotals = useCallback((weekDays: Date[]) => {
+    let worked = 0;
+    let due = 0;
+    
+    weekDays.forEach((day) => {
+      const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+      const record = records[recordKey];
+      worked += record?.hours ?? 0;
+      due += record?.scheduledHours ?? 0;
+    });
+    
+    return { worked, due };
+  }, [records, selectedWorkerId]);
 
   const loadRecords = useCallback(async (showLoader = true) => {
     if (showLoader) setLoadingRecords(true);
@@ -204,9 +238,9 @@ export function WorkHoursManager({
     });
   }
 
-  async function saveDay(day: Date) {
+  async function saveDay(day: Date, updatedRecord?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
     const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
-    const record = records[recordKey] ?? emptyRecord();
+    const record = updatedRecord || (records[recordKey] ?? emptyRecord());
     setSavingKey(recordKey);
     setMessage("");
     const response = await fetch("/api/work-hours", {
@@ -237,6 +271,46 @@ export function WorkHoursManager({
     setMessage("Ore aggiornate.");
     void loadRecords(false);
   }
+
+  const handleCheckboxChange = async (day: Date, key: "paidBreak" | "manualOverride", checked: boolean) => {
+    const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+    const rec = records[recordKey] ?? emptyRecord();
+    const updatedPaidBreak = key === "paidBreak" ? checked : rec.paidBreak;
+    const updatedManualOverride = key === "manualOverride" ? checked : rec.manualOverride;
+
+    let updatedHours = rec.hours;
+    if (!updatedManualOverride) {
+      updatedHours = updatedPaidBreak ? rec.grossHours : rec.netHours;
+    }
+
+    const updatedRec = {
+      ...rec,
+      [key]: checked,
+      hours: updatedHours,
+    };
+
+    setRecords((current) => ({
+      ...current,
+      [recordKey]: updatedRec,
+    }));
+
+    await saveDay(day, updatedRec);
+  };
+
+  const handleInputBlur = async (day: Date, key: "hours" | "note", value: string) => {
+    const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+    const rec = records[recordKey] ?? emptyRecord();
+    const updatedValue = key === "hours" ? Number(value) : value;
+
+    if (rec[key] === updatedValue) return;
+
+    const updatedRec = {
+      ...rec,
+      [key]: updatedValue,
+    };
+
+    await saveDay(day, updatedRec);
+  };
 
   async function exportPdf(pdfWorkers: Worker[], filename: string) {
     setExporting(true);
@@ -499,103 +573,130 @@ export function WorkHoursManager({
           </div>
         </div>
 
-        <div className="lg:hidden space-y-3 p-4">
-          {days.map((day) => {
-            const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
-            const record = records[recordKey] ?? emptyRecord();
-            const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+        <div className="lg:hidden space-y-6 p-4">
+          {weeks.map((weekDays, weekIdx) => {
+            const { worked, due } = getWeekTotals(weekDays);
+            const firstDayStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit" }).format(weekDays[0]);
+            const lastDayStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit" }).format(weekDays[weekDays.length - 1]);
+            
             return (
-              <div
-                key={`mobile-${recordKey}`}
-                className={`rounded-[24px] border p-4 shadow-sm ${isWeekend ? "border-paradise-nude bg-paradise-nude/15" : "border-black/5 bg-white"}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-bold">
-                      {new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "2-digit", month: "long" }).format(day)}
-                    </p>
-                    <p className="mt-1 text-xs text-black/55 dark:text-white/55">
-                      {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
-                    </p>
+              <div key={`week-section-${weekIdx}`} className="space-y-3">
+                <div className="flex items-center justify-between px-4 py-2 bg-[#FAF6F9] dark:bg-neutral-850 rounded-2xl border border-black/[0.03]">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase tracking-[0.16em] text-paradise-pink">Settimana {weekIdx + 1}</span>
+                    <span className="text-[10px] font-semibold text-black/45 dark:text-white/40">{firstDayStr} - {lastDayStr}</span>
                   </div>
-                  <Badge tone={record.scheduledHours > 0 ? "pink" : "dark"}>
-                    {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h dovute` : "Riposo / libero"}
-                  </Badge>
+                  <div className="flex gap-3 text-[10px] font-bold text-black/60 dark:text-white/70">
+                    <span>Lavorate: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".00", "")} h</strong></span>
+                    <span>Dovute: <strong className="text-amber-600 dark:text-paradise-gold">{due.toFixed(2).replace(".00", "")} h</strong></span>
+                  </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Lavorate</p>
-                    <input
-                      className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03] disabled:text-black/50"
-                      disabled={!record.manualOverride}
-                      type="number"
-                      min="0"
-                      max="24"
-                      step="0.01"
-                      value={record.hours}
-                      onChange={(event) => updateLocal(day, "hours", event.target.value)}
-                    />
-                  </div>
-                  <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Sistema</p>
-                    <div className="mt-2 space-y-2 text-xs font-semibold text-black/70">
-                      <label className="flex items-center gap-2">
+                {weekDays.map((day) => {
+                  const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+                  const record = records[recordKey] ?? emptyRecord();
+                  const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+                  return (
+                    <div
+                      key={`mobile-${recordKey}`}
+                      className={`rounded-[24px] border p-4 shadow-sm ${isWeekend ? "border-paradise-nude bg-paradise-nude/15" : "border-black/5 bg-white dark:bg-neutral-900"}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold">
+                            {new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "2-digit", month: "long" }).format(day)}
+                          </p>
+                          <p className="mt-1 text-xs text-black/55 dark:text-white/55">
+                            {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
+                          </p>
+                        </div>
+                        <Badge tone={record.scheduledHours > 0 ? "pink" : "dark"}>
+                          {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h dovute` : "Riposo / libero"}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Lavorate</p>
+                          <input
+                            className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03] disabled:text-black/50"
+                            disabled={!record.manualOverride}
+                            type="number"
+                            min="0"
+                            max="24"
+                            step="0.01"
+                            value={record.hours}
+                            onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                            onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                          />
+                        </div>
+                        <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Sistema</p>
+                          <div className="mt-2 space-y-2 text-xs font-semibold text-black/70">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="size-4 rounded border-black/10 text-paradise-pink focus:ring-paradise-pink"
+                                checked={record.paidBreak}
+                                onChange={(event) => void handleCheckboxChange(day, "paidBreak", event.target.checked)}
+                              />
+                              Pausa pagata
+                            </label>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="size-4 rounded border-black/10 text-paradise-pink focus:ring-paradise-pink"
+                                checked={record.manualOverride}
+                                onChange={(event) => void handleCheckboxChange(day, "manualOverride", event.target.checked)}
+                              />
+                              Correzione manuale
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-2xl border border-black/5 bg-neutral-50 p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Note</p>
                         <input
-                          type="checkbox"
-                          className="size-4 rounded border-black/10 text-paradise-pink focus:ring-paradise-pink"
-                          checked={record.paidBreak}
-                          onChange={(event) => updateLocal(day, "paidBreak", event.target.checked)}
+                          className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-paradise-pink"
+                          value={record.note}
+                          onChange={(event) => updateLocal(day, "note", event.target.value)}
+                          onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
+                          placeholder="Riposo, festivo, malattia..."
                         />
-                        Pausa pagata
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          className="size-4 rounded border-black/10 text-paradise-pink focus:ring-paradise-pink"
-                          checked={record.manualOverride}
-                          onChange={(event) => updateLocal(day, "manualOverride", event.target.checked)}
-                        />
-                        Correzione manuale
-                      </label>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                        <div className="rounded-2xl border border-black/5 bg-white p-3">
+                          <p className="font-bold uppercase tracking-[0.14em] text-black/35">Entrata</p>
+                          <p className="mt-1 font-semibold">{record.firstEntry ?? "--"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-black/5 bg-white p-3">
+                          <p className="font-bold uppercase tracking-[0.14em] text-black/35">Uscita</p>
+                          <p className="mt-1 font-semibold">{record.lastExit ?? "--"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-black/5 bg-white p-3">
+                          <p className="font-bold uppercase tracking-[0.14em] text-black/35">Pausa</p>
+                          <p className="mt-1 font-semibold">{record.breakHours ? `${record.breakHours} h` : "--"}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-end h-8 border-t border-black/[0.03] pt-2">
+                        {savingKey === recordKey ? (
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-black/45 dark:text-white/40">
+                            <RefreshCw className="size-3.5 animate-spin text-paradise-pink" />
+                            <span>Salvo...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-500">
+                            <Check className="size-3.5 text-emerald-500" />
+                            <span>Salvato</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 rounded-2xl border border-black/5 bg-neutral-50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Note</p>
-                  <input
-                    className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-paradise-pink"
-                    value={record.note}
-                    onChange={(event) => updateLocal(day, "note", event.target.value)}
-                    placeholder="Riposo, festivo, malattia..."
-                  />
-                </div>
-
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <div className="rounded-2xl border border-black/5 bg-white p-3">
-                    <p className="font-bold uppercase tracking-[0.14em] text-black/35">Entrata</p>
-                    <p className="mt-1 font-semibold">{record.firstEntry ?? "--"}</p>
-                  </div>
-                  <div className="rounded-2xl border border-black/5 bg-white p-3">
-                    <p className="font-bold uppercase tracking-[0.14em] text-black/35">Uscita</p>
-                    <p className="mt-1 font-semibold">{record.lastExit ?? "--"}</p>
-                  </div>
-                  <div className="rounded-2xl border border-black/5 bg-white p-3">
-                    <p className="font-bold uppercase tracking-[0.14em] text-black/35">Pausa</p>
-                    <p className="mt-1 font-semibold">{record.breakHours ? `${record.breakHours} h` : "--"}</p>
-                  </div>
-                </div>
-
-                <Button
-                  variant="soft"
-                  className="mt-4 h-11 w-full text-sm"
-                  onClick={() => saveDay(day)}
-                  disabled={!selectedWorkerId || savingKey === recordKey}
-                >
-                  <Save className="size-4" />
-                  {savingKey === recordKey ? "Salvo..." : "Salva giornata"}
-                </Button>
+                  );
+                })}
               </div>
             );
           })}
@@ -616,69 +717,111 @@ export function WorkHoursManager({
               </tr>
             </thead>
             <tbody>
-              {days.map((day) => {
-                const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
-                const record = records[recordKey] ?? emptyRecord();
-                const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+              {weeks.map((weekDays, weekIdx) => {
+                const { worked, due } = getWeekTotals(weekDays);
+                const firstDayStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit" }).format(weekDays[0]);
+                const lastDayStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit" }).format(weekDays[weekDays.length - 1]);
+
                 return (
-                  <tr key={recordKey} className={`border-b border-black/5 dark:border-white/5 transition-colors hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 ${isWeekend ? "bg-paradise-nude/10 dark:bg-neutral-800/10" : ""}`}>
-                    <td className="px-5 py-3.5">
-                      <span className="inline-flex items-center gap-2 font-semibold"><CalendarDays className="size-4 text-black/35 dark:text-white/35" /> {new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}</span>
-                    </td>
-                    <td className="px-5 py-3.5 text-xs text-black/55 dark:text-white/55">
-                      {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
-                    </td>
-                    <td className="px-5 py-3.5 font-medium text-black/60 dark:text-white/60">
-                      {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h` : "-"}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <input
-                        className="h-9 w-20 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3.5 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
-                        disabled={!record.manualOverride}
-                        type="number"
-                        min="0"
-                        max="24"
-                        step="0.01"
-                        value={record.hours}
-                        onChange={(event) => updateLocal(day, "hours", event.target.value)}
-                      />
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
-                        <input
-                          type="checkbox"
-                          className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
-                          checked={record.paidBreak}
-                          onChange={(event) => updateLocal(day, "paidBreak", event.target.checked)}
-                        />
-                        Pagata {record.breakHours ? `(${record.breakHours} h)` : ""}
-                      </label>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
-                        <input
-                          type="checkbox"
-                          className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
-                          checked={record.manualOverride}
-                          onChange={(event) => updateLocal(day, "manualOverride", event.target.checked)}
-                        />
-                        Manuale
-                      </label>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <input
-                        className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
-                        value={record.note}
-                        onChange={(event) => updateLocal(day, "note", event.target.value)}
-                        placeholder="Riposo, festivo, malattia..."
-                      />
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <Button variant="soft" className="h-9 text-xs px-3" onClick={() => saveDay(day)} disabled={!selectedWorkerId || savingKey === recordKey}>
-                        <Save className="size-3.5" />
-                        {savingKey === recordKey ? "Salvo" : "Salva"}
-                      </Button>
-                    </td>
+                  <tr key={`week-group-${weekIdx}`} className="contents">
+                    {/* Week Header Row */}
+                    <tr key={`week-header-${weekIdx}`} className="bg-gradient-to-r from-paradise-softPink/10 to-transparent border-t-2 border-b border-black/5 dark:border-white/5">
+                      <td colSpan={8} className="px-5 py-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-paradise-pink">Settimana {weekIdx + 1}</span>
+                            <span className="text-xs font-semibold text-black/45 dark:text-white/40">({firstDayStr} - {lastDayStr})</span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-xs font-bold text-black/60 dark:text-white/70">
+                              Ore Lavorate: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".00", "")} h</strong>
+                            </span>
+                            <span className="text-xs font-bold text-black/60 dark:text-white/70">
+                              Ore Dovute: <strong className="text-amber-600 dark:text-paradise-gold">{due.toFixed(2).replace(".00", "")} h</strong>
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Day Rows */}
+                    {weekDays.map((day) => {
+                      const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+                      const record = records[recordKey] ?? emptyRecord();
+                      const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+                      return (
+                        <tr key={recordKey} className={`border-b border-black/5 dark:border-white/5 transition-colors hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 ${isWeekend ? "bg-paradise-nude/10 dark:bg-neutral-800/10" : ""}`}>
+                          <td className="px-5 py-3.5">
+                            <span className="inline-flex items-center gap-2 font-semibold"><CalendarDays className="size-4 text-black/35 dark:text-white/35" /> {new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}</span>
+                          </td>
+                          <td className="px-5 py-3.5 text-xs text-black/55 dark:text-white/55">
+                            {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
+                          </td>
+                          <td className="px-5 py-3.5 font-medium text-black/60 dark:text-white/60">
+                            {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h` : "-"}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <input
+                              className="h-9 w-20 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3.5 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
+                              disabled={!record.manualOverride}
+                              type="number"
+                              min="0"
+                              max="24"
+                              step="0.01"
+                              value={record.hours}
+                              onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                              onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                            />
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
+                              <input
+                                type="checkbox"
+                                className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
+                                checked={record.paidBreak}
+                                onChange={(event) => void handleCheckboxChange(day, "paidBreak", event.target.checked)}
+                              />
+                              Pagata {record.breakHours ? `(${record.breakHours} h)` : ""}
+                            </label>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
+                              <input
+                                type="checkbox"
+                                className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
+                                checked={record.manualOverride}
+                                onChange={(event) => void handleCheckboxChange(day, "manualOverride", event.target.checked)}
+                              />
+                              Manuale
+                            </label>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <input
+                              className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
+                              value={record.note}
+                              onChange={(event) => updateLocal(day, "note", event.target.value)}
+                              onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
+                              placeholder="Riposo, festivo, malattia..."
+                            />
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            <div className="flex items-center justify-end h-9">
+                              {savingKey === recordKey ? (
+                                <div className="flex items-center gap-1.5 text-xs font-semibold text-black/45 dark:text-white/40">
+                                  <RefreshCw className="size-3.5 animate-spin text-paradise-pink" />
+                                  <span>Salvo...</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-500/90">
+                                  <Check className="size-3.5 text-emerald-500" />
+                                  <span>Salvato</span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tr>
                 );
               })}
