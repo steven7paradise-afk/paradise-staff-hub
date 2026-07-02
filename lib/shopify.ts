@@ -374,7 +374,8 @@ export async function getShopifyOrderNoteText(orderName: string): Promise<string
 export async function updateShopifyOrderMetafields(
   orderName: string,
   status: string,
-  note: string
+  note: string,
+  collaborator?: string
 ): Promise<boolean> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -481,7 +482,29 @@ export async function updateShopifyOrderMetafields(
       console.error(`Failed to update Shopify order note_ordine for ${cleanName}: ${noteRes.status} ${await noteRes.text()}`);
     }
 
-    const success = statoRes.ok || noteRes.ok;
+    // Update Collaboratore
+    let collaboratorOk = true;
+    if (collaborator) {
+      const staffRes = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderId}/metafields.json`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          metafield: {
+            namespace: "custom",
+            key: "collaboratore_ordine",
+            value: collaborator,
+            type: "single_line_text_field"
+          }
+        })
+      });
+
+      if (!staffRes.ok) {
+        collaboratorOk = false;
+        console.error(`Failed to update Shopify order collaboratore_ordine for ${cleanName}: ${staffRes.status} ${await staffRes.text()}`);
+      }
+    }
+
+    const success = statoRes.ok || noteRes.ok || collaboratorOk;
     if (success) {
       console.log(`Successfully updated Shopify order metafields for order ${cleanName}`);
     }

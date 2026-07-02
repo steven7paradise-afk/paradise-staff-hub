@@ -184,6 +184,7 @@ export function TabletClock({
   const activeAppointments = todayAppointments.filter((app) => !completedAppointments.has(app.id));
 
   const [appointmentsExpanded, setAppointmentsExpanded] = useState(true);
+  const [showAllAppointmentsModal, setShowAllAppointmentsModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [pin, setPin] = useState("");
@@ -1424,20 +1425,34 @@ export function TabletClock({
               appointmentsExpanded ? "max-h-[50vh] sm:max-h-[42vh]" : "max-h-[52px]"
             )}>
               {/* Slider Toggle button */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setAppointmentsExpanded(!appointmentsExpanded)}
                   className="flex h-7 items-center justify-center gap-1 rounded-full border border-[#ff8bb2]/30 bg-white px-4 text-[10px] font-black uppercase tracking-wider text-[#a74758] shadow-md hover:bg-[#fff2fa] transition-colors"
                 >
                   {appointmentsExpanded ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />}
-                  {appointmentsExpanded ? "Riduci" : "Mostra appuntamenti"}
+                  {appointmentsExpanded ? "Riduci" : "Mostra appuntamento"}
                 </button>
+                {activeAppointments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllAppointmentsModal(true)}
+                    className="flex h-7 items-center justify-center gap-1.5 rounded-full border border-[#ff8bb2]/35 bg-gradient-to-r from-[#ff8bb2] to-[#a74758] px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-md hover:opacity-95 active:scale-95 transition-all"
+                  >
+                    <CalendarDays className="size-3.5" />
+                    <span>Mostra tutti</span>
+                  </button>
+                )}
               </div>
 
               <div
-                onClick={() => setAppointmentsExpanded(!appointmentsExpanded)}
-                className="flex h-[52px] cursor-pointer items-center justify-between px-6 border-b border-black/5"
+                onClick={() => {
+                  if (activeAppointments.length > 0) {
+                    setShowAllAppointmentsModal(true);
+                  }
+                }}
+                className="flex h-[52px] cursor-pointer items-center justify-between px-6 border-b border-black/5 hover:bg-black/[0.01]"
               >
                 <div className="flex items-center gap-2 text-[#E88AC5]">
                   <CalendarDays className="size-4.5" />
@@ -1456,7 +1471,7 @@ export function TabletClock({
                   </span>
                 </div>
                 <div className="text-[11px] font-bold text-black/40">
-                  {appointmentsExpanded ? "Clicca per ridurre" : "Clicca per espandere"}
+                  {activeAppointments.length > 0 ? "Clicca per vedere tutti gli appuntamenti" : ""}
                 </div>
               </div>              {/* Table rendering list of bookings */}
               <div className={cn("overflow-y-auto px-6 py-4 flex-1", !appointmentsExpanded && "hidden")}>
@@ -1867,9 +1882,7 @@ export function TabletClock({
                                       onClick={() =>
                                         setAppointmentForm((prev) => ({
                                           ...prev,
-                                          staffIds: selected
-                                            ? prev.staffIds.filter((id) => id !== emp.id)
-                                            : [...prev.staffIds, emp.id],
+                                          staffIds: selected ? [] : [emp.id],
                                         }))
                                       }
                                       className={cn(
@@ -2565,6 +2578,255 @@ export function TabletClock({
                 >
                   <Calendar className="size-4" />
                   <span>Compila Scheda Controllo</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal showing all appointments list */}
+        {showAllAppointmentsModal && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="flex flex-col max-h-[85vh] w-full max-w-5xl overflow-hidden rounded-[28px] bg-white shadow-[0_30px_90px_rgba(0,0,0,0.45)] border border-black/10">
+              {/* Modal Header */}
+              <div className="flex items-start justify-between gap-4 border-b border-black/[0.06] p-6 bg-gradient-to-r from-pink-50/50 to-amber-50/20">
+                <div className="flex items-center gap-2.5 text-[#E88AC5]">
+                  <CalendarDays className="size-5" />
+                  <h3 className="text-lg font-black uppercase tracking-[0.18em] text-[#171717]">
+                    Tutti gli appuntamenti di oggi
+                  </h3>
+                  <span className="ml-1 rounded-full bg-[#FFF0F2] px-2 py-0.5 text-xs font-black text-[#E88AC5] border border-[#FCDCE2]">
+                    {activeAppointments.length}
+                  </span>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => setShowAllAppointmentsModal(false)}
+                  className="grid size-10 place-items-center rounded-full bg-black/[0.04] text-black/60 hover:bg-black/[0.08] hover:text-black transition"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              {/* Modal Body: Table of all active appointments */}
+              <div className="overflow-y-auto px-6 py-4 flex-1 bg-white">
+                {activeAppointments.length > 0 ? (
+                  <div className="min-w-full inline-block align-middle">
+                    <div className="overflow-hidden">
+                      <table className="min-w-full divide-y divide-black/[0.06]">
+                        <thead>
+                          <tr className="text-left text-[10px] font-black uppercase tracking-[0.16em] text-black/45">
+                            <th scope="col" className="pb-3 text-left">Orario</th>
+                            <th scope="col" className="pb-3 text-left">Cliente</th>
+                            <th scope="col" className="pb-3 text-left">Sede</th>
+                            <th scope="col" className="pb-3 text-left">Staff</th>
+                            <th scope="col" className="pb-3 text-right">Stato</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-black/[0.04]">
+                          {activeAppointments.map((booking) => {
+                            const isConfirmed =
+                              booking.status?.toLowerCase().includes("confermato") ||
+                              booking.status === "confirmed" ||
+                              booking.status === "confermata";
+
+                            const isPending =
+                              booking.status?.toLowerCase().includes("in arrivo") ||
+                              booking.status === "pending";
+
+                            const isArriving =
+                              booking.status?.toLowerCase().includes("arrivando") ||
+                              booking.status === "arrived";
+
+                            return (
+                              <tr key={booking.id} className="text-sm font-medium hover:bg-black/[0.01]">
+                                <td className="py-3.5 whitespace-nowrap text-left">
+                                  <div className="flex flex-col text-left">
+                                    <div className="flex items-center gap-1.5 font-black text-[#171717]">
+                                      <Clock className="size-4 text-[#ff8bb2]" />
+                                      {booking.time}
+                                    </div>
+                                    <span className="text-[10px] font-bold text-black/45 pl-[22px] mt-0.5">
+                                      {new Intl.DateTimeFormat("it-IT", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        timeZone: "Europe/Rome",
+                                      }).format(new Date(booking.startDate))}
+                                    </span>
+                                    {booking.isTomorrow && (
+                                      <span className="mt-0.5 inline-flex w-max items-center gap-1 rounded bg-[#EBF9EB] border border-[#D1F2D1] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#2E7D32]">
+                                        Domani
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                
+                                <td className="py-3.5 whitespace-nowrap text-left">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowAllAppointmentsModal(false);
+                                      setSelectedBookingForDetails(booking);
+                                    }}
+                                    className="flex items-center gap-2.5 hover:opacity-80 transition text-left cursor-pointer outline-none group"
+                                  >
+                                    {booking.customerPhotoUrl ? (
+                                      <img
+                                        src={booking.customerPhotoUrl}
+                                        className="size-8 rounded-full object-cover border border-black/10 group-hover:scale-105 transition duration-200"
+                                        alt=""
+                                      />
+                                    ) : (
+                                      <div className="grid size-8 place-items-center rounded-full bg-[#ff8bb2]/15 text-[#a74758] border border-[#ff8bb2]/20 group-hover:scale-105 transition duration-200">
+                                        <UserRound className="size-4" />
+                                      </div>
+                                    )}
+                                    <div className="flex flex-col">
+                                      <div className="flex items-baseline gap-2 flex-wrap">
+                                        <span className="text-sm font-black text-[#171717] group-hover:text-[#a74758] transition duration-200">
+                                          {booking.customerName}
+                                        </span>
+                                        <span className="text-[11px] font-semibold text-[#a74758]/70 bg-[#a74758]/5 border border-[#a74758]/10 px-2.5 py-0.5 rounded-full">
+                                          {booking.serviceTitle}
+                                        </span>
+                                      </div>
+                                      {booking.priceAmount !== null && booking.priceAmount > 0 ? (
+                                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100 w-max mt-1">
+                                          Acconto: {booking.priceAmount.toLocaleString("it-IT", {
+                                            style: "currency",
+                                            currency: booking.priceCurrency,
+                                          })}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </button>
+                                </td>
+
+                                <td className="py-3.5 whitespace-nowrap text-left text-xs font-semibold text-black/60 capitalize">
+                                  {booking.inferredSalon === "buenos-aires" ? "Buenos Aires" : booking.inferredSalon}
+                                </td>
+
+                                <td className="py-3.5 whitespace-nowrap text-left">
+                                  <div className="flex flex-wrap gap-1.5 items-center">
+                                    {booking.teammates.length > 0 ? (
+                                      booking.teammates.map((mate: any, idx: number) => (
+                                        <div
+                                          key={idx}
+                                          className="flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full pl-1 pr-2.5 py-0.5"
+                                        >
+                                          {mate.photoUrl ? (
+                                            <img src={mate.photoUrl} className="size-5 rounded-full object-cover" alt="" />
+                                          ) : (
+                                            <div className="grid size-5 place-items-center rounded-full bg-[#ff8bb2]/10 text-[#a74758] text-[9px] font-black">
+                                              {mate.name.charAt(0)}
+                                            </div>
+                                          )}
+                                          <span className="text-[11px] font-bold text-black/75">{mate.name}</span>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <span className="text-xs text-black/35 italic font-bold">Non assegnato</span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                <td className="py-3.5 whitespace-nowrap text-right">
+                                  <div className="flex gap-2 justify-end items-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowAllAppointmentsModal(false);
+                                        setSelectedBookingForDetails(booking);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-[#fff2fa] hover:border-[#ff8bb2]/30 active:scale-95 transition shadow-sm h-8"
+                                    >
+                                      Apri
+                                    </button>
+
+                                    {isArriving ? (
+                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FCDCE2] bg-[#FFF0F2] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#E88AC5] h-8">
+                                        Sta Arrivando
+                                      </span>
+                                    ) : isPending ? (
+                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FBEAD2] bg-[#FFF8EB] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#F1A43A] h-8">
+                                        In Arrivo
+                                      </span>
+                                    ) : isConfirmed ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowAllAppointmentsModal(false);
+                                            void prefillFromBooking(booking);
+                                          }}
+                                          className="inline-flex items-center gap-1.5 rounded-full border border-[#D1F2D1] bg-[#EBF9EB] px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#2E7D32] hover:bg-[#D8F3D8] hover:border-[#BCE8BC] active:scale-95 transition shadow-sm h-8"
+                                        >
+                                          Crea appuntamento
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setCompletedAppointments((prev) => {
+                                              const next = new Set(prev);
+                                              next.add(booking.id);
+                                              return next;
+                                            });
+                                            sound("success");
+                                            
+                                            // Save Finito status in background database response
+                                            void fetch("/api/client-control/tablet-submit", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({
+                                                isFinito: true,
+                                                bookingId: booking.id,
+                                                clientName: booking.customerName,
+                                                salon: device?.locationName,
+                                              }),
+                                            }).then(() => {
+                                              router.refresh();
+                                            }).catch((err) => {
+                                              console.error("Error saving Finito status:", err);
+                                            });
+                                          }}
+                                          className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-8"
+                                        >
+                                          Finito
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D5E5FA] bg-[#EDF4FC] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#4E89E8] h-8">
+                                        In Preparazione
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 text-center text-sm font-bold text-black/35 gap-2">
+                    <CalendarDays className="size-8 text-black/20" />
+                    <span>Nessun appuntamento in programma per oggi in questo salone.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="border-t border-black/[0.06] p-6 bg-black/[0.01] flex items-center justify-end gap-4 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowAllAppointmentsModal(false)}
+                  className="px-5 py-2.5 rounded-xl border border-black/10 hover:bg-black/[0.02] text-xs font-black uppercase tracking-wider text-black/60 transition active:scale-95"
+                >
+                  Chiudi
                 </button>
               </div>
             </div>

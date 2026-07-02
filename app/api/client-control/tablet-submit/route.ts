@@ -3,7 +3,7 @@ import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS, ensureClientControlForm } from "@/lib/client-control-form";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
-import { appendShopifyOrderNote } from "@/lib/shopify";
+import { appendShopifyOrderNote, updateShopifyOrderMetafields } from "@/lib/shopify";
 
 export const dynamic = "force-dynamic";
 
@@ -162,10 +162,19 @@ export async function POST(request: NextRequest) {
 
   const shopifyOrder = textValue(body?.shopifyOrder);
   const customNote = textValue(body?.customNoteText);
-  if (shopifyOrder && customNote) {
+  if (shopifyOrder) {
     const writerName = staffNames.join(" e ") || "Staff";
-    appendShopifyOrderNote(shopifyOrder, writerName, customNote)
-      .catch((err) => console.error("Failed to append tablet note to Shopify:", err));
+    const collaboratorName = staffNames.join(", ") || "";
+    if (customNote) {
+      appendShopifyOrderNote(shopifyOrder, writerName, customNote)
+        .catch((err) => console.error("Failed to append tablet note to Shopify:", err));
+    }
+    updateShopifyOrderMetafields(
+      shopifyOrder,
+      "Controllato",
+      customNote || "",
+      collaboratorName
+    ).catch((err) => console.error("Failed to update Shopify metafields from tablet submit:", err));
   }
 
   return NextResponse.json({ ok: true, id: response.id, createdAt: response.created_at.toISOString() });

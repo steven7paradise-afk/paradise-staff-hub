@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 
 const managementRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -127,11 +128,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           ).catch((err) => console.error("Failed to sync note to Shopify:", err));
         }
 
-        // 2. Sync status and latest custom note as Shopify Metafields!
+        // 2. Sync status, latest custom note, and collaborator as Shopify Metafields!
+        const collaboratorName = Array.isArray(answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff])
+          ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].join(", ")
+          : typeof answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] === "string"
+            ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]
+            : "";
+
         await updateShopifyOrderMetafields(
           shopifyOrderName,
           statusLabelText,
-          statusNote || ""
+          statusNote || "",
+          collaboratorName
         ).catch((err) => console.error("Failed to update Shopify metafields:", err));
       }
     }
