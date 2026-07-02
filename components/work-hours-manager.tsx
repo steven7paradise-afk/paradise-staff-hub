@@ -286,23 +286,30 @@ export function WorkHoursManager({
       setMessage(data.error ?? "Ore non salvate.");
       return;
     }
-    setRecords((current) => ({
-      ...current,
-      [recordKey]: {
-        ...record,
-        hours: data.hours,
-        grossHours: data.grossHours,
-        breakHours: data.breakHours,
-        netHours: data.netHours,
-        firstEntry: data.firstEntry,
-        lastExit: data.lastExit,
-        paidBreak: data.paidBreak,
-        manualOverride: data.manualOverride,
-        plannedStart: data.plannedStart ?? record.plannedStart,
-        plannedEnd: data.plannedEnd ?? record.plannedEnd,
-        categoryCode: data.categoryCode ?? record.categoryCode,
-      },
-    }));
+    setRecords((current) => {
+      const existing = current[recordKey];
+      const isHoursFocused = focusedInputRef.current?.recordKey === recordKey && focusedInputRef.current?.field === "hours";
+      const isNoteFocused = focusedInputRef.current?.recordKey === recordKey && focusedInputRef.current?.field === "note";
+
+      return {
+        ...current,
+        [recordKey]: {
+          ...record,
+          hours: isHoursFocused ? (existing?.hours ?? data.hours) : data.hours,
+          note: isNoteFocused ? (existing?.note ?? data.note) : data.note,
+          grossHours: data.grossHours,
+          breakHours: data.breakHours,
+          netHours: data.netHours,
+          firstEntry: data.firstEntry,
+          lastExit: data.lastExit,
+          paidBreak: data.paidBreak,
+          manualOverride: data.manualOverride,
+          plannedStart: data.plannedStart ?? record.plannedStart,
+          plannedEnd: data.plannedEnd ?? record.plannedEnd,
+          categoryCode: data.categoryCode ?? record.categoryCode,
+        },
+      };
+    });
     setMessage("Ore aggiornate.");
     void loadRecords(false);
   }
@@ -335,6 +342,7 @@ export function WorkHoursManager({
   const lastFocusValue = useRef<string | number | null>(null);
   const saveTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
   const recordsRef = useRef(records);
+  const focusedInputRef = useRef<{ recordKey: string; field: "hours" | "note" } | null>(null);
 
   useEffect(() => {
     recordsRef.current = records;
@@ -734,8 +742,8 @@ export function WorkHoursManager({
                             step="0.01"
                             value={record.hours}
                             onChange={(event) => updateLocal(day, "hours", event.target.value)}
-                            onFocus={(event) => handleInputFocus(event.target.value)}
-                            onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                            onFocus={(event) => { handleInputFocus(event.target.value); focusedInputRef.current = { recordKey, field: "hours" }; }}
+                            onBlur={(event) => { void handleInputBlur(day, "hours", event.target.value); focusedInputRef.current = null; }}
                             onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                           />
                         </div>
@@ -770,8 +778,8 @@ export function WorkHoursManager({
                           className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-paradise-pink"
                           value={record.note}
                           onChange={(event) => updateLocal(day, "note", event.target.value)}
-                          onFocus={(event) => handleInputFocus(event.target.value)}
-                          onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
+                          onFocus={(event) => { handleInputFocus(event.target.value); focusedInputRef.current = { recordKey, field: "note" }; }}
+                          onBlur={(event) => { void handleInputBlur(day, "note", event.target.value); focusedInputRef.current = null; }}
                           onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                           placeholder="Riposo, festivo, malattia..."
                         />
@@ -937,8 +945,8 @@ export function WorkHoursManager({
                                 step="0.01"
                                 value={record.hours}
                                 onChange={(event) => updateLocal(day, "hours", event.target.value)}
-                                onFocus={(event) => handleInputFocus(event.target.value)}
-                                onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                                onFocus={(event) => { handleInputFocus(event.target.value); focusedInputRef.current = { recordKey, field: "hours" }; }}
+                                onBlur={(event) => { void handleInputBlur(day, "hours", event.target.value); focusedInputRef.current = null; }}
                                 onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                               />
                               <label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider cursor-pointer text-black/50 dark:text-white/50">
@@ -958,8 +966,8 @@ export function WorkHoursManager({
                               className="h-9 w-full min-w-[130px] rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
                               value={record.note}
                               onChange={(event) => updateLocal(day, "note", event.target.value)}
-                              onFocus={(event) => handleInputFocus(event.target.value)}
-                              onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
+                              onFocus={(event) => { handleInputFocus(event.target.value); focusedInputRef.current = { recordKey, field: "note" }; }}
+                              onBlur={(event) => { void handleInputBlur(day, "note", event.target.value); focusedInputRef.current = null; }}
                               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                               placeholder="Nota..."
                             />
