@@ -571,20 +571,24 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
 }
 
 /**
- * Fetches the line items (product names) of a Shopify order given its name or ID.
+ * Fetches the details of a Shopify order given its name or ID.
  */
-export async function getShopifyOrderLineItems(orderName: string): Promise<string[]> {
+export async function getShopifyOrderDetails(orderName: string): Promise<{
+  clientName: string | null;
+  totalPrice: number | null;
+  lineItems: string[];
+} | null> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
     const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
     if (!shop || !token) {
       console.warn("Shopify configuration missing.");
-      return [];
+      return null;
     }
 
     const cleanName = orderName.trim();
-    if (!cleanName) return [];
+    if (!cleanName) return null;
 
     let orderData: any = null;
 
@@ -642,13 +646,28 @@ export async function getShopifyOrderLineItems(orderName: string): Promise<strin
       }
     }
 
-    if (orderData && Array.isArray(orderData.line_items)) {
-      return orderData.line_items.map((item: any) => item.title);
+    if (orderData) {
+      const firstName = String(orderData.customer?.first_name || "").trim();
+      const lastName = String(orderData.customer?.last_name || "").trim();
+      const fullName = [firstName, lastName].filter(Boolean).join(" ");
+      const clientName = fullName || null;
+
+      const totalPrice = orderData.total_price ? parseFloat(orderData.total_price) : null;
+      
+      const lineItems = Array.isArray(orderData.line_items) 
+        ? orderData.line_items.map((item: any) => item.title) 
+        : [];
+
+      return {
+        clientName,
+        totalPrice,
+        lineItems
+      };
     }
   } catch (error) {
-    console.error("Error fetching Shopify order line items:", error);
+    console.error("Error fetching Shopify order details:", error);
   }
-  return [];
+  return null;
 }
 
 function getLevenshteinDistance(a: string, b: string): number {

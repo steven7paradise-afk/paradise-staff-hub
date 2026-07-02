@@ -116,11 +116,18 @@ export async function POST(request: NextRequest) {
   const staffNames = staffForSalon.map((employee) => employee.name);
   const shopifyOrder = textValue(body?.shopifyOrder);
   let productsListStr = "";
+  let shopifyClientName: string | null = null;
+  let shopifyTotalPrice: number | null = null;
+
   if (shopifyOrder) {
-    const { getShopifyOrderLineItems } = await import("@/lib/shopify");
-    const items = await getShopifyOrderLineItems(shopifyOrder).catch(() => []);
-    if (items.length > 0) {
-      productsListStr = items.join(", ");
+    const { getShopifyOrderDetails } = await import("@/lib/shopify");
+    const details = await getShopifyOrderDetails(shopifyOrder).catch(() => null);
+    if (details) {
+      if (details.lineItems.length > 0) {
+        productsListStr = details.lineItems.join(", ");
+      }
+      shopifyClientName = details.clientName;
+      shopifyTotalPrice = details.totalPrice;
     }
   }
 
@@ -128,7 +135,7 @@ export async function POST(request: NextRequest) {
 
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
-    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || (isNoShow ? "No Show" : "Finito"),
+    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isNoShow ? "No Show" : "Finito"),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: isNoShow ? "No Show" : "Finito",
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: isNoShow ? ["NO SHOW"] : undefined,
@@ -137,9 +144,9 @@ export async function POST(request: NextRequest) {
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
   } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
-    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName,
+    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName,
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
-    [CLIENT_CONTROL_FIELD_IDS.paid]: moneyValue(body?.paid),
+    [CLIENT_CONTROL_FIELD_IDS.paid]: moneyValue(body?.paid) || shopifyTotalPrice,
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: staffNames[0],
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: staffNames,
     [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,

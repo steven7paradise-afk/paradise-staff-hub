@@ -74,11 +74,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (answers) {
       const orderNum = String(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim();
       if (orderNum) {
-        const { getShopifyOrderLineItems } = await import("@/lib/shopify");
-        const items = await getShopifyOrderLineItems(orderNum).catch(() => []);
-        if (items.length > 0) {
-          answers[CLIENT_CONTROL_FIELD_IDS.productsList] = items.join(", ");
-          answers[CLIENT_CONTROL_FIELD_IDS.products] = true;
+        const { getShopifyOrderDetails } = await import("@/lib/shopify");
+        const details = await getShopifyOrderDetails(orderNum).catch(() => null);
+        if (details) {
+          if (details.lineItems.length > 0) {
+            answers[CLIENT_CONTROL_FIELD_IDS.productsList] = details.lineItems.join(", ");
+            answers[CLIENT_CONTROL_FIELD_IDS.products] = true;
+          }
+          if (details.clientName && !answers[CLIENT_CONTROL_FIELD_IDS.clientName]) {
+            answers[CLIENT_CONTROL_FIELD_IDS.clientName] = details.clientName;
+          }
+          if (details.totalPrice !== null) {
+            answers[CLIENT_CONTROL_FIELD_IDS.paid] = details.totalPrice;
+          }
         }
       }
       dataToUpdate.answers = answers; // JSON object of answers
