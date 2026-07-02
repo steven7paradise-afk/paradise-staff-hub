@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, Camera, Check, Download, Edit3, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { cn } from "@/lib/utils";
@@ -129,6 +129,7 @@ export function ClientControlDashboard({
   const [activeSalon, setActiveSalon] = useState("Tutti");
   const [selected, setSelected] = useState<ResponseItem | null>(null);
   const [draftAnswers, setDraftAnswers] = useState<Record<string, any>>({});
+  const [viewingResponse, setViewingResponse] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
@@ -630,8 +631,9 @@ export function ClientControlDashboard({
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => openResponse(response)} className="grid size-10 place-items-center rounded-full bg-black/[0.04] text-black hover:bg-[#ffe5f5]"><Edit3 className="size-4" /></button>
-                        {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-10 place-items-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"><Trash2 className="size-4" /></button> : null}
+                        <button type="button" onClick={() => setViewingResponse(response)} className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100" title="Visualizza ordine e dettagli"><Eye className="size-4" /></button>
+                        <button type="button" onClick={() => openResponse(response)} className="grid size-10 place-items-center rounded-full bg-black/[0.04] text-black hover:bg-[#ffe5f5]" title="Modifica"><Edit3 className="size-4" /></button>
+                        {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-10 place-items-center rounded-full bg-red-50 text-red-600 hover:bg-red-100" title="Elimina"><Trash2 className="size-4" /></button> : null}
                       </div>
                     </td>
                   </tr>
@@ -715,6 +717,122 @@ export function ClientControlDashboard({
               ) : null}
               <button type="button" onClick={saveSelected} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#EA8CCD] px-6 py-3 text-sm font-black text-white disabled:opacity-60">
                 <Edit3 className="size-4" /> {saving ? "Salvataggio..." : "Salva modifiche"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewingResponse ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-[28px] bg-white shadow-2xl flex flex-col">
+            <div className="flex items-start justify-between gap-4 border-b border-black/10 p-6 bg-[#FAF6F9]">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Dettagli Controllo & Ordine</p>
+                <h3 className="text-2xl font-black text-black/80">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.clientName])}</h3>
+                <p className="mt-1 text-xs font-semibold text-black/40">
+                  Registrato il {new Date(viewingResponse.created_at).toLocaleString("it-IT")} da {viewingResponse.user?.name || "Tablet"}
+                </p>
+              </div>
+              <button type="button" onClick={() => setViewingResponse(null)} className="grid size-11 place-items-center rounded-full bg-black/[0.04] text-black/60 hover:bg-black/[0.08] transition"><X className="size-5" /></button>
+            </div>
+            
+            <div className="overflow-y-auto p-6 space-y-6 flex-1">
+              {/* Cliente Info Section */}
+              <div className="bg-[#FAF6F9]/50 rounded-2xl p-4 border border-black/[0.03] space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Informazioni Cliente</p>
+                <div className="grid gap-3 sm:grid-cols-2 text-sm font-semibold">
+                  <div>
+                    <span className="text-black/40 block text-xs">Email</span>
+                    <span className="text-black/85">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.email]) || "Non inserita"}</span>
+                  </div>
+                  <div>
+                    <span className="text-black/40 block text-xs">Telefono</span>
+                    <span className="text-black/85">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.phone]) || "Non inserito"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Items Section */}
+              <div className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Prodotti / Servizi Acquistati</p>
+                {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.productsList] ? (
+                  <div className="grid gap-2">
+                    {String(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.productsList])
+                      .split(",")
+                      .map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-3 rounded-2xl bg-emerald-50/60 border border-emerald-100 p-4 text-emerald-900 font-bold text-sm">
+                          <div className="size-2 rounded-full bg-emerald-500" />
+                          <span>{item.trim()}</span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-black/10 p-6 text-center text-sm font-bold text-black/40">
+                    Nessun prodotto o servizio registrato per questo controllo.
+                  </div>
+                )}
+              </div>
+
+              {/* Details grid */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Pagamento */}
+                <div className="bg-[#FAF6F9]/30 rounded-2xl p-4 border border-black/[0.03] space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Dettagli Pagamento</p>
+                  <div className="space-y-1 text-sm font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-black/40 font-semibold text-xs">Saldo Pagato</span>
+                      <span className="text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-black/40 font-semibold text-xs">Acconto</span>
+                      <span className="text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</span>
+                    </div>
+                    {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ? (
+                      <div className="flex justify-between pt-1 border-t border-black/5">
+                        <span className="text-black/40 font-semibold text-xs">ID Ordine Shopify</span>
+                        <span className="text-black/70">#{viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder]}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Staff / Sede */}
+                <div className="bg-[#FAF6F9]/30 rounded-2xl p-4 border border-black/[0.03] space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Sede e Collaboratori</p>
+                  <div className="space-y-1 text-sm font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-black/40 font-semibold text-xs">Sede</span>
+                      <span className="text-black/80">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.location] || viewingResponse.user_location_name)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-black/40 font-semibold text-xs">Staff</span>
+                      <span className="text-black/80 line-clamp-1">
+                        {answerText(
+                          namesFromAnswer(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] || viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceOwner] || viewingResponse.user?.name)
+                            .map((name) => resolveCanonicalStaffName(name, employeeNames))
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section */}
+              {viewingResponse.answers?.client_control_notes_text || viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.notes] ? (
+                <div className="bg-amber-50/40 rounded-2xl p-4 border border-amber-100/60 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-800">Note Interne</p>
+                  <p className="text-sm font-semibold text-black/70 italic">
+                    "{answerText(viewingResponse.answers.client_control_notes_text || "Nota spuntata")}"
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            
+            <div className="border-t border-black/10 p-5 flex justify-end bg-[#FAF6F9]">
+              <button type="button" onClick={() => setViewingResponse(null)} className="rounded-2xl bg-black/[0.04] hover:bg-black/[0.08] text-black/70 px-6 py-3 text-sm font-black transition">
+                Chiudi
               </button>
             </div>
           </div>
