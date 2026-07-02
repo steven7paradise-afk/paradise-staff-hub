@@ -91,12 +91,15 @@ export async function GET(request: NextRequest) {
     let plannedStart: string | null = null;
     let plannedEnd: string | null = null;
     let categoryCode: string | null = null;
+    let defaultNote = "";
     if (schedule) {
       plannedStart = schedule.start_time ?? schedule.category.start_time;
       plannedEnd = schedule.end_time ?? schedule.category.end_time;
       categoryCode = schedule.category.code;
       if (isWorkCategory(schedule.category)) {
         scheduledHours = schedule.category.paid_hours ?? categoryDuration(plannedStart, plannedEnd);
+      } else {
+        defaultNote = schedule.category.name;
       }
     }
 
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
       userId: key.split("-").slice(0, -3).join("-"),
       date: key.slice(-10),
       hours: record?.manual_override ? record.hours : automaticHours,
-      note: record?.note ?? "",
+      note: record?.note ?? defaultNote,
       paidBreak,
       manualOverride: record?.manual_override ?? false,
       scheduledHours,
@@ -154,6 +157,15 @@ export async function PUT(request: NextRequest) {
   const clock = calculateClockHours(logs);
   const computedHours = paidBreak ? clock.grossHours : clock.netHours;
 
+  const schedule = await prisma.scheduleEntry.findUnique({
+    where: { user_id_date: { user_id: userId, date } },
+    include: { category: true },
+  });
+  let defaultNote = "";
+  if (schedule && !isWorkCategory(schedule.category)) {
+    defaultNote = schedule.category.name;
+  }
+
   const record = await prisma.workHourRecord.upsert({
     where: { user_id_date: { user_id: userId, date } },
     update: { hours: manualOverride ? hours : computedHours, note: note || null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
@@ -165,7 +177,7 @@ export async function PUT(request: NextRequest) {
     userId: record.user_id,
     date: record.date,
     hours: record.hours,
-    note: record.note ?? "",
+    note: record.note ?? defaultNote,
     paidBreak: record.paid_break,
     manualOverride: record.manual_override,
     ...clock,
