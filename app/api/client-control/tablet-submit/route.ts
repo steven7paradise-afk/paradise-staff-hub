@@ -46,6 +46,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as {
     salon?: string;
     clientName?: string;
+    email?: string;
+    phone?: string;
     depositPaid?: string | number;
     paid?: string | number;
     staffIds?: string[];
@@ -136,6 +138,8 @@ export async function POST(request: NextRequest) {
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isNoShow ? "No Show" : "Finito"),
+    [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
+    [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: isNoShow ? "No Show" : "Finito",
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: isNoShow ? ["NO SHOW"] : undefined,
@@ -145,6 +149,8 @@ export async function POST(request: NextRequest) {
   } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName,
+    [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
+    [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
     [CLIENT_CONTROL_FIELD_IDS.paid]: moneyValue(body?.paid) || shopifyTotalPrice,
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: staffNames[0],

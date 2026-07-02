@@ -6,6 +6,8 @@ export const CLIENT_CONTROL_FORM_CATEGORY = "Qualita";
 export const CLIENT_CONTROL_FIELD_IDS = {
   location: "client_control_location",
   clientName: "client_control_client_name",
+  email: "client_control_email",
+  phone: "client_control_phone",
   depositPaid: "client_control_deposit_paid",
   paid: "client_control_paid",
   serviceOwner: "client_control_service_owner",
@@ -35,7 +37,21 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     label: "Nome cliente",
     type: "text",
     required: true,
-    description: "Nome della cliente o riferimento appuntamento.",
+    description: "Il nome completo del cliente.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.email,
+    label: "Email",
+    type: "text",
+    required: false,
+    description: "Indirizzo email del cliente.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.phone,
+    label: "Telefono",
+    type: "text",
+    required: false,
+    description: "Numero di telefono del cliente.",
   },
   {
     id: CLIENT_CONTROL_FIELD_IDS.depositPaid,

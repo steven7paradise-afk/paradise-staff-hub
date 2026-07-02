@@ -567,7 +567,11 @@ export function ClientControlDashboard({
                     <td className="px-5 py-4 font-semibold text-black/55">{new Date(response.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                     <td className="px-5 py-4">
                       <p className="font-black">{answerText(answers[CLIENT_CONTROL_FIELD_IDS.clientName])}</p>
-                      <p className="mt-1 text-xs font-semibold text-black/40">{answerText(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder])}</p>
+                      <div className="mt-1 flex flex-col gap-0.5 text-xs font-semibold text-black/40">
+                        {answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ? <p>Ordine: {answerText(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder])}</p> : null}
+                        {answers[CLIENT_CONTROL_FIELD_IDS.email] ? <p>Email: {answerText(answers[CLIENT_CONTROL_FIELD_IDS.email])}</p> : null}
+                        {answers[CLIENT_CONTROL_FIELD_IDS.phone] ? <p>Tel: {answerText(answers[CLIENT_CONTROL_FIELD_IDS.phone])}</p> : null}
+                      </div>
                     </td>
                     <td className="px-5 py-4 font-bold text-black/62">{answerText(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name)}</td>
                     <td className="px-5 py-4 max-w-[240px]">

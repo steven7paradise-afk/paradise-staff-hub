@@ -203,6 +203,8 @@ export function TabletClock({
   const [appointmentForm, setAppointmentForm] = useState({
     salon: device?.locationName ?? "Salone Duomo",
     clientName: "",
+    email: "",
+    phone: "",
     serviceTitle: "",
     depositPaid: "",
     paid: "",
@@ -496,6 +498,8 @@ export function TabletClock({
       setAppointmentForm((prev) => ({
         ...prev,
         clientName: "",
+        email: "",
+        phone: "",
         serviceTitle: "",
         depositPaid: "",
         paid: "",
@@ -817,6 +821,8 @@ export function TabletClock({
       setAppointmentForm({
         salon: salonsList.includes(mappedSalon) ? mappedSalon : "Salone Duomo",
         clientName: booking.customerName || "",
+        email: booking.customerEmail || "",
+        phone: booking.customerPhone || "",
         serviceTitle: booking.serviceTitle || "",
         depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
         paid: "",
@@ -1631,6 +1637,9 @@ export function TabletClock({
                                       isFinito: true,
                                       bookingId: booking.id,
                                       clientName: booking.customerName,
+                                      email: booking.customerEmail || "",
+                                      phone: booking.customerPhone || "",
+                                      depositPaid: booking.priceAmount != null ? booking.priceAmount : "",
                                       salon: device?.locationName,
                                     }),
                                   }).then(() => {
@@ -1662,6 +1671,9 @@ export function TabletClock({
                                       isNoShow: true,
                                       bookingId: booking.id,
                                       clientName: booking.customerName,
+                                      email: booking.customerEmail || "",
+                                      phone: booking.customerPhone || "",
+                                      depositPaid: booking.priceAmount != null ? booking.priceAmount : "",
                                       salon: device?.locationName,
                                       shopifyOrder: booking.bookingStr || "",
                                     }),
@@ -1814,6 +1826,26 @@ export function TabletClock({
                                 onChange={(e) => setAppointmentForm((prev) => ({ ...prev, clientName: e.target.value }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="Nome cliente"
+                              />
+                            </label>
+
+                            <label className="block">
+                              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Email cliente</span>
+                              <input
+                                value={appointmentForm.email}
+                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, email: e.target.value }))}
+                                className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                                placeholder="email@esempio.com"
+                              />
+                            </label>
+
+                            <label className="block">
+                              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Telefono cliente</span>
+                              <input
+                                value={appointmentForm.phone}
+                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, phone: e.target.value }))}
+                                className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                                placeholder="+39..."
                               />
                             </label>
 
@@ -2824,6 +2856,8 @@ export function TabletClock({
                                                 isFinito: true,
                                                 bookingId: booking.id,
                                                 clientName: booking.customerName,
+                                                email: booking.customerEmail || "",
+                                                phone: booking.customerPhone || "",
                                                 salon: device?.locationName,
                                               }),
                                             }).then(() => {
@@ -2856,6 +2890,8 @@ export function TabletClock({
                                                 isNoShow: true,
                                                 bookingId: booking.id,
                                                 clientName: booking.customerName,
+                                                email: booking.customerEmail || "",
+                                                phone: booking.customerPhone || "",
                                                 salon: device?.locationName,
                                                 shopifyOrder: booking.bookingStr || "",
                                               }),
