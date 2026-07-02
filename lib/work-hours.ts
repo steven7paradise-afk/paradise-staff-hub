@@ -27,8 +27,24 @@ function timeLabel(date: Date) {
   }).format(date);
 }
 
+function roundToNearest30Minutes(date: Date): Date {
+  const rounded = new Date(date);
+  const minutes = rounded.getMinutes();
+  const rem = minutes % 30;
+  if (rem < 15) {
+    rounded.setMinutes(minutes - rem, 0, 0);
+  } else {
+    rounded.setMinutes(minutes + (30 - rem), 0, 0);
+  }
+  return rounded;
+}
+
 export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
-  const ordered = [...logs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  const roundedLogs = logs.map((log) => ({
+    ...log,
+    timestamp: roundToNearest30Minutes(log.timestamp),
+  }));
+  const ordered = [...roundedLogs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   let enteredAt: Date | null = null;
   let breakAt: Date | null = null;
   let grossMilliseconds = 0;

@@ -10,6 +10,7 @@ type Worker = {
   email: string;
   active: boolean;
   location: string;
+  photoUrl?: string | null;
 };
 
 type WorkRecord = {
@@ -217,28 +218,36 @@ export function WorkHoursManager({
     const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
     setRecords((current) => {
       const rec = current[recordKey] ?? emptyRecord();
-      const updatedPaidBreak = key === "paidBreak" ? Boolean(value) : rec.paidBreak;
-      const updatedManualOverride = key === "manualOverride" ? Boolean(value) : rec.manualOverride;
-      
+      let updatedPaidBreak = rec.paidBreak;
+      let updatedManualOverride = rec.manualOverride;
       let updatedHours = rec.hours;
-      if (key === "hours") {
-        updatedHours = Number(value);
-      } else if (key === "paidBreak") {
+      let updatedNote = rec.note;
+
+      if (key === "paidBreak") {
+        updatedPaidBreak = Boolean(value);
         if (!updatedManualOverride) {
           updatedHours = updatedPaidBreak ? rec.grossHours : rec.netHours;
         }
       } else if (key === "manualOverride") {
+        updatedManualOverride = Boolean(value);
         if (!updatedManualOverride) {
           updatedHours = rec.paidBreak ? rec.grossHours : rec.netHours;
         }
+      } else if (key === "hours") {
+        updatedHours = Number(value);
+        updatedManualOverride = true; // Auto-check manual override!
+      } else if (key === "note") {
+        updatedNote = String(value);
       }
 
       return {
         ...current,
         [recordKey]: {
           ...rec,
-          [key]: key === "hours" ? Number(value) : value,
           hours: updatedHours,
+          paidBreak: updatedPaidBreak,
+          manualOverride: updatedManualOverride,
+          note: updatedNote,
         },
       };
     });
@@ -322,6 +331,7 @@ export function WorkHoursManager({
     const updatedRec = {
       ...rec,
       [key]: updatedValue,
+      manualOverride: key === "hours" ? true : rec.manualOverride,
     };
 
     await saveDay(day, updatedRec);
@@ -460,7 +470,9 @@ export function WorkHoursManager({
   }
 
   async function exportAllPdf() {
-    const scope = locationFilter === "Tutti i saloni" ? workers : workers.filter((worker) => worker.location === locationFilter);
+    const scope = (locationFilter === "Tutti i saloni" ? workers : workers.filter((worker) => worker.location === locationFilter))
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, "it"));
     await exportPdf(scope, `Ore-staff-${locationFilter.replaceAll(" ", "-")}-${monthNames[month]}-${year}.pdf`);
   }
 
@@ -471,63 +483,78 @@ export function WorkHoursManager({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
-      <Card className="p-0 border border-black/5 bg-white/80 dark:bg-neutral-900/80 shadow-md backdrop-blur-md">
-        <div className="border-b border-black/5 dark:border-white/5 p-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Personale</p>
-          <select
-            className="mt-4 min-h-11 w-full rounded-2xl border border-black/10 dark:border-white/10 bg-white/80 dark:bg-neutral-800/80 px-3 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white"
-            value={locationFilter}
-            onChange={(event) => setLocationFilter(event.target.value)}
-          >
-            {locationOptions.map((location) => (
-              <option key={location} value={location} className="dark:bg-[#201F24] dark:text-white">{location}</option>
-            ))}
-          </select>
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-black/10 dark:border-white/10 bg-white/70 dark:bg-neutral-800/70 px-3">
-            <Search className="size-4 text-black/40 dark:text-white/40" />
-            <input className="h-11 flex-1 bg-transparent text-sm outline-none dark:text-white" placeholder="Cerca lavoratore..." value={query} onChange={(event) => setQuery(event.target.value)} />
+    <div className="flex flex-col gap-6 animate-fade-in">
+      {/* Top Selector Panel */}
+      <Card className="p-5 border border-black/5 bg-white/80 dark:bg-neutral-900/80 shadow-md backdrop-blur-md">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-black/5 dark:border-white/5 pb-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40 dark:text-white/40">Seleziona Personale</p>
+              <p className="text-xs text-black/50 dark:text-white/40 mt-1">Filtra per salone o cerca per nome per visualizzare e modificare le ore.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Location Selector */}
+              <select
+                className="min-h-10 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-xs font-semibold outline-none focus:border-paradise-pink dark:text-white"
+                value={locationFilter}
+                onChange={(event) => setLocationFilter(event.target.value)}
+              >
+                {locationOptions.map((location) => (
+                  <option key={location} value={location} className="dark:bg-[#201F24] dark:text-white">{location}</option>
+                ))}
+              </select>
+              {/* Search Bar */}
+              <div className="flex items-center gap-2 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 h-10 w-48 sm:w-64">
+                <Search className="size-3.5 text-black/40 dark:text-white/40" />
+                <input
+                  className="flex-1 bg-transparent text-xs outline-none dark:text-white"
+                  placeholder="Cerca lavoratore..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="mt-4 md:hidden">
-            <select
-              className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink"
-              value={selectedWorkerId}
-              onChange={(event) => setSelectedWorkerId(event.target.value)}
-            >
-              {filteredWorkers.map((worker) => (
-                <option key={worker.id} value={worker.id}>
-                  {worker.name} - {worker.location}
-                </option>
-              ))}
-            </select>
-            {selectedWorker ? (
-              <div className="mt-3 rounded-2xl border border-paradise-pink/20 bg-paradise-softPink/20 px-3 py-2">
-                <p className="text-sm font-semibold">{selectedWorker.name}</p>
-                <p className="text-xs text-black/50">{selectedWorker.location}</p>
-              </div>
-            ) : null}
+          {/* Horizontal Scrolling Worker List */}
+          <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-neutral-200 dark:scrollbar-thumb-neutral-800">
+            {filteredWorkers.length === 0 ? (
+              <p className="text-xs text-black/45 dark:text-white/45 py-2">Nessun lavoratore corrisponde ai filtri.</p>
+            ) : (
+              filteredWorkers.map((worker) => {
+                const isSelected = selectedWorkerId === worker.id;
+                return (
+                  <button
+                    key={worker.id}
+                    onClick={() => setSelectedWorkerId(worker.id)}
+                    className="flex flex-col items-center gap-1.5 shrink-0 group focus:outline-none py-1"
+                  >
+                    <div className={`relative size-14 rounded-full p-0.5 border-2 transition ${isSelected ? "border-paradise-pink scale-105" : "border-transparent group-hover:border-black/10 dark:group-hover:border-white/10"}`}>
+                      {worker.photoUrl ? (
+                        <img
+                          src={worker.photoUrl}
+                          alt={worker.name}
+                          className="size-full rounded-full object-cover shadow-sm bg-neutral-100"
+                        />
+                      ) : (
+                        <div className="size-full rounded-full bg-paradise-noir dark:bg-white/15 text-white dark:text-white/80 grid place-items-center font-bold text-sm shadow-sm">
+                          {worker.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      {isSelected && (
+                        <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-paradise-pink border-2 border-white dark:border-neutral-900 grid place-items-center shadow-sm">
+                          <Check className="size-3 text-white stroke-[3px]" />
+                        </div>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-bold tracking-tight max-w-[75px] truncate text-center ${isSelected ? "text-paradise-pink" : "text-black/60 dark:text-white/60 group-hover:text-black dark:group-hover:text-white"}`}>
+                      {worker.name.split(" ")[0]}
+                    </span>
+                  </button>
+                );
+              })
+            )}
           </div>
-        </div>
-        <div className="hidden max-h-[620px] overflow-y-auto p-3 md:block">
-          {filteredWorkers.length === 0 ? <p className="p-4 text-sm text-black/45 dark:text-white/45">Nessun lavoratore presente.</p> : null}
-          {filteredWorkers.map((worker) => (
-            <button
-              key={worker.id}
-              className={`mb-2 w-full rounded-2xl border p-4 text-left transition ${selectedWorkerId === worker.id ? "border-paradise-pink bg-paradise-softPink/30 dark:bg-paradise-pink/10 shadow-sm" : "border-black/5 dark:border-white/5 bg-white/60 dark:bg-neutral-850/60 hover:bg-white dark:hover:bg-neutral-800"}`}
-              onClick={() => setSelectedWorkerId(worker.id)}
-            >
-              <div className="flex items-start gap-3">
-                <div className="grid size-10 place-items-center rounded-2xl bg-paradise-noir dark:bg-white text-white dark:text-paradise-noir shadow-sm">
-                  <UserRound className="size-4" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">{worker.name}</p>
-                  <p className="text-xs text-black/45 dark:text-white/45">{worker.location}</p>
-                </div>
-              </div>
-            </button>
-          ))}
         </div>
       </Card>
 
@@ -669,7 +696,6 @@ export function WorkHoursManager({
                           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Lavorate</p>
                           <input
                             className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-paradise-pink disabled:bg-black/[0.03] disabled:text-black/50"
-                            disabled={!record.manualOverride}
                             type="number"
                             min="0"
                             max="24"
@@ -868,7 +894,6 @@ export function WorkHoursManager({
                             <div className="flex items-center gap-2">
                               <input
                                 className="h-9 w-16 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-2 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
-                                disabled={!record.manualOverride}
                                 type="number"
                                 min="0"
                                 max="24"

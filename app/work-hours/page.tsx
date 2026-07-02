@@ -35,6 +35,7 @@ export default async function WorkHoursPage() {
           email: worker.email,
           active: worker.active,
           location: worker.location?.name ?? "Nessun salone",
+          photoUrl: worker.photo_url ?? null,
         }))}
       />
     </AppShell>
