@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ensureClientControlForm, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
-import { getShopifyOrderNamesBulk, getRecentShopifyOrders, isFuzzyNameMatch } from "@/lib/shopify";
+import { getShopifyOrderNamesBulk, isFuzzyNameMatch } from "@/lib/shopify";
 
 
 export const dynamic = "force-dynamic";
@@ -115,10 +115,7 @@ export default async function TabletClockPage({
       clientControlFormId = clientControlForm.active ? clientControlForm.id : null;
 
       const orderIds = bookingsRaw.map((b) => b.order_id).filter(Boolean);
-      const [shopifyOrderNames, { customerNames: recentShopifyCustomers, orderNames: recentShopifyOrders, customerEmails: recentShopifyEmails }] = await Promise.all([
-        getShopifyOrderNamesBulk(orderIds),
-        getRecentShopifyOrders()
-      ]);
+      const shopifyOrderNames = await getShopifyOrderNamesBulk(orderIds);
 
 
       // Filter today's appointments for this salon!
@@ -214,8 +211,8 @@ export default async function TabletClockPage({
           const cleanBookingOrder = (booking.booking_str || "").trim().toLowerCase().replace(/^#/, "");
           const cleanClientName = customerFullName.trim().toLowerCase();
           
-          const orderMatched = (cleanOrderName && (savedOrders.has(cleanOrderName) || recentShopifyOrders.has(cleanOrderName))) || 
-                               (cleanBookingOrder && (savedOrders.has(cleanBookingOrder) || recentShopifyOrders.has(cleanBookingOrder)));
+          const orderMatched = (cleanOrderName && savedOrders.has(cleanOrderName)) || 
+                               (cleanBookingOrder && savedOrders.has(cleanBookingOrder));
           
           let nameMatched = false;
           const savedNames = savedClientNamesByDate.get(bookingRomeDateStr);
@@ -226,18 +223,6 @@ export default async function TabletClockPage({
                 break;
               }
             }
-          }
-          if (!nameMatched && cleanClientName) {
-            for (const recentName of recentShopifyCustomers) {
-              if (isFuzzyNameMatch(cleanClientName, recentName)) {
-                nameMatched = true;
-                break;
-              }
-            }
-          }
-          const cleanEmail = String(booking.customer?.email || "").trim().toLowerCase();
-          if (!nameMatched && cleanEmail && recentShopifyEmails.has(cleanEmail)) {
-            nameMatched = true;
           }
           const isSaved = savedBookingIds.has(booking.id) || orderMatched || nameMatched;
 

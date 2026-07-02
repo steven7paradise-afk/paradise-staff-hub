@@ -84,6 +84,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           if (details.clientName && !answers[CLIENT_CONTROL_FIELD_IDS.clientName]) {
             answers[CLIENT_CONTROL_FIELD_IDS.clientName] = details.clientName;
           }
+          if (details.email && !answers[CLIENT_CONTROL_FIELD_IDS.email]) {
+            answers[CLIENT_CONTROL_FIELD_IDS.email] = details.email;
+          }
+          if (details.phone && !answers[CLIENT_CONTROL_FIELD_IDS.phone]) {
+            answers[CLIENT_CONTROL_FIELD_IDS.phone] = details.phone;
+          }
           if (details.totalPrice !== null) {
             answers[CLIENT_CONTROL_FIELD_IDS.paid] = details.totalPrice;
             answers["client_control_shopify_expected_paid"] = details.totalPrice;

@@ -578,6 +578,8 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   totalPrice: number | null;
   lineItems: string[];
   note: string | null;
+  email: string | null;
+  phone: string | null;
 } | null> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -660,12 +662,16 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         : [];
 
       const note = orderData.note || null;
+      const email = orderData.customer?.email || null;
+      const phone = orderData.customer?.phone || null;
 
       return {
         clientName,
         totalPrice,
         lineItems,
-        note
+        note,
+        email,
+        phone
       };
     }
   } catch (error) {
