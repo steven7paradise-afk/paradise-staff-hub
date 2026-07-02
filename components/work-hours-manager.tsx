@@ -16,7 +16,7 @@ type Worker = {
 type WorkRecord = {
   userId: string;
   date: string;
-  hours: number;
+  hours: number | string;
   note: string;
   paidBreak: boolean;
   manualOverride: boolean;
@@ -97,7 +97,7 @@ export function WorkHoursManager({
     weekDays.forEach((day) => {
       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
       const record = records[recordKey];
-      worked += record?.hours ?? 0;
+      worked += Number(record?.hours) || 0;
       due += record?.scheduledHours ?? 0;
     });
     
@@ -148,7 +148,7 @@ export function WorkHoursManager({
     days.forEach((day) => {
       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
       const record = records[recordKey];
-      const hours = record?.hours ?? 0;
+      const hours = Number(record?.hours) || 0;
       const scheduled = record?.scheduledHours ?? 0;
 
       worked += hours;
@@ -211,7 +211,7 @@ export function WorkHoursManager({
   }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
-    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null };
+    return { hours: "", note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null };
   }
 
   function updateLocal(day: Date, key: "hours" | "note" | "paidBreak" | "manualOverride", value: string | boolean) {
@@ -234,7 +234,7 @@ export function WorkHoursManager({
           updatedHours = rec.paidBreak ? rec.grossHours : rec.netHours;
         }
       } else if (key === "hours") {
-        updatedHours = Number(value);
+        updatedHours = String(value);
         updatedManualOverride = true; // Auto-check manual override!
       } else if (key === "note") {
         updatedNote = String(value);
@@ -261,7 +261,7 @@ export function WorkHoursManager({
     const response = await fetch("/api/work-hours", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: selectedWorkerId, date: day.toISOString(), hours: record.hours, note: record.note, paidBreak: record.paidBreak, manualOverride: record.manualOverride }),
+      body: JSON.stringify({ userId: selectedWorkerId, date: day.toISOString(), hours: Number(record.hours) || 0, note: record.note, paidBreak: record.paidBreak, manualOverride: record.manualOverride }),
     });
     const data = await response.json();
     setSavingKey("");
@@ -324,7 +324,7 @@ export function WorkHoursManager({
   const handleInputBlur = async (day: Date, key: "hours" | "note", value: string) => {
     const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
     const rec = records[recordKey] ?? emptyRecord();
-    const updatedValue = key === "hours" ? Number(value) : value;
+    const updatedValue = key === "hours" ? (value === "" ? 0 : Number(value)) : value;
 
     if (lastFocusValue.current === updatedValue) return;
 
@@ -400,7 +400,7 @@ export function WorkHoursManager({
 
       pdfWorkers.forEach((worker, workerIndex) => {
         if (workerIndex > 0) pdf.addPage();
-        const workerTotal = days.reduce((total, day) => total + (records[`${worker.id}-${dateKey(day)}`]?.hours ?? 0), 0);
+        const workerTotal = days.reduce((total, day) => total + (Number(records[`${worker.id}-${dateKey(day)}`]?.hours) || 0), 0);
         drawHeader(worker, workerTotal);
         let y = 66;
         drawTableHead(y);
@@ -452,7 +452,8 @@ export function WorkHoursManager({
 
           // 8. Controllo (actual approved/corrected hours)
           pdf.setFont("helvetica", "bold");
-          pdf.text(record.hours > 0 ? record.hours.toFixed(2).replace(".", ",") : "0,00", margin + 193, y + 4.2);
+          const ctrlHours = Number(record.hours) || 0;
+          pdf.text(ctrlHours > 0 ? ctrlHours.toFixed(2).replace(".", ",") : "0,00", margin + 193, y + 4.2);
           pdf.setFont("helvetica", "normal");
 
           // 9. Note
