@@ -1643,6 +1643,38 @@ export function TabletClock({
                               >
                                 Finito
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCompletedAppointments((prev) => {
+                                    const next = new Set(prev);
+                                    next.add(booking.id);
+                                    return next;
+                                  });
+                                  sound("success");
+                                  
+                                  // Save No Show status in background database response
+                                  void fetch("/api/client-control/tablet-submit", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      isFinito: true,
+                                      isNoShow: true,
+                                      bookingId: booking.id,
+                                      clientName: booking.customerName,
+                                      salon: device?.locationName,
+                                      shopifyOrder: booking.bookingStr || "",
+                                    }),
+                                  }).then(() => {
+                                    router.refresh();
+                                  }).catch((err) => {
+                                    console.error("Error saving No Show status:", err);
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-red-600 hover:bg-red-100 active:scale-95 transition shadow-sm h-9"
+                              >
+                                No Show
+                              </button>
                             </div>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D5E5FA] bg-[#EDF4FC] px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-[#4E89E8] h-9">
@@ -2803,6 +2835,39 @@ export function TabletClock({
                                           className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-8"
                                         >
                                           Finito
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setCompletedAppointments((prev) => {
+                                              const next = new Set(prev);
+                                              next.add(booking.id);
+                                              return next;
+                                            });
+                                            sound("success");
+                                            
+                                            // Save No Show status in background database response
+                                            void fetch("/api/client-control/tablet-submit", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({
+                                                isFinito: true,
+                                                isNoShow: true,
+                                                bookingId: booking.id,
+                                                clientName: booking.customerName,
+                                                salon: device?.locationName,
+                                                shopifyOrder: booking.bookingStr || "",
+                                              }),
+                                            }).then(() => {
+                                              router.refresh();
+                                            }).catch((err) => {
+                                              console.error("Error saving No Show status:", err);
+                                            });
+                                          }}
+                                          className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-red-600 hover:bg-red-100 active:scale-95 transition shadow-sm h-8"
+                                        >
+                                          No Show
                                         </button>
                                       </>
                                     ) : (

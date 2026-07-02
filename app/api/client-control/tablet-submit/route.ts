@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
     review?: boolean;
     bookingId?: string | null;
     isFinito?: boolean;
+    isNoShow?: boolean;
   } | null;
 
   const isFinito = !!body?.isFinito;
@@ -123,12 +124,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const isNoShow = !!body?.isNoShow;
+
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
-    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || "Finito",
-    [CLIENT_CONTROL_FIELD_IDS.correctness]: "Finito",
+    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || (isNoShow ? "No Show" : "Finito"),
+    [CLIENT_CONTROL_FIELD_IDS.correctness]: isNoShow ? "No Show" : "Finito",
+    [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
+    [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: isNoShow ? ["NO SHOW"] : undefined,
     booking_id: textValue(body?.bookingId),
-    client_control_created_from: "Tablet Clock Finito",
+    client_control_created_from: isNoShow ? "Tablet Clock No Show" : "Tablet Clock Finito",
+    client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
   } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName,
@@ -171,17 +177,15 @@ export async function POST(request: NextRequest) {
     select: { id: true, created_at: true },
   });
 
-  const customNote = textValue(body?.customNoteText);
+  const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
   if (shopifyOrder) {
-    const writerName = staffNames.join(" e ") || "Staff";
-    const collaboratorName = staffNames.join(", ") || "";
-    if (customNote) {
-      appendShopifyOrderNote(shopifyOrder, writerName, customNote)
-        .catch((err) => console.error("Failed to append tablet note to Shopify:", err));
-    }
+    const writerName = isNoShow ? "NO SHOW" : (staffNames.join(" e ") || "Staff");
+    const collaboratorName = isNoShow ? "NO SHOW" : (staffNames.join(", ") || "");
+    appendShopifyOrderNote(shopifyOrder, writerName, customNote || "Stato cambiato")
+      .catch((err) => console.error("Failed to append tablet note to Shopify:", err));
     updateShopifyOrderMetafields(
       shopifyOrder,
-      "Controllato",
+      isNoShow ? "No Show" : "Controllato",
       customNote || "",
       collaboratorName
     ).catch((err) => console.error("Failed to update Shopify metafields from tablet submit:", err));

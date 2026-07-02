@@ -125,7 +125,7 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     label: "Corretto?",
     type: "select",
     required: true,
-    options: ["Da controllare", "Errore", "Controllato"],
+    options: ["Da controllare", "Errore", "Controllato", "Finito", "No Show"],
     description: "Da controllare e il valore predefinito.",
   },
 ];
