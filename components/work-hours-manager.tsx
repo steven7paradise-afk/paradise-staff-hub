@@ -25,6 +25,8 @@ type WorkRecord = {
   firstEntry: string | null;
   lastExit: string | null;
   scheduledHours: number;
+  plannedStart: string | null;
+  plannedEnd: string | null;
 };
 
 const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
@@ -113,7 +115,7 @@ export function WorkHoursManager({
       return;
     }
     const map: Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }> = {};
-    (data as (WorkRecord & { scheduledHours?: number })[]).forEach((record) => {
+    (data as (WorkRecord & { scheduledHours?: number; plannedStart?: string | null; plannedEnd?: string | null })[]).forEach((record) => {
       map[`${record.userId}-${record.date.slice(0, 10)}`] = {
         hours: record.hours,
         note: record.note,
@@ -125,6 +127,8 @@ export function WorkHoursManager({
         firstEntry: record.firstEntry,
         lastExit: record.lastExit,
         scheduledHours: record.scheduledHours ?? 0,
+        plannedStart: record.plannedStart ?? null,
+        plannedEnd: record.plannedEnd ?? null,
       };
     });
     setRecords(map);
@@ -204,7 +208,7 @@ export function WorkHoursManager({
   }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
-    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0 };
+    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null };
   }
 
   function updateLocal(day: Date, key: "hours" | "note" | "paidBreak" | "manualOverride", value: string | boolean) {
@@ -266,6 +270,8 @@ export function WorkHoursManager({
         lastExit: data.lastExit,
         paidBreak: data.paidBreak,
         manualOverride: data.manualOverride,
+        plannedStart: data.plannedStart ?? record.plannedStart,
+        plannedEnd: data.plannedEnd ?? record.plannedEnd,
       },
     }));
     setMessage("Ore aggiornate.");
@@ -317,10 +323,10 @@ export function WorkHoursManager({
     setMessage("");
     try {
       const { default: jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 14;
+      const margin = 12;
       const rowHeight = 6;
       const tableWidth = pageWidth - margin * 2;
       const monthLabel = `${monthNames[month]} ${year}`;
@@ -341,7 +347,7 @@ export function WorkHoursManager({
         pdf.setTextColor(31, 31, 31);
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(15);
-        pdf.text(`${workerTotal.toFixed(2).replace(".00", "")} h`, pageWidth - margin - 28, 19);
+        pdf.text(`${workerTotal.toFixed(2).replace(".", ",")} h`, pageWidth - margin - 29, 19);
 
         pdf.setTextColor(31, 31, 31);
         pdf.setFontSize(15);
@@ -361,10 +367,16 @@ export function WorkHoursManager({
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(7.8);
         pdf.setTextColor(31, 31, 31);
+        
         pdf.text("Giorno", margin + 3, y + 4.2);
-        pdf.text("Timbratura", margin + 42, y + 4.2);
-        pdf.text("Ore", margin + 84, y + 4.2);
-        pdf.text("Note", margin + 106, y + 4.2);
+        pdf.text("Data", margin + 23, y + 4.2);
+        pdf.text("Ingresso (Pianif.)", margin + 48, y + 4.2);
+        pdf.text("Uscita (Pianif.)", margin + 78, y + 4.2);
+        pdf.text("Entrata (Timbr.)", margin + 108, y + 4.2);
+        pdf.text("Uscita (Timbr.)", margin + 138, y + 4.2);
+        pdf.text("Totale Ore", margin + 168, y + 4.2);
+        pdf.text("Controllo", margin + 193, y + 4.2);
+        pdf.text("Note", margin + 218, y + 4.2);
       }
 
       pdfWorkers.forEach((worker, workerIndex) => {
@@ -393,13 +405,41 @@ export function WorkHoursManager({
           pdf.setDrawColor(232, 224, 228);
           pdf.rect(margin, y, tableWidth, rowHeight);
           pdf.setTextColor(31, 31, 31);
-          pdf.text(new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day), margin + 3, y + 4.2);
-          pdf.text(record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "-", margin + 42, y + 4.2);
+
+          // 1. Giorno
+          const dayName = new Intl.DateTimeFormat("it-IT", { weekday: "long" }).format(day);
+          const capitalizedDayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+          pdf.text(capitalizedDayName, margin + 3, y + 4.2);
+
+          // 2. Data
+          const dateStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(day);
+          pdf.text(dateStr, margin + 23, y + 4.2);
+
+          // 3. Ingresso (planned start)
+          pdf.text(record.plannedStart ?? "-", margin + 48, y + 4.2);
+
+          // 4. Uscita (planned end)
+          pdf.text(record.plannedEnd ?? "-", margin + 78, y + 4.2);
+
+          // 5. Entrata (actual entry)
+          pdf.text(record.firstEntry ?? "-", margin + 108, y + 4.2);
+
+          // 6. Uscita (actual exit)
+          pdf.text(record.lastExit ?? "-", margin + 138, y + 4.2);
+
+          // 7. Totale Ore (calculated net clocked hours)
+          const computedHours = record.paidBreak ? record.grossHours : record.netHours;
+          pdf.text(computedHours > 0 ? computedHours.toFixed(2).replace(".", ",") : "-", margin + 168, y + 4.2);
+
+          // 8. Controllo (actual approved/corrected hours)
           pdf.setFont("helvetica", "bold");
-          pdf.text(`${record.hours.toFixed(2).replace(".00", "")} h`, margin + 84, y + 4.2);
+          pdf.text(record.hours > 0 ? record.hours.toFixed(2).replace(".", ",") : "0,00", margin + 193, y + 4.2);
           pdf.setFont("helvetica", "normal");
-          const noteLines = pdf.splitTextToSize(record.note || "", tableWidth - 110);
-          pdf.text(noteLines[0] ?? "", margin + 106, y + 4.2);
+
+          // 9. Note
+          const noteLines = pdf.splitTextToSize(record.note || "", 52);
+          pdf.text(noteLines[0] ?? "", margin + 218, y + 4.2);
+
           y += rowHeight;
         });
       });

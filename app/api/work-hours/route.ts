@@ -88,8 +88,14 @@ export async function GET(request: NextRequest) {
 
     const schedule = scheduleGroups.get(key);
     let scheduledHours = 0;
-    if (schedule && isWorkCategory(schedule.category)) {
-      scheduledHours = schedule.category.paid_hours ?? categoryDuration(schedule.start_time ?? schedule.category.start_time, schedule.end_time ?? schedule.category.end_time);
+    let plannedStart: string | null = null;
+    let plannedEnd: string | null = null;
+    if (schedule) {
+      plannedStart = schedule.start_time ?? schedule.category.start_time;
+      plannedEnd = schedule.end_time ?? schedule.category.end_time;
+      if (isWorkCategory(schedule.category)) {
+        scheduledHours = schedule.category.paid_hours ?? categoryDuration(plannedStart, plannedEnd);
+      }
     }
 
     return {
@@ -101,6 +107,8 @@ export async function GET(request: NextRequest) {
       paidBreak,
       manualOverride: record?.manual_override ?? false,
       scheduledHours,
+      plannedStart,
+      plannedEnd,
       ...clock,
     };
   });
