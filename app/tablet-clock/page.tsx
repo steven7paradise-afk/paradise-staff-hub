@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ensureClientControlForm, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
-import { getShopifyOrderNamesBulk } from "@/lib/shopify";
+import { getShopifyOrderNamesBulk, getRecentShopifyOrders } from "@/lib/shopify";
 
 
 export const dynamic = "force-dynamic";
@@ -115,7 +115,10 @@ export default async function TabletClockPage({
       clientControlFormId = clientControlForm.active ? clientControlForm.id : null;
 
       const orderIds = bookingsRaw.map((b) => b.order_id).filter(Boolean);
-      const shopifyOrderNames = await getShopifyOrderNamesBulk(orderIds);
+      const [shopifyOrderNames, { customerNames: recentShopifyCustomers, orderNames: recentShopifyOrders }] = await Promise.all([
+        getShopifyOrderNamesBulk(orderIds),
+        getRecentShopifyOrders()
+      ]);
 
 
       // Filter today's appointments for this salon!
@@ -211,8 +214,8 @@ export default async function TabletClockPage({
           const cleanBookingOrder = (booking.booking_str || "").trim().toLowerCase().replace(/^#/, "");
           const cleanClientName = customerFullName.trim().toLowerCase();
           
-          const orderMatched = (cleanOrderName && savedOrders.has(cleanOrderName)) || 
-                               (cleanBookingOrder && savedOrders.has(cleanBookingOrder));
+          const orderMatched = (cleanOrderName && (savedOrders.has(cleanOrderName) || recentShopifyOrders.has(cleanOrderName))) || 
+                               (cleanBookingOrder && (savedOrders.has(cleanBookingOrder) || recentShopifyOrders.has(cleanBookingOrder)));
           
           let nameMatched = false;
           const savedNames = savedClientNamesByDate.get(bookingRomeDateStr);
@@ -223,6 +226,9 @@ export default async function TabletClockPage({
                 break;
               }
             }
+          }
+          if (!nameMatched && cleanClientName && recentShopifyCustomers.has(cleanClientName)) {
+            nameMatched = true;
           }
           const isSaved = savedBookingIds.has(booking.id) || orderMatched || nameMatched;
 

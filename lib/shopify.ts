@@ -515,4 +515,54 @@ export async function updateShopifyOrderMetafields(
   }
 }
 
+/**
+ * Fetches recent Shopify orders (created in the last 24 hours) and returns sets of customer names and order names.
+ */
+export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<string>; orderNames: Set<string> }> {
+  const customerNames = new Set<string>();
+  const orderNames = new Set<string>();
+  try {
+    const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+    const token = process.env.SHOPIFY_ACCESS_TOKEN;
+
+    if (!shop || !token) {
+      return { customerNames, orderNames };
+    }
+
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const minDate = oneDayAgo.toISOString();
+
+    const url = `https://${shop}/admin/api/2024-04/orders.json?created_at_min=${encodeURIComponent(minDate)}&status=any&limit=250&fields=name,customer`;
+    const res = await fetch(url, {
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const orders = data?.orders || [];
+      for (const order of orders) {
+        const orderName = String(order.name || "").trim().toLowerCase().replace(/^#/, "");
+        if (orderName) {
+          orderNames.add(orderName);
+        }
+        const firstName = String(order.customer?.first_name || "").trim();
+        const lastName = String(order.customer?.last_name || "").trim();
+        const fullName = [firstName, lastName].filter(Boolean).join(" ");
+        const cleanName = fullName.toLowerCase().trim();
+        if (cleanName) {
+          customerNames.add(cleanName);
+        }
+      }
+    } else {
+      console.error(`Failed to fetch recent Shopify orders: ${res.status}`);
+    }
+  } catch (error) {
+    console.error("Error in getRecentShopifyOrders:", error);
+  }
+  return { customerNames, orderNames };
+}
+
 
