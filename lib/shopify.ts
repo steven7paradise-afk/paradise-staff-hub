@@ -565,4 +565,85 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
   return { customerNames, orderNames };
 }
 
+/**
+ * Fetches the line items (product names) of a Shopify order given its name or ID.
+ */
+export async function getShopifyOrderLineItems(orderName: string): Promise<string[]> {
+  try {
+    const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+    const token = process.env.SHOPIFY_ACCESS_TOKEN;
+
+    if (!shop || !token) {
+      console.warn("Shopify configuration missing.");
+      return [];
+    }
+
+    const cleanName = orderName.trim();
+    if (!cleanName) return [];
+
+    let orderData: any = null;
+
+    // 1. Try direct ID query
+    if (/^\d{12,}$/.test(cleanName.replace("#", ""))) {
+      const directId = cleanName.replace("#", "");
+      const res = await fetch(`https://${shop}/admin/api/2024-04/orders/${directId}.json`, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        orderData = data?.order;
+      }
+    }
+
+    // 2. Search by order name
+    if (!orderData) {
+      let searchQuery = cleanName;
+      if (!searchQuery.startsWith("#") && /^\d+$/.test(searchQuery)) {
+        searchQuery = `#${searchQuery}`;
+      }
+
+      const searchRes = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(searchQuery)}&status=any`, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        const orders = searchData?.orders || [];
+        if (orders.length > 0) {
+          orderData = orders[0];
+        } else {
+          // Try searching without the '#' prefix
+          const nameWithoutHash = searchQuery.replace("#", "");
+          const searchResNoHash = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(nameWithoutHash)}&status=any`, {
+            headers: {
+              "X-Shopify-Access-Token": token,
+              "Content-Type": "application/json",
+            },
+          });
+          if (searchResNoHash.ok) {
+            const searchDataNoHash = await searchResNoHash.json();
+            const ordersNoHash = searchDataNoHash?.orders || [];
+            if (ordersNoHash.length > 0) {
+              orderData = ordersNoHash[0];
+            }
+          }
+        }
+      }
+    }
+
+    if (orderData && Array.isArray(orderData.line_items)) {
+      return orderData.line_items.map((item: any) => item.title);
+    }
+  } catch (error) {
+    console.error("Error fetching Shopify order line items:", error);
+  }
+  return [];
+}
+
 

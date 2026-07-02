@@ -16,6 +16,7 @@ export const CLIENT_CONTROL_FIELD_IDS = {
   afterMedia: "client_control_after_media",
   instagramTag: "client_control_instagram_tag",
   products: "client_control_products",
+  productsList: "client_control_products_list",
   review: "client_control_review",
   correctness: "client_control_correctness",
 } as const;
@@ -104,6 +105,13 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     type: "checkbox",
     required: false,
     description: "La cliente ha acquistato almeno 1 prodotto.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.productsList,
+    label: "Prodotti acquistati",
+    type: "text",
+    required: false,
+    description: "Lista dei prodotti acquistati su Shopify (compilato in automatico).",
   },
   {
     id: CLIENT_CONTROL_FIELD_IDS.review,

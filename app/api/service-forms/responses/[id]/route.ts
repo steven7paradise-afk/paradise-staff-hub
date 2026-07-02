@@ -71,7 +71,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       dataToUpdate.activity_log = [...currentLog, newLogEntry];
     }
     if (comments) dataToUpdate.comments = comments; // JSON array of comments
-    if (answers) dataToUpdate.answers = answers; // JSON object of answers
+    if (answers) {
+      const orderNum = String(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim();
+      if (orderNum) {
+        const { getShopifyOrderLineItems } = await import("@/lib/shopify");
+        const items = await getShopifyOrderLineItems(orderNum).catch(() => []);
+        if (items.length > 0) {
+          answers[CLIENT_CONTROL_FIELD_IDS.productsList] = items.join(", ");
+          answers[CLIENT_CONTROL_FIELD_IDS.products] = true;
+        }
+      }
+      dataToUpdate.answers = answers; // JSON object of answers
+    }
 
     const updatedResponse = await prisma.serviceFormResponse.update({
       where: { id },

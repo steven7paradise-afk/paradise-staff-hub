@@ -113,6 +113,16 @@ export async function POST(request: NextRequest) {
 
   const form = await ensureClientControlForm(submitter.id);
   const staffNames = staffForSalon.map((employee) => employee.name);
+  const shopifyOrder = textValue(body?.shopifyOrder);
+  let productsListStr = "";
+  if (shopifyOrder) {
+    const { getShopifyOrderLineItems } = await import("@/lib/shopify");
+    const items = await getShopifyOrderLineItems(shopifyOrder).catch(() => []);
+    if (items.length > 0) {
+      productsListStr = items.join(", ");
+    }
+  }
+
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || "Finito",
@@ -126,14 +136,15 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.paid]: moneyValue(body?.paid),
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: staffNames[0],
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: staffNames,
-    [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: textValue(body?.shopifyOrder),
+    [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,
     [CLIENT_CONTROL_FIELD_IDS.instagramTag]: textValue(body?.instagramTag),
     [CLIENT_CONTROL_FIELD_IDS.notes]: boolValue(body?.notes),
     client_control_notes_text: textValue(body?.customNoteText),
     booking_id: textValue(body?.bookingId),
     [CLIENT_CONTROL_FIELD_IDS.beforeMedia]: boolValue(body?.beforeMedia),
     [CLIENT_CONTROL_FIELD_IDS.afterMedia]: boolValue(body?.afterMedia),
-    [CLIENT_CONTROL_FIELD_IDS.products]: boolValue(body?.products),
+    [CLIENT_CONTROL_FIELD_IDS.products]: boolValue(body?.products) || (productsListStr !== ""),
+    [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
     [CLIENT_CONTROL_FIELD_IDS.review]: boolValue(body?.review),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: "Controllato",
     client_control_created_from: "Tablet Clock",
@@ -160,7 +171,6 @@ export async function POST(request: NextRequest) {
     select: { id: true, created_at: true },
   });
 
-  const shopifyOrder = textValue(body?.shopifyOrder);
   const customNote = textValue(body?.customNoteText);
   if (shopifyOrder) {
     const writerName = staffNames.join(" e ") || "Staff";
