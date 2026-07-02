@@ -668,6 +668,7 @@ export function WorkHoursManager({
                             value={record.hours}
                             onChange={(event) => updateLocal(day, "hours", event.target.value)}
                             onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                           />
                         </div>
                         <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
@@ -702,6 +703,7 @@ export function WorkHoursManager({
                           value={record.note}
                           onChange={(event) => updateLocal(day, "note", event.target.value)}
                           onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
+                          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                           placeholder="Riposo, festivo, malattia..."
                         />
                       </div>
@@ -811,6 +813,7 @@ export function WorkHoursManager({
                               value={record.hours}
                               onChange={(event) => updateLocal(day, "hours", event.target.value)}
                               onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                              onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                             />
                           </td>
                           <td className="px-5 py-3.5">
@@ -841,6 +844,7 @@ export function WorkHoursManager({
                               value={record.note}
                               onChange={(event) => updateLocal(day, "note", event.target.value)}
                               onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
+                              onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                               placeholder="Riposo, festivo, malattia..."
                             />
                           </td>
