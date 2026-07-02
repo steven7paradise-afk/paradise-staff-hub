@@ -1443,11 +1443,12 @@ export function TabletClock({
                   <CalendarDays className="size-4.5" />
                   <span className="text-xs font-black uppercase tracking-[0.18em]">
                     {(() => {
+                      if (activeAppointments.length === 0) return "Nessun appuntamento";
                       const hasToday = activeAppointments.some((b) => !b.isTomorrow);
                       const hasTomorrow = activeAppointments.some((b) => b.isTomorrow);
-                      if (hasToday && hasTomorrow) return "Appuntamenti di oggi e domani";
-                      if (hasTomorrow) return "Appuntamenti di domani";
-                      return "Appuntamenti di oggi";
+                      if (hasToday && hasTomorrow) return "Prossimo appuntamento di oggi o domani";
+                      if (hasTomorrow) return "Prossimo appuntamento di domani";
+                      return "Prossimo appuntamento di oggi";
                     })()}
                   </span>
                   <span className="ml-2 rounded-full bg-[#FFF0F2] px-2 py-0.5 text-[10px] font-black text-[#E88AC5] border border-[#FCDCE2]">
@@ -1457,197 +1458,179 @@ export function TabletClock({
                 <div className="text-[11px] font-bold text-black/40">
                   {appointmentsExpanded ? "Clicca per ridurre" : "Clicca per espandere"}
                 </div>
-              </div>
-
-              {/* Table rendering list of bookings */}
+              </div>              {/* Table rendering list of bookings */}
               <div className={cn("overflow-y-auto px-6 py-4 flex-1", !appointmentsExpanded && "hidden")}>
                 {activeAppointments.length > 0 ? (
-                  <div className="min-w-full inline-block align-middle">
-                    <div className="overflow-hidden">
-                      <table className="min-w-full divide-y divide-black/[0.06]">
-                        <thead>
-                          <tr className="text-left text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                            <th scope="col" className="pb-3 text-left">Orario</th>
-                            <th scope="col" className="pb-3 text-left">Cliente</th>
-                            <th scope="col" className="pb-3 text-left">Sede</th>
-                            <th scope="col" className="pb-3 text-left">Staff</th>
-                            <th scope="col" className="pb-3 text-right">Stato</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-black/[0.04]">
-                          {activeAppointments.map((booking) => {
-                            const isConfirmed =
-                              booking.status?.toLowerCase().includes("confermato") ||
-                              booking.status === "confirmed" ||
-                              booking.status === "confermata";
+                  (() => {
+                    const booking = activeAppointments[0];
+                    const isConfirmed =
+                      booking.status?.toLowerCase().includes("confermato") ||
+                      booking.status === "confirmed" ||
+                      booking.status === "confermata";
 
-                            const isPending =
-                              booking.status?.toLowerCase().includes("in arrivo") ||
-                              booking.status === "pending";
+                    const isPending =
+                      booking.status?.toLowerCase().includes("in arrivo") ||
+                      booking.status === "pending";
 
-                            const isArriving =
-                              booking.status?.toLowerCase().includes("arrivando") ||
-                              booking.status === "arrived";
+                    const isArriving =
+                      booking.status?.toLowerCase().includes("arrivando") ||
+                      booking.status === "arrived";
 
-                            return (
-                              <tr key={booking.id} className="text-sm font-medium hover:bg-black/[0.01]">
-                                <td className="py-3.5 whitespace-nowrap text-left">
-                                  <div className="flex flex-col text-left">
-                                    <div className="flex items-center gap-1.5 font-black text-[#171717]">
-                                      <Clock className="size-4 text-[#ff8bb2]" />
-                                      {booking.time}
-                                    </div>
-                                    <span className="text-[10px] font-bold text-black/45 pl-[22px] mt-0.5">
-                                      {new Intl.DateTimeFormat("it-IT", {
-                                        day: "2-digit",
-                                        month: "2-digit",
-                                        timeZone: "Europe/Rome",
-                                      }).format(new Date(booking.startDate))}
-                                    </span>
-                                    {booking.isTomorrow && (
-                                      <span className="mt-0.5 inline-flex w-max items-center gap-1 rounded bg-[#EBF9EB] border border-[#D1F2D1] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#2E7D32]">
-                                        Domani
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                
-                                <td className="py-3.5 whitespace-nowrap text-left">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedBookingForDetails(booking)}
-                                    className="flex items-center gap-2.5 hover:opacity-80 transition text-left cursor-pointer outline-none group"
-                                  >
-                                    {booking.customerPhotoUrl ? (
-                                      <img
-                                        src={booking.customerPhotoUrl}
-                                        className="size-8 rounded-full object-cover border border-black/10 group-hover:scale-105 transition duration-200"
-                                        alt=""
-                                      />
-                                    ) : (
-                                      <div className="grid size-8 place-items-center rounded-full bg-[#ff8bb2]/15 text-[#a74758] border border-[#ff8bb2]/20 group-hover:scale-105 transition duration-200">
-                                        <UserRound className="size-4" />
-                                      </div>
-                                    )}
-                                    <div className="flex flex-col">
-                                      <div className="flex items-baseline gap-2 flex-wrap">
-                                        <span className="text-sm font-black text-[#171717] group-hover:text-[#a74758] transition duration-200">
-                                          {booking.customerName}
-                                        </span>
-                                        <span className="text-[11px] font-semibold text-[#a74758]/70 bg-[#a74758]/5 border border-[#a74758]/10 px-2 py-0.5 rounded-full">
-                                          {booking.serviceTitle}
-                                        </span>
-                                      </div>
-                                      {booking.priceAmount !== null && booking.priceAmount > 0 ? (
-                                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-100 w-max mt-1">
-                                          Acconto: {booking.priceAmount.toLocaleString("it-IT", {
-                                            style: "currency",
-                                            currency: booking.priceCurrency,
-                                          })}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  </button>
-                                </td>
+                    return (
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-[22px] border border-pink-100/60 bg-[#FFFDFD] shadow-sm hover:border-[#ff8bb2]/30 transition duration-200">
+                        {/* Time & Date */}
+                        <div className="flex items-center gap-3.5 shrink-0">
+                          <div className="grid size-12 place-items-center rounded-xl bg-pink-50 text-pink-500 border border-pink-100">
+                            <Clock className="size-6 text-[#ff8bb2]" />
+                          </div>
+                          <div>
+                            <span className="block text-xl font-black text-[#171717]">{booking.time}</span>
+                            <span className="block text-xs font-bold text-black/45">
+                              {new Intl.DateTimeFormat("it-IT", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                timeZone: "Europe/Rome",
+                              }).format(new Date(booking.startDate))}
+                            </span>
+                            {booking.isTomorrow && (
+                              <span className="mt-1 inline-flex items-center gap-1 rounded bg-[#EBF9EB] border border-[#D1F2D1] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#2E7D32]">
+                                Domani
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                                <td className="py-3.5 whitespace-nowrap text-left text-xs font-semibold text-black/60 capitalize">
-                                  {booking.inferredSalon === "buenos-aires" ? "Buenos Aires" : booking.inferredSalon}
-                                </td>
+                        {/* Customer & Service info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3">
+                            {booking.customerPhotoUrl ? (
+                              <img
+                                src={booking.customerPhotoUrl}
+                                className="size-11 rounded-full object-cover border border-black/10 shadow-sm"
+                                alt=""
+                              />
+                            ) : (
+                              <div className="grid size-11 place-items-center rounded-full bg-[#ff8bb2]/15 text-[#a74758] border border-[#ff8bb2]/20 shadow-inner">
+                                <UserRound className="size-5.5" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-base font-black text-[#171717] truncate">{booking.customerName}</p>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-xs font-semibold text-[#a74758] bg-[#a74758]/5 border border-[#a74758]/10 px-2.5 py-0.5 rounded-full">
+                                  {booking.serviceTitle}
+                                </span>
+                                {booking.priceAmount !== null && booking.priceAmount > 0 && (
+                                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                                    Acconto: {booking.priceAmount.toLocaleString("it-IT", {
+                                      style: "currency",
+                                      currency: booking.priceCurrency,
+                                    })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
 
-                                <td className="py-3.5 whitespace-nowrap text-left">
-                                  <div className="flex flex-wrap gap-1.5 items-center">
-                                    {booking.teammates.length > 0 ? (
-                                      booking.teammates.map((mate: any, idx: number) => (
-                                        <div
-                                          key={idx}
-                                          className="flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full pl-1 pr-2.5 py-0.5"
-                                        >
-                                          {mate.photoUrl ? (
-                                            <img src={mate.photoUrl} className="size-5 rounded-full object-cover" alt="" />
-                                          ) : (
-                                            <div className="grid size-5 place-items-center rounded-full bg-[#ff8bb2]/10 text-[#a74758] text-[9px] font-black">
-                                              {mate.name.charAt(0)}
-                                            </div>
-                                          )}
-                                          <span className="text-[11px] font-bold text-black/75">{mate.name}</span>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <span className="text-xs text-black/35 italic font-bold">Non assegnato</span>
-                                    )}
-                                  </div>
-                                </td>
+                        {/* Salon & Teammates */}
+                        <div className="flex flex-col gap-1.5 shrink-0 min-w-[150px] border-l border-black/[0.05] pl-4">
+                          <div>
+                            <span className="block text-[9px] font-black uppercase tracking-wider text-black/40">Sede</span>
+                            <span className="text-xs font-bold text-black/75 capitalize">
+                              {booking.inferredSalon === "buenos-aires" ? "Buenos Aires" : booking.inferredSalon}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase tracking-wider text-black/40 font-bold">Staff</span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {booking.teammates.length > 0 ? (
+                                booking.teammates.map((mate: any, idx: number) => (
+                                  <span key={idx} className="inline-flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full px-2 py-0.5 text-[10px] font-bold text-black/75">
+                                    {mate.name}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[10px] text-black/35 italic font-bold">Non assegnato</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                                <td className="py-3.5 whitespace-nowrap text-right">
-                                  {isArriving ? (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FCDCE2] bg-[#FFF0F2] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#E88AC5]">
-                                      <span className="size-1.5 rounded-full bg-[#E88AC5] animate-pulse" />
-                                      Sta Arrivando
-                                    </span>
-                                  ) : isPending ? (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FBEAD2] bg-[#FFF8EB] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#F1A43A]">
-                                      <span className="size-1.5 rounded-full bg-[#F1A43A]" />
-                                      In Arrivo
-                                    </span>
-                                  ) : isConfirmed ? (
-                                    <div className="flex gap-2 justify-end items-center">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          void prefillFromBooking(booking);
-                                        }}
-                                        className="inline-flex items-center gap-1 rounded-full border border-[#D1F2D1] bg-[#EBF9EB] px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#2E7D32] hover:bg-[#D8F3D8] hover:border-[#BCE8BC] active:scale-95 transition shadow-sm"
-                                      >
-                                        <span className="size-1.5 rounded-full bg-[#2E7D32]" />
-                                        Crea appuntamento
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setCompletedAppointments((prev) => {
-                                            const next = new Set(prev);
-                                            next.add(booking.id);
-                                            return next;
-                                          });
-                                          sound("success");
-                                          
-                                          // Save Finito status in background database response
-                                          void fetch("/api/client-control/tablet-submit", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({
-                                              isFinito: true,
-                                              bookingId: booking.id,
-                                              clientName: booking.customerName,
-                                              salon: device?.locationName,
-                                            }),
-                                          }).then(() => {
-                                            router.refresh();
-                                          }).catch((err) => {
-                                            console.error("Error saving Finito status:", err);
-                                          });
-                                        }}
-                                        className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm"
-                                      >
-                                        Finito
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D5E5FA] bg-[#EDF4FC] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#4E89E8]">
-                                      <span className="size-1.5 rounded-full bg-[#4E89E8]" />
-                                      In Preparazione
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                        {/* Action buttons (Apri + State Actions) */}
+                        <div className="flex items-center gap-2.5 flex-wrap md:flex-nowrap shrink-0 border-l border-black/[0.05] pl-4">
+                          {/* Apri popup button */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBookingForDetails(booking)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-black/70 hover:bg-[#fff2fa] hover:border-[#ff8bb2]/30 active:scale-95 transition shadow-sm h-9"
+                          >
+                            <ChevronRight className="size-4 text-[#ff8bb2]" />
+                            <span>Apri</span>
+                          </button>
+
+                          {/* Status badge or Action buttons */}
+                          {isArriving ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FCDCE2] bg-[#FFF0F2] px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-[#E88AC5] h-9">
+                              <span className="size-1.5 rounded-full bg-[#E88AC5] animate-pulse" />
+                              Sta Arrivando
+                            </span>
+                          ) : isPending ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FBEAD2] bg-[#FFF8EB] px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-[#F1A43A] h-9">
+                              <span className="size-1.5 rounded-full bg-[#F1A43A]" />
+                              In Arrivo
+                            </span>
+                          ) : isConfirmed ? (
+                            <div className="flex gap-2 items-center">
+                              <button
+                                type="button"
+                                onClick={() => void prefillFromBooking(booking)}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-[#D1F2D1] bg-[#EBF9EB] px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-[#2E7D32] hover:bg-[#D8F3D8] hover:border-[#BCE8BC] active:scale-95 transition shadow-sm h-9"
+                              >
+                                <span className="size-1.5 rounded-full bg-[#2E7D32]" />
+                                Crea appuntamento
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCompletedAppointments((prev) => {
+                                    const next = new Set(prev);
+                                    next.add(booking.id);
+                                    return next;
+                                  });
+                                  sound("success");
+                                  
+                                  // Save Finito status in background database response
+                                  void fetch("/api/client-control/tablet-submit", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      isFinito: true,
+                                      bookingId: booking.id,
+                                      clientName: booking.customerName,
+                                      salon: device?.locationName,
+                                    }),
+                                  }).then(() => {
+                                    router.refresh();
+                                  }).catch((err) => {
+                                    console.error("Error saving Finito status:", err);
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-9"
+                              >
+                                Finito
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D5E5FA] bg-[#EDF4FC] px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-[#4E89E8] h-9">
+                              <span className="size-1.5 rounded-full bg-[#4E89E8]" />
+                              In Preparazione
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="flex flex-col items-center justify-center py-6 text-center text-sm font-bold text-black/35 gap-2">
                     <CalendarDays className="size-8 text-black/20" />
