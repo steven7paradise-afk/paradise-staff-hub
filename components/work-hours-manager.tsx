@@ -251,6 +251,23 @@ export function WorkHoursManager({
         },
       };
     });
+
+    // Debounce save for text inputs
+    if (key === "hours" || key === "note") {
+      if (saveTimeoutRef.current[recordKey]) {
+        clearTimeout(saveTimeoutRef.current[recordKey]);
+      }
+      saveTimeoutRef.current[recordKey] = setTimeout(async () => {
+        const rec = recordsRef.current[recordKey];
+        if (rec) {
+          const updatedRec = {
+            ...rec,
+            hours: rec.hours === "" ? 0 : Number(rec.hours),
+          };
+          await saveDay(day, updatedRec);
+        }
+      }, 600);
+    }
   }
 
   async function saveDay(day: Date, updatedRecord?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
@@ -316,6 +333,19 @@ export function WorkHoursManager({
   };
 
   const lastFocusValue = useRef<string | number | null>(null);
+  const saveTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const recordsRef = useRef(records);
+
+  useEffect(() => {
+    recordsRef.current = records;
+  }, [records]);
+
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      Object.values(saveTimeoutRef.current).forEach(clearTimeout);
+    };
+  }, []);
 
   const handleInputFocus = (value: string | number) => {
     lastFocusValue.current = value;
@@ -323,6 +353,12 @@ export function WorkHoursManager({
 
   const handleInputBlur = async (day: Date, key: "hours" | "note", value: string) => {
     const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
+
+    if (saveTimeoutRef.current[recordKey]) {
+      clearTimeout(saveTimeoutRef.current[recordKey]);
+      delete saveTimeoutRef.current[recordKey];
+    }
+
     const rec = records[recordKey] ?? emptyRecord();
     const updatedValue = key === "hours" ? (value === "" ? 0 : Number(value)) : value;
 
