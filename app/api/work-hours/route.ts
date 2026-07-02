@@ -90,9 +90,11 @@ export async function GET(request: NextRequest) {
     let scheduledHours = 0;
     let plannedStart: string | null = null;
     let plannedEnd: string | null = null;
+    let categoryCode: string | null = null;
     if (schedule) {
       plannedStart = schedule.start_time ?? schedule.category.start_time;
       plannedEnd = schedule.end_time ?? schedule.category.end_time;
+      categoryCode = schedule.category.code;
       if (isWorkCategory(schedule.category)) {
         scheduledHours = schedule.category.paid_hours ?? categoryDuration(plannedStart, plannedEnd);
       }
@@ -109,6 +111,7 @@ export async function GET(request: NextRequest) {
       scheduledHours,
       plannedStart,
       plannedEnd,
+      categoryCode,
       ...clock,
     };
   });

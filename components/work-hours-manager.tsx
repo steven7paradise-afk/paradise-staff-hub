@@ -27,6 +27,7 @@ type WorkRecord = {
   scheduledHours: number;
   plannedStart: string | null;
   plannedEnd: string | null;
+  categoryCode: string | null;
 };
 
 const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
@@ -115,7 +116,7 @@ export function WorkHoursManager({
       return;
     }
     const map: Record<string, Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }> = {};
-    (data as (WorkRecord & { scheduledHours?: number; plannedStart?: string | null; plannedEnd?: string | null })[]).forEach((record) => {
+    (data as (WorkRecord & { scheduledHours?: number; plannedStart?: string | null; plannedEnd?: string | null; categoryCode?: string | null })[]).forEach((record) => {
       map[`${record.userId}-${record.date.slice(0, 10)}`] = {
         hours: record.hours,
         note: record.note,
@@ -129,6 +130,7 @@ export function WorkHoursManager({
         scheduledHours: record.scheduledHours ?? 0,
         plannedStart: record.plannedStart ?? null,
         plannedEnd: record.plannedEnd ?? null,
+        categoryCode: record.categoryCode ?? null,
       };
     });
     setRecords(map);
@@ -208,7 +210,7 @@ export function WorkHoursManager({
   }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
-    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null };
+    return { hours: 0, note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null };
   }
 
   function updateLocal(day: Date, key: "hours" | "note" | "paidBreak" | "manualOverride", value: string | boolean) {
@@ -272,6 +274,7 @@ export function WorkHoursManager({
         manualOverride: data.manualOverride,
         plannedStart: data.plannedStart ?? record.plannedStart,
         plannedEnd: data.plannedEnd ?? record.plannedEnd,
+        categoryCode: data.categoryCode ?? record.categoryCode,
       },
     }));
     setMessage("Ore aggiornate.");
@@ -753,17 +756,21 @@ export function WorkHoursManager({
         </div>
 
         <div className="hidden overflow-x-auto lg:block">
-          <table className="w-full min-w-[1040px] border-collapse text-sm">
+          <table className="w-full min-w-[1250px] border-collapse text-sm">
             <thead>
-              <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-black/5 dark:border-white/5 text-left">
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Giorno</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Timbratura</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Dovute</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Lavorate</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Pausa</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Correzione</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">Note</th>
-                <th className="px-5 py-4 font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50 text-right">Azione</th>
+              <tr className="bg-neutral-50 dark:bg-neutral-800/50 border-b border-black/5 dark:border-white/5 text-left font-bold text-xs uppercase tracking-wider text-black/50 dark:text-white/50">
+                <th className="px-3.5 py-4">Giorno</th>
+                <th className="px-3.5 py-4">Data</th>
+                <th className="px-3.5 py-4">Ingresso (Pianif.)</th>
+                <th className="px-3.5 py-4">Uscita (Pianif.)</th>
+                <th className="px-3.5 py-4">Pausa</th>
+                <th className="px-3.5 py-4">Entrata (Timbr.)</th>
+                <th className="px-3.5 py-4">Uscita (Timbr.)</th>
+                <th className="px-3.5 py-4">Permessi</th>
+                <th className="px-3.5 py-4">Totale Ore</th>
+                <th className="px-3.5 py-4">Controllo</th>
+                <th className="px-3.5 py-4">Note</th>
+                <th className="px-3.5 py-4 text-right">Stato</th>
               </tr>
             </thead>
             <tbody>
@@ -776,7 +783,7 @@ export function WorkHoursManager({
                   <tr key={`week-group-${weekIdx}`} className="contents">
                     {/* Week Header Row */}
                     <tr key={`week-header-${weekIdx}`} className="bg-gradient-to-r from-paradise-softPink/10 to-transparent border-t-2 border-b border-black/5 dark:border-white/5">
-                      <td colSpan={8} className="px-5 py-3">
+                      <td colSpan={12} className="px-5 py-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-black uppercase tracking-[0.16em] text-paradise-pink">Settimana {weekIdx + 1}</span>
@@ -784,10 +791,10 @@ export function WorkHoursManager({
                           </div>
                           <div className="flex items-center gap-4">
                             <span className="text-xs font-bold text-black/60 dark:text-white/70">
-                              Ore Lavorate: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".00", "")} h</strong>
+                              Ore Lavorate: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".", ",")} h</strong>
                             </span>
                             <span className="text-xs font-bold text-black/60 dark:text-white/70">
-                              Ore Dovute: <strong className="text-amber-600 dark:text-paradise-gold">{due.toFixed(2).replace(".00", "")} h</strong>
+                              Ore Dovute: <strong className="text-amber-600 dark:text-paradise-gold">{due.toFixed(2).replace(".", ",")} h</strong>
                             </span>
                           </div>
                         </div>
@@ -799,66 +806,104 @@ export function WorkHoursManager({
                       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
                       const record = records[recordKey] ?? emptyRecord();
                       const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+                      const computedHours = record.paidBreak ? record.grossHours : record.netHours;
+
+                      const dayName = new Intl.DateTimeFormat("it-IT", { weekday: "long" }).format(day);
+                      const capitalizedDayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+                      const dateStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(day);
+
                       return (
                         <tr key={recordKey} className={`border-b border-black/5 dark:border-white/5 transition-colors hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 ${isWeekend ? "bg-paradise-nude/10 dark:bg-neutral-800/10" : ""}`}>
-                          <td className="px-5 py-3.5">
-                            <span className="inline-flex items-center gap-2 font-semibold"><CalendarDays className="size-4 text-black/35 dark:text-white/35" /> {new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}</span>
+                          {/* 1. Giorno */}
+                          <td className="px-3.5 py-3.5">
+                            <span className="inline-flex items-center gap-2 font-semibold">
+                              <CalendarDays className="size-4 text-black/35 dark:text-white/35" />
+                              {capitalizedDayName}
+                            </span>
                           </td>
-                          <td className="px-5 py-3.5 text-xs text-black/55 dark:text-white/55">
-                            {record.firstEntry && record.lastExit ? `${record.firstEntry} - ${record.lastExit}` : "Nessuna timbratura"}
+                          {/* 2. DATA */}
+                          <td className="px-3.5 py-3.5 text-xs font-semibold text-black/75 dark:text-white/70">
+                            {dateStr}
                           </td>
-                          <td className="px-5 py-3.5 font-medium text-black/60 dark:text-white/60">
-                            {record.scheduledHours > 0 ? `${record.scheduledHours.toFixed(2).replace(".00", "")} h` : "-"}
+                          {/* 3. Ingresso (Pianif.) */}
+                          <td className="px-3.5 py-3.5 text-xs text-black/60 dark:text-white/60 font-semibold">
+                            {record.plannedStart ?? "-"}
                           </td>
-                          <td className="px-5 py-3.5">
-                            <input
-                              className="h-9 w-20 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3.5 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
-                              disabled={!record.manualOverride}
-                              type="number"
-                              min="0"
-                              max="24"
-                              step="0.01"
-                              value={record.hours}
-                              onChange={(event) => updateLocal(day, "hours", event.target.value)}
-                              onFocus={(event) => handleInputFocus(event.target.value)}
-                              onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
-                              onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-                            />
+                          {/* 4. Uscita (Pianif.) */}
+                          <td className="px-3.5 py-3.5 text-xs text-black/60 dark:text-white/60 font-semibold">
+                            {record.plannedEnd ?? "-"}
                           </td>
-                          <td className="px-5 py-3.5">
-                            <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
+                          {/* 5. Pausa */}
+                          <td className="px-3.5 py-3.5">
+                            <label className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
                               <input
                                 type="checkbox"
                                 className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
                                 checked={record.paidBreak}
                                 onChange={(event) => void handleCheckboxChange(day, "paidBreak", event.target.checked)}
                               />
-                              Pagata {record.breakHours ? `(${record.breakHours} h)` : ""}
+                              <span>Pagata {record.breakHours ? `(${record.breakHours.toFixed(2).replace(".00", "")} h)` : ""}</span>
                             </label>
                           </td>
-                          <td className="px-5 py-3.5">
-                            <label className="flex items-center gap-2 whitespace-nowrap text-xs font-semibold cursor-pointer text-black/70 dark:text-white/80">
+                          {/* 6. Entrata (Timbr.) */}
+                          <td className="px-3.5 py-3.5 text-xs font-semibold text-black/55 dark:text-white/55">
+                            {record.firstEntry ?? "-"}
+                          </td>
+                          {/* 7. Uscita (Timbr.) */}
+                          <td className="px-3.5 py-3.5 text-xs font-semibold text-black/55 dark:text-white/55">
+                            {record.lastExit ?? "-"}
+                          </td>
+                          {/* 8. Permessi */}
+                          <td className="px-3.5 py-3.5 text-xs font-bold text-amber-700 dark:text-paradise-gold">
+                            {record.categoryCode === "P" || record.categoryCode === "PE" ? "Permesso" :
+                             record.categoryCode === "FE" || record.categoryCode === "F" ? "Ferie" :
+                             record.categoryCode === "M" || record.categoryCode === "MA" ? "Malattia" : "-"}
+                          </td>
+                          {/* 9. Totale Ore */}
+                          <td className="px-3.5 py-3.5 font-bold text-black/65 dark:text-white/65">
+                            {computedHours > 0 ? `${computedHours.toFixed(2).replace(".", ",")} h` : "-"}
+                          </td>
+                          {/* 10. Controllo */}
+                          <td className="px-3.5 py-3.5">
+                            <div className="flex items-center gap-2">
                               <input
-                                type="checkbox"
-                                className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-4"
-                                checked={record.manualOverride}
-                                onChange={(event) => void handleCheckboxChange(day, "manualOverride", event.target.checked)}
+                                className="h-9 w-16 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-2 text-sm font-semibold outline-none focus:border-paradise-pink dark:text-white disabled:bg-black/[0.03] dark:disabled:bg-white/[0.03] disabled:text-black/50 dark:disabled:text-white/50"
+                                disabled={!record.manualOverride}
+                                type="number"
+                                min="0"
+                                max="24"
+                                step="0.01"
+                                value={record.hours}
+                                onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                                onFocus={(event) => handleInputFocus(event.target.value)}
+                                onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
+                                onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                               />
-                              Manuale
-                            </label>
+                              <label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider cursor-pointer text-black/50 dark:text-white/50">
+                                <input
+                                  type="checkbox"
+                                  className="rounded border-black/10 dark:border-white/10 text-paradise-pink focus:ring-paradise-pink size-3.5"
+                                  checked={record.manualOverride}
+                                  onChange={(event) => void handleCheckboxChange(day, "manualOverride", event.target.checked)}
+                                />
+                                <span>M</span>
+                              </label>
+                            </div>
                           </td>
-                          <td className="px-5 py-3.5">
+                          {/* 11. Note */}
+                          <td className="px-3.5 py-3.5">
                             <input
-                              className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
+                              className="h-9 w-full min-w-[130px] rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
                               value={record.note}
                               onChange={(event) => updateLocal(day, "note", event.target.value)}
                               onFocus={(event) => handleInputFocus(event.target.value)}
                               onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
                               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-                              placeholder="Riposo, festivo, malattia..."
+                              placeholder="Nota..."
                             />
                           </td>
-                          <td className="px-5 py-3.5 text-right">
+                          {/* 12. Stato */}
+                          <td className="px-3.5 py-3.5 text-right">
                             <div className="flex items-center justify-end h-9">
                               {savingKey === recordKey ? (
                                 <div className="flex items-center gap-1.5 text-xs font-semibold text-black/45 dark:text-white/40">
