@@ -518,15 +518,16 @@ export async function updateShopifyOrderMetafields(
 /**
  * Fetches recent Shopify orders (created in the last 24 hours) and returns sets of customer names and order names.
  */
-export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<string>; orderNames: Set<string> }> {
+export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<string>; orderNames: Set<string>; customerEmails: Set<string> }> {
   const customerNames = new Set<string>();
   const orderNames = new Set<string>();
+  const customerEmails = new Set<string>();
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
     const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
     if (!shop || !token) {
-      return { customerNames, orderNames };
+      return { customerNames, orderNames, customerEmails };
     }
 
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -555,6 +556,10 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
         if (cleanName) {
           customerNames.add(cleanName);
         }
+        const email = String(order.customer?.email || "").trim().toLowerCase();
+        if (email) {
+          customerEmails.add(email);
+        }
       }
     } else {
       console.error(`Failed to fetch recent Shopify orders: ${res.status}`);
@@ -562,7 +567,7 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
   } catch (error) {
     console.error("Error in getRecentShopifyOrders:", error);
   }
-  return { customerNames, orderNames };
+  return { customerNames, orderNames, customerEmails };
 }
 
 /**
@@ -644,6 +649,60 @@ export async function getShopifyOrderLineItems(orderName: string): Promise<strin
     console.error("Error fetching Shopify order line items:", error);
   }
   return [];
+}
+
+function getLevenshteinDistance(a: string, b: string): number {
+  const tmp = [];
+  for (let i = 0; i <= a.length; i++) {
+    tmp[i] = [i];
+  }
+  for (let j = 0; j <= b.length; j++) {
+    tmp[0][j] = j;
+  }
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      tmp[i][j] = a[i - 1] === b[j - 1] 
+        ? tmp[i - 1][j - 1] 
+        : Math.min(tmp[i - 1][j - 1] + 1, tmp[i][j - 1] + 1, tmp[i - 1][j] + 1);
+    }
+  }
+  return tmp[a.length][b.length];
+}
+
+export function isFuzzyNameMatch(name1: string, name2: string): boolean {
+  const n1 = name1.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "").trim();
+  const n2 = name2.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s]/g, "").trim();
+  
+  if (!n1 || !n2) return false;
+  if (n1 === n2 || n1.includes(n2) || n2.includes(n1)) return true;
+
+  const words1 = n1.split(/\s+/).filter(w => w.length > 1);
+  const words2 = n2.split(/\s+/).filter(w => w.length > 1);
+
+  if (words1.length === 0 || words2.length === 0) return false;
+
+  let matches = 0;
+  for (const w1 of words1) {
+    let found = false;
+    for (const w2 of words2) {
+      if (w1 === w2) {
+        found = true;
+        break;
+      }
+      const distance = getLevenshteinDistance(w1, w2);
+      const maxDist = Math.max(1, Math.min(2, Math.floor(w1.length / 3)));
+      if (distance <= maxDist) {
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      matches++;
+    }
+  }
+
+  const minRequired = Math.min(words1.length, words2.length);
+  return matches >= minRequired;
 }
 
 
