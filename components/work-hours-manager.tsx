@@ -142,8 +142,6 @@ export function WorkHoursManager({
   const stats = useMemo(() => {
     let worked = 0;
     let due = 0;
-    let missing = 0;
-    let overtime = 0;
 
     days.forEach((day) => {
       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
@@ -153,19 +151,10 @@ export function WorkHoursManager({
 
       worked += hours;
       due += scheduled;
-
-      if (scheduled > 0) {
-        if (hours > scheduled) {
-          overtime += (hours - scheduled);
-        } else {
-          missing += (scheduled - hours);
-        }
-      } else {
-        if (hours > 0) {
-          overtime += hours;
-        }
-      }
     });
+
+    const overtime = worked > due ? worked - due : 0;
+    const missing = due > worked ? due - worked : 0;
 
     return {
       worked,
