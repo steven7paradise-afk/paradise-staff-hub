@@ -1641,7 +1641,7 @@ export function TabletClock({
                                 }}
                                 className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-9"
                               >
-                                Finito
+                                Elimina
                               </button>
                               <button
                                 type="button"
@@ -2834,7 +2834,7 @@ export function TabletClock({
                                           }}
                                           className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-8"
                                         >
-                                          Finito
+                                          Elimina
                                         </button>
                                         <button
                                           type="button"
