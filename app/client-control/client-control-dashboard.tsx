@@ -819,6 +819,42 @@ export function ClientControlDashboard({
                 </div>
               </div>
 
+              {/* Comparison Section (Shopify Expected vs Declared) */}
+              <div className="bg-[#FAF6F9]/50 rounded-2xl p-4 border border-black/[0.03] space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40 font-bold">Confronto Pagamento (Shopify vs Dichiarato)</p>
+                <div className="grid gap-4 sm:grid-cols-2 text-sm">
+                  <div className="bg-white rounded-xl p-3 border border-black/5">
+                    <span className="text-black/40 block text-xs font-semibold">Dichiarato da Staff</span>
+                    <span className="text-lg font-black text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}</span>
+                  </div>
+                  <div className="bg-white rounded-xl p-3 border border-black/5">
+                    <span className="text-black/40 block text-xs font-semibold">Atteso su Shopify</span>
+                    <span className={cn(
+                      "text-lg font-black",
+                      viewingResponse.answers?.client_control_shopify_expected_paid !== undefined &&
+                      viewingResponse.answers?.client_control_shopify_expected_paid !== null &&
+                      parseFloat(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid] || "0") !== parseFloat(viewingResponse.answers?.client_control_shopify_expected_paid || "0")
+                        ? "text-red-600"
+                        : "text-emerald-600"
+                    )}>
+                      {viewingResponse.answers?.client_control_shopify_expected_paid !== undefined && viewingResponse.answers?.client_control_shopify_expected_paid !== null
+                        ? money(viewingResponse.answers.client_control_shopify_expected_paid) 
+                        : "Non disponibile"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shopify Order Note Section */}
+              {viewingResponse.answers?.client_control_shopify_order_note ? (
+                <div className="bg-blue-50/40 rounded-2xl p-4 border border-blue-100/60 space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-800 font-bold">Nota Ordine Shopify</p>
+                  <p className="text-sm font-semibold text-black/70 italic">
+                    "{viewingResponse.answers.client_control_shopify_order_note}"
+                  </p>
+                </div>
+              ) : null}
+
               {/* Notes Section */}
               {viewingResponse.answers?.client_control_notes_text || viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.notes] ? (
                 <div className="bg-amber-50/40 rounded-2xl p-4 border border-amber-100/60 space-y-2">

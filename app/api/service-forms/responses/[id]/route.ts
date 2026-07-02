@@ -86,7 +86,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           }
           if (details.totalPrice !== null) {
             answers[CLIENT_CONTROL_FIELD_IDS.paid] = details.totalPrice;
+            answers["client_control_shopify_expected_paid"] = details.totalPrice;
           }
+          answers["client_control_shopify_order_note"] = details.note || "";
         }
       }
       dataToUpdate.answers = answers; // JSON object of answers

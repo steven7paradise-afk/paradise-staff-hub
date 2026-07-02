@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
   let productsListStr = "";
   let shopifyClientName: string | null = null;
   let shopifyTotalPrice: number | null = null;
+  let shopifyOrderNote: string | null = null;
 
   if (shopifyOrder) {
     const { getShopifyOrderDetails } = await import("@/lib/shopify");
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
       }
       shopifyClientName = details.clientName;
       shopifyTotalPrice = details.totalPrice;
+      shopifyOrderNote = details.note;
     }
   }
 
@@ -151,6 +153,8 @@ export async function POST(request: NextRequest) {
     booking_id: textValue(body?.bookingId),
     client_control_created_from: isNoShow ? "Tablet Clock No Show" : "Tablet Clock Finito",
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
+    client_control_shopify_order_note: shopifyOrderNote || "",
+    client_control_shopify_expected_paid: shopifyTotalPrice,
   } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName,
@@ -172,6 +176,8 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.review]: boolValue(body?.review),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: "Controllato",
     client_control_created_from: "Tablet Clock",
+    client_control_shopify_order_note: shopifyOrderNote || "",
+    client_control_shopify_expected_paid: shopifyTotalPrice,
   };
 
   const response = await prisma.serviceFormResponse.create({

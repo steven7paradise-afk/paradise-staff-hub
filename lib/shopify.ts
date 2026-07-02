@@ -577,6 +577,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   clientName: string | null;
   totalPrice: number | null;
   lineItems: string[];
+  note: string | null;
 } | null> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -658,10 +659,13 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         ? orderData.line_items.map((item: any) => item.title) 
         : [];
 
+      const note = orderData.note || null;
+
       return {
         clientName,
         totalPrice,
-        lineItems
+        lineItems,
+        note
       };
     }
   } catch (error) {
