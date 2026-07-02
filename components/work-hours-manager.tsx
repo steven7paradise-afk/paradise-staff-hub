@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { CalendarDays, Download, RefreshCw, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award, Check } from "lucide-react";
 import { Badge, Button, Card, Field } from "@/components/ui";
 
@@ -303,12 +303,18 @@ export function WorkHoursManager({
     await saveDay(day, updatedRec);
   };
 
+  const lastFocusValue = useRef<string | number | null>(null);
+
+  const handleInputFocus = (value: string | number) => {
+    lastFocusValue.current = value;
+  };
+
   const handleInputBlur = async (day: Date, key: "hours" | "note", value: string) => {
     const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
     const rec = records[recordKey] ?? emptyRecord();
     const updatedValue = key === "hours" ? Number(value) : value;
 
-    if (rec[key] === updatedValue) return;
+    if (lastFocusValue.current === updatedValue) return;
 
     const updatedRec = {
       ...rec,
@@ -667,6 +673,7 @@ export function WorkHoursManager({
                             step="0.01"
                             value={record.hours}
                             onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                            onFocus={(event) => handleInputFocus(event.target.value)}
                             onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
                             onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                           />
@@ -702,6 +709,7 @@ export function WorkHoursManager({
                           className="mt-2 h-10 w-full rounded-xl border border-black/10 bg-white px-3 text-sm outline-none focus:border-paradise-pink"
                           value={record.note}
                           onChange={(event) => updateLocal(day, "note", event.target.value)}
+                          onFocus={(event) => handleInputFocus(event.target.value)}
                           onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
                           onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                           placeholder="Riposo, festivo, malattia..."
@@ -812,6 +820,7 @@ export function WorkHoursManager({
                               step="0.01"
                               value={record.hours}
                               onChange={(event) => updateLocal(day, "hours", event.target.value)}
+                              onFocus={(event) => handleInputFocus(event.target.value)}
                               onBlur={(event) => void handleInputBlur(day, "hours", event.target.value)}
                               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                             />
@@ -843,6 +852,7 @@ export function WorkHoursManager({
                               className="h-9 w-full rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-neutral-800 px-3 text-sm outline-none focus:border-paradise-pink dark:text-white"
                               value={record.note}
                               onChange={(event) => updateLocal(day, "note", event.target.value)}
+                              onFocus={(event) => handleInputFocus(event.target.value)}
                               onBlur={(event) => void handleInputBlur(day, "note", event.target.value)}
                               onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                               placeholder="Riposo, festivo, malattia..."
