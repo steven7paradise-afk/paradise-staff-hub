@@ -895,6 +895,14 @@ export function TabletClock({
     return () => window.clearInterval(timer);
   }, []);
 
+  // Refresh page data (bookings, etc.) every 10 minutes
+  useEffect(() => {
+    const refreshTimer = window.setInterval(() => {
+      router.refresh();
+    }, 10 * 60 * 1000);
+    return () => window.clearInterval(refreshTimer);
+  }, [router]);
+
   useEffect(() => {
     if (pin.length === 6 && device) void identifyPin(pin);
   }, [pin, device]);
