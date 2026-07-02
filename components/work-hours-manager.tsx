@@ -672,11 +672,15 @@ export function WorkHoursManager({
                 {weekDays.map((day) => {
                   const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
                   const record = records[recordKey] ?? emptyRecord();
-                  const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+                  const dayOfWeek = day.getUTCDay();
+                  const cardBgClass =
+                    dayOfWeek === 6 ? "border-amber-100/60 bg-amber-50/30 dark:border-amber-950/20 dark:bg-amber-950/5" :
+                    dayOfWeek === 0 ? "border-rose-100/60 bg-rose-50/30 dark:border-rose-950/20 dark:bg-rose-950/5" :
+                    "border-black/5 bg-white dark:bg-neutral-900";
                   return (
                     <div
                       key={`mobile-${recordKey}`}
-                      className={`rounded-[24px] border p-4 shadow-sm ${isWeekend ? "border-paradise-nude bg-paradise-nude/15" : "border-black/5 bg-white dark:bg-neutral-900"}`}
+                      className={`rounded-[24px] border p-4 shadow-sm ${cardBgClass}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -832,15 +836,20 @@ export function WorkHoursManager({
                     {weekDays.map((day) => {
                       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
                       const record = records[recordKey] ?? emptyRecord();
-                      const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+                      const dayOfWeek = day.getUTCDay();
                       const computedHours = record.paidBreak ? record.grossHours : record.netHours;
 
                       const dayName = new Intl.DateTimeFormat("it-IT", { weekday: "long" }).format(day);
                       const capitalizedDayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
                       const dateStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(day);
 
+                      const rowBgClass =
+                        dayOfWeek === 6 ? "bg-amber-50/30 dark:bg-amber-950/10 hover:bg-amber-100/30 dark:hover:bg-amber-900/15" :
+                        dayOfWeek === 0 ? "bg-rose-50/30 dark:bg-rose-950/10 hover:bg-rose-100/30 dark:hover:bg-rose-900/15" :
+                        "hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30";
+
                       return (
-                        <tr key={recordKey} className={`border-b border-black/5 dark:border-white/5 transition-colors hover:bg-neutral-50/50 dark:hover:bg-neutral-800/30 ${isWeekend ? "bg-paradise-nude/10 dark:bg-neutral-800/10" : ""}`}>
+                        <tr key={recordKey} className={`border-b border-black/5 dark:border-white/5 transition-colors ${rowBgClass}`}>
                           {/* 1. Giorno */}
                           <td className="px-3.5 py-3.5">
                             <span className="inline-flex items-center gap-2 font-semibold">
