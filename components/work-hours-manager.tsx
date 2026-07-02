@@ -378,126 +378,117 @@ export function WorkHoursManager({
     setMessage("");
     try {
       const { default: jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 12;
-      const rowHeight = 6;
-      const tableWidth = pageWidth - margin * 2;
-      const monthLabel = `${monthNames[month]} ${year}`;
+      const margin = 20;
+      const rowHeight = 7.5;
+      const tableWidth = pageWidth - margin * 2; // 170mm
+      const col1Width = 50;
+      const col2Width = 45;
+      const col3Width = 75;
 
       function drawHeader(worker: Worker, workerTotal: number) {
-        pdf.setFillColor(31, 31, 31);
-        pdf.rect(0, 0, pageWidth, 36, "F");
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(18);
-        pdf.text("PARADISE BEAUTY", margin, 15);
-        pdf.setFontSize(9);
-        pdf.setFont("helvetica", "normal");
-        pdf.text("Conteggio mensile ore staff", margin, 22);
-
-        pdf.setFillColor(255, 214, 234);
-        pdf.roundedRect(pageWidth - margin - 34, 9, 34, 16, 4, 4, "F");
         pdf.setTextColor(31, 31, 31);
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(15);
-        pdf.text(`${workerTotal.toFixed(2).replace(".", ",")} h`, pageWidth - margin - 29, 19);
+        pdf.setFontSize(13);
+        pdf.text(`Collaboratore: ${worker.name.toUpperCase()}`, margin, 18);
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9.5);
+        pdf.setTextColor(80, 80, 80);
+        pdf.text(`Mese: ${monthNames[month]} ${year}    |    Salone: ${worker.location}`, margin, 24);
+
+        pdf.text(`Totale ore lavorate approvate:`, margin, 30);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(219, 39, 119); // pink color
+        const totalStr = workerTotal % 1 === 0 ? workerTotal.toString() : workerTotal.toFixed(2).replace(".", ",");
+        pdf.text(`${totalStr} h`, margin + 50, 30);
 
         pdf.setTextColor(31, 31, 31);
-        pdf.setFontSize(15);
-        pdf.text(worker.name.toUpperCase(), margin, 46);
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(9);
-        pdf.setTextColor(110, 110, 110);
-        pdf.text(`${worker.email}  |  ${worker.location}  |  ${monthLabel}`, margin, 53);
-        pdf.text("Pausa non retribuita gia esclusa, salvo quando marcata come pagata.", margin, 59);
       }
 
       function drawTableHead(y: number) {
-        pdf.setFillColor(247, 233, 239);
-        pdf.rect(margin, y, tableWidth, rowHeight, "F");
-        pdf.setDrawColor(225, 213, 218);
-        pdf.rect(margin, y, tableWidth, rowHeight);
+        pdf.setFillColor(255, 214, 234); // soft pastel pink
+        pdf.rect(margin, y, tableWidth, 8.5, "F");
+        pdf.setDrawColor(219, 180, 199); // borders pink tone
+        pdf.rect(margin, y, tableWidth, 8.5);
+
         pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7.8);
+        pdf.setFontSize(9);
         pdf.setTextColor(31, 31, 31);
-        
-        pdf.text("Giorno", margin + 3, y + 4.2);
-        pdf.text("Data", margin + 23, y + 4.2);
-        pdf.text("Ingresso (Pianif.)", margin + 48, y + 4.2);
-        pdf.text("Uscita (Pianif.)", margin + 78, y + 4.2);
-        pdf.text("Entrata (Timbr.)", margin + 108, y + 4.2);
-        pdf.text("Uscita (Timbr.)", margin + 138, y + 4.2);
-        pdf.text("Totale Ore", margin + 168, y + 4.2);
-        pdf.text("Controllo", margin + 193, y + 4.2);
-        pdf.text("Note", margin + 218, y + 4.2);
+
+        pdf.text("Giorno", margin + 4, y + 5.5);
+        pdf.text("Ore lavorate", margin + col1Width + 4, y + 5.5);
+        pdf.text("Note", margin + col1Width + col2Width + 4, y + 5.5);
       }
 
       pdfWorkers.forEach((worker, workerIndex) => {
         if (workerIndex > 0) pdf.addPage();
         const workerTotal = days.reduce((total, day) => total + (Number(records[`${worker.id}-${dateKey(day)}`]?.hours) || 0), 0);
         drawHeader(worker, workerTotal);
-        let y = 66;
+
+        const tableTop = 38;
+        let y = tableTop;
         drawTableHead(y);
-        y += rowHeight;
+        y += 8.5;
 
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(7.5);
+        pdf.setFontSize(8.5);
+
         days.forEach((day) => {
           const record = records[`${worker.id}-${dateKey(day)}`] ?? emptyRecord();
-          if (y > pageHeight - 18) {
-            pdf.addPage();
-            y = 16;
-            drawTableHead(y);
-            y += rowHeight;
-            pdf.setFont("helvetica", "normal");
-            pdf.setFontSize(7.5);
+          const dayOfWeek = day.getUTCDay();
+
+          let fillR = 255;
+          let fillG = 255;
+          let fillB = 255;
+
+          if (dayOfWeek === 6) {
+            // Saturday: soft amber pastel
+            fillR = 254;
+            fillG = 243;
+            fillB = 199;
+          } else if (dayOfWeek === 0) {
+            // Sunday: soft rose pastel
+            fillR = 255;
+            fillG = 228;
+            fillB = 230;
           }
-          const rowFill = day.getUTCDay() === 0 || day.getUTCDay() === 6 ? 252 : 255;
-          pdf.setFillColor(rowFill, rowFill, rowFill);
+
+          pdf.setFillColor(fillR, fillG, fillB);
           pdf.rect(margin, y, tableWidth, rowHeight, "F");
-          pdf.setDrawColor(232, 224, 228);
-          pdf.rect(margin, y, tableWidth, rowHeight);
+
+          pdf.setDrawColor(220, 220, 220);
+          pdf.line(margin, y + rowHeight, margin + tableWidth, y + rowHeight);
+
           pdf.setTextColor(31, 31, 31);
-
-          // 1. Giorno
-          const dayName = new Intl.DateTimeFormat("it-IT", { weekday: "long" }).format(day);
-          const capitalizedDayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-          pdf.text(capitalizedDayName, margin + 3, y + 4.2);
-
-          // 2. Data
-          const dateStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(day);
-          pdf.text(dateStr, margin + 23, y + 4.2);
-
-          // 3. Ingresso (planned start)
-          pdf.text(record.plannedStart ?? "-", margin + 48, y + 4.2);
-
-          // 4. Uscita (planned end)
-          pdf.text(record.plannedEnd ?? "-", margin + 78, y + 4.2);
-
-          // 5. Entrata (actual entry)
-          pdf.text(record.firstEntry ?? "-", margin + 108, y + 4.2);
-
-          // 6. Uscita (actual exit)
-          pdf.text(record.lastExit ?? "-", margin + 138, y + 4.2);
-
-          // 7. Totale Ore (calculated net clocked hours)
-          const computedHours = record.paidBreak ? record.grossHours : record.netHours;
-          pdf.text(computedHours > 0 ? computedHours.toFixed(2).replace(".", ",") : "-", margin + 168, y + 4.2);
-
-          // 8. Controllo (actual approved/corrected hours)
-          pdf.setFont("helvetica", "bold");
-          const ctrlHours = Number(record.hours) || 0;
-          pdf.text(ctrlHours > 0 ? ctrlHours.toFixed(2).replace(".", ",") : "0,00", margin + 193, y + 4.2);
           pdf.setFont("helvetica", "normal");
 
-          // 9. Note
-          const noteLines = pdf.splitTextToSize(record.note || "", 52);
-          pdf.text(noteLines[0] ?? "", margin + 218, y + 4.2);
+          // Col 1: Date formatted as DD/MM/YYYY
+          const dateStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(day);
+          pdf.text(dateStr, margin + 4, y + 5);
+
+          // Col 2: Ore lavorate (Number formatted with comma, or 0)
+          const hoursVal = Number(record.hours) || 0;
+          const hoursStr = hoursVal % 1 === 0 ? hoursVal.toString() : hoursVal.toFixed(2).replace(".", ",");
+          pdf.text(hoursStr, margin + col1Width + 4, y + 5);
+
+          // Col 3: Note (uppercase)
+          const noteStr = (record.note || "").toUpperCase();
+          pdf.text(noteStr, margin + col1Width + col2Width + 4, y + 5);
 
           y += rowHeight;
         });
+
+        // Draw vertical table separator lines
+        const totalTableHeight = 8.5 + days.length * rowHeight;
+        pdf.setDrawColor(200, 200, 200);
+        pdf.line(margin, tableTop, margin, tableTop + totalTableHeight);
+        pdf.line(margin + tableWidth, tableTop, margin + tableWidth, tableTop + totalTableHeight);
+        pdf.line(margin + col1Width, tableTop, margin + col1Width, tableTop + totalTableHeight);
+        pdf.line(margin + col1Width + col2Width, tableTop, margin + col1Width + col2Width, tableTop + totalTableHeight);
       });
 
       pdf.save(filename);
