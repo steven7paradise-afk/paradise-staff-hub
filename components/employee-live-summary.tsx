@@ -138,13 +138,13 @@ export function EmployeeLiveSummary({
 
   return (
     <div className="grid gap-3 grid-cols-1 md:grid-cols-[1.5fr_1fr]">
-      <InstantLink className="rounded-[24px]" href="/my-shifts" activeClassName="">
+      <InstantLink className="rounded-[32px] block" href="/my-shifts" activeClassName="">
         <Card className={`h-full p-5 sm:p-6 transition-all duration-500 ${
           clock.isWorking 
             ? "border-emerald-300 dark:border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.12)] animate-pulse-green bg-emerald-50/5 dark:bg-emerald-950/5" 
             : clock.isPaused 
               ? "border-amber-300 dark:border-amber-500/40 shadow-[0_0_20px_rgba(245,158,11,0.12)] animate-pulse-gold bg-amber-50/5 dark:bg-amber-950/5" 
-              : "hover:border-black/10 dark:hover:border-white/20"
+              : "border-white/40 bg-white/50 dark:bg-white/5 dark:border-white/10"
         }`}>
           <div className="flex items-start justify-between gap-2">
             <CalendarDays className={`size-6 transition-transform duration-500 ${clock.isWorking ? "text-emerald-500 scale-105" : clock.isPaused ? "text-amber-500" : "text-[#B85B68]"}`} />
@@ -185,12 +185,12 @@ export function EmployeeLiveSummary({
 
 function CompactLiveStatus({ icon: Icon, label, value, hint, href, className = "", active = false, danger = false }: { icon: LucideIcon; label: string; value: string; hint: string; href?: string; className?: string; active?: boolean; danger?: boolean }) {
   const content = (
-    <div className={`flex h-full items-center gap-4 rounded-[20px] border px-4 py-3.5 transition-all duration-300 ${
+    <div className={`flex h-full items-center gap-4 rounded-[24px] border px-4 py-3.5 transition-all duration-300 ${
       danger 
         ? "border-red-300 bg-red-50/70 shadow-[0_0_15px_rgba(239,68,68,0.15)] animate-pulse-danger dark:border-red-900/60 dark:bg-red-950/15" 
         : active 
           ? "border-amber-300 bg-amber-50/70 shadow-[0_0_15px_rgba(245,158,11,0.1)] dark:border-amber-900/60 dark:bg-amber-950/15" 
-          : "border-black/5 bg-white/95 dark:border-white/10 dark:bg-[color:var(--card)]/80 hover:border-black/10 dark:hover:border-white/20 hover:shadow-sm"
+          : "border-white/40 bg-white/50 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-white/5 hover:border-white/80 hover:bg-white/80"
     }`}>
       <div className={`grid size-10 shrink-0 place-items-center rounded-xl transition-transform duration-300 ${
         danger 

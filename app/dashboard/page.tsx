@@ -535,8 +535,8 @@ export default async function DashboardPage() {
             <Card>
               <PanelHeader title="Il mio turno di oggi" href="/my-shifts" icon={CalendarDays} />
               {todayShift ? (
-                <div className="mt-4 flex gap-4 rounded-2xl border border-black/5 bg-paradise-nude dark:bg-white/5 p-4 transition-all duration-300 hover:scale-[1.01]">
-                  <div className="min-w-14 rounded-xl bg-white dark:bg-white/10 p-2 text-center shadow-sm">
+                <div className="mt-4 flex gap-4 rounded-2xl border border-white/40 bg-white/50 backdrop-blur-md dark:bg-white/5 p-4 shadow-sm transition-all duration-300 hover:scale-[1.01] hover:bg-white/70">
+                  <div className="min-w-14 rounded-xl bg-white/80 dark:bg-white/10 p-2 text-center shadow-sm">
                     <p className="text-xs font-bold uppercase text-black/45 dark:text-white/40">{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(todayShift.date)}</p>
                     <p className="text-2xl font-semibold">{todayShift.date.getDate()}</p>
                   </div>
@@ -555,8 +555,8 @@ export default async function DashboardPage() {
             <Card>
               <PanelHeader title="Il mio prossimo turno" href="/my-shifts" icon={CalendarDays} />
               {nextShift ? (
-                <div className="mt-4 flex gap-4 rounded-2xl border border-black/5 bg-paradise-nude dark:bg-white/5 p-4 transition-all duration-300 hover:scale-[1.01]">
-                  <div className="min-w-14 rounded-xl bg-white dark:bg-white/10 p-2 text-center shadow-sm">
+                <div className="mt-4 flex gap-4 rounded-2xl border border-white/40 bg-white/50 backdrop-blur-md dark:bg-white/5 p-4 shadow-sm transition-all duration-300 hover:scale-[1.01] hover:bg-white/70">
+                  <div className="min-w-14 rounded-xl bg-white/80 dark:bg-white/10 p-2 text-center shadow-sm">
                     <p className="text-xs font-bold uppercase text-black/45 dark:text-white/40">{new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(nextShift.date)}</p>
                     <p className="text-2xl font-semibold">{nextShift.date.getDate()}</p>
                   </div>
@@ -608,7 +608,7 @@ export default async function DashboardPage() {
                       "flex flex-col justify-between rounded-2xl border p-3.5 transition-all duration-300",
                       isToday 
                         ? "border-[#e8b1bf] bg-paradise-softPink/10 dark:bg-white/10 shadow-sm"
-                        : "border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-black/10 dark:hover:border-white/20"
+                        : "border-white/40 bg-white/50 backdrop-blur-sm dark:bg-white/5 dark:border-white/10 hover:border-white/80 hover:bg-white/70 hover:shadow-sm"
                     )}
                   >
                     <div>
@@ -690,7 +690,7 @@ export default async function DashboardPage() {
                         "flex items-center gap-3 rounded-2xl border p-3.5 transition-all duration-300",
                         entry.user_id === currentUser.id 
                           ? "border-[#e8b1bf] bg-paradise-softPink/10 dark:bg-white/10 shadow-sm"
-                          : "border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-black/10 dark:hover:border-white/20",
+                          : "border-white/40 bg-white/50 backdrop-blur-sm dark:bg-white/5 dark:border-white/10 hover:border-white/80 hover:bg-white/70 hover:shadow-sm",
                         !hasShift && "opacity-60"
                       )}
                     >
@@ -737,7 +737,7 @@ export default async function DashboardPage() {
 
       {role === "RESPONSABILE" ? (
         <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr] animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
-          <Card className="border-l-4 border-l-paradise-pink">
+          <Card className="border-none relative overflow-hidden">
             <div className="mb-4 flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
               <div className="flex items-center gap-2">
                 <Users className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
@@ -747,14 +747,14 @@ export default async function DashboardPage() {
             </div>
             <LiveTeamStatus initialWorkers={liveTeamWorkers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", breakDurationMinutes: parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes, lastLog: worker.attendance_logs[0] ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() } : null }))} />
           </Card>
-          <Card className="border-l-4 border-l-[#A370F4]">
+          <Card className="border-none relative overflow-hidden">
             <div className="mb-4 flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3">
               <ShieldCheck className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
               <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Assenze e malattie attive</h2>
             </div>
             <AbsenceList absences={activeAbsences} />
           </Card>
-          <Card className="xl:col-span-2 border-l-4 border-l-amber-500">
+          <Card className="xl:col-span-2 border-none relative overflow-hidden">
             <div className="mb-4 flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3">
               <FileText className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
               <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Contratti da controllare</h2>
@@ -766,7 +766,7 @@ export default async function DashboardPage() {
 
       {role === "ADMIN" || role === "SUPER_ADMIN" ? (
         <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr] animate-fade-in-up [animation-delay:100ms] opacity-0" style={{ animationFillMode: "forwards" }}>
-          <Card className="p-0 overflow-hidden border-l-4 border-l-paradise-pink">
+          <Card className="p-0 overflow-hidden border-none relative">
             <div className="p-5 border-b border-black/5 dark:border-white/5 flex items-center justify-between bg-black/5 dark:bg-white/5">
               <div className="flex items-center gap-2">
                 <Building2 className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
@@ -790,14 +790,14 @@ export default async function DashboardPage() {
               ))}
             </div>
           </Card>
-          <Card className="border-l-4 border-l-amber-500">
+          <Card className="border-none relative overflow-hidden">
             <div className="mb-4 flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3">
               <FileText className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
               <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Contratti in scadenza</h2>
             </div>
             <ContractList users={contractDeadlines} />
           </Card>
-          <Card className="xl:col-span-2 border-l-4 border-l-emerald-500">
+          <Card className="xl:col-span-2 border-none relative overflow-hidden">
             <div className="mb-4 flex items-center justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-3">
               <div className="flex items-center gap-2">
                 <Users className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
@@ -812,7 +812,7 @@ export default async function DashboardPage() {
 
       {role !== "DIPENDENTE" ? (
         <section className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr] animate-fade-in-up [animation-delay:200ms] opacity-0" style={{ animationFillMode: "forwards" }}>
-          <Card className="border-l-4 border-l-paradise-pink">
+          <Card className="border-none relative overflow-hidden">
             <div className="mb-5 flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
               <div className="flex items-center gap-2">
                 <Clock3 className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
@@ -825,7 +825,7 @@ export default async function DashboardPage() {
               initialLogs={recentAttendance.map((log) => ({ id: log.id, employee: log.user.name, location: log.location.name, device: log.device.device_name, type: log.type, time: log.time, timestamp: log.timestamp.toISOString() }))}
             />
           </Card>
-          <Card className="border-l-4 border-l-emerald-500">
+          <Card className="border-none relative overflow-hidden">
             <div className="mb-5 flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3">
               <ShieldCheck className="size-4.5 text-[#B85B68] dark:text-paradise-pink" />
               <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">{requestsTitle}</h2>
@@ -970,7 +970,7 @@ function TodayClockList({ logs }: { logs: Array<{ type: AttendanceType; timestam
     return <EmptyText text="Nessuna timbratura registrata oggi." />;
   }
   return (
-    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-black/5 dark:border-white/10 bg-white/45 dark:bg-white/5 overflow-hidden">
+    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-white/40 bg-white/50 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-white/5 overflow-hidden">
       {logs.map((log, index) => (
         <div 
           key={`${log.type}-${log.timestamp.toISOString()}-${index}`} 
@@ -1177,7 +1177,7 @@ function QuickActionsPanel({ role }: { role: Role }) {
   }
 
   return (
-    <Card className="border-l-4 border-l-paradise-pink p-5 md:p-6 mb-6">
+    <Card className="border-none relative overflow-hidden p-5 md:p-6 mb-6">
       <div className="flex items-center gap-2 mb-4 border-b border-black/5 dark:border-white/5 pb-3">
         <Activity className="size-5 text-[#B85B68] dark:text-paradise-pink animate-pulse" />
         <div>
@@ -1192,7 +1192,7 @@ function QuickActionsPanel({ role }: { role: Role }) {
             <Link 
               key={act.label} 
               href={act.href} 
-              className="flex flex-col p-4 rounded-xl border border-black/5 bg-white/50 dark:bg-white/5 dark:border-white/10 hover:border-paradise-pink/40 hover:bg-paradise-nude dark:hover:bg-white/10 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-sm"
+              className="flex flex-col p-4 rounded-[20px] border border-white/50 bg-white/60 backdrop-blur-sm shadow-sm dark:bg-white/5 dark:border-white/10 hover:border-white/80 hover:bg-white/90 hover:shadow-md transition-all duration-300 group hover:-translate-y-1"
             >
               <div className="grid size-9 place-items-center rounded-lg bg-paradise-softPink dark:bg-white/10 text-[#B85B68] dark:text-paradise-pink group-hover:scale-105 transition-transform duration-300">
                 <Icon className="size-5" />
@@ -1212,7 +1212,7 @@ function RequestList({ role, requests }: { role: Role; requests: RequestWithUser
     return <p className="text-sm text-black/50 dark:text-white/45 p-4">Nessuna richiesta presente.</p>;
   }
   return (
-    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-black/5 dark:border-white/10 bg-white/45 dark:bg-white/5 overflow-hidden">
+    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-white/40 bg-white/50 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-white/5 overflow-hidden">
       {requests.map((request) => (
         <div 
           key={request.id} 
@@ -1237,7 +1237,7 @@ function AbsenceList({ absences }: { absences: RequestWithUser[] }) {
     return <p className="text-sm text-black/50 dark:text-white/45 p-4">Nessuna assenza attiva oggi.</p>;
   }
   return (
-    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-black/5 dark:border-white/10 bg-white/45 dark:bg-white/5 overflow-hidden">
+    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-white/40 bg-white/50 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-white/5 overflow-hidden">
       {absences.map((absence) => (
         <div 
           key={absence.id} 
@@ -1259,7 +1259,7 @@ function ContractList({ users }: { users: UserWithLocation[] }) {
     return <p className="text-sm text-black/50 dark:text-white/45 p-4">Nessuna scadenza contratto impostata.</p>;
   }
   return (
-    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-black/5 dark:border-white/10 bg-white/45 dark:bg-white/5 overflow-hidden">
+    <div className="divide-y divide-black/5 dark:divide-white/5 rounded-2xl border border-white/40 bg-white/50 backdrop-blur-md shadow-sm dark:border-white/10 dark:bg-white/5 overflow-hidden">
       {users.map((user) => {
         const days = daysUntil(user.contract_end);
         return (
