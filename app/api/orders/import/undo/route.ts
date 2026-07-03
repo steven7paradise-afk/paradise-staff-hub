@@ -42,14 +42,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, count: 0, message: "Nessun ordine importato trovato da eliminare." });
     }
 
-    // Find the latest update timestamp among imported orders
-    const latestImportTime = new Date(importedResponses[0].updated_at).getTime();
+    // Find the latest import log timestamp
+    let latestLogTime = 0;
+    for (const res of importedResponses) {
+      const log = Array.isArray(res.activity_log) ? res.activity_log : [];
+      const importLog = log.find((l: any) => l.note === "Ordine importato da CSV" || l.action === "Ordine importato da CSV");
+      if (importLog) {
+        const logTime = new Date(importLog.at || importLog.date || res.updated_at).getTime();
+        if (logTime > latestLogTime) {
+          latestLogTime = logTime;
+        }
+      }
+    }
 
-    // Group orders imported around the same time (within a 10-minute window of the latest import)
+    if (latestLogTime === 0) {
+      return NextResponse.json({ success: true, count: 0, message: "Nessun ordine importato trovato da eliminare." });
+    }
+
+    // Group orders imported around the same time (within a 10-minute window of the latest import log)
     const tenMinutes = 10 * 60 * 1000;
     const targetsToDelete = importedResponses.filter((res) => {
-      const resTime = new Date(res.updated_at).getTime();
-      return Math.abs(latestImportTime - resTime) < tenMinutes;
+      const log = Array.isArray(res.activity_log) ? res.activity_log : [];
+      const importLog = log.find((l: any) => l.note === "Ordine importato da CSV" || l.action === "Ordine importato da CSV");
+      if (importLog) {
+        const logTime = new Date(importLog.at || importLog.date || res.updated_at).getTime();
+        return Math.abs(latestLogTime - logTime) < tenMinutes;
+      }
+      return false;
     });
 
     // Delete them

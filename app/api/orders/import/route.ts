@@ -119,28 +119,24 @@ export async function POST(req: Request) {
 
         const answers: Record<string, any> = {};
 
-        // Find standard title/notes fallbacks if present
         const titleField = (orderForm.fields as any[]).find((f) => f.id === "order_title" || normalizeKey(f.label) === "nomeordine")?.id;
         const itemsField = (orderForm.fields as any[]).find((f) => f.id === "order_items" || normalizeKey(f.label) === "cosardinare")?.id;
         const supplierField = (orderForm.fields as any[]).find((f) => f.id === "order_supplier" || normalizeKey(f.label) === "fornitorelinkacquisto")?.id;
         const priorityField = (orderForm.fields as any[]).find((f) => f.id === "order_priority" || normalizeKey(f.label) === "priorita")?.id;
 
-        if (titleField) {
-          answers[titleField] = `Ordine per: ${order.clientName}`;
-        }
-        if (itemsField) {
-          answers[itemsField] = notes;
-        }
-        if (supplierField) {
-          answers[supplierField] = "Importato da CSV";
-        }
-        if (priorityField) {
-          answers[priorityField] = "Normale";
-        }
+        const titleFieldId = titleField || "order_title";
+        const itemsFieldId = itemsField || "order_items";
+        const supplierFieldId = supplierField || "order_supplier";
+        const priorityFieldId = priorityField || "order_priority";
+
+        answers[titleFieldId] = `Ordine per: ${order.clientName}`;
+        answers[itemsFieldId] = notes;
+        answers[supplierFieldId] = "Importato da CSV";
+        answers[priorityFieldId] = "Normale";
 
         // Map CSV fields to form fields dynamically
         for (const field of (orderForm.fields as any[])) {
-          if (field.id === titleField || field.id === itemsField || field.id === supplierField || field.id === priorityField) {
+          if (field.id === titleFieldId || field.id === itemsFieldId || field.id === supplierFieldId || field.id === priorityFieldId) {
             continue;
           }
 
@@ -239,7 +235,7 @@ export async function POST(req: Request) {
                 to: order.status || "NEW",
                 note: "Ordine importato da CSV",
                 by: session.user.name ?? "Utente sconosciuto",
-                at: targetDate.toISOString(),
+                at: new Date().toISOString(),
               },
             ],
           },
