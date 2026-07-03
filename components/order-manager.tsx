@@ -278,7 +278,7 @@ export function OrderManager({
 
             return { 
               clientName, 
-              notes,
+              rows: clientRows,
               status: finalStatus,
               createdAt: finalDate.toISOString()
             };

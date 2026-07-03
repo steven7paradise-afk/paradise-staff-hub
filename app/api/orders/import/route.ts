@@ -3,7 +3,65 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ensureOrderForm } from "@/lib/order-form";
 
-export const dynamic = "force-dynamic";
+function parseCustomDate(dateStr: string): Date {
+  if (!dateStr) return new Date();
+  const clean = dateStr.toLowerCase().replace(/\s+/g, " ").trim();
+  const parsed = Date.parse(clean);
+  if (!isNaN(parsed)) return new Date(parsed);
+
+  const normalized = clean.replace(/\b(de|di)\b/g, " ");
+  const parts = normalized.split(" ").filter(Boolean);
+  if (parts.length >= 3) {
+    const day = parseInt(parts[0], 10);
+    const monthStr = parts[1];
+    const year = parseInt(parts[2], 10);
+    
+    let hour = 12;
+    let min = 0;
+    if (parts[3] && parts[3].includes(":")) {
+      const timeParts = parts[3].split(":");
+      hour = parseInt(timeParts[0], 10) || 12;
+      min = parseInt(timeParts[1], 10) || 0;
+    }
+    
+    const months: Record<string, number> = {
+      gen: 0, gennaio: 0, ene: 0, enero: 0, jan: 0, january: 0,
+      feb: 1, febbraio: 1, febr: 1, febrero: 1, february: 1,
+      mar: 2, marzo: 2, march: 2,
+      apr: 3, aprile: 3, abr: 3, abril: 3, april: 3,
+      mag: 4, maggio: 4, may: 4, mayo: 4,
+      giu: 5, giugno: 5, jun: 5, junio: 5, june: 5,
+      lug: 6, luglio: 6, jul: 6, julio: 6, july: 6,
+      ago: 7, agosto: 7, aug: 7, august: 7,
+      set: 8, settembre: 8, sep: 8, sept: 8, septiembre: 8, september: 8,
+      ott: 9, ottobre: 9, oct: 9, ottobre: 9, october: 9,
+      nov: 10, novembre: 10, noviembre: 10, november: 10,
+      dic: 11, dicembre: 11, dicembre: 11, december: 11
+    };
+    
+    let monthIdx = -1;
+    for (const [key, idx] of Object.entries(months)) {
+      if (monthStr.startsWith(key) || key.startsWith(monthStr)) {
+        monthIdx = idx;
+        break;
+      }
+    }
+    
+    if (monthIdx !== -1 && !isNaN(day) && !isNaN(year)) {
+      return new Date(year, monthIdx, day, hour, min);
+    }
+  }
+  
+  return new Date();
+}
+
+function normalizeKey(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
 
 export async function POST(req: Request) {
   try {
@@ -28,7 +86,7 @@ export async function POST(req: Request) {
     const { orders } = data as { 
       orders: { 
         clientName: string; 
-        notes: string;
+        rows: Record<string, string>[];
         status?: string;
         createdAt?: string;
       }[] 
@@ -50,17 +108,76 @@ export async function POST(req: Request) {
 
     const responses = await Promise.all(
       orders.map(async (order) => {
-        const titleField = (orderForm.fields as any[]).find((f) => f.id === "order_title")?.id || "order_title";
-        const itemsField = (orderForm.fields as any[]).find((f) => f.id === "order_items")?.id || "order_items";
-        const supplierField = (orderForm.fields as any[]).find((f) => f.id === "order_supplier")?.id || "order_supplier";
-        const priorityField = (orderForm.fields as any[]).find((f) => f.id === "order_priority")?.id || "order_priority";
+        // Construct the multiline details description
+        const notes = order.rows.map((r, index) => {
+          const details = Object.entries(r)
+            .filter(([k, v]) => typeof v === "string" && v.trim() !== "")
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("\n");
+          return `--- RIGA ${index + 1} ---\n${details}`;
+        }).join("\n\n");
 
-        const answers = {
-          [titleField]: `Ordine per: ${order.clientName}`,
-          [itemsField]: order.notes,
-          [supplierField]: "Importato da CSV",
-          [priorityField]: "Normale",
-        };
+        const answers: Record<string, any> = {};
+
+        // Find standard title/notes fallbacks if present
+        const titleField = (orderForm.fields as any[]).find((f) => f.id === "order_title" || normalizeKey(f.label) === "nomeordine")?.id;
+        const itemsField = (orderForm.fields as any[]).find((f) => f.id === "order_items" || normalizeKey(f.label) === "cosardinare")?.id;
+        const supplierField = (orderForm.fields as any[]).find((f) => f.id === "order_supplier" || normalizeKey(f.label) === "fornitorelinkacquisto")?.id;
+        const priorityField = (orderForm.fields as any[]).find((f) => f.id === "order_priority" || normalizeKey(f.label) === "priorita")?.id;
+
+        if (titleField) {
+          answers[titleField] = `Ordine per: ${order.clientName}`;
+        }
+        if (itemsField) {
+          answers[itemsField] = notes;
+        }
+        if (supplierField) {
+          answers[supplierField] = "Importato da CSV";
+        }
+        if (priorityField) {
+          answers[priorityField] = "Normale";
+        }
+
+        // Map CSV fields to form fields dynamically
+        for (const field of (orderForm.fields as any[])) {
+          if (field.id === titleField || field.id === itemsField || field.id === supplierField || field.id === priorityField) {
+            continue;
+          }
+
+          const normLabel = normalizeKey(field.label);
+          const firstRow = order.rows[0];
+          if (!firstRow) continue;
+
+          // Search for a matching CSV column header
+          const csvKey = Object.keys(firstRow).find((k) => {
+            const normK = normalizeKey(k);
+            if (!normK || !normLabel) return false;
+            return normK.includes(normLabel) || normLabel.includes(normK);
+          });
+
+          if (csvKey) {
+            const values = order.rows
+              .map((r) => String(r[csvKey] || "").trim())
+              .filter(Boolean);
+            const uniqueValues = Array.from(new Set(values));
+
+            if (uniqueValues.length > 0) {
+              if (field.type === "select") {
+                const val = uniqueValues[0];
+                const matchedOption = (field.options as string[] || []).find((o) => 
+                  normalizeKey(o).includes(normalizeKey(val)) || 
+                  normalizeKey(val).includes(normalizeKey(o))
+                );
+                answers[field.id] = matchedOption || val;
+              } else if (field.type === "date") {
+                const dateVal = parseCustomDate(uniqueValues[0]);
+                answers[field.id] = dateVal.toISOString().split("T")[0];
+              } else {
+                answers[field.id] = uniqueValues.join(" / ");
+              }
+            }
+          }
+        }
 
         const targetDate = order.createdAt ? new Date(order.createdAt) : new Date();
 
