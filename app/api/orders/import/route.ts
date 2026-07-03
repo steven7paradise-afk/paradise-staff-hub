@@ -144,16 +144,52 @@ export async function POST(req: Request) {
             continue;
           }
 
+          // Hardcode Nome cognome since it is filtered out from raw rows
+          if (field.id === "field_1782212649889") {
+            answers[field.id] = order.clientName;
+            continue;
+          }
+
           const normLabel = normalizeKey(field.label);
           const firstRow = order.rows[0];
           if (!firstRow) continue;
 
-          // Search for a matching CSV column header
-          const csvKey = Object.keys(firstRow).find((k) => {
+          // Define aliases for matching common synonyms
+          const aliases: Record<string, string[]> = {
+            "field_1782212680362": ["email", "mail", "email address"],
+            "field_1782212690129": ["telefono", "cellulare", "phone"],
+            "field_1782212712780": ["disponibilita", "sono::"],
+            "field_1782221517924": ["ordine shopify", "numero ordine shopify", "shopify"]
+          };
+
+          const fieldAliases = aliases[field.id] || [];
+
+          // 1. Exact match pass
+          let csvKey = Object.keys(firstRow).find((k) => {
             const normK = normalizeKey(k);
             if (!normK || !normLabel) return false;
-            return normK.includes(normLabel) || normLabel.includes(normK);
+            
+            const exactMatch = normK === normLabel;
+            if (exactMatch) return true;
+            
+            return fieldAliases.some(alias => normalizeKey(alias) === normK);
           });
+
+          // 2. Fuzzy match pass
+          if (!csvKey) {
+            csvKey = Object.keys(firstRow).find((k) => {
+              const normK = normalizeKey(k);
+              if (!normK || !normLabel) return false;
+              
+              const fuzzyMatch = normK.includes(normLabel) || normLabel.includes(normK);
+              if (fuzzyMatch) return true;
+              
+              return fieldAliases.some(alias => {
+                const normAlias = normalizeKey(alias);
+                return normK.includes(normAlias) || normAlias.includes(normK);
+              });
+            });
+          }
 
           if (csvKey) {
             const values = order.rows
