@@ -1619,39 +1619,7 @@ export function TabletClock({
                                 <span className="size-1.5 rounded-full bg-[#2E7D32]" />
                                 Crea appuntamento
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCompletedAppointments((prev) => {
-                                    const next = new Set(prev);
-                                    next.add(booking.id);
-                                    return next;
-                                  });
-                                  sound("success");
-                                  
-                                  // Save Finito status in background database response
-                                  void fetch("/api/client-control/tablet-submit", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      isFinito: true,
-                                      bookingId: booking.id,
-                                      clientName: booking.customerName,
-                                      email: booking.customerEmail || "",
-                                      phone: booking.customerPhone || "",
-                                      depositPaid: booking.priceAmount != null ? booking.priceAmount : "",
-                                      salon: device?.locationName,
-                                    }),
-                                  }).then(() => {
-                                    router.refresh();
-                                  }).catch((err) => {
-                                    console.error("Error saving Finito status:", err);
-                                  });
-                                }}
-                                className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-9"
-                              >
-                                Elimina
-                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2837,39 +2805,7 @@ export function TabletClock({
                                         >
                                           Crea appuntamento
                                         </button>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setCompletedAppointments((prev) => {
-                                              const next = new Set(prev);
-                                              next.add(booking.id);
-                                              return next;
-                                            });
-                                            sound("success");
-                                            
-                                            // Save Finito status in background database response
-                                            void fetch("/api/client-control/tablet-submit", {
-                                              method: "POST",
-                                              headers: { "Content-Type": "application/json" },
-                                              body: JSON.stringify({
-                                                isFinito: true,
-                                                bookingId: booking.id,
-                                                clientName: booking.customerName,
-                                                email: booking.customerEmail || "",
-                                                phone: booking.customerPhone || "",
-                                                salon: device?.locationName,
-                                              }),
-                                            }).then(() => {
-                                              router.refresh();
-                                            }).catch((err) => {
-                                              console.error("Error saving Finito status:", err);
-                                            });
-                                          }}
-                                          className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-black/60 hover:bg-black/[0.02] hover:border-black/15 active:scale-95 transition shadow-sm h-8"
-                                        >
-                                          Elimina
-                                        </button>
+
                                         <button
                                           type="button"
                                           onClick={(e) => {
