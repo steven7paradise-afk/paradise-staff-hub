@@ -25,7 +25,14 @@ export async function POST(req: Request) {
     }
 
     const data = await req.json();
-    const { orders } = data as { orders: { clientName: string; notes: string }[] };
+    const { orders } = data as { 
+      orders: { 
+        clientName: string; 
+        notes: string;
+        status?: string;
+        createdAt?: string;
+      }[] 
+    };
 
     if (!orders || !Array.isArray(orders)) {
       return NextResponse.json({ error: "Dati non validi" }, { status: 400 });
@@ -55,6 +62,8 @@ export async function POST(req: Request) {
           [priorityField]: "Normale",
         };
 
+        const targetDate = order.createdAt ? new Date(order.createdAt) : new Date();
+
         return prisma.serviceFormResponse.create({
           data: {
             form_id: orderForm.id,
@@ -63,16 +72,21 @@ export async function POST(req: Request) {
             user_location_id: user?.sede_id ?? null,
             user_location_name: user?.location?.name ?? "Nessuna sede",
             answers,
-            status: "NEW",
+            status: order.status || "NEW",
             priority: "Normale",
             assigned_to_id: null,
             internal_notes: [],
             comments: [],
+            created_at: targetDate,
+            updated_at: targetDate,
             activity_log: [
               {
-                date: new Date().toISOString(),
-                user: session.user.name ?? "Utente sconosciuto",
-                action: "Ordine importato da CSV",
+                type: "STATUS_CHANGE",
+                from: "NEW",
+                to: order.status || "NEW",
+                note: "Ordine importato da CSV",
+                by: session.user.name ?? "Utente sconosciuto",
+                at: targetDate.toISOString(),
               },
             ],
           },

@@ -48,6 +48,67 @@ const monthsList = [
 const currentYear = new Date().getFullYear();
 const yearsList = Array.from({ length: 3 }, (_, i) => currentYear - 1 + i);
 
+function parseCustomDate(dateStr: string): Date {
+  if (!dateStr) return new Date();
+  const clean = dateStr.toLowerCase().replace(/\s+/g, " ").trim();
+  const parsed = Date.parse(clean);
+  if (!isNaN(parsed)) return new Date(parsed);
+
+  const normalized = clean.replace(/\b(de|di)\b/g, " ");
+  const parts = normalized.split(" ").filter(Boolean);
+  if (parts.length >= 3) {
+    const day = parseInt(parts[0], 10);
+    const monthStr = parts[1];
+    const year = parseInt(parts[2], 10);
+    
+    let hour = 12;
+    let min = 0;
+    if (parts[3] && parts[3].includes(":")) {
+      const timeParts = parts[3].split(":");
+      hour = parseInt(timeParts[0], 10) || 12;
+      min = parseInt(timeParts[1], 10) || 0;
+    }
+    
+    const months: Record<string, number> = {
+      gen: 0, gennaio: 0, ene: 0, enero: 0, jan: 0, january: 0,
+      feb: 1, febbraio: 1, febr: 1, febrero: 1, february: 1,
+      mar: 2, marzo: 2, march: 2,
+      apr: 3, aprile: 3, abr: 3, abril: 3, april: 3,
+      mag: 4, maggio: 4, may: 4, mayo: 4,
+      giu: 5, giugno: 5, jun: 5, junio: 5, june: 5,
+      lug: 6, luglio: 6, jul: 6, julio: 6, july: 6,
+      ago: 7, agosto: 7, aug: 7, august: 7,
+      set: 8, settembre: 8, sep: 8, sept: 8, septiembre: 8, september: 8,
+      ott: 9, ottobre: 9, oct: 9, ottobre: 9, october: 9,
+      nov: 10, novembre: 10, noviembre: 10, november: 10,
+      dic: 11, dicembre: 11, dicembre: 11, december: 11
+    };
+    
+    let monthIdx = -1;
+    for (const [key, idx] of Object.entries(months)) {
+      if (monthStr.startsWith(key) || key.startsWith(monthStr)) {
+        monthIdx = idx;
+        break;
+      }
+    }
+    
+    if (monthIdx !== -1 && !isNaN(day) && !isNaN(year)) {
+      return new Date(year, monthIdx, day, hour, min);
+    }
+  }
+  
+  return new Date();
+}
+
+function mapCsvStatus(statusStr: string): string {
+  const s = statusStr.toLowerCase();
+  if (s.includes("completat")) return "COMPLETED";
+  if (s.includes("arrivat") || s.includes("pront")) return "READY"; // Wait, in ORDER_COLUMNS it's READY ("Arrivato / pronto"), not ARRIVED!
+  if (s.includes("ordinat")) return "ORDERED";
+  if (s.includes("prepar")) return "PREPARING";
+  return "NEW";
+}
+
 function answerById(order: OrderResponse, id: string) {
   const value = order.answers?.[id];
   if (!value) return "";
@@ -188,7 +249,39 @@ export function OrderManager({
               return `--- RIGA ${index + 1} ---\\n${details}`;
             }).join("\\n\\n");
 
-            return { clientName, notes };
+            // Extract status
+            const statuses = clientRows.map(r => {
+              const statusKey = Object.keys(r).find(k => k.toLowerCase() === "stato" || k.toLowerCase().includes("stato"));
+              return mapCsvStatus(statusKey ? r[statusKey] || "" : "");
+            });
+            let finalStatus = "NEW";
+            if (statuses.includes("NEW")) finalStatus = "NEW";
+            else if (statuses.includes("PREPARING")) finalStatus = "PREPARING";
+            else if (statuses.includes("ORDERED")) finalStatus = "ORDERED";
+            else if (statuses.includes("READY")) finalStatus = "READY";
+            else if (statuses.includes("COMPLETED")) finalStatus = "COMPLETED";
+
+            // Extract date
+            let finalDate = new Date();
+            const dates = clientRows.map(r => {
+              const creatoKey = Object.keys(r).find(k => k.toLowerCase().includes("creato il") || k.toLowerCase().includes("creato_il"));
+              if (creatoKey && r[creatoKey]) return parseCustomDate(r[creatoKey]);
+              const dataKey = Object.keys(r).find(k => k.toLowerCase().includes("data") || k.toLowerCase() === "date");
+              if (dataKey && r[dataKey]) return parseCustomDate(r[dataKey]);
+              return null;
+            }).filter(Boolean) as Date[];
+
+            if (dates.length > 0) {
+              // Take oldest date to represent creation time
+              finalDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            }
+
+            return { 
+              clientName, 
+              notes,
+              status: finalStatus,
+              createdAt: finalDate.toISOString()
+            };
           });
 
           const res = await fetch("/api/orders/import", {
