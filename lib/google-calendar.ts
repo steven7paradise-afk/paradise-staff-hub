@@ -33,7 +33,12 @@ function addDays(value: Date, days: number) {
 
 function eventDate(date: Date, time?: string | null) {
   if (!time) return { date: dateOnly(date) };
-  return { dateTime: `${dateOnly(date)}T${time}:00`, timeZone: "Europe/Rome" };
+  const tzString = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Rome",
+    timeZoneName: "longOffset"
+  }).format(date);
+  const offset = tzString.split("GMT")[1] || "+02:00";
+  return { dateTime: `${dateOnly(date)}T${time}:00${offset}`, timeZone: "Europe/Rome" };
 }
 
 function resolveExtraLeaveCalendarIds(primaryCalendarId: string) {
