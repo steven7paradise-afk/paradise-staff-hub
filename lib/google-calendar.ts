@@ -224,6 +224,23 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
     return { skipped: true, reason: "Schedule entry not found" };
   }
 
+  const isLeave = isLeaveCategory(entry.category);
+  if (!isLeave) {
+    if (entry.google_calendar_event_id) {
+      await deleteScheduleEventFromGoogleCalendar(
+        entry.google_calendar_event_id,
+        entry.id,
+        entry.user.google_calendar_id && entry.user.google_calendar_sync ? entry.user.google_calendar_id : null
+      );
+      await prisma.scheduleEntry.update({
+        where: { id: entry.id },
+        data: { google_calendar_event_id: null },
+      });
+      return { skipped: false, deleted: true, reason: "Non-leave category, removed from Google Calendar" };
+    }
+    return { skipped: true, reason: "Non-leave category (not synced)" };
+  }
+
   const setup = await getCalendarClient();
   if (setup.skipped) return setup;
 
