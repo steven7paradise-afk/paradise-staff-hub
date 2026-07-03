@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest) {
       const calendarEventsToDelete = deleteFilters.length
         ? await prisma.scheduleEntry.findMany({
             where: { OR: deleteFilters },
-            select: { id: true, google_calendar_event_id: true },
+            include: { user: true },
           })
         : [];
 
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest) {
         .map((result) => (result && typeof result === "object" && "id" in result ? String(result.id) : null))
         .filter((id): id is string => Boolean(id));
       const calendarSync = await Promise.allSettled([
-        ...calendarEventsToDelete.map((entry) => deleteScheduleEventFromGoogleCalendar(entry.google_calendar_event_id, entry.id)),
+        ...calendarEventsToDelete.map((entry) => deleteScheduleEventFromGoogleCalendar(entry.google_calendar_event_id, entry.id, entry.user.google_calendar_id && entry.user.google_calendar_sync ? entry.user.google_calendar_id : undefined)),
         ...upsertedEntryIds.map((id) => syncScheduleEntryToGoogleCalendar(id)),
       ]);
       const calendarFailures = calendarSync.filter((result) => result.status === "rejected").length;
@@ -121,10 +121,14 @@ export async function PUT(request: NextRequest) {
   if (!categoryId) {
     const existing = await prisma.scheduleEntry.findFirst({
       where: { user_id: userId, date, location_id: locationId },
-      select: { id: true, google_calendar_event_id: true },
+      include: { user: true },
     });
+    let targetCalendarId = undefined;
+    if (existing?.user?.google_calendar_id && existing.user.google_calendar_sync) {
+      targetCalendarId = existing.user.google_calendar_id;
+    }
     await prisma.scheduleEntry.deleteMany({ where: { user_id: userId, date, location_id: locationId } });
-    const calendarSync = await deleteScheduleEventFromGoogleCalendar(existing?.google_calendar_event_id, existing?.id);
+    const calendarSync = await deleteScheduleEventFromGoogleCalendar(existing?.google_calendar_event_id, existing?.id, targetCalendarId);
     return NextResponse.json({ removed: true, calendarSync });
   }
 

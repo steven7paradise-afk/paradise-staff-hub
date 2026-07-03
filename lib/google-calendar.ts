@@ -293,12 +293,15 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
 export async function deleteScheduleEventFromGoogleCalendar(
   eventId?: string | null,
   scheduleEntryId?: string | null,
+  userCalendarId?: string | null,
 ) {
   const setup = await getCalendarClient();
   if (setup.skipped) return setup;
 
   let targetCalendarId = setup.calendarId;
-  if (scheduleEntryId) {
+  if (userCalendarId) {
+    targetCalendarId = cleanCalendarId(userCalendarId);
+  } else if (scheduleEntryId) {
     const entry = await prisma.scheduleEntry.findUnique({
       where: { id: scheduleEntryId },
       include: { user: true },
