@@ -484,26 +484,28 @@ export default async function DashboardPage() {
           >
             {metrics.map((metric, idx) => {
               const Icon = metric.icon;
-              const borderColors = [
-                "border-l-4 border-l-paradise-pink",
-                "border-l-4 border-l-[#d4af37]",
-                "border-l-4 border-l-emerald-500",
-                "border-l-4 border-l-[#C66170]"
+              const metricStyles = [
+                { bg: "bg-purple-500/10 dark:bg-purple-500/20", icon: "text-purple-600 dark:text-purple-400" },
+                { bg: "bg-blue-500/10 dark:bg-blue-500/20", icon: "text-blue-600 dark:text-blue-400" },
+                { bg: "bg-emerald-500/10 dark:bg-emerald-500/20", icon: "text-emerald-600 dark:text-emerald-400" },
+                { bg: "bg-orange-500/10 dark:bg-orange-500/20", icon: "text-orange-600 dark:text-orange-400" }
               ];
-              const borderColor = borderColors[idx % borderColors.length];
+              const style = metricStyles[idx % metricStyles.length];
               return (
                 <Card 
                   key={metric.label} 
-                  className={cn("p-4 md:p-6 min-w-[170px] shrink-0 snap-start flex-1 md:min-w-0 border border-black/5 dark:border-white/10 shadow-sm", borderColor)}
+                  className="p-5 md:p-7 min-w-[170px] shrink-0 snap-start flex-1 md:min-w-0 border-none relative overflow-hidden group"
                 >
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs md:text-sm font-semibold uppercase tracking-wider text-black/40 dark:text-white/40">{metric.label}</p>
-                    <div className="grid size-8 place-items-center rounded-lg bg-paradise-softPink/40 dark:bg-white/5 text-[#B85B68] dark:text-paradise-pink">
-                      <Icon className="size-4.5" />
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[11px] md:text-xs font-bold uppercase tracking-widest text-black/40 dark:text-white/40">{metric.label}</p>
+                      <p className="mt-3 md:mt-4 text-3xl md:text-4xl font-black tracking-tight text-[color:var(--text)]">{metric.value}</p>
+                    </div>
+                    <div className={cn("grid size-12 place-items-center rounded-2xl transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3", style.bg, style.icon)}>
+                      <Icon className="size-6" />
                     </div>
                   </div>
-                  <p className="mt-4 md:mt-5 text-2xl md:text-3xl font-bold tracking-tight text-[color:var(--text)]">{metric.value}</p>
-                  <p className="mt-2 text-[10px] md:text-xs text-black/45 dark:text-white/45">{metric.trend}</p>
+                  <p className="mt-4 text-[10px] md:text-[11px] font-semibold text-black/35 dark:text-white/40">{metric.trend}</p>
                 </Card>
               );
             })}
@@ -888,68 +890,77 @@ function CashClosingTodayDashboard({ responses, statusToday }: { responses: any[
   const differentFundCount = responses.filter((response) => Math.abs(moneyValue(response.answers?.[CASH_CLOSING_FIELD_IDS.fund]) - 50) > 0.009).length;
 
   return (
-    <Card className="mb-6 overflow-hidden border-l-4 border-l-[#d4af37] p-0">
-      <div className="flex flex-col gap-3 border-b border-black/5 bg-gradient-to-r from-[#FFF7DF] to-white p-5 dark:border-white/10 dark:from-white/10 dark:to-white/5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="grid size-11 place-items-center rounded-2xl bg-[#d4af37]/20 text-[#9E7A3B] dark:text-[#F7DFA7]">
-            <Calculator className="size-5" />
+    <Card className="mb-8 overflow-hidden border-none p-0 bg-gradient-to-br from-[#2D1B4E] to-[#1A0B2E] text-white relative shadow-[0_20px_50px_rgba(45,27,78,0.25)]">
+      {/* Decorative premium blobs */}
+      <div className="absolute -top-24 -right-24 size-64 rounded-full bg-purple-500/20 blur-3xl" />
+      <div className="absolute -bottom-24 -left-24 size-64 rounded-full bg-blue-500/20 blur-3xl" />
+      <div className="absolute top-10 right-1/4 size-2 rounded-full bg-white/40 blur-[1px]" />
+      <div className="absolute bottom-1/4 right-10 size-1.5 rounded-full bg-white/30 blur-[1px]" />
+      <div className="absolute top-1/3 left-1/3 size-3 rounded-full bg-purple-400/30 blur-[2px]" />
+
+      <div className="flex flex-col gap-6 border-b border-white/10 p-6 sm:flex-row sm:items-center sm:justify-between relative z-10">
+        <div className="flex items-center gap-4">
+          <div className="grid size-14 place-items-center rounded-[20px] bg-white/10 text-white backdrop-blur-md shadow-inner border border-white/10">
+            <Calculator className="size-6" />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#9E7A3B] dark:text-[#F7DFA7]">Controllo Cassa</p>
-            <h2 className="text-lg font-black text-black dark:text-white">Chiusure cassa (Ultime 48h)</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-300">Controllo Cassa</p>
+            <h2 className="text-xl font-black text-white">Chiusure cassa (Ultime 48h)</h2>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
-          <div className="rounded-2xl bg-white p-3 shadow-sm dark:bg-white/10">
-            <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Chiusure</p>
-            <p className="mt-1 text-xl font-black text-black dark:text-white">{responses.length}</p>
+        <div className="grid grid-cols-3 gap-3 text-center sm:min-w-[380px]">
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 backdrop-blur-sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">Chiusure</p>
+            <p className="mt-1.5 text-2xl font-black text-white">{responses.length}</p>
           </div>
-          <div className="rounded-2xl bg-white p-3 shadow-sm dark:bg-white/10">
-            <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Prelevato</p>
-            <p className="mt-1 text-sm font-black text-[#9E7A3B] dark:text-[#F7DFA7]">{formatMoney(totalWithdrawn)}</p>
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 backdrop-blur-sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">Prelevato</p>
+            <p className="mt-1.5 text-lg font-black text-purple-300">{formatMoney(totalWithdrawn)}</p>
           </div>
-          <div className="rounded-2xl bg-white p-3 shadow-sm dark:bg-white/10">
-            <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Fondi != 50</p>
-            <p className="mt-1 text-xl font-black text-black dark:text-white">{differentFundCount}</p>
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 backdrop-blur-sm">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">Fondi != 50</p>
+            <p className="mt-1.5 text-2xl font-black text-white">{differentFundCount}</p>
           </div>
         </div>
       </div>
 
-      {responses.length === 0 ? (
-        <p className="p-5 text-sm font-semibold text-black/45 dark:text-white/45">Nessuna chiusura cassa registrata nelle ultime 48 ore.</p>
-      ) : (
-        <div className="divide-y divide-black/5 dark:divide-white/10">
-          {responses.map((response) => {
-            const answers = response.answers ?? {};
-            const signature = answers._signature;
-            const fund = moneyValue(answers[CASH_CLOSING_FIELD_IDS.fund]);
-            const fundDifferent = Math.abs(fund - 50) > 0.009;
-            return (
-              <div key={response.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div>
-                  <p className="text-sm font-black text-black dark:text-white">{response.user_location_name || response.user?.location?.name || "Sede non indicata"}</p>
-                  <p className="mt-1 text-xs text-black/50 dark:text-white/45">
-                    Firmata da <strong>{signature?.user_name || response.user?.name || "Dipendente"}</strong> · <span className={new Date(response.created_at) >= statusToday ? "text-[#9E7A3B] dark:text-[#F7DFA7] font-bold" : "text-black/40 dark:text-white/40"}>{new Date(response.created_at) >= statusToday ? "Oggi" : "Ieri"}</span> alle {new Date(response.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                  {answers[CASH_CLOSING_FIELD_IDS.notes] ? (
-                    <p className="mt-2 rounded-xl bg-black/[0.03] px-3 py-2 text-xs text-black/60 dark:bg-white/5 dark:text-white/55">{String(answers[CASH_CLOSING_FIELD_IDS.notes])}</p>
-                  ) : null}
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-right sm:min-w-[260px]">
-                  <div className="rounded-2xl bg-paradise-nude/60 p-3 dark:bg-white/5">
-                    <p className="text-[10px] font-bold uppercase text-black/40 dark:text-white/40">Prelevato</p>
-                    <p className="font-black text-black dark:text-white">{formatMoney(moneyValue(answers[CASH_CLOSING_FIELD_IDS.withdrawn]))}</p>
+      <div className="relative z-10">
+        {responses.length === 0 ? (
+          <p className="p-6 text-sm font-semibold text-white/60">Nessuna chiusura cassa registrata nelle ultime 48 ore.</p>
+        ) : (
+          <div className="divide-y divide-white/10">
+            {responses.map((response) => {
+              const answers = response.answers ?? {};
+              const signature = answers._signature;
+              const fund = moneyValue(answers[CASH_CLOSING_FIELD_IDS.fund]);
+              const fundDifferent = Math.abs(fund - 50) > 0.009;
+              return (
+                <div key={response.id} className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center hover:bg-white/[0.02] transition-colors">
+                  <div>
+                    <p className="text-base font-black text-white">{response.user_location_name || response.user?.location?.name || "Sede non indicata"}</p>
+                    <p className="mt-1.5 text-xs text-white/50">
+                      Firmata da <strong className="text-white/90">{signature?.user_name || response.user?.name || "Dipendente"}</strong> · <span className={new Date(response.created_at) >= statusToday ? "text-purple-300 font-bold" : "text-white/40"}>{new Date(response.created_at) >= statusToday ? "Oggi" : "Ieri"}</span> alle {new Date(response.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    {answers[CASH_CLOSING_FIELD_IDS.notes] ? (
+                      <p className="mt-3 rounded-xl bg-black/20 px-4 py-2.5 text-xs text-white/70 border border-white/5">{String(answers[CASH_CLOSING_FIELD_IDS.notes])}</p>
+                    ) : null}
                   </div>
-                  <div className={`rounded-2xl p-3 ${fundDifferent ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-200" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200"}`}>
-                    <p className="text-[10px] font-bold uppercase opacity-70">Fondo</p>
-                    <p className="font-black">{formatMoney(fund)}</p>
+                  <div className="grid grid-cols-2 gap-3 text-right sm:min-w-[280px]">
+                    <div className="rounded-[18px] bg-white/5 border border-white/5 p-3.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">Prelevato</p>
+                      <p className="font-black text-white mt-0.5">{formatMoney(moneyValue(answers[CASH_CLOSING_FIELD_IDS.withdrawn]))}</p>
+                    </div>
+                    <div className={cn("rounded-[18px] p-3.5 border", fundDifferent ? "bg-red-500/20 border-red-500/30 text-red-200" : "bg-emerald-500/20 border-emerald-500/30 text-emerald-200")}>
+                      <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Fondo</p>
+                      <p className="font-black mt-0.5">{formatMoney(fund)}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
