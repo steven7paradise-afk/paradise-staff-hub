@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui";
 type TeamStatus = {
   id: string;
   name: string;
+  photo_url?: string | null;
   location: string;
   lastLog: { type: "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA"; timestamp: string; time: string } | null;
   breakDurationMinutes: number;
@@ -137,14 +138,18 @@ export function LiveTeamStatus({ initialWorkers }: { initialWorkers: TeamStatus[
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`relative grid size-10 shrink-0 place-items-center rounded-full bg-paradise-nude text-xs font-bold text-paradise-noir transition-all duration-300 dark:bg-white/5 dark:text-white/80 ${
+                  <div className={`relative grid size-10 shrink-0 place-items-center rounded-full bg-paradise-nude text-xs font-bold text-paradise-noir transition-all duration-300 dark:bg-white/5 dark:text-white/80 overflow-hidden ${
                     isActive 
                       ? "ring-2 ring-emerald-400/60 ring-offset-2 dark:ring-offset-slate-900" 
                       : isBreak 
                         ? "ring-2 ring-amber-400/60 ring-offset-2 dark:ring-offset-slate-900" 
                         : ""
                   }`}>
-                    {initials}
+                    {worker.photo_url ? (
+                      <img src={worker.photo_url} alt={worker.name} className="size-full object-cover" />
+                    ) : (
+                      initials
+                    )}
                     {isActive && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />}
                     {isBreak && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />}
                   </div>

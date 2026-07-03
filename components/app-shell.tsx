@@ -51,7 +51,7 @@ const nav = [
   { href: "/settings", label: "Impostazioni", iconName: "Settings", roles: ["SUPER_ADMIN", "ADMIN"], section: "Impostazioni" },
 ] satisfies { href: string; label: string; iconName: string; roles: Role[]; section?: string }[];
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
   const serviceSettingPromise = currentRole === "DIPENDENTE" && session?.user?.sedeId
@@ -407,6 +407,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           "--user-background-color": `color-mix(in srgb, ${currentUser.sidebar_color} 6%, var(--background))`,
         } : {}),
       } as React.CSSProperties}
+      transparentMain={transparentMain}
     />
   );
 }

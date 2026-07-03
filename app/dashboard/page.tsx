@@ -404,6 +404,7 @@ export default async function DashboardPage() {
       subtitle={subtitle} 
       role={role}
       hideHeader={role === "DIPENDENTE"}
+      transparentMain={true}
     >
       {/* Sfondo fisso per garantire l'effetto Glassmorphism/Neumorphism indipendentemente dal tema dell'utente */}
       <div className="fixed inset-0 -z-10 bg-[#f4f7f9] dark:bg-[#0f0f11] pointer-events-none" />
@@ -748,7 +749,7 @@ export default async function DashboardPage() {
               </div>
               <Link href="/schedules" className="rounded-full bg-paradise-softPink/40 px-3 py-1 text-[11px] font-semibold text-[#B85B68] transition hover:bg-paradise-softPink/60 dark:text-[#F4A3C4]">Modifica orario</Link>
             </div>
-            <LiveTeamStatus initialWorkers={liveTeamWorkers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", breakDurationMinutes: parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes, lastLog: worker.attendance_logs[0] ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() } : null }))} />
+            <LiveTeamStatus initialWorkers={liveTeamWorkers.map((worker) => ({ id: worker.id, name: worker.name, photo_url: worker.photo_url, location: worker.location?.name ?? "Nessun salone", breakDurationMinutes: parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes, lastLog: worker.attendance_logs[0] ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() } : null }))} />
           </Card>
           <Card className="border-none relative overflow-hidden">
             <div className="mb-4 flex items-center gap-2 border-b border-black/5 dark:border-white/5 pb-3">
@@ -808,7 +809,7 @@ export default async function DashboardPage() {
               </div>
               <Badge tone="green">Online</Badge>
             </div>
-            <LiveTeamStatus initialWorkers={liveTeamWorkers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", breakDurationMinutes: parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes, lastLog: worker.attendance_logs[0] ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() } : null }))} />
+            <LiveTeamStatus initialWorkers={liveTeamWorkers.map((worker) => ({ id: worker.id, name: worker.name, photo_url: worker.photo_url, location: worker.location?.name ?? "Nessun salone", breakDurationMinutes: parseClockRule(liveClockSettings.find((setting) => setting.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes, lastLog: worker.attendance_logs[0] ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() } : null }))} />
           </Card>
         </section>
       ) : null}

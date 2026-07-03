@@ -27,6 +27,7 @@ export async function GET() {
     select: {
       id: true,
       name: true,
+      photo_url: true,
       sede_id: true,
       location: { select: { name: true } },
       attendance_logs: {
@@ -44,6 +45,7 @@ export async function GET() {
   return NextResponse.json(workers.map((worker) => ({
     id: worker.id,
     name: worker.name,
+    photo_url: worker.photo_url,
     location: worker.location?.name ?? "Nessun salone",
     lastLog: worker.attendance_logs[0]
       ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() }

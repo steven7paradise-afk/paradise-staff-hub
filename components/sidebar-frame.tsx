@@ -10,11 +10,13 @@ export function SidebarFrame({
   main,
   mobileNav,
   style,
+  transparentMain = false,
 }: {
   aside: React.ReactNode;
   main: React.ReactNode;
   mobileNav?: React.ReactNode;
   style: React.CSSProperties;
+  transparentMain?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
@@ -74,7 +76,7 @@ export function SidebarFrame({
       </div>
       <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", collapsed ? "xl:ml-[88px]" : "xl:ml-[280px]")}>
         <div className="xl:p-5 xl:pl-3 xl:h-screen xl:flex xl:flex-col">
-          <div className="bg-[color:var(--card)] xl:rounded-[28px] xl:shadow-sm flex-1 border border-black/5 dark:border-white/5 xl:flex xl:flex-col overflow-hidden">
+          <div className={cn("xl:rounded-[28px] xl:shadow-sm flex-1 border border-black/5 dark:border-white/5 xl:flex xl:flex-col overflow-hidden", transparentMain ? "bg-transparent" : "bg-[color:var(--card)]")}>
             <div className="flex-1 overflow-y-auto luxury-scroll min-w-0">
               {main}
             </div>
