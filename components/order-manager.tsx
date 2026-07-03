@@ -245,9 +245,9 @@ export function OrderManager({
               const details = Object.entries(r)
                 .filter(([k, v]) => k !== clientKey && typeof v === "string" && v.trim() !== "")
                 .map(([k, v]) => `${k}: ${v}`)
-                .join("\\n");
-              return `--- RIGA ${index + 1} ---\\n${details}`;
-            }).join("\\n\\n");
+                .join("\n");
+              return `--- RIGA ${index + 1} ---\n${details}`;
+            }).join("\n\n");
 
             // Extract status
             const statuses = clientRows.map(r => {
