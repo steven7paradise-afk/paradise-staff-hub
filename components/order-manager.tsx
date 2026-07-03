@@ -102,8 +102,8 @@ function parseCustomDate(dateStr: string): Date {
 
 function mapCsvStatus(statusStr: string): string {
   const s = statusStr.toLowerCase();
-  if (s.includes("completat")) return "COMPLETED";
-  if (s.includes("arrivat") || s.includes("pront")) return "READY"; // Wait, in ORDER_COLUMNS it's READY ("Arrivato / pronto"), not ARRIVED!
+  if (s.includes("completat") || s.includes("inviato") || s.includes("inviate")) return "COMPLETED";
+  if (s.includes("arrivat") || s.includes("pront")) return "READY";
   if (s.includes("ordinat")) return "ORDERED";
   if (s.includes("prepar")) return "PREPARING";
   return "NEW";
@@ -170,6 +170,7 @@ export function OrderManager({
   const [showCsvUpload, setShowCsvUpload] = useState(false);
   const [uploadingCsv, setUploadingCsv] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [undoing, setUndoing] = useState(false);
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -309,6 +310,26 @@ export function OrderManager({
     });
   }
 
+  async function handleUndoImport() {
+    if (!confirm("Sei sicuro di voler eliminare l'ultima importazione effettuata? Questa azione cancellerà solo gli ordini caricati nell'ultimo blocco CSV.")) {
+      return;
+    }
+    setUndoing(true);
+    try {
+      const res = await fetch("/api/orders/import/undo", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = await res.json();
+      alert(`Eliminati con successo ${data.count} ordini dell'ultima importazione.`);
+      window.location.reload();
+    } catch (err: any) {
+      alert("Errore durante l'eliminazione: " + err.message);
+    } finally {
+      setUndoing(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] bg-white p-6 shadow-sm">
@@ -353,9 +374,19 @@ export function OrderManager({
             </div>
             
             {canManage && (
-              <Button onClick={() => setShowCsvUpload(true)} variant="soft" className="rounded-2xl border-black/10">
-                Importa CSV
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => setShowCsvUpload(true)} variant="soft" className="rounded-2xl border-black/10">
+                  Importa CSV
+                </Button>
+                <Button 
+                  onClick={handleUndoImport} 
+                  disabled={undoing}
+                  variant="soft" 
+                  className="rounded-2xl border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 transition"
+                >
+                  {undoing ? "Annullamento..." : "Annulla Ultimo Caricamento"}
+                </Button>
+              </div>
             )}
           </div>
         </div>
