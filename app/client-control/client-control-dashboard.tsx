@@ -99,7 +99,7 @@ function buildAnalytics(responses: ResponseItem[], employeeNames: string[]) {
 
     for (const name of staffNames) {
       const current = entry.staff.get(name) ?? { name, services: 0, notePhoto: 0, products: 0, reviews: 0, consulenze: 0, checks: 0 };
-      current.services += 1;
+      current.services += consulenze ? 0 : 1;
       current.notePhoto += notePhoto;
       current.products += products;
       current.reviews += reviews;
