@@ -1,5 +1,7 @@
 "use client";
 
+import Papa from "papaparse";
+
 import { useMemo, useState } from "react";
 import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, PackageCheck, Search, ShoppingCart, Truck, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
@@ -104,6 +106,9 @@ export function OrderManager({
   const [mobileStatus, setMobileStatus] = useState("ALL");
   const [changingStatusTo, setChangingStatusTo] = useState<string | null>(null);
   const [statusNoteText, setStatusNoteText] = useState("");
+  const [showCsvUpload, setShowCsvUpload] = useState(false);
+  const [uploadingCsv, setUploadingCsv] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -149,6 +154,68 @@ export function OrderManager({
     setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
   }
 
+  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingCsv(true);
+    setUploadError("");
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const rows = results.data as Record<string, string>[];
+          
+          const clientKey = results.meta.fields?.find(f => f.toLowerCase().includes("cliente")) || "CLIENTE";
+          const grouped = new Map<string, any[]>();
+          
+          for (const row of rows) {
+            const clientName = row[clientKey] || "Senza Nome";
+            if (!grouped.has(clientName)) {
+              grouped.set(clientName, []);
+            }
+            grouped.get(clientName)?.push(row);
+          }
+
+          const ordersToImport = Array.from(grouped.entries()).map(([clientName, clientRows]) => {
+            const notes = clientRows.map((r, index) => {
+              const details = Object.entries(r)
+                .filter(([k, v]) => k !== clientKey && typeof v === "string" && v.trim() !== "")
+                .map(([k, v]) => `${k}: ${v}`)
+                .join("\\n");
+              return `--- RIGA ${index + 1} ---\\n${details}`;
+            }).join("\\n\\n");
+
+            return { clientName, notes };
+          });
+
+          const res = await fetch("/api/orders/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orders: ordersToImport }),
+          });
+
+          if (!res.ok) {
+            throw new Error(await res.text());
+          }
+
+          setShowCsvUpload(false);
+          window.location.reload();
+        } catch (err: any) {
+          setUploadError("Errore durante l'elaborazione del CSV: " + err.message);
+        } finally {
+          setUploadingCsv(false);
+        }
+      },
+      error: (error) => {
+        setUploadError("Errore di lettura del CSV: " + error.message);
+        setUploadingCsv(false);
+      }
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] bg-white p-6 shadow-sm">
@@ -191,6 +258,12 @@ export function OrderManager({
               <Search className="size-4 text-black/35" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
             </div>
+            
+            {canManage && (
+              <Button onClick={() => setShowCsvUpload(true)} variant="soft" className="rounded-2xl border-black/10">
+                Importa CSV
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -300,6 +373,31 @@ export function OrderManager({
           );
         })}
       </div>
+
+      {showCsvUpload ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-md p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-lg">Importa Ordini da CSV</h3>
+              <button onClick={() => !uploadingCsv && setShowCsvUpload(false)} disabled={uploadingCsv} className="text-black/50 hover:text-black">
+                <X className="size-5" />
+              </button>
+            </div>
+            <p className="text-sm text-black/60">
+              Carica il file CSV scaricato dal modulo. Il sistema leggerà automaticamente i dati e raggrupperà le righe con lo stesso nome "CLIENTE" in un unico ordine.
+            </p>
+            {uploadError && <div className="text-red-500 text-sm p-3 bg-red-50 rounded-xl">{uploadError}</div>}
+            
+            <div className="flex justify-center border-2 border-dashed border-black/20 rounded-2xl p-6 hover:bg-black/5 transition cursor-pointer relative">
+              <input type="file" accept=".csv" onChange={handleFileUpload} disabled={uploadingCsv} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+              <div className="text-center">
+                {uploadingCsv ? <Loader2 className="size-6 animate-spin mx-auto text-paradise-pink" /> : <PackageCheck className="size-6 mx-auto text-black/30 mb-2" />}
+                <span className="text-sm font-semibold">{uploadingCsv ? "Elaborazione in corso..." : "Clicca o trascina qui il file CSV"}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : null}
 
       {selected ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4">

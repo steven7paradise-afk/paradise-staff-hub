@@ -18,6 +18,7 @@
       
       --bg-base: #fdfbf7; /* Panna caldo di base */
       --bg-page-fallback: #fcfaf5; /* Panna chiaro per la pagina */
+      --owner-hero-bg-image: url("https://cdn.shopify.com/s/files/1/0952/8157/8330/files/ChatGPT_Image_27_giu_2026_13_12_32.png?v=1782558772");
       
       --text-main: #2a2022; /* Grigio caldo scurissimo per non essere nero assoluto */
       --text-muted: #6b5c5e;
@@ -104,166 +105,217 @@
       background: none;
     }
 
-    .paradise-linkbio-hero-container {
+    .paradise-linkbio-hero,
+    .paradise-linkbio-content {
       position: relative;
-      width: 100%;
-      height: 380px;
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
-      margin-bottom: 24px;
-      overflow: visible;
-      background: transparent;
-      padding-top: 24px;
-    }
-
-
-
-    .paradise-linkbio-hero-img-transparent {
-      height: 375px;
-      width: auto;
-      object-fit: contain;
-      z-index: 2;
-      position: relative;
-      margin-bottom: 0;
-      opacity: 0;
-      transform: translateY(30px);
-      animation: imgEntrance 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
-    }
-
-    @keyframes imgEntrance {
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      z-index: 1;
     }
 
     /* --------------------------------------------------
-       INTESTAZIONE PROFILO & FIRMA
+       HERO & LOGO
        -------------------------------------------------- */
-    .paradise-linkbio-profile-header {
-      text-align: center;
-      margin-bottom: 12px;
-      opacity: 0;
-      transform: translateY(15px);
-      animation: headerEntrance 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+    .paradise-linkbio-hero {
+      height: 330px;
+      overflow: hidden;
+      background: #ffffff;
+      position: relative;
+      flex-shrink: 0;
     }
 
-    @keyframes headerEntrance {
+    /* Immagine scenografica applicata solo dietro la titolare */
+    .paradise-linkbio-hero::before {
+      content: "";
+      position: absolute;
+      z-index: 0;
+      inset: 0;
+      pointer-events: none;
+      background-color: #fbf5f1;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.08), rgba(253, 248, 244, 0.16)),
+        var(--owner-hero-bg-image);
+      background-position: center 30%;
+      background-repeat: no-repeat;
+      background-size: 78% auto;
+      transform: scale(1);
+      animation: paradiseHeroDepth 14s ease-in-out infinite alternate;
+      will-change: transform;
+    }
+
+    @keyframes paradiseHeroDepth {
+      from { transform: scale(1); }
+      to { transform: scale(1.018) translate3d(0, -0.2%, 0); }
+    }
+
+    .paradise-linkbio-hero-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      display: block;
+      position: relative;
+      z-index: 1;
+      transition: transform 6s ease;
+      opacity: 0;
+      transform: scale(1.15);
+      animation: heroZoomIn 1.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+
+    @keyframes heroZoomIn {
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+    
+    /* Effetto zoom lento dell'immagine per dinamismo */
+    .paradise-linkbio-page:hover .paradise-linkbio-hero-img {
+      transform: scale(1.04);
+    }
+
+    /* Sfumatura morbida alla base dell'hero */
+    .paradise-linkbio-hero::after {
+      content: "";
+      position: absolute;
+      left: -10%;
+      right: -10%;
+      bottom: -45px;
+      height: 180px;
+      z-index: 2;
+      background:
+        radial-gradient(ellipse at center, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.92) 38%, rgba(255,255,255,0) 75%),
+        linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.98) 60%, rgba(255,255,255,0) 100%);
+      pointer-events: none;
+    }
+
+    .paradise-linkbio-author {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      bottom: 24px;
+      z-index: 3;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(20px);
+      animation: logoEntrance 1s cubic-bezier(0.175, 0.885, 0.32, 1.2) 0.3s forwards;
+    }
+
+    @keyframes logoEntrance {
       to {
         opacity: 1;
         transform: translateY(0);
       }
     }
 
-    .paradise-linkbio-profile-name {
+    .paradise-linkbio-author span {
+      display: inline-block;
       font-family: var(--font-cursive);
-      font-size: 54px;
-      color: var(--primary);
-      line-height: 1;
-      margin-bottom: 4px;
-      font-weight: 500;
+      font-size: 48px;
+      color: #111111;
+      text-shadow: 0 4px 12px rgba(255, 255, 255, 0.9);
+      animation: float-logo 4s ease-in-out infinite;
       letter-spacing: 0.5px;
-      text-shadow: 0 4px 10px rgba(168, 108, 116, 0.08);
     }
 
-    .paradise-linkbio-profile-subtitle {
-      font-family: var(--font-sans);
-      font-size: 10px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      font-weight: 600;
-      color: #8c736c; /* warm coppery taupe */
-      margin: 0;
-    }
-
-    /* Divisore Cuore Rosa Gold */
-    .paradise-linkbio-hero-divider {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin: 14px 0 24px;
-      color: var(--primary-light);
-      opacity: 0;
-      animation: fadeIn 0.8s ease 0.5s forwards;
-    }
-
-    .paradise-linkbio-hero-divider span {
-      display: block;
-      width: 45px;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.3), transparent);
-    }
-
-    .paradise-linkbio-hero-divider svg {
-      width: 10px;
-      height: 10px;
-      display: block;
-      fill: currentColor;
-      opacity: 0.8;
+    @keyframes float-logo {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
     }
 
     /* --------------------------------------------------
-       CONTENUTO PRINCIPALE & SOCIAL PILL
+       CONTENUTO & SOCIALS
        -------------------------------------------------- */
     .paradise-linkbio-content {
       padding: 0 24px 36px;
+      margin-top: -35px;
     }
 
-    /* Barra Social Capsule Pill */
-    .paradise-linkbio-social-pill {
+    /* Barra Social Glassmorphic */
+    .paradise-linkbio-social {
       position: relative;
       z-index: 3;
-      width: 120px;
-      height: 46px;
-      margin: 0 auto 30px;
+      width: 110px;
+      height: 56px;
+      margin: 0 auto 36px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
-      background: rgba(255, 255, 255, 0.5);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1px solid rgba(184, 143, 40, 0.15);
+      padding: 0 18px;
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
       border-radius: 100px;
       box-shadow: 
-        inset 0 1px 1px rgba(255, 255, 255, 0.9),
-        0 8px 24px rgba(0, 0, 0, 0.02);
+        inset 0 1px 1px rgba(255,255,255,0.9),
+        0 8px 24px rgba(0, 0, 0, 0.03);
       opacity: 0;
-      transform: translateY(15px);
-      animation: headerEntrance 1s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+      transform: translateY(20px);
+      animation: slideUpFade 0.8s cubic-bezier(0.25, 1, 0.5, 1) 0.5s forwards;
     }
 
-    .paradise-linkbio-social-pill a {
+    .paradise-linkbio-social a {
       position: relative;
-      width: 28px;
-      height: 28px;
+      width: 32px;
+      height: 32px;
       display: grid;
       place-items: center;
       text-decoration: none;
-      color: #4a3c39;
+      color: #111111;
       transition: var(--transition-elastic);
       z-index: 2;
     }
 
-    .paradise-linkbio-social-pill a svg {
+    .paradise-linkbio-social a svg {
       display: block;
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
       fill: currentColor;
       transition: var(--transition-elastic);
+      filter: drop-shadow(0 2px 4px rgba(155, 78, 63, 0.12));
     }
 
-    .paradise-linkbio-social-pill a:hover {
-      transform: scale(1.18);
-      color: var(--primary);
+    /* Glow backdrop per i social */
+    .paradise-linkbio-social a::after {
+      content: "";
+      position: absolute;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.03);
+      opacity: 0;
+      transform: scale(0.6);
+      transition: var(--transition-elastic);
+      z-index: -1;
     }
 
-    .paradise-linkbio-social-divider {
-      width: 1px;
-      height: 18px;
-      background-color: rgba(184, 143, 40, 0.25);
+    /* Hover dei singoli social */
+    .paradise-linkbio-social a:hover {
+      transform: translateY(-4px) scale(1.2);
+    }
+    .paradise-linkbio-social a:hover::after {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+
+    /* Colore personalizzato e bagliore al passaggio del mouse */
+    .paradise-linkbio-social a[aria-label="Instagram"]:hover { color: #d6249f; }
+    .paradise-linkbio-social a[aria-label="Instagram"]:hover::after { background: rgba(214, 36, 159, 0.08); box-shadow: 0 0 10px rgba(214, 36, 159, 0.15); }
+
+    .paradise-linkbio-social a[aria-label="TikTok"]:hover { color: #000000; }
+    .paradise-linkbio-social a[aria-label="TikTok"]:hover::after { background: rgba(0, 0, 0, 0.05); box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }
+
+
+    @keyframes social-shine {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    @keyframes slideUpFade {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     @keyframes fadeIn {
@@ -273,52 +325,86 @@
     }
 
     /* --------------------------------------------------
-       TESTI DI INTRODUZIONE & CITAZIONE
+       TESTI DI INTRODUZIONE
        -------------------------------------------------- */
-    .paradise-linkbio-intro-text {
-      max-width: 380px;
-      margin: 0 auto 20px;
+    .paradise-linkbio-intro {
       text-align: center;
+      margin-bottom: 12px;
       opacity: 0;
       transform: translateY(15px);
-      animation: headerEntrance 1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+      animation: slideUpFade 0.8s cubic-bezier(0.25, 1, 0.5, 1) 0.6s forwards;
     }
 
-    .paradise-linkbio-intro-text p {
-      font-family: var(--font-sans);
-      font-size: 13.5px;
-      line-height: 1.65;
-      color: #5c4d4a; /* warm soft brown */
+    .paradise-linkbio-intro h1 {
+      margin: 0 0 10px;
+      font-family: var(--font-serif);
+      font-size: 32px;
+      line-height: 1.15;
+      font-weight: 500;
+      color: var(--text-main);
+      letter-spacing: -0.3px;
+    }
+
+    .paradise-linkbio-intro h1 span {
+      font-weight: 700;
+      color: var(--primary);
+      position: relative;
+      display: inline-block;
+    }
+
+    .paradise-linkbio-intro h1 span::after {
+      content: "";
+      position: absolute;
+      bottom: 2px;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: rgba(237, 110, 158, 0.2);
+      border-radius: 2px;
+    }
+
+    .paradise-linkbio-intro p {
+      margin: 0 auto;
+      max-width: 360px;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text-muted);
       font-weight: 400;
     }
 
-    .paradise-linkbio-quote-container {
+    .paradise-linkbio-intro p strong {
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 17px;
+    }
+
+    /* Divisore con battito */
+    .paradise-linkbio-divider {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      margin: 0 auto 32px;
-      max-width: 400px;
+      gap: 16px;
+      width: 100%;
+      margin: 16px auto 26px;
+      color: var(--primary-light);
       opacity: 0;
-      transform: translateY(15px);
-      animation: headerEntrance 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
+      animation: fadeIn 0.8s ease 0.7s forwards;
     }
 
-    .paradise-linkbio-quote-line {
-      flex-grow: 1;
+    .paradise-linkbio-divider span {
+      display: block;
+      width: 90px;
       height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(168, 108, 116, 0.25), transparent);
-      max-width: 40px;
+      background: linear-gradient(90deg, transparent, rgba(226, 116, 159, 0.45), transparent);
     }
 
-    .paradise-linkbio-quote-text {
-      font-family: var(--font-serif);
-      font-size: 15.5px;
-      font-style: italic;
-      color: var(--primary);
-      text-align: center;
-      font-weight: 500;
-      letter-spacing: 0.2px;
+    .paradise-linkbio-divider svg {
+      width: 14px;
+      height: 14px;
+      display: block;
+      fill: currentColor;
+      filter: drop-shadow(0 2px 6px rgba(213, 70, 125, 0.2));
+      animation: heartbeat 2s infinite ease-in-out;
     }
 
     @keyframes heartbeat {
@@ -714,7 +800,7 @@
       min-height: 48px;
       border: 1px solid rgba(245, 174, 202, 0.4);
       border-radius: 100px;
-      background: rgba(255,255,255,0.9);
+      background: rgba(255, 255, 255, 0.9);
       color: var(--primary);
       font-family: var(--font-sans);
       font-size: 13px;
@@ -729,13 +815,13 @@
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(195, 66, 116, 0.15);
       border-color: rgba(245, 174, 202, 0.8);
-      background: #fff;
+      background: #ffffff;
     }
 
     /* Bottone Sede Attiva */
     .paradise-linkbio-booking-btn.is-active {
       background: var(--accent-pink);
-      color: #fff;
+      color: #ffffff;
       border-color: transparent;
       box-shadow: 0 10px 22px rgba(213, 70, 125, 0.35);
     }
@@ -750,7 +836,7 @@
       margin-top: 16px;
       padding: 16px;
       border-radius: 20px;
-      background: rgba(255,255,255,0.9);
+      background: rgba(255, 255, 255, 0.9);
       border: 1px solid rgba(245, 174, 202, 0.2);
       box-shadow: inset 0 1px 1px #fff, 0 10px 20px rgba(0,0,0,0.02);
       opacity: 0;
@@ -912,42 +998,37 @@
         width: min(90vw, 1050px);
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      .paradise-linkbio-hero::before {
+        animation: none;
+        transform: scale(1);
+      }
+    }
   </style>
 
 <div class="paradise-linkbio-wrap">
   <div class="paradise-linkbio-page">
     
-    <!-- Sezione Hero Con Immagine Con Arco Pre-renderizzato -->
-    <section class="paradise-linkbio-hero-container">
-      <img class="paradise-linkbio-hero-img-transparent" src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/ChatGPT_Image_27_giu_2026_13_12_32.png?v=1782558772" alt="Rosa Francesca" loading="eager">
+    <!-- Sezione Hero Immagine + Logo -->
+    <section class="paradise-linkbio-hero">
+      <img class="paradise-linkbio-hero-img" src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/Senza-titolo-1_f1f036c1-04bc-4c93-a5af-ac3fdafc7de7.png?v=1782558128" alt="Modella Paradise Beauty" loading="eager">
+
+      <div class="paradise-linkbio-author">
+        <span>by Rosa Francesca</span>
+      </div>
     </section>
 
-    <!-- Contenuto Principale -->
+    <!-- Contenuto Principale Link -->
     <section class="paradise-linkbio-content">
       
-      <!-- Intestazione Nome Rosa Francesca in Corsivo -->
-      <div class="paradise-linkbio-profile-header">
-        <h1 class="paradise-linkbio-profile-name">Rosa Francesca</h1>
-        <p class="paradise-linkbio-profile-subtitle">Founder, Visione, Bellezza e Crescita.</p>
-      </div>
-
-      <!-- Divisore Cuore Rosa Gold con Linee Sfumate -->
-      <div class="paradise-linkbio-hero-divider">
-        <span></span>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-        </svg>
-        <span></span>
-      </div>
-
-      <!-- Navigazione Social (Instagram + TikTok) con divisore verticale -->
-      <nav class="paradise-linkbio-social-pill" aria-label="Social Rosa Francesca">
+      <!-- Navigazione Social (Instagram + TikTok) -->
+      <nav class="paradise-linkbio-social" aria-label="Social Paradise Beauty">
         <a href="https://www.instagram.com/rosa.francesca.b/" target="_blank" rel="noopener" aria-label="Instagram">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
           </svg>
         </a>
-        <span class="paradise-linkbio-social-divider"></span>
         <a
           href="https://www.tiktok.com/@rosafrancesca.bs?_r=1&_t=ZG-97Ye92hxamO"
           target="_blank"
@@ -963,29 +1044,32 @@
         </a>
       </nav>
 
-      <!-- Testo Introduttivo Centrato -->
-      <div class="paradise-linkbio-intro-text">
-        <p>Ho creato questo spazio per condividere bellezza, formazione e consapevolezza con donne che vogliono crescere e riconoscere il proprio valore.</p>
+      <!-- Intestazione Link in Bio (Solo Descrizione) -->
+      <div class="paradise-linkbio-intro">
+        <p>Trattamenti esclusivi e formazione per la donna che vuole affermarsi. Ideato da <strong>Rosa Francesca</strong>.</p>
       </div>
 
-      <!-- Citazione con Linee -->
-      <div class="paradise-linkbio-quote-container">
-        <span class="paradise-linkbio-quote-line"></span>
-        <span class="paradise-linkbio-quote-text">Credi in te. Scegli te. Diventa la tua visione.</span>
-        <span class="paradise-linkbio-quote-line"></span>
+      <!-- Divisore Elegante -->
+      <div class="paradise-linkbio-divider">
+        <span></span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+        <span></span>
       </div>
 
       <!-- Elenco Card (Link e Popup) -->
       <div class="paradise-linkbio-cards">
         
-        <!-- CARD 1 (La mia storia) -->
-        <a class="paradise-linkbio-card" href="https://www.paradisebeauty.it/pages/chi-siamo-paradise-beauty" target="_blank" rel="noopener" aria-label="La mia storia - Rosa Francesca">
+        <!-- CARD 1 (Chi è Rosa Francesca?) - Featured Hero Card -->
+        <a class="paradise-linkbio-card paradise-linkbio-card-featured" href="https://www.paradisebeauty.it/pages/chi-siamo-paradise-beauty" target="_blank" rel="noopener" aria-label="Scopri chi è Rosa Francesca">
           <div class="paradise-linkbio-card-icon">
-            <img src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/Senza-titolo-1_f1f036c1-04bc-4c93-a5af-ac3fdafc7de7.png?v=1782558128" alt="La mia storia" loading="lazy">
+            <img src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/Senza-titolo-1_f1f036c1-04bc-4c93-a5af-ac3fdafc7de7.png?v=1782558128" alt="Rosa Francesca Founder Paradise Beauty" loading="lazy">
           </div>
           <div class="paradise-linkbio-card-text">
-            <h2>La mia storia</h2>
-            <span>Dall'amore per la bellezza alla costruzione di un progetto imprenditoriale.</span>
+            <p>Founder & Story</p>
+            <h2 class="paradise-linkbio-card-title-cursive">Rosa Francesca</h2>
+            <span>Dall'amore per la bellezza alla guida di un'impresa di successo. Scopri la mia storia.</span>
           </div>
           <div class="paradise-linkbio-card-arrow">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -994,14 +1078,15 @@
           </div>
         </a>
 
-        <!-- CARD 2 (Academy & Formazione) -->
-        <a class="paradise-linkbio-card" href="https://www.paradisebeauty.it/pages/paradise-academy" target="_blank" rel="noopener" aria-label="Academy e Formazione">
+        <!-- CARD 2 (Link Home Page) -->
+        <a class="paradise-linkbio-card" href="https://www.paradisebeauty.it/" target="_blank" rel="noopener" aria-label="Visita il sito ufficiale Paradise Beauty">
           <div class="paradise-linkbio-card-icon">
-            <img src="https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=150&q=80" alt="Academy & Formazione" loading="lazy">
+            <img src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/download_2f4caeae-ffa4-4e15-860a-a4bcc6fa46f1.png?v=1779870226" alt="Logo Paradise Beauty" loading="lazy">
           </div>
           <div class="paradise-linkbio-card-text">
-            <h2>Academy & Formazione</h2>
-            <span>Percorsi pensati per chi vuole crescere davvero, nel lavoro e nella propria visione.</span>
+            <p>Sito ufficiale</p>
+            <h2>Il Nostro Sito Web</h2>
+            <span>Esplora lo shop, i servizi ed entra nel mondo Paradise.</span>
           </div>
           <div class="paradise-linkbio-card-arrow">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1010,30 +1095,15 @@
           </div>
         </a>
 
-        <!-- CARD 3 (Il mio mondo) -->
-        <a class="paradise-linkbio-card" href="https://www.instagram.com/rosa.francesca.b/" target="_blank" rel="noopener" aria-label="Il mio mondo">
+        <!-- CARD 3 (Link Academy) -->
+        <a class="paradise-linkbio-card" href="https://www.paradisebeauty.it/pages/paradise-academy" target="_blank" rel="noopener" aria-label="Corso di formazione Paradise Academy">
           <div class="paradise-linkbio-card-icon">
-            <img src="https://images.unsplash.com/photo-1526047932273-341f2a7631f9?auto=format&fit=crop&w=150&q=80" alt="Il mio mondo" loading="lazy">
+            <img src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/mobile_BANNER_CORSO_HAIR_EXTENSION_47e7d67b-fe0c-47a0-8d57-01f0b4513553.png?v=1780496716" alt="Corso Extension Paradise Academy" loading="lazy">
           </div>
           <div class="paradise-linkbio-card-text">
-            <h2>Il mio mondo</h2>
-            <span>Contenuti, riflessioni, backstage e vita reale.</span>
-          </div>
-          <div class="paradise-linkbio-card-arrow">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </div>
-        </a>
-
-        <!-- CARD 4 (Sito ufficiale) -->
-        <a class="paradise-linkbio-card" href="https://www.paradisebeauty.it/" target="_blank" rel="noopener" aria-label="Sito ufficiale">
-          <div class="paradise-linkbio-card-icon" style="background-color: #ca9095; padding: 12px; display: grid; place-items: center;">
-            <img src="https://cdn.shopify.com/s/files/1/0952/8157/8330/files/download_2f4caeae-ffa4-4e15-860a-a4bcc6fa46f1.png?v=1779870226" alt="Sito ufficiale logo" loading="lazy" style="object-fit: contain; filter: brightness(0) invert(1);">
-          </div>
-          <div class="paradise-linkbio-card-text">
-            <h2>Sito ufficiale</h2>
-            <span>Scopri tutti i progetti e i servizi.</span>
+            <p>Academy & Training</p>
+            <h2>Corso di Formazione</h2>
+            <span>Impara le tecniche delle extension e lancia la tua carriera.</span>
           </div>
           <div class="paradise-linkbio-card-arrow">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1043,12 +1113,12 @@
         </a>
       </div>
 
-      <!-- RF Monogram Footer Elegante -->
-      <div class="paradise-linkbio-monogram-footer">
-        <span></span>
-        <div class="paradise-linkbio-monogram">RF</div>
-        <span></span>
-      </div>
+
+
+      <!-- Copyright Footer -->
+      <footer class="paradise-linkbio-footer">
+        © <span id="current-year">2026</span> Tutti i diritti riservati. Proprietà di Rosa Francesca SRL
+      </footer>
     </section>
   </div>
 </div>
@@ -1104,5 +1174,3 @@
     }
   })();
 </script>
-
-
