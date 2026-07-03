@@ -40,7 +40,16 @@ function eventDate(date: Date, time?: string | null) {
   const offset = tzString.split("GMT")[1] || "+02:00";
   return { dateTime: `${dateOnly(date)}T${time}:00${offset}`, timeZone: "Europe/Rome" };
 }
-
+function cleanCalendarId(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    const match = trimmed.match(/\/ical\/([^/]+)/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]);
+    }
+  }
+  return trimmed;
+}
 function resolveExtraLeaveCalendarIds(primaryCalendarId: string) {
   const configured = process.env.GOOGLE_LEAVE_EXTRA_CALENDAR_IDS?.split(",") ?? [];
   return Array.from(new Set([...DEFAULT_EXTRA_LEAVE_CALENDAR_IDS, ...configured]
@@ -121,7 +130,7 @@ async function resolveCalendarId() {
   });
 
   if (adminWithCalendar?.google_calendar_id) {
-    calendarId = adminWithCalendar.google_calendar_id.trim();
+    calendarId = cleanCalendarId(adminWithCalendar.google_calendar_id);
   }
 
   return calendarId;
@@ -221,7 +230,7 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
   const event = buildScheduleEvent(entry);
   let targetCalendarId = setup.calendarId;
   if (entry.user.google_calendar_id && entry.user.google_calendar_sync) {
-    targetCalendarId = entry.user.google_calendar_id.trim();
+    targetCalendarId = cleanCalendarId(entry.user.google_calendar_id);
   }
 
   // ── Primary calendar ──────────────────────────────────────────────
@@ -295,7 +304,7 @@ export async function deleteScheduleEventFromGoogleCalendar(
       include: { user: true },
     });
     if (entry?.user?.google_calendar_id && entry.user.google_calendar_sync) {
-      targetCalendarId = entry.user.google_calendar_id.trim();
+      targetCalendarId = cleanCalendarId(entry.user.google_calendar_id);
     }
   }
 
@@ -366,7 +375,7 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
   });
 
   if (adminWithCalendar?.google_calendar_id) {
-    calendarId = adminWithCalendar.google_calendar_id.trim();
+    calendarId = cleanCalendarId(adminWithCalendar.google_calendar_id);
   }
 
   if (!calendarId || !clientEmail || !privateKey) {
@@ -538,7 +547,7 @@ export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
   });
 
   if (adminWithCalendar?.google_calendar_id) {
-    calendarId = adminWithCalendar.google_calendar_id.trim();
+    calendarId = cleanCalendarId(adminWithCalendar.google_calendar_id);
   }
 
   if (!calendarId || !clientEmail || !privateKey) {
