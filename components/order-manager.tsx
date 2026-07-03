@@ -437,19 +437,47 @@ export function OrderManager({
                     <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-black/40">Cronologia Stati e Note</h3>
                     <div className="grid gap-3">
                       {(selected.activity_log as any[]).map((log: any, idx: number) => {
-                        const colFrom = ORDER_COLUMNS.find((c) => c.id === log.from);
-                        const colTo = ORDER_COLUMNS.find((c) => c.id === log.to);
+                        const logDate = log.at || log.date;
+                        let formattedDate = "";
+                        if (logDate) {
+                          try {
+                            formattedDate = new Intl.DateTimeFormat("it-IT", { 
+                              day: "2-digit", 
+                              month: "short", 
+                              hour: "2-digit", 
+                              minute: "2-digit" 
+                            }).format(new Date(logDate));
+                          } catch (e) {
+                            formattedDate = "";
+                          }
+                        }
+
+                        let title = "";
+                        if (log.action) {
+                          title = log.action;
+                        } else if (log.from !== undefined || log.to !== undefined) {
+                          const colFrom = ORDER_COLUMNS.find((c) => c.id === log.from);
+                          const colTo = ORDER_COLUMNS.find((c) => c.id === log.to);
+                          title = `Stato cambiato da ${colFrom?.label ?? log.from ?? 'sconosciuto'} a ${colTo?.label ?? log.to ?? 'sconosciuto'}`;
+                        } else {
+                          title = "Attività registrata";
+                        }
+
+                        const actor = log.by || log.user || "Staff";
+
                         return (
                           <div key={idx} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-4 text-sm">
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-extrabold text-black/75">
-                                Stato cambiato da {colFrom?.label ?? log.from} a {colTo?.label ?? log.to}
+                                {title}
                               </span>
-                              <span className="text-[11px] text-black/40">
-                                {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(log.at))}
-                              </span>
+                              {formattedDate && (
+                                <span className="text-[11px] text-black/40">
+                                  {formattedDate}
+                                </span>
+                              )}
                             </div>
-                            <p className="mt-1 text-xs text-black/45">Modificato da: {log.by}</p>
+                            <p className="mt-1 text-xs text-black/45">Modificato da: {actor}</p>
                             {log.note && (
                               <div className="mt-3 rounded-xl bg-white p-3 border border-black/5">
                                 <p className="text-xs font-bold text-black/35 mb-1">Nota stato:</p>
