@@ -238,23 +238,29 @@ export default async function DashboardPage() {
       take: 30,
     }), []),
     role !== "DIPENDENTE"
-      ? safe(prisma.serviceFormResponse.findMany({
-          where: {
-            created_at: { gte: statusYesterday, lt: statusTomorrow },
-            ...(role === "RESPONSABILE" ? { user_location_id: currentUser.sede_id ?? undefined } : {}),
-            form: {
-              is: {
-                OR: [
-                  { name: { contains: "chiusura cassa", mode: "insensitive" } },
-                  { category: { contains: "cassa", mode: "insensitive" } },
-                ],
-              },
+      ? safe(
+          prisma.cashClosing.findMany({
+            where: {
+              created_at: { gte: statusYesterday, lt: statusTomorrow },
+              ...(role === "RESPONSABILE" ? { location_id: currentUser.sede_id ?? undefined } : {}),
             },
-          },
-          include: { form: true, user: { select: { id: true, name: true, role: true, photo_url: true, sede_id: true } } },
-          orderBy: { created_at: "desc" },
-          take: 20,
-        }), [])
+            include: { user: true, location: true },
+            orderBy: { created_at: "desc" },
+            take: 20,
+          }).then(closings => closings.map(c => ({
+            id: c.id,
+            user_location_name: c.location?.name,
+            user: c.user,
+            created_at: c.created_at,
+            answers: {
+              [CASH_CLOSING_FIELD_IDS.withdrawn]: c.withdrawn,
+              [CASH_CLOSING_FIELD_IDS.fund]: c.fund,
+              [CASH_CLOSING_FIELD_IDS.notes]: c.notes,
+              _signature: { user_name: c.signature_name },
+            }
+          }))),
+          []
+        )
       : Promise.resolve([]),
   ]);
   const allowedNewResponses = rawNewResponses.filter((r: any) => {
