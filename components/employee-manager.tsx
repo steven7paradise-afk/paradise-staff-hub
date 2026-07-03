@@ -22,6 +22,8 @@ type Employee = {
   photoUrl: string;
   whatsappPhone: string;
   mansione?: string | null;
+  googleCalendarId: string;
+  googleCalendarSync: boolean;
 };
 
 type Location = { id: string; name: string };
@@ -59,6 +61,8 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     photoUrl: "",
     whatsappPhone: "",
     mansione: "",
+    googleCalendarId: "",
+    googleCalendarSync: false,
   };
   const activeEmployees = employees.filter((employee) => employee.active);
   const inactiveEmployees = employees.filter((employee) => !employee.active);
@@ -122,6 +126,8 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       photoUrl: data.photo_url ?? "",
       whatsappPhone: data.whatsapp_phone ?? "",
       mansione: data.mansione ?? "",
+      googleCalendarId: data.google_calendar_id ?? "",
+      googleCalendarSync: data.google_calendar_sync ?? false,
     };
     setEmployees((current) =>
       creating ? [...current, updated].sort((a, b) => a.name.localeCompare(b.name)) : current.map((item) => (item.id === updated.id ? updated : item)),
@@ -267,6 +273,30 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                 <span className="text-xs font-bold tracking-wide uppercase text-black/55">{creating ? "Password Provvisoria" : "Nuova Password (opzionale)"}</span>
                 <Field type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={creating ? "Automatica se vuota" : "Minimo 8 caratteri"} />
               </label>
+
+              {/* Google Calendar Sync settings */}
+              <div className="sm:col-span-2 rounded-2xl bg-gradient-to-br from-indigo-50/20 to-blue-50/20 border border-blue-100 p-4 space-y-4">
+                <label className="flex items-center gap-3 select-none cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-indigo-600"
+                    checked={editing.googleCalendarSync}
+                    onChange={(event) => updateDraft("googleCalendarSync", event.target.checked)}
+                  />
+                  <span className="text-sm font-bold text-paradise-noir">Sincronizzazione Google Calendar Attiva</span>
+                </label>
+
+                {editing.googleCalendarSync && (
+                  <label className="block space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <span className="text-xs font-bold tracking-wide uppercase text-black/55">ID Calendario Google</span>
+                    <Field
+                      value={editing.googleCalendarId}
+                      onChange={(event) => updateDraft("googleCalendarId", event.target.value)}
+                      placeholder="es: xxxxxxxxxxxxx@group.calendar.google.com"
+                    />
+                  </label>
+                )}
+              </div>
 
               <label className="flex items-center gap-3 rounded-2xl border border-black/5 bg-neutral-50/50 p-4 sm:col-span-2 select-none cursor-pointer hover:bg-neutral-50 transition-colors">
                 <input type="checkbox" className="size-4 accent-[#B85B68]" checked={editing.active} onChange={(event) => updateDraft("active", event.target.checked)} />

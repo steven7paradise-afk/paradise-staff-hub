@@ -63,6 +63,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
       access_list: data.accessList !== undefined ? data.accessList : undefined,
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
+      google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
+      google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : undefined,
       ...(pin ? { pin_hash: await bcrypt.hash(pin, 12), pin_lookup: pinLookup(pin) } : {}),
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {}),
   };

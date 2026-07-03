@@ -219,6 +219,10 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
   if (setup.skipped) return setup;
 
   const event = buildScheduleEvent(entry);
+  let targetCalendarId = setup.calendarId;
+  if (entry.user.google_calendar_id && entry.user.google_calendar_sync) {
+    targetCalendarId = entry.user.google_calendar_id.trim();
+  }
 
   // ── Primary calendar ──────────────────────────────────────────────
   let primaryEventId = entry.google_calendar_event_id;
@@ -227,7 +231,7 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
   if (primaryEventId) {
     try {
       await setup.calendar.events.update({
-        calendarId: setup.calendarId,
+        calendarId: targetCalendarId,
         eventId: primaryEventId,
         requestBody: event,
         sendUpdates: "none",
@@ -241,7 +245,7 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
 
   if (!primaryEventId) {
     const response = await setup.calendar.events.insert({
-      calendarId: setup.calendarId,
+      calendarId: targetCalendarId,
       requestBody: event,
       sendUpdates: "none",
     });
@@ -261,7 +265,7 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
   // as a stable tracking key so we can upsert/delete correctly.
   let extraCalendars: Array<{ calendarId: string; skipped?: boolean; error?: boolean; message?: string }> = [];
   if (isLeaveCategory(entry.category)) {
-    const extraCalendarIds = resolveExtraLeaveCalendarIds(setup.calendarId);
+    const extraCalendarIds = resolveExtraLeaveCalendarIds(targetCalendarId);
     const results = await Promise.allSettled(
       extraCalendarIds.map((extraCalendarId) =>
         upsertTrackedLeaveEvent(setup.calendar, extraCalendarId, `schedule-${entry.id}`, event)
@@ -269,8 +273,8 @@ export async function syncScheduleEntryToGoogleCalendar(scheduleEntryId: string)
     );
     extraCalendars = results.map((r) =>
       r.status === "fulfilled"
-        ? r.value
-        : { calendarId: "", error: true, message: r.reason instanceof Error ? r.reason.message : "Extra calendar sync failed" }
+          ? r.value
+          : { calendarId: "", error: true, message: r.reason instanceof Error ? r.reason.message : "Extra calendar sync failed" }
     );
   }
 
@@ -284,6 +288,17 @@ export async function deleteScheduleEventFromGoogleCalendar(
   const setup = await getCalendarClient();
   if (setup.skipped) return setup;
 
+  let targetCalendarId = setup.calendarId;
+  if (scheduleEntryId) {
+    const entry = await prisma.scheduleEntry.findUnique({
+      where: { id: scheduleEntryId },
+      include: { user: true },
+    });
+    if (entry?.user?.google_calendar_id && entry.user.google_calendar_sync) {
+      targetCalendarId = entry.user.google_calendar_id.trim();
+    }
+  }
+
   // ── Primary calendar ──────────────────────────────────────────────
   let primaryResult: { deleted?: boolean; skipped?: boolean; reason?: string; error?: boolean; message?: string } = {
     skipped: true,
@@ -293,7 +308,7 @@ export async function deleteScheduleEventFromGoogleCalendar(
   if (eventId) {
     try {
       await setup.calendar.events.delete({
-        calendarId: setup.calendarId,
+        calendarId: targetCalendarId,
         eventId,
         sendUpdates: "none",
       });

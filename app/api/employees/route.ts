@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
       photo_url: data.photoUrl ? String(data.photoUrl).trim() : null,
       whatsapp_phone: whatsappPhone,
       mansione,
+      google_calendar_id: data.googleCalendarId ? String(data.googleCalendarId).trim() : null,
+      google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : false,
       active: data.active !== false,
     },
   });

@@ -36,6 +36,8 @@ export default async function EmployeesPage() {
           photoUrl: employee.photo_url ?? "",
           whatsappPhone: employee.whatsapp_phone ?? "",
           mansione: employee.mansione ?? "",
+          googleCalendarId: employee.google_calendar_id ?? "",
+          googleCalendarSync: employee.google_calendar_sync,
         }))}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
       />
