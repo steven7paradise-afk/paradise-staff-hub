@@ -123,6 +123,8 @@ export default async function DashboardPage() {
   const statusToday = romeDate();
   const statusTomorrow = new Date(statusToday);
   statusTomorrow.setUTCDate(statusTomorrow.getUTCDate() + 1);
+  const statusYesterday = new Date(statusToday);
+  statusYesterday.setUTCDate(statusYesterday.getUTCDate() - 1);
   let attendanceWhere: Prisma.AttendanceLogWhereInput = {};
   let requestWhere: Prisma.LeaveRequestWhereInput = {};
   if (role === "DIPENDENTE") {
@@ -238,7 +240,7 @@ export default async function DashboardPage() {
     role !== "DIPENDENTE"
       ? safe(prisma.serviceFormResponse.findMany({
           where: {
-            created_at: { gte: statusToday, lt: statusTomorrow },
+            created_at: { gte: statusYesterday, lt: statusTomorrow },
             ...(role === "RESPONSABILE" ? { user_location_id: currentUser.sede_id ?? undefined } : {}),
             form: {
               is: {
@@ -466,7 +468,7 @@ export default async function DashboardPage() {
           </Link>
         </div>
       )}
-      {role !== "DIPENDENTE" ? <CashClosingTodayDashboard responses={todayCashClosings as any[]} /> : null}
+      {role !== "DIPENDENTE" ? <CashClosingTodayDashboard responses={todayCashClosings as any[]} statusToday={statusToday} /> : null}
 
       {role !== "DIPENDENTE" ? (
         <>
@@ -875,7 +877,7 @@ function formatMoney(value: number) {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
-function CashClosingTodayDashboard({ responses }: { responses: any[] }) {
+function CashClosingTodayDashboard({ responses, statusToday }: { responses: any[], statusToday: Date }) {
   const totalWithdrawn = responses.reduce((sum, response) => sum + moneyValue(response.answers?.[CASH_CLOSING_FIELD_IDS.withdrawn]), 0);
   const differentFundCount = responses.filter((response) => Math.abs(moneyValue(response.answers?.[CASH_CLOSING_FIELD_IDS.fund]) - 50) > 0.009).length;
 
@@ -887,8 +889,8 @@ function CashClosingTodayDashboard({ responses }: { responses: any[] }) {
             <Calculator className="size-5" />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#9E7A3B] dark:text-[#F7DFA7]">Cassa oggi</p>
-            <h2 className="text-lg font-black text-black dark:text-white">Chiusure cassa di oggi</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#9E7A3B] dark:text-[#F7DFA7]">Controllo Cassa</p>
+            <h2 className="text-lg font-black text-black dark:text-white">Chiusure cassa (Ultime 48h)</h2>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
@@ -908,7 +910,7 @@ function CashClosingTodayDashboard({ responses }: { responses: any[] }) {
       </div>
 
       {responses.length === 0 ? (
-        <p className="p-5 text-sm font-semibold text-black/45 dark:text-white/45">Nessuna chiusura cassa registrata oggi.</p>
+        <p className="p-5 text-sm font-semibold text-black/45 dark:text-white/45">Nessuna chiusura cassa registrata nelle ultime 48 ore.</p>
       ) : (
         <div className="divide-y divide-black/5 dark:divide-white/10">
           {responses.map((response) => {
@@ -921,7 +923,7 @@ function CashClosingTodayDashboard({ responses }: { responses: any[] }) {
                 <div>
                   <p className="text-sm font-black text-black dark:text-white">{response.user_location_name || response.user?.location?.name || "Sede non indicata"}</p>
                   <p className="mt-1 text-xs text-black/50 dark:text-white/45">
-                    Firmata da <strong>{signature?.user_name || response.user?.name || "Dipendente"}</strong> · {new Date(response.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    Firmata da <strong>{signature?.user_name || response.user?.name || "Dipendente"}</strong> · <span className={new Date(response.created_at) >= statusToday ? "text-[#9E7A3B] dark:text-[#F7DFA7] font-bold" : "text-black/40 dark:text-white/40"}>{new Date(response.created_at) >= statusToday ? "Oggi" : "Ieri"}</span> alle {new Date(response.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                   {answers[CASH_CLOSING_FIELD_IDS.notes] ? (
                     <p className="mt-2 rounded-xl bg-black/[0.03] px-3 py-2 text-xs text-black/60 dark:bg-white/5 dark:text-white/55">{String(answers[CASH_CLOSING_FIELD_IDS.notes])}</p>
