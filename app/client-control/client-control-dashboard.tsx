@@ -132,6 +132,7 @@ export function ClientControlDashboard({
   const [selected, setSelected] = useState<ResponseItem | null>(null);
   const [draftAnswers, setDraftAnswers] = useState<Record<string, any>>({});
   const [viewingResponse, setViewingResponse] = useState<any | null>(null);
+  const [viewingMetricList, setViewingMetricList] = useState<{ title: string; key: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
@@ -490,7 +491,11 @@ export function ClientControlDashboard({
             const max = Math.max(...rows.map((row) => row[metric.key]), 1);
             const Icon = metric.icon;
             return (
-              <div key={metric.key} className="rounded-[28px] border border-black/[0.06] bg-gradient-to-br from-white to-neutral-50/80 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:shadow-[0_12px_40px_rgba(234,140,205,0.08)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group">
+              <div 
+                key={metric.key} 
+                onClick={() => setViewingMetricList({ title: metric.title, key: metric.key })}
+                className="cursor-pointer rounded-[28px] border border-black/[0.06] bg-gradient-to-br from-white to-neutral-50/80 p-5 shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:shadow-[0_12px_40px_rgba(234,140,205,0.08)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group"
+              >
                 <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-transparent to-neutral-100/50 rounded-bl-full pointer-events-none transition-transform duration-500 group-hover:scale-110" />
                 
                 <div className="flex items-center gap-2">
@@ -725,6 +730,65 @@ export function ClientControlDashboard({
               <button type="button" onClick={saveSelected} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#EA8CCD] px-6 py-3 text-sm font-black text-white disabled:opacity-60">
                 <Edit3 className="size-4" /> {saving ? "Salvataggio..." : "Salva modifiche"}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewingMetricList ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-[28px] bg-white shadow-2xl flex flex-col">
+            <div className="flex items-start justify-between gap-4 border-b border-black/10 p-6 bg-[#FAF6F9]">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Dettaglio Statistiche</p>
+                <h3 className="text-2xl font-black text-black/80">{viewingMetricList.title}</h3>
+                <p className="mt-1 text-xs font-semibold text-black/40">
+                  {monthsList.find((m) => m.value === selectedMonth)?.label} {selectedYear} • {activeSalon}
+                </p>
+              </div>
+              <button type="button" onClick={() => setViewingMetricList(null)} className="grid size-11 place-items-center rounded-full bg-black/[0.04] text-black/60 hover:bg-black/[0.08] transition"><X className="size-5" /></button>
+            </div>
+            
+            <div className="overflow-y-auto p-6 flex-1 bg-white">
+              <div className="grid gap-3">
+                {analyticsResponses.filter((response) => {
+                  const answers = response.answers ?? {};
+                  const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
+                  if (activeSalon !== "Tutti" && salon !== activeSalon) return false;
+                  
+                  if (viewingMetricList.key === "notePhoto") return truthy(answers[CLIENT_CONTROL_FIELD_IDS.notes]) || truthy(answers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]) || truthy(answers[CLIENT_CONTROL_FIELD_IDS.afterMedia]);
+                  if (viewingMetricList.key === "products") return truthy(answers[CLIENT_CONTROL_FIELD_IDS.products]);
+                  if (viewingMetricList.key === "reviews") return truthy(answers[CLIENT_CONTROL_FIELD_IDS.review]);
+                  if (viewingMetricList.key === "consulenze") return String(answers[CLIENT_CONTROL_FIELD_IDS.productsList] || "").toLowerCase().includes("consulenz");
+                  return false;
+                }).map((response) => {
+                  const answers = response.answers ?? {};
+                  return (
+                    <div key={response.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-black/5 hover:border-black/10 hover:bg-[#FAF6F9]/50 transition-colors">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-black text-sm">{answerText(answers[CLIENT_CONTROL_FIELD_IDS.clientName])}</p>
+                          <span className="text-[10px] font-bold text-black/40 bg-black/5 px-2 py-0.5 rounded-full">
+                            {new Date(response.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <p className="text-xs font-semibold text-black/50">
+                          Staff: <span className="text-black/70">
+                            {answerText(namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff] || answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner] || response.user.name).map((name) => resolveCanonicalStaffName(name, employeeNames)))}
+                          </span>
+                        </p>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setViewingResponse(response)} 
+                        className="bg-black/5 hover:bg-black/10 text-black text-xs font-bold px-4 py-2 rounded-xl transition whitespace-nowrap"
+                      >
+                        Apri Controllo
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
