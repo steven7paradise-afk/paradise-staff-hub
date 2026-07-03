@@ -405,9 +405,12 @@ export default async function DashboardPage() {
       role={role}
       hideHeader={role === "DIPENDENTE"}
     >
+      {/* Sfondo fisso per garantire l'effetto Glassmorphism/Neumorphism indipendentemente dal tema dell'utente */}
+      <div className="fixed inset-0 -z-10 bg-[#f4f7f9] dark:bg-[#0f0f11] pointer-events-none" />
+      
       {/* Profile Banner (Replaces standard header for DIPENDENTE) */}
       {role === "DIPENDENTE" ? (
-        <div className="relative overflow-hidden rounded-3xl border border-black/5 bg-white/70 dark:bg-white/5 dark:border-white/10 p-5 md:p-6 shadow-sm backdrop-blur-md flex flex-col md:flex-row items-center md:items-start justify-between gap-5 transition-all duration-300 hover:shadow-luxury mb-6">
+        <div className="relative overflow-hidden rounded-3xl border border-white/60 bg-white/70 dark:bg-white/5 dark:border-white/10 p-5 md:p-6 shadow-luxury backdrop-blur-xl flex flex-col md:flex-row items-center md:items-start justify-between gap-5 transition-all duration-300 mb-6">
           <div className="absolute top-0 right-0 -z-10 translate-x-12 -translate-y-12 size-40 rounded-full bg-paradise-softPink/20 dark:bg-white/5 blur-3xl" />
           
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 w-full md:w-auto">
