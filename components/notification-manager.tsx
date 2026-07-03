@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -113,6 +113,8 @@ export function NotificationManager({
   const [filter, setFilter] = useState<Filter>("ALL");
   const [query, setQuery] = useState("");
   const router = useRouter();
+  const clickCountsRef = useRef<Record<string, number>>({});
+  const clickTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const recipientsByLocation = locations.map((location) => ({
     ...location,
@@ -123,6 +125,12 @@ export function NotificationManager({
   useEffect(() => {
     setItems(notifications);
   }, [notifications]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(clickTimeoutsRef.current).forEach((timeoutId) => clearTimeout(timeoutId));
+    };
+  }, []);
 
   const stats = useMemo(() => {
     return {
@@ -181,6 +189,32 @@ export function NotificationManager({
     router.push(href);
   }
 
+  function handleNotificationClick(notification: NotificationItem) {
+    const currentCount = (clickCountsRef.current[notification.id] ?? 0) + 1;
+    clickCountsRef.current[notification.id] = currentCount;
+
+    const existingTimeout = clickTimeoutsRef.current[notification.id];
+    if (existingTimeout) clearTimeout(existingTimeout);
+
+    clickTimeoutsRef.current[notification.id] = setTimeout(() => {
+      const finalCount = clickCountsRef.current[notification.id] ?? 0;
+      delete clickCountsRef.current[notification.id];
+      delete clickTimeoutsRef.current[notification.id];
+
+      if (finalCount >= 3) {
+        void deleteNotification(notification);
+        return;
+      }
+
+      if (finalCount === 2) {
+        void openNotification(notification);
+        return;
+      }
+
+      void markRead(notification);
+    }, 260);
+  }
+
   async function send() {
     setSending(true);
     setStatus("Invio comunicazione in corso...");
@@ -207,9 +241,7 @@ export function NotificationManager({
       <div className="w-full max-w-none space-y-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
-            <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#E13D81]">Paradise Beauty</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-tight">Comunicazioni</h2>
-            <p className="mt-2 text-black/55">Messaggi, avvisi e comunicazioni interne.</p>
+            <p className="text-base text-black/55">Messaggi, avvisi e comunicazioni interne.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="grid grid-cols-3 rounded-2xl border border-black/10 bg-white p-1 text-sm font-semibold shadow-sm">
@@ -281,12 +313,12 @@ export function NotificationManager({
                   <button
                     key={notification.id}
                     className="grid w-full gap-4 p-6 text-left transition hover:bg-[#FAF7F9] md:grid-cols-[72px_1fr_auto] md:items-center"
-                    onClick={() => openNotification(notification)}
+                    onClick={() => handleNotificationClick(notification)}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       void deleteNotification(notification);
                     }}
-                    title="Click per aprire. Click destro per eliminare."
+                    title="1 click segna letta, 2 click apre, 3 click archivia."
                   >
                     <div className={cn("grid size-16 place-items-center rounded-[20px]", style.bg)}>
                       <Icon className="size-7" />
@@ -295,7 +327,7 @@ export function NotificationManager({
                       {isImportant(notification) ? <span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-bold uppercase text-[#E13D81]">Importante</span> : null}
                       <p className="mt-2 text-lg font-semibold">{notification.title}</p>
                       <p className="mt-1 text-sm text-black/55">{notification.type.toLowerCase()} <span className="mx-2">•</span> {dateLabel(notification.createdAt)}</p>
-                      <p className="mt-2 line-clamp-2 text-sm leading-6 text-black/60">{notification.message}</p>
+                      <p className="mt-2 line-clamp-1 text-sm leading-6 text-black/50">{notification.message}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className={cn("rounded-full px-3 py-1 text-xs font-bold", statusInfo.className)}>{statusInfo.label}</span>
@@ -338,18 +370,20 @@ export function NotificationManager({
       </div>
 
       {selected ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-xl">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-sm">
+          <Card className="w-full max-w-2xl border border-black/5 bg-white p-7 shadow-2xl">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">{selected.type.toLowerCase()}</p>
-                <h2 className="mt-2 text-2xl font-semibold">{selected.title}</h2>
-                <p className="mt-1 text-sm text-black/45">{dateLabel(selected.createdAt)}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#C85C8C]">{selected.type.toLowerCase()}</p>
+                <h2 className="mt-2 text-2xl font-semibold leading-tight text-black">{selected.title}</h2>
+                <p className="mt-2 text-sm font-medium text-black/45">{dateLabel(selected.createdAt)}</p>
               </div>
               <button className="grid size-10 place-items-center rounded-xl border border-black/10" onClick={() => setSelected(null)}><X className="size-5" /></button>
             </div>
-            <p className="whitespace-pre-line text-sm leading-7 text-black/65">{selected.message}</p>
-            <Button className="mt-6 w-full" onClick={() => setSelected(null)}>Ho letto</Button>
+            <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-5">
+              <p className="whitespace-pre-line text-base leading-8 text-black/80">{selected.message}</p>
+            </div>
+            <Button className="mt-6 min-h-14 w-full rounded-2xl bg-[#E88CCC] text-base font-semibold text-white shadow-lg shadow-pink-100 hover:bg-[#DF78BF]" onClick={() => setSelected(null)}>Ho letto</Button>
           </Card>
         </div>
       ) : null}

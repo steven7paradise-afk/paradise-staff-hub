@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X } from "lucide-react";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { cn } from "@/lib/utils";
@@ -69,7 +69,7 @@ function buildAnalytics(responses: ResponseItem[], employeeNames: string[]) {
     salon: string;
     responses: number;
     paid: number;
-    staff: Map<string, { name: string; services: number; notePhoto: number; products: number; reviews: number; checks: number }>;
+    staff: Map<string, { name: string; services: number; notePhoto: number; products: number; reviews: number; consulenze: number; checks: number }>;
   }>();
 
   for (const response of responses) {
@@ -95,14 +95,16 @@ function buildAnalytics(responses: ResponseItem[], employeeNames: string[]) {
       (truthy(answers[CLIENT_CONTROL_FIELD_IDS.afterMedia]) ? 1 : 0);
     const products = truthy(answers[CLIENT_CONTROL_FIELD_IDS.products]) ? 1 : 0;
     const reviews = truthy(answers[CLIENT_CONTROL_FIELD_IDS.review]) ? 1 : 0;
+    const consulenze = String(answers[CLIENT_CONTROL_FIELD_IDS.productsList] || "").toLowerCase().includes("consulenz") ? 1 : 0;
 
     for (const name of staffNames) {
-      const current = entry.staff.get(name) ?? { name, services: 0, notePhoto: 0, products: 0, reviews: 0, checks: 0 };
+      const current = entry.staff.get(name) ?? { name, services: 0, notePhoto: 0, products: 0, reviews: 0, consulenze: 0, checks: 0 };
       current.services += 1;
       current.notePhoto += notePhoto;
       current.products += products;
       current.reviews += reviews;
-      current.checks += notePhoto + products + reviews;
+      current.consulenze += consulenze;
+      current.checks += notePhoto + products + reviews + consulenze;
       entry.staff.set(name, current);
     }
   }
@@ -162,13 +164,14 @@ export function ClientControlDashboard({
   const analyticsResponses = useMemo(() => monthlyResponses.filter((response) => countsInAnalytics(response.answers ?? {})), [monthlyResponses]);
   const salons = useMemo(() => buildAnalytics(monthlyResponses, employeeNames), [employeeNames, monthlyResponses]);
   const allStaff = useMemo(() => {
-    const staff = new Map<string, { name: string; services: number; notePhoto: number; products: number; reviews: number; checks: number }>();
+    const staff = new Map<string, { name: string; services: number; notePhoto: number; products: number; reviews: number; consulenze: number; checks: number }>();
     salons.forEach((salon) => salon.staff.forEach((item) => {
-      const current = staff.get(item.name) ?? { name: item.name, services: 0, notePhoto: 0, products: 0, reviews: 0, checks: 0 };
+      const current = staff.get(item.name) ?? { name: item.name, services: 0, notePhoto: 0, products: 0, reviews: 0, consulenze: 0, checks: 0 };
       current.services += item.services;
       current.notePhoto += item.notePhoto;
       current.products += item.products;
       current.reviews += item.reviews;
+      current.consulenze += item.consulenze;
       current.checks += item.checks;
       staff.set(item.name, current);
     }));
@@ -248,10 +251,11 @@ export function ClientControlDashboard({
     doc.setFont("helvetica", "bold");
     
     doc.text("COLLABORATORE", 18, startY + 5.5);
-    doc.text("SERVIZI", 80, startY + 5.5);
-    doc.text("NOTE/FOTO", 102, startY + 5.5);
-    doc.text("PRODOTTI", 128, startY + 5.5);
-    doc.text("RECENSIONI", 150, startY + 5.5);
+    doc.text("SERVIZI", 70, startY + 5.5);
+    doc.text("NOTE/FOTO", 90, startY + 5.5);
+    doc.text("PRODOTTI", 112, startY + 5.5);
+    doc.text("RECENSIONI", 134, startY + 5.5);
+    doc.text("CONSUL.", 156, startY + 5.5);
     doc.text("BONUS TOT", 175, startY + 5.5);
 
     doc.setDrawColor(230, 230, 230);
@@ -281,10 +285,11 @@ export function ClientControlDashboard({
         doc.text(staff.name, 18, currentY + 5.5);
         doc.setFont("helvetica", "normal");
         
-        doc.text(String(staff.services), 80, currentY + 5.5);
-        doc.text(String(staff.notePhoto), 102, currentY + 5.5);
-        doc.text(String(staff.products), 128, currentY + 5.5);
-        doc.text(String(staff.reviews), 150, currentY + 5.5);
+        doc.text(String(staff.services), 70, currentY + 5.5);
+        doc.text(String(staff.notePhoto), 90, currentY + 5.5);
+        doc.text(String(staff.products), 112, currentY + 5.5);
+        doc.text(String(staff.reviews), 134, currentY + 5.5);
+        doc.text(String(staff.consulenze), 156, currentY + 5.5);
         
         doc.setFont("helvetica", "bold");
         doc.text(String(staff.checks), 175, currentY + 5.5);
@@ -301,10 +306,11 @@ export function ClientControlDashboard({
           doc.setTextColor(198, 97, 112);
           doc.setFont("helvetica", "bold");
           doc.text("COLLABORATORE", 18, currentY + 5.5);
-          doc.text("SERVIZI", 80, currentY + 5.5);
-          doc.text("NOTE/FOTO", 102, currentY + 5.5);
-          doc.text("PRODOTTI", 128, currentY + 5.5);
-          doc.text("RECENSIONI", 150, currentY + 5.5);
+          doc.text("SERVIZI", 70, currentY + 5.5);
+          doc.text("NOTE/FOTO", 90, currentY + 5.5);
+          doc.text("PRODOTTI", 112, currentY + 5.5);
+          doc.text("RECENSIONI", 134, currentY + 5.5);
+          doc.text("CONSUL.", 156, currentY + 5.5);
           doc.text("BONUS TOT", 175, currentY + 5.5);
           doc.line(15, currentY + 8, 195, currentY + 8);
           currentY += 8;
@@ -478,6 +484,7 @@ export function ClientControlDashboard({
             { title: "Note & foto", key: "notePhoto" as const, gradient: "from-[#D29BFD] to-[#8C3FD6]", glow: "rgba(210,155,253,0.35)", icon: Camera },
             { title: "Recensioni", key: "reviews" as const, gradient: "from-[#7ABAFE] to-[#2563EB]", glow: "rgba(122,186,254,0.35)", icon: Star },
             { title: "Prodotti", key: "products" as const, gradient: "from-[#64D2E1] to-[#0D9488]", glow: "rgba(100,210,225,0.35)", icon: ShoppingBag },
+            { title: "Consulenze", key: "consulenze" as const, gradient: "from-[#FFB56B] to-[#F97316]", glow: "rgba(249,115,22,0.35)", icon: MessageCircle },
           ].map((metric) => {
             const rows = (selectedSalon?.staff ?? []).filter((staff) => staff[metric.key] > 0).slice(0, 4);
             const max = Math.max(...rows.map((row) => row[metric.key]), 1);

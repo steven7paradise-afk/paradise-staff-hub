@@ -144,7 +144,11 @@ function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function getBookingDateKey(booking: Pick<AppointmentRecord, "startDate">) {
+function getBookingDateKey(booking: Pick<AppointmentRecord, "startDate" | "dateKey">) {
+  if ("dateKey" in booking && booking.dateKey) {
+    return booking.dateKey;
+  }
+
   return localDateKey(new Date(booking.startDate));
 }
 

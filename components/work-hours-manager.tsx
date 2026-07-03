@@ -41,6 +41,20 @@ function daysInMonth(year: number, month: number) {
   return Array.from({ length: new Date(year, month + 1, 0).getDate() }, (_, index) => new Date(Date.UTC(year, month, index + 1)));
 }
 
+function getWorkedHours(record?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
+  if (!record) return 0;
+  return record.paidBreak ? record.grossHours : record.netHours;
+}
+
+function getControlHours(record?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
+  if (!record) return 0;
+  const controlHours = Number(record.hours);
+  if (Number.isFinite(controlHours) && controlHours > 0) {
+    return controlHours;
+  }
+  return record.scheduledHours ?? 0;
+}
+
 export function WorkHoursManager({
   workers,
   initialYear,
@@ -97,8 +111,8 @@ export function WorkHoursManager({
     weekDays.forEach((day) => {
       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
       const record = records[recordKey];
-      worked += Number(record?.hours) || 0;
-      due += record?.scheduledHours ?? 0;
+      worked += getWorkedHours(record);
+      due += getControlHours(record);
     });
     
     return { worked, due };
@@ -146,8 +160,8 @@ export function WorkHoursManager({
     days.forEach((day) => {
       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
       const record = records[recordKey];
-      const hours = Number(record?.hours) || 0;
-      const scheduled = record?.scheduledHours ?? 0;
+      const hours = getWorkedHours(record);
+      const scheduled = getControlHours(record);
 
       worked += hours;
       due += scheduled;

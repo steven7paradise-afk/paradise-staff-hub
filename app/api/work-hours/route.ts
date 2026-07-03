@@ -168,8 +168,8 @@ export async function PUT(request: NextRequest) {
 
   const record = await prisma.workHourRecord.upsert({
     where: { user_id_date: { user_id: userId, date } },
-    update: { hours: manualOverride ? hours : computedHours, note: note || null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
-    create: { user_id: userId, date, hours: manualOverride ? hours : computedHours, note: note || null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
+    update: { hours: manualOverride ? hours : computedHours, note: note !== undefined && note !== null ? note : null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
+    create: { user_id: userId, date, hours: manualOverride ? hours : computedHours, note: note !== undefined && note !== null ? note : null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
   });
 
   return NextResponse.json({
