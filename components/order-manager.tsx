@@ -79,9 +79,9 @@ function parseCustomDate(dateStr: string): Date {
       lug: 6, luglio: 6, jul: 6, julio: 6, july: 6,
       ago: 7, agosto: 7, aug: 7, august: 7,
       set: 8, settembre: 8, sep: 8, sept: 8, septiembre: 8, september: 8,
-      ott: 9, ottobre: 9, oct: 9, ottobre: 9, october: 9,
+      ott: 9, ottobre: 9, oct: 9, october: 9,
       nov: 10, novembre: 10, noviembre: 10, november: 10,
-      dic: 11, dicembre: 11, dicembre: 11, december: 11
+      dic: 11, dicembre: 11, december: 11
     };
     
     let monthIdx = -1;

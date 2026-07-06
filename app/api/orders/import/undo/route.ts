@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     // Find the latest import log timestamp
     let latestLogTime = 0;
     for (const res of importedResponses) {
-      const log = Array.isArray(res.activity_log) ? res.activity_log : [];
+      const log = Array.isArray(res.activity_log) ? (res.activity_log as any[]) : [];
       const importLog = log.find((l: any) => l.note === "Ordine importato da CSV" || l.action === "Ordine importato da CSV");
       if (importLog) {
         const logTime = new Date(importLog.at || importLog.date || res.updated_at).getTime();
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     // Group orders imported around the same time (within a 10-minute window of the latest import log)
     const tenMinutes = 10 * 60 * 1000;
     const targetsToDelete = importedResponses.filter((res) => {
-      const log = Array.isArray(res.activity_log) ? res.activity_log : [];
+      const log = Array.isArray(res.activity_log) ? (res.activity_log as any[]) : [];
       const importLog = log.find((l: any) => l.note === "Ordine importato da CSV" || l.action === "Ordine importato da CSV");
       if (importLog) {
         const logTime = new Date(importLog.at || importLog.date || res.updated_at).getTime();
