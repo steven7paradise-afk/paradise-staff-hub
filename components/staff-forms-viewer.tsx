@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -217,9 +217,10 @@ export function StaffFormsViewer({
   const candidaturaForm = forms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
   const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
   const cashClosingForm = forms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
-  const italianInvoiceForm = forms.find(f => f.name.toUpperCase().includes("FATTURA ITALIANA") || f.category.toUpperCase().includes("FATTUR"));
+  const italianInvoiceForm = forms.find(f => f.name.toUpperCase().includes("FATTURA") || f.category.toUpperCase().includes("FATTUR"));
   const clientControlForm = forms.find(f => f.name.toUpperCase().includes("CONTROLLO CLIENTE") || f.category.toUpperCase().includes("QUALITA"));
-  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id, italianInvoiceForm?.id, clientControlForm?.id].filter(Boolean));
+  const refundForm = forms.find(f => f.name.toUpperCase().includes("RIMBORSO") || f.category.toUpperCase().includes("AMMINIST"));
+  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id, italianInvoiceForm?.id, clientControlForm?.id, refundForm?.id].filter(Boolean));
   const regularForms = forms.filter((form) => !primaryFormIds.has(form.id));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
@@ -705,7 +706,7 @@ export function StaffFormsViewer({
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#0369A1] opacity-80">FATTURAZIONE</p>
-                <h2 className="mt-1 text-xl font-black text-[#0369A1] leading-tight">Fattura Italiana</h2>
+                <h2 className="mt-1 text-xl font-black text-[#0369A1] leading-tight">Fattura</h2>
               </div>
             </button>
           )}
@@ -742,6 +743,24 @@ export function StaffFormsViewer({
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#76274e] opacity-80">GENERALE</p>
                 <h2 className="mt-1 text-xl font-black text-[#2b1020] leading-tight">Candidatura</h2>
+              </div>
+            </button>
+          )}
+
+          {/* Card: Rimborso */}
+          {refundForm && (
+            <button
+              type="button"
+              onClick={() => handleOpenForm(refundForm)}
+              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDA4AF] to-[#FFE4E6] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDA4AF]/30"
+              style={{ boxShadow: "0 10px 30px rgba(253,164,175,0.15)" }}
+            >
+              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                <RotateCcw className="size-6 text-white" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9F1239] opacity-80">AMMINISTRAZIONE</p>
+                <h2 className="mt-1 text-xl font-black text-[#9F1239] leading-tight">Rimborso</h2>
               </div>
             </button>
           )}

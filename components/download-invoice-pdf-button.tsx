@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { Eye, Loader2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 type DownloadInvoicePdfButtonProps = {
@@ -17,10 +17,10 @@ type DownloadInvoicePdfButtonProps = {
 };
 
 export function DownloadInvoicePdfButton({ invoice }: DownloadInvoicePdfButtonProps) {
-  const [downloading, setDownloading] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
-  const handleDownload = async () => {
-    setDownloading(true);
+  const handleView = async () => {
+    setGenerating(true);
     try {
       const doc = new jsPDF({
         orientation: "portrait",
@@ -151,33 +151,34 @@ export function DownloadInvoicePdfButton({ invoice }: DownloadInvoicePdfButtonPr
       doc.text("Questo documento costituisce una richiesta di emissione fattura. Non sostituisce la fattura elettronica inviata allo SDI.", 15, 275);
       doc.text(`Generato automaticamente da Staff Hub il ${new Date().toLocaleDateString("it-IT")}`, 150, 275);
 
-      // Save PDF
-      const filename = `richiesta_fattura_${clientName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${invoice.id.substring(0, 6)}.pdf`;
-      doc.save(filename);
+      // Output as blob URL and open in new tab
+      const blob = doc.output("blob");
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
     } catch (error) {
       console.error("PDF generation failed:", error);
       alert("Errore durante la generazione del PDF. Riprova.");
     } finally {
-      setDownloading(false);
+      setGenerating(false);
     }
   };
 
   return (
     <button
       type="button"
-      onClick={handleDownload}
-      disabled={downloading}
+      onClick={handleView}
+      disabled={generating}
       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black text-[#0e7490] hover:text-[#155e75] bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/20 dark:hover:bg-cyan-950/40 dark:text-cyan-400 rounded-xl border border-cyan-200/50 dark:border-cyan-800/30 transition active:scale-[0.98] disabled:opacity-50"
     >
-      {downloading ? (
+      {generating ? (
         <>
           <Loader2 className="size-3.5 animate-spin" />
           Generando...
         </>
       ) : (
         <>
-          <Download className="size-3.5" />
-          PDF
+          <Eye className="size-3.5" />
+          Vedi PDF
         </>
       )}
     </button>

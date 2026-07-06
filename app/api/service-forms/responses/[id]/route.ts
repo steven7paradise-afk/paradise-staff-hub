@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { status, comments, answers, statusNote } = body;
+    const { status, comments, answers, statusNote, internalNotes } = body;
 
     const response = await prisma.serviceFormResponse.findUnique({
       where: { id },
@@ -55,6 +55,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const dataToUpdate: any = {};
+    if (internalNotes !== undefined) {
+      dataToUpdate.internal_notes = internalNotes;
+    }
     if (status) {
       dataToUpdate.status = status;
 

@@ -32,6 +32,7 @@ const nav = [
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },

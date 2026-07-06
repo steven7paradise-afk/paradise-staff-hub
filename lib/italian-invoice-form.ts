@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export const ITALIAN_INVOICE_FORM_NAME = "Richiesta Fattura Italiana";
+export const ITALIAN_INVOICE_FORM_NAME = "Richiesta Fattura";
 export const ITALIAN_INVOICE_FORM_CATEGORY = "Fatturazione";
 
 export const ITALIAN_INVOICE_FIELD_IDS = {
