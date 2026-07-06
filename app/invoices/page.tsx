@@ -6,6 +6,7 @@ import type { Role } from "@/lib/roles";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { DownloadInvoicePdfButton } from "@/components/download-invoice-pdf-button";
+import { InvoiceStatusSelector } from "@/components/invoice-status-selector";
 import {
   CircleDollarSign,
   FileText,
@@ -175,6 +176,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                   <th className="px-5 py-4">PEC / Codice SDI</th>
                   <th className="px-5 py-4 text-right">Importo</th>
                   <th className="px-5 py-4">Pagamento</th>
+                  <th className="px-5 py-4 text-center">Stato</th>
                   <th className="px-5 py-4 text-center">Esporta</th>
                 </tr>
               </thead>
@@ -241,6 +243,9 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                       </td>
                       <td className="px-5 py-4 text-xs text-black/60 dark:text-white/60">{paymentMethod}</td>
                       <td className="px-5 py-4 text-center">
+                        <InvoiceStatusSelector responseId={res.id} initialStatus={res.status} />
+                      </td>
+                      <td className="px-5 py-4 text-center">
                         <DownloadInvoicePdfButton invoice={res as any} />
                       </td>
                     </tr>
@@ -249,7 +254,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
 
                 {responses.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-5 py-16 text-center text-sm font-semibold text-black/40 dark:text-white/30">
+                    <td colSpan={10} className="px-5 py-16 text-center text-sm font-semibold text-black/40 dark:text-white/30">
                       Nessuna richiesta di fattura registrata nel mese selezionato.
                     </td>
                   </tr>
@@ -318,6 +323,10 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                     <div>
                       <span className="block text-[10px] uppercase font-bold text-black/35">Pagamento</span>
                       <span className="text-black dark:text-white">{paymentMethod}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-black/35">Stato</span>
+                      <InvoiceStatusSelector responseId={res.id} initialStatus={res.status} />
                     </div>
                     <div>
                       <span className="block text-[10px] uppercase font-bold text-black/35">Operatore</span>

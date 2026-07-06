@@ -619,13 +619,13 @@ export function StaffFormsViewer({
   return (
     <div className="space-y-6 dark staff-forms-page">
       <style dangerouslySetInnerHTML={{__html: `
-        .staff-forms-page {
-          color-scheme: dark;
+        body, main, #__next, .staff-forms-page {
+          background-color: #050506 !important;
         }
       `}} />
 
       {/* Tablet cash-register shortcuts */}
-      <div className="rounded-[36px] border border-white/10 bg-[#0A0A0B] p-6 shadow-2xl sm:p-8">
+      <div className="w-full">
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#E8C98B]">
@@ -647,8 +647,8 @@ export function StaffFormsViewer({
               className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#A1B5FD]/30"
               style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-                <Calculator className="size-6 text-[#4F46E5]" />
+              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                <Calculator className="size-6 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#3b4b8c] opacity-80">CASSA</p>
@@ -665,8 +665,8 @@ export function StaffFormsViewer({
               className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#8DE0BD]/30"
               style={{ boxShadow: "0 10px 30px rgba(141,224,189,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-                <ShoppingCart className="size-6 text-[#059669]" />
+              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                <ShoppingCart className="size-6 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#204a37] opacity-80">ORDINI</p>
@@ -683,8 +683,8 @@ export function StaffFormsViewer({
             className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDCB82] to-[#FFE8B9] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDCB82]/30"
             style={{ boxShadow: "0 10px 30px rgba(253,203,130,0.15)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-              <CreditCard className="size-6 text-[#D97706]" />
+            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+              <CreditCard className="size-6 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6d4615] opacity-80">FORNITORI</p>
@@ -700,8 +700,8 @@ export function StaffFormsViewer({
               className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#7DD3FC] to-[#E0F2FE] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#7DD3FC]/30"
               style={{ boxShadow: "0 10px 30px rgba(125,211,252,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-                <ReceiptText className="size-6 text-[#0284C7]" />
+              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                <ReceiptText className="size-6 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#0369A1] opacity-80">FATTURAZIONE</p>
@@ -718,8 +718,8 @@ export function StaffFormsViewer({
               className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#E9D5FF] to-[#F3E8FF] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#E9D5FF]/30"
               style={{ boxShadow: "0 10px 30px rgba(233,213,255,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-                <ClipboardCheck className="size-6 text-[#7C3AED]" />
+              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                <ClipboardCheck className="size-6 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#581C87] opacity-80">QUALITÀ</p>
@@ -736,8 +736,8 @@ export function StaffFormsViewer({
               className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#F7A1C4] to-[#ffd5e7] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#F7A1C4]/30"
               style={{ boxShadow: "0 10px 30px rgba(247,161,196,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-                <UserPlus className="size-6 text-[#DB2777]" />
+              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                <UserPlus className="size-6 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#76274e] opacity-80">GENERALE</p>
@@ -752,42 +752,12 @@ export function StaffFormsViewer({
             className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FCA5A5] to-[#FEE2E2] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FCA5A5]/30"
             style={{ boxShadow: "0 10px 30px rgba(252,165,165,0.15)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-              <ShoppingBag className="size-6 text-[#DC2626]" />
+            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+              <ShoppingBag className="size-6 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7F1D1D] opacity-80">ORDINI</p>
               <h2 className="mt-1 text-xl font-black text-[#7F1D1D] leading-tight">Stato Ordini</h2>
-            </div>
-          </Link>
-
-          {/* Card: Registro Fatture Link */}
-          <Link
-            href="/invoices"
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#99F6E4] to-[#CCFBF1] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#99F6E4]/30"
-            style={{ boxShadow: "0 10px 30px rgba(153,246,228,0.15)" }}
-          >
-            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-              <FileText className="size-6 text-[#0D9488]" />
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#115E59] opacity-80">REGISTRO</p>
-              <h2 className="mt-1 text-xl font-black text-[#115E59] leading-tight">Registro Fatture</h2>
-            </div>
-          </Link>
-
-          {/* Card: Storico Cassa Link */}
-          <Link
-            href="/cash"
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#E2E8F0] to-[#F1F5F9] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#E2E8F0]/30"
-            style={{ boxShadow: "0 10px 30px rgba(226,232,240,0.15)" }}
-          >
-            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
-              <History className="size-6 text-[#475569]" />
-            </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#334155] opacity-80">STORICO</p>
-              <h2 className="mt-1 text-xl font-black text-[#334155] leading-tight">Storico Cassa</h2>
             </div>
           </Link>
 
@@ -807,8 +777,8 @@ export function StaffFormsViewer({
                 className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-black/5"
                 style={{ backgroundImage: `linear-gradient(to bottom right, ${color.bg.split(" ")[1]}, ${color.bg.split(" ")[3]})`, color: color.text }}
               >
-                <div className="grid size-12 place-items-center rounded-2xl bg-white/70 shadow-md">
-                  <ClipboardList className={`size-6 ${color.iconColor}`} />
+                <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+                  <ClipboardList className="size-6 text-white" />
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: color.iconColor }}>{form.category.toUpperCase() || color.accent}</p>
