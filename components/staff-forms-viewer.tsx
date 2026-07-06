@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -124,11 +124,97 @@ export function StaffFormsViewer({
   const [files, setFiles] = useState<Record<string, File>>({});
   const [activeFieldIndex, setActiveFieldIndex] = useState(0);
 
+  const [loadingVat, setLoadingVat] = useState(false);
+  const [vatLookupStatus, setVatLookupStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  const [loadingShopify, setLoadingShopify] = useState(false);
+  const [shopifyLookupStatus, setShopifyLookupStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleVatLookup = async () => {
+    const vat = String(answers["invoice_vat_number"] || "").replace(/\D/g, "");
+    if (!vat || vat.length !== 11) {
+      setVatLookupStatus({ success: false, message: "La Partita IVA deve essere di 11 cifre." });
+      return;
+    }
+
+    setLoadingVat(true);
+    setVatLookupStatus(null);
+
+    try {
+      const res = await fetch(`/api/vat-lookup?vat=${vat}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Errore di ricerca.");
+      }
+
+      setAnswers(prev => ({
+        ...prev,
+        "invoice_client_name": data.name,
+        "invoice_address": data.address,
+      }));
+
+      setVatLookupStatus({
+        success: true,
+        message: `Azienda trovata! Dati compilati: ${data.name}`
+      });
+    } catch (err: any) {
+      setVatLookupStatus({
+        success: false,
+        message: err.message || "Errore nella ricerca della Partita IVA."
+      });
+    } finally {
+      setLoadingVat(false);
+    }
+  };
+
+  const handleShopifyOrderLookup = async () => {
+    const query = String(answers["invoice_shopify_order"] || "").trim();
+    
+    setLoadingShopify(true);
+    setShopifyLookupStatus(null);
+
+    try {
+      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Errore di caricamento.");
+      }
+
+      setAnswers(prev => {
+        const nextAnswers = { ...prev };
+        if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
+        if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
+        if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
+        
+        let productsNote = `Importato da ordine Shopify ${data.orderName || ""}`;
+        if (data.lineItems && data.lineItems.length > 0) {
+          productsNote += `\nProdotti: ${data.lineItems.join(", ")}`;
+        }
+        nextAnswers["invoice_notes"] = productsNote;
+
+        return nextAnswers;
+      });
+
+      setShopifyLookupStatus({
+        success: true,
+        message: `Ordine ${data.orderName || ""} caricato con successo!`
+      });
+    } catch (err: any) {
+      setShopifyLookupStatus({
+        success: false,
+        message: err.message || "Errore nel caricamento dell'ordine Shopify."
+      });
+    } finally {
+      setLoadingShopify(false);
+    }
+  };
+
   // Derived helper variables for dynamic group participants form
   const candidaturaForm = forms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
   const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
   const cashClosingForm = forms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
-  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id].filter(Boolean));
+  const italianInvoiceForm = forms.find(f => f.name.toUpperCase().includes("FATTURA ITALIANA") || f.category.toUpperCase().includes("FATTUR"));
+  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id, italianInvoiceForm?.id].filter(Boolean));
   const regularForms = forms.filter((form) => !primaryFormIds.has(form.id));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
@@ -627,6 +713,27 @@ export function StaffFormsViewer({
               </div>
             </button>
           )}
+
+          {italianInvoiceForm && (
+            <button
+              type="button"
+              onClick={() => handleOpenForm(italianInvoiceForm)}
+              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#7DD3FC] to-[#E0F2FE] p-5 text-left text-[#0369A1] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
+                  <ReceiptText className="size-6 text-[#0369A1]" />
+                </div>
+                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
+                  <Plus className="size-5" />
+                </span>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Fatturazione</p>
+                <h2 className="mt-1 text-xl font-black">Fattura Italiana</h2>
+              </div>
+            </button>
+          )}
         </div>
 
         {orderForm && (
@@ -1081,15 +1188,68 @@ export function StaffFormsViewer({
 
                           <div>
                           {field.type === "text" && (
-                            <input
-                              type="text"
-                              required={field.required}
-                              value={answers[field.id] || ""}
-                              onChange={(e) => handleTextChange(field.id, e.target.value)}
-                              onKeyDown={(e) => handleKeyDown(e, field.type)}
-                              placeholder="Scrivi qui..."
-                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
-                            />
+                            <div className="relative flex flex-col gap-2 w-full">
+                              <div className="relative flex items-center">
+                                <input
+                                  type="text"
+                                  required={field.required}
+                                  value={answers[field.id] || ""}
+                                  onChange={(e) => handleTextChange(field.id, e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, field.type)}
+                                  placeholder="Scrivi qui..."
+                                  className={cn(
+                                    "h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]",
+                                    (field.id === "invoice_vat_number" || field.id === "invoice_shopify_order") && "pr-32"
+                                  )}
+                                />
+                                {field.id === "invoice_vat_number" && (
+                                  <button
+                                    type="button"
+                                    onClick={handleVatLookup}
+                                    disabled={loadingVat}
+                                    className="absolute right-2 h-10 px-4 rounded-xl bg-[#A74758] hover:bg-[#c25368] disabled:bg-white/5 disabled:text-white/30 text-white text-xs font-black transition flex items-center gap-1.5 active:scale-[0.98]"
+                                  >
+                                    {loadingVat ? (
+                                      <Loader2 className="size-3.5 animate-spin" />
+                                    ) : (
+                                      <Search className="size-3.5" />
+                                    )}
+                                    Cerca
+                                  </button>
+                                )}
+                                {field.id === "invoice_shopify_order" && (
+                                  <button
+                                    type="button"
+                                    onClick={handleShopifyOrderLookup}
+                                    disabled={loadingShopify}
+                                    className="absolute right-2 h-10 px-4 rounded-xl bg-[#A74758] hover:bg-[#c25368] disabled:bg-white/5 disabled:text-white/30 text-white text-xs font-black transition flex items-center gap-1.5 active:scale-[0.98]"
+                                  >
+                                    {loadingShopify ? (
+                                      <Loader2 className="size-3.5 animate-spin" />
+                                    ) : (
+                                      <Download className="size-3.5" />
+                                    )}
+                                    Importa
+                                  </button>
+                                )}
+                              </div>
+                              {field.id === "invoice_vat_number" && vatLookupStatus && (
+                                <p className={cn(
+                                  "text-xs font-semibold px-2 animate-in fade-in slide-in-from-top-1 duration-200",
+                                  vatLookupStatus.success ? "text-emerald-400" : "text-red-400"
+                                )}>
+                                  {vatLookupStatus.message}
+                                </p>
+                              )}
+                              {field.id === "invoice_shopify_order" && shopifyLookupStatus && (
+                                <p className={cn(
+                                  "text-xs font-semibold px-2 animate-in fade-in slide-in-from-top-1 duration-200",
+                                  shopifyLookupStatus.success ? "text-emerald-400" : "text-red-400"
+                                )}>
+                                  {shopifyLookupStatus.message}
+                                </p>
+                              )}
+                            </div>
                           )}
 
                           {field.type === "textarea" && (

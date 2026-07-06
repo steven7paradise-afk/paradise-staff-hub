@@ -30,7 +30,8 @@ const nav = [
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/cash", label: "Cassa", iconName: "ReceiptText", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
@@ -159,7 +160,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   if (isDarwin && !baseItems.some((item) => item.href === "/cash")) {
     baseItems = [
       ...baseItems,
-      { href: "/cash", label: "Cassa", iconName: "ReceiptText", roles: [currentRole] as Role[], section: "Planning & Saloni" }
+      { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: [currentRole] as Role[], section: "Planning & Saloni" }
     ];
   }
 
@@ -172,7 +173,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         ...(userHasSocialAccess ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
         ...(userHasAppointmentsAccess ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
         ...(userHasTablesAccess ? [tablesNavItem] : []),
-        ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "ReceiptText", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
+        ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
     : baseItems;
   const dateLabel = new Intl.DateTimeFormat("it-IT", {

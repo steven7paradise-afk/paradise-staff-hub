@@ -9,6 +9,7 @@ import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
 import { ensureCashClosingForm, isCashClosingFormName } from "@/lib/cash-closing-form";
 import { ensureClientControlForm } from "@/lib/client-control-form";
+import { ensureItalianInvoiceForm } from "@/lib/italian-invoice-form";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import {
   normalizeServiceFormsVisibility,
@@ -29,6 +30,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     ensureOrderForm(session.user.id),
     ensureCashClosingForm(session.user.id),
     ensureClientControlForm(session.user.id),
+    ensureItalianInvoiceForm(session.user.id),
   ]);
 
   const locationId = session.user.sedeId;

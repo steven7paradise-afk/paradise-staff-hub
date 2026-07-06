@@ -26,6 +26,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/orders": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/cash": ["SUPER_ADMIN", "ADMIN"],
+  "/invoices": ["SUPER_ADMIN", "ADMIN"],
   "/client-control": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/recruitment": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/staff": ["SUPER_ADMIN", "ADMIN"],
