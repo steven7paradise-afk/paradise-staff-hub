@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText } from "lucide-react";
+import Link from "next/link";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -217,7 +218,8 @@ export function StaffFormsViewer({
   const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
   const cashClosingForm = forms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
   const italianInvoiceForm = forms.find(f => f.name.toUpperCase().includes("FATTURA ITALIANA") || f.category.toUpperCase().includes("FATTUR"));
-  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id].filter(Boolean));
+  const clientControlForm = forms.find(f => f.name.toUpperCase().includes("CONTROLLO CLIENTE") || f.category.toUpperCase().includes("QUALITA"));
+  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id, italianInvoiceForm?.id, clientControlForm?.id].filter(Boolean));
   const regularForms = forms.filter((form) => !primaryFormIds.has(form.id));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
@@ -622,422 +624,201 @@ export function StaffFormsViewer({
         }
       `}} />
 
-
       {/* Tablet cash-register shortcuts */}
-      <div className="rounded-[32px] border border-white/10 bg-[#101010] p-5 shadow-2xl sm:p-6">
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="rounded-[36px] border border-white/10 bg-[#0A0A0B] p-6 shadow-2xl sm:p-8">
+        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E8C98B]">Terminale operativo</p>
-            <h1 className="mt-1 text-2xl font-black text-white sm:text-3xl">Cassa & Moduli</h1>
+            <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#E8C98B]">
+              <div className="size-1.5 rounded-full bg-yellow-400 animate-pulse" />
+              Terminale operativo POS
+            </div>
+            <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">Cassa & Moduli</h1>
+            <p className="mt-2 text-xs font-semibold text-white/45">Interfaccia touch-friendly per la gestione rapida del salone.</p>
           </div>
-          <p className="max-w-xl text-xs font-semibold text-white/45 sm:text-right">Schermata rapida per tablet: chiusura cassa, ordini e pagamenti fornitore.</p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {/* Unified POS Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+          {/* Card: Chiusura Cassa */}
           {cashClosingForm && (
             <button
               type="button"
               onClick={() => handleOpenForm(cashClosingForm)}
-              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-5 text-left text-[#111827] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#A1B5FD]/30"
+              style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.15)" }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
-                  <Calculator className="size-6" />
-                </div>
-                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
-                  <ArrowUpRight className="size-5" />
-                </span>
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+                <Calculator className="size-6 text-[#4F46E5]" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Cassa</p>
-                <h2 className="mt-1 text-xl font-black">Chiusura Cassa</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#3b4b8c] opacity-80">CASSA</p>
+                <h2 className="mt-1 text-xl font-black text-[#111827] leading-tight">Chiusura Cassa</h2>
               </div>
             </button>
           )}
 
+          {/* Card: Nuovo Ordine */}
           {orderForm && (
             <button
               type="button"
               onClick={() => handleOpenForm(orderForm)}
-              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-5 text-left text-[#10251c] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#8DE0BD]/30"
+              style={{ boxShadow: "0 10px 30px rgba(141,224,189,0.15)" }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
-                  <ShoppingCart className="size-6" />
-                </div>
-                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
-                  <Plus className="size-5" />
-                </span>
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+                <ShoppingCart className="size-6 text-[#059669]" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Ordini</p>
-                <h2 className="mt-1 text-xl font-black">Nuovo Ordine</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#204a37] opacity-80">ORDINI</p>
+                <h2 className="mt-1 text-xl font-black text-[#10251c] leading-tight">Nuovo Ordine</h2>
               </div>
             </button>
           )}
 
+          {/* Card: Pagamento Link */}
           <a
             href="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#FDCB82] to-[#FFE8B9] p-5 text-left text-[#211407] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDCB82] to-[#FFE8B9] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDCB82]/30"
+            style={{ boxShadow: "0 10px 30px rgba(253,203,130,0.15)" }}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
-                <CreditCard className="size-6" />
-              </div>
-              <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
-                <ArrowUpRight className="size-5" />
-              </span>
+            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+              <CreditCard className="size-6 text-[#D97706]" />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Fornitori</p>
-              <h2 className="mt-1 text-xl font-black">Pagamento Link</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6d4615] opacity-80">FORNITORI</p>
+              <h2 className="mt-1 text-xl font-black text-[#211407] leading-tight">Pagamento Link</h2>
             </div>
           </a>
 
+          {/* Card: Richiesta Fattura Italiana */}
+          {italianInvoiceForm && (
+            <button
+              type="button"
+              onClick={() => handleOpenForm(italianInvoiceForm)}
+              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#7DD3FC] to-[#E0F2FE] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#7DD3FC]/30"
+              style={{ boxShadow: "0 10px 30px rgba(125,211,252,0.15)" }}
+            >
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+                <ReceiptText className="size-6 text-[#0284C7]" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#0369A1] opacity-80">FATTURAZIONE</p>
+                <h2 className="mt-1 text-xl font-black text-[#0369A1] leading-tight">Fattura Italiana</h2>
+              </div>
+            </button>
+          )}
+
+          {/* Card: Controllo Cliente */}
+          {clientControlForm && (
+            <button
+              type="button"
+              onClick={() => handleOpenForm(clientControlForm)}
+              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#E9D5FF] to-[#F3E8FF] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#E9D5FF]/30"
+              style={{ boxShadow: "0 10px 30px rgba(233,213,255,0.15)" }}
+            >
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+                <ClipboardCheck className="size-6 text-[#7C3AED]" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#581C87] opacity-80">QUALITÀ</p>
+                <h2 className="mt-1 text-xl font-black text-[#581C87] leading-tight">Controllo Cliente</h2>
+              </div>
+            </button>
+          )}
+
+          {/* Card: Candidatura */}
           {candidaturaForm && (
             <button
               type="button"
               onClick={() => handleOpenForm(candidaturaForm)}
-              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#F7A1C4] to-[#ffd5e7] p-5 text-left text-[#2b1020] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
+              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#F7A1C4] to-[#ffd5e7] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#F7A1C4]/30"
+              style={{ boxShadow: "0 10px 30px rgba(247,161,196,0.15)" }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
-                  <Plus className="size-6" />
-                </div>
-                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
-                  <ArrowUpRight className="size-5" />
-                </span>
+              <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+                <UserPlus className="size-6 text-[#DB2777]" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Generale</p>
-                <h2 className="mt-1 text-xl font-black">Candidatura</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#76274e] opacity-80">GENERALE</p>
+                <h2 className="mt-1 text-xl font-black text-[#2b1020] leading-tight">Candidatura</h2>
               </div>
             </button>
           )}
-        </div>
 
-        {orderForm && (
-          <a
+          {/* Card: Stato Ordini Link */}
+          <Link
             href="/orders"
-            className="mt-4 flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-black text-white transition hover:bg-white/10"
+            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FCA5A5] to-[#FEE2E2] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FCA5A5]/30"
+            style={{ boxShadow: "0 10px 30px rgba(252,165,165,0.15)" }}
           >
-            <ShoppingCart className="size-5 text-[#E8C98B]" /> Stato ordini
-            <ArrowUpRight className="size-4" />
-          </a>
-        )}
-      </div>
-
-      {/* Prossimi Eventi */}
-      {false && upcomingEvents.length > 0 && (
-        <Card className="bg-white/5 border border-white/10 border-l-4 border-l-[#E8C98B] p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2 border-b border-white/10 pb-3">
-            <Calendar className="size-5 text-[#A74758]" />
+            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+              <ShoppingBag className="size-6 text-[#DC2626]" />
+            </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Prossimi Eventi / Scadenze</h2>
-              <p className="text-xs text-white/60">Visualizza le date pianificate compilate nei moduli operativi</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7F1D1D] opacity-80">ORDINI</p>
+              <h2 className="mt-1 text-xl font-black text-[#7F1D1D] leading-tight">Stato Ordini</h2>
             </div>
-          </div>
+          </Link>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {upcomingEvents.map((evt, idx) => (
-              <div 
-                key={`${evt.responseId}-${idx}`}
-                onClick={() => setSelectedResponse(evt.response)}
-                className="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-[#E8C98B]/80 hover:bg-white/10 transition duration-300 cursor-pointer group"
+          {/* Card: Registro Fatture Link */}
+          <Link
+            href="/invoices"
+            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#99F6E4] to-[#CCFBF1] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#99F6E4]/30"
+            style={{ boxShadow: "0 10px 30px rgba(153,246,228,0.15)" }}
+          >
+            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+              <FileText className="size-6 text-[#0D9488]" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#115E59] opacity-80">REGISTRO</p>
+              <h2 className="mt-1 text-xl font-black text-[#115E59] leading-tight">Registro Fatture</h2>
+            </div>
+          </Link>
+
+          {/* Card: Storico Cassa Link */}
+          <Link
+            href="/cash"
+            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#E2E8F0] to-[#F1F5F9] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#E2E8F0]/30"
+            style={{ boxShadow: "0 10px 30px rgba(226,232,240,0.15)" }}
+          >
+            <div className="grid size-12 place-items-center rounded-2xl bg-white/75 shadow-md">
+              <History className="size-6 text-[#475569]" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#334155] opacity-80">STORICO</p>
+              <h2 className="mt-1 text-xl font-black text-[#334155] leading-tight">Storico Cassa</h2>
+            </div>
+          </Link>
+
+          {/* Render any other dynamic forms from database */}
+          {regularForms.map((form, idx) => {
+            const colors = [
+              { bg: "from-[#F3F4F6] to-[#E5E7EB]", text: "text-[#374151]", iconColor: "text-[#4B5563]", accent: "GENERALE" },
+              { bg: "from-[#F0FDF4] to-[#DCFCE7]", text: "text-[#166534]", iconColor: "text-[#15803D]", accent: "INFO" },
+              { bg: "from-[#FFF5F5] to-[#FFE3E3]", text: "text-[#991B1B]", iconColor: "text-[#B91C1C]", accent: "DIVERSO" },
+            ];
+            const color = colors[idx % colors.length];
+            return (
+              <button
+                key={form.id}
+                type="button"
+                onClick={() => handleOpenForm(form)}
+                className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-black/5"
+                style={{ backgroundImage: `linear-gradient(to bottom right, ${color.bg.split(" ")[1]}, ${color.bg.split(" ")[3]})`, color: color.text }}
               >
+                <div className="grid size-12 place-items-center rounded-2xl bg-white/70 shadow-md">
+                  <ClipboardList className={`size-6 ${color.iconColor}`} />
+                </div>
                 <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-extrabold uppercase text-[#A74758] bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg shadow-sm">
-                      {evt.daysLeft === 0 ? "Oggi" : evt.daysLeft === 1 ? "Domani" : `Tra ${evt.daysLeft} giorni`}
-                    </span>
-                    <span className="text-[10px] text-white/40 font-semibold">{evt.dateLabel}</span>
-                  </div>
-                  <h4 className="font-bold text-sm text-white mt-2.5 truncate group-hover:text-[#E8C98B] transition">{evt.formName}</h4>
-                  <p className="text-xs text-white/60 mt-1 flex items-center gap-1">
-                    <User className="size-3 text-white/40" /> {evt.userName}
-                  </p>
-                  {evt.locationName && (
-                    <p className="text-[10px] text-white/40 mt-0.5 flex items-center gap-1">
-                      <MapPin className="size-3 text-white/40" /> {evt.locationName}
-                    </p>
-                  )}
-
-                  <div className="mt-3 pt-2 border-t border-white/10 space-y-1">
-                    {(() => {
-                      const isEvtCorsistiForm = evt.formName.toUpperCase().includes("CORSISTI");
-                      const evtParticipaField = evt.fields.find((f: any) => f.label.toUpperCase().includes("PARTICIPA"));
-                      const evtParticipaValue = evtParticipaField ? evt.answers[evtParticipaField.id] : "";
-                      const isEvtGroupCourse = String(evtParticipaValue || "").toUpperCase().includes("GRUP");
-
-                      const isDefaultField = (label: string) => {
-                        const l = label.toUpperCase();
-                        return l === "NOME CORSISTA" || l === "EMAIL CORSISTA" || l === "NUMERO CORSISTA";
-                      };
-
-                      const fieldsToRender = evt.fields.filter((f: any) => {
-                        if (f.type === "date") return false;
-                        if (isEvtCorsistiForm && isEvtGroupCourse && isDefaultField(f.label)) return false;
-                        return true;
-                      });
-
-                      const renderedFields = fieldsToRender.slice(0, 2).map((field: any) => {
-                        const ans = evt.answers[field.id];
-                        if (ans === undefined || ans === null || ans === "") return null;
-                        return (
-                          <div key={field.id} className="text-[11px] truncate">
-                            <span className="font-semibold text-white/50">{field.label}: </span>
-                            <span className="text-white">{typeof ans === "object" ? ans.name : String(ans)}</span>
-                          </div>
-                        );
-                      });
-
-                      if (isEvtCorsistiForm && isEvtGroupCourse) {
-                        const pNames: string[] = [];
-                        for (let i = 1; i <= 10; i++) {
-                          const name = evt.answers[`participant_${i}_name`];
-                          if (name) pNames.push(name);
-                        }
-                        if (pNames.length > 0) {
-                          renderedFields.push(
-                            <div key="group_participants" className="text-[11px] truncate">
-                              <span className="font-semibold text-white/50">Corsisti: </span>
-                              <span className="text-[#E8C98B] font-medium">{pNames.join(", ")}</span>
-                            </div>
-                          );
-                        }
-                      }
-
-                      return renderedFields;
-                    })()}
-                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: color.iconColor }}>{form.category.toUpperCase() || color.accent}</p>
+                  <h2 className="mt-1 text-xl font-black leading-tight truncate">{form.name}</h2>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Templates List (Desktop/Tablet) */}
-      {regularForms.length > 0 && (
-      <div className="hidden sm:grid gap-6 md:grid-cols-2">
-        {regularForms.map((form, idx) => {
-          const colors = [
-            { bg: "from-[#E8EDFF] to-[#C7D2FE]", accent: "#6366F1", glow: "rgba(99,102,241,0.15)", iconBg: "bg-indigo-100", iconText: "text-indigo-600", btnBg: "bg-indigo-600 hover:bg-indigo-700", borderAccent: "border-indigo-200/60" },
-            { bg: "from-[#FFF3E0] to-[#FFE0B2]", accent: "#F59E0B", glow: "rgba(245,158,11,0.15)", iconBg: "bg-amber-100", iconText: "text-amber-600", btnBg: "bg-amber-600 hover:bg-amber-700", borderAccent: "border-amber-200/60" },
-            { bg: "from-[#E0F7ED] to-[#A7F3D0]", accent: "#10B981", glow: "rgba(16,185,129,0.15)", iconBg: "bg-emerald-100", iconText: "text-emerald-600", btnBg: "bg-emerald-600 hover:bg-emerald-700", borderAccent: "border-emerald-200/60" },
-            { bg: "from-[#FDE8F0] to-[#FBCFE8]", accent: "#EC4899", glow: "rgba(236,72,153,0.15)", iconBg: "bg-pink-100", iconText: "text-pink-600", btnBg: "bg-pink-600 hover:bg-pink-700", borderAccent: "border-pink-200/60" },
-          ];
-          const color = colors[idx % colors.length];
-          const isExpanded = expandedFormId === form.id;
-
-          return (
-            <div
-              key={form.id}
-              onClick={() => setExpandedFormId(isExpanded ? null : form.id)}
-              className={cn(
-                "group w-full rounded-[32px] p-6 transition-all duration-400 cursor-pointer relative overflow-hidden select-none border",
-                `bg-gradient-to-br ${color.bg}`,
-                color.borderAccent,
-                isExpanded
-                  ? "flex flex-col gap-5 shadow-xl"
-                  : "h-[96px] flex items-center justify-between shadow-md hover:shadow-lg hover:-translate-y-0.5"
-              )}
-              style={{ boxShadow: isExpanded ? `0 20px 60px ${color.glow}, 0 4px 20px rgba(0,0,0,0.04)` : undefined }}
-            >
-              {/* Decorative corner elements */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/30 to-transparent rounded-bl-full pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-20 h-20 bg-gradient-to-tr from-black/[0.02] to-transparent rounded-tr-full pointer-events-none" />
-
-              {isExpanded ? (
-                <div className="flex flex-col justify-between w-full h-full relative z-10">
-                  <div>
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-full bg-white/50 backdrop-blur-sm" style={{ color: color.accent }}>
-                          {form.category}
-                        </span>
-                        <h3 className="text-xl font-black mt-2.5 leading-tight text-gray-900">{form.name}</h3>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenForm(form);
-                        }}
-                        className="size-12 rounded-full flex items-center justify-center bg-white shadow-lg active:scale-95 transition-all duration-200 shrink-0 hover:shadow-xl hover:scale-105"
-                        style={{ color: color.accent }}
-                      >
-                        <ArrowUpRight className="size-5" />
-                      </button>
-                    </div>
-
-                    <p className="mt-4 text-sm font-medium text-gray-600 leading-relaxed">
-                      {form.description || "Nessuna descrizione specificata per questo modulo."}
-                    </p>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-2 gap-3 pt-4 border-t border-black/[0.06]">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFormForHistory(form);
-                      }}
-                      className="inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-white/60 backdrop-blur-sm text-sm font-black text-gray-700 border border-white/80 shadow-sm hover:bg-white/80 hover:shadow-md active:scale-[0.97] transition-all duration-200"
-                    >
-                      <Clock className="size-4.5" />
-                      Invii
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenForm(form);
-                      }}
-                      className={cn("inline-flex min-h-[52px] items-center justify-center gap-2.5 rounded-2xl text-white text-sm font-black shadow-lg hover:shadow-xl active:scale-[0.97] transition-all duration-200", color.btnBg)}
-                    >
-                      <Plus className="size-4.5" />
-                      Compila
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-4 truncate relative z-10">
-                    <div className={cn("grid size-11 place-items-center rounded-2xl", color.iconBg, color.iconText)}>
-                      <DynamicIcon name={form.icon || "ClipboardList"} className="size-5" />
-                    </div>
-                    <div className="truncate">
-                      <span className="text-[10px] font-black uppercase tracking-[0.18em] block" style={{ color: color.accent }}>
-                        {form.category}
-                      </span>
-                      <h3 className="text-base sm:text-lg font-black truncate text-gray-900">{form.name}</h3>
-                    </div>
-                  </div>
-                  <div
-                    className="size-11 rounded-full flex items-center justify-center bg-white shadow-md shrink-0 relative z-10 group-hover:shadow-lg group-hover:scale-105 transition-all duration-200"
-                    style={{ color: color.accent }}
-                  >
-                    <ArrowUpRight className="size-5" />
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-
-        {regularForms.length === 0 && (
-          <div className="col-span-full py-16 flex flex-col items-center justify-center text-center text-white/40 bg-white/5 rounded-3xl border border-dashed border-white/10">
-            <AlertCircle className="size-10 text-white/30 mb-3" />
-            <p className="font-semibold text-lg">Nessun modulo disponibile</p>
-            <p className="text-sm mt-1">Non ci sono moduli assegnati al tuo ruolo o alla tua sede corrente.</p>
-          </div>
-        )}
+              </button>
+            );
+          })}
+        </div>
       </div>
-      )}
-
-      {/* Mobile Stacked Cards Layout (sm:hidden) */}
-      {regularForms.length > 0 && (
-      <div className="space-y-4 sm:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl">
-        {regularForms.map((form, idx) => {
-          const colors = [
-            { bg: "from-[#E8EDFF] to-[#C7D2FE]", accent: "#6366F1", iconBg: "bg-indigo-100", iconText: "text-indigo-600", btnBg: "bg-indigo-600", borderAccent: "border-indigo-200/60" },
-            { bg: "from-[#FFF3E0] to-[#FFE0B2]", accent: "#F59E0B", iconBg: "bg-amber-100", iconText: "text-amber-600", btnBg: "bg-amber-600", borderAccent: "border-amber-200/60" },
-            { bg: "from-[#E0F7ED] to-[#A7F3D0]", accent: "#10B981", iconBg: "bg-emerald-100", iconText: "text-emerald-600", btnBg: "bg-emerald-600", borderAccent: "border-emerald-200/60" },
-            { bg: "from-[#FDE8F0] to-[#FBCFE8]", accent: "#EC4899", iconBg: "bg-pink-100", iconText: "text-pink-600", btnBg: "bg-pink-600", borderAccent: "border-pink-200/60" },
-          ];
-          const color = colors[idx % colors.length];
-          const isExpanded = expandedFormId === form.id;
-
-          return (
-            <div
-              key={form.id}
-              onClick={() => setExpandedFormId(isExpanded ? null : form.id)}
-              className={cn(
-                "group w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer relative overflow-hidden select-none border",
-                `bg-gradient-to-br ${color.bg}`,
-                color.borderAccent,
-                isExpanded ? "flex flex-col gap-4 shadow-lg" : "h-[72px] flex items-center justify-between shadow-sm"
-              )}
-            >
-              {/* Decorative corner */}
-              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-white/25 to-transparent rounded-bl-full pointer-events-none" />
-
-              {isExpanded ? (
-                <div className="flex flex-col justify-between w-full relative z-10">
-                  <div>
-                    <div className="flex justify-between items-start gap-3">
-                      <div>
-                        <span className="inline-flex text-[9px] font-black uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-white/50 backdrop-blur-sm" style={{ color: color.accent }}>
-                          {form.category}
-                        </span>
-                        <h3 className="text-base font-black mt-2 leading-tight text-gray-900">{form.name}</h3>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenForm(form);
-                        }}
-                        className="size-9 rounded-full flex items-center justify-center bg-white shadow-md active:scale-95 transition-all shrink-0"
-                        style={{ color: color.accent }}
-                      >
-                        <ArrowUpRight className="size-4" />
-                      </button>
-                    </div>
-
-                    <p className="mt-3 text-xs font-medium text-gray-600 leading-relaxed">
-                      {form.description || "Nessuna descrizione specificata per questo modulo."}
-                    </p>
-                  </div>
-
-                  <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/[0.06]">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFormForHistory(form);
-                      }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/60 backdrop-blur-sm text-sm font-black text-gray-700 border border-white/80 active:scale-[0.97] transition-all"
-                    >
-                      <Clock className="size-4" />
-                      Invii
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenForm(form);
-                      }}
-                      className={cn("inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl text-white text-sm font-black shadow-md active:scale-[0.97] transition-all", color.btnBg)}
-                    >
-                      <Plus className="size-4" />
-                      Compila
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-3 truncate relative z-10">
-                    <div className={cn("grid size-9 place-items-center rounded-xl", color.iconBg, color.iconText)}>
-                      <DynamicIcon name={form.icon || "ClipboardList"} className="size-4" />
-                    </div>
-                    <h3 className="text-sm font-black truncate text-gray-900">{form.name}</h3>
-                  </div>
-                  <div
-                    className="size-9 rounded-full flex items-center justify-center bg-white shadow-sm shrink-0 relative z-10"
-                    style={{ color: color.accent }}
-                  >
-                    <ArrowUpRight className="size-4" />
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-
-      </div>
-      )}
 
       {/* FILL OUT MODAL */}
       {selectedForm && (
