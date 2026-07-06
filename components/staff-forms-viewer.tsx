@@ -155,7 +155,7 @@ export function StaffFormsViewer({
 
       setVatLookupStatus({
         success: true,
-        message: `Azienda trovata! Dati compilati: ${data.name}`
+        message: `✓ AZIENDA TROVATA\n• Ragione Sociale: ${data.name}\n• Indirizzo: ${data.address}`
       });
     } catch (err: any) {
       setVatLookupStatus({
@@ -195,9 +195,12 @@ export function StaffFormsViewer({
         return nextAnswers;
       });
 
+      const prodList = data.lineItems && data.lineItems.length > 0 
+        ? data.lineItems.join(", ") 
+        : "Nessuno";
       setShopifyLookupStatus({
         success: true,
-        message: `Ordine ${data.orderName || ""} caricato con successo!`
+        message: `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "N/A"}\n• Totale: € ${data.totalPrice !== null ? data.totalPrice.toFixed(2) : "0.00"}\n• Prodotti: ${prodList}`
       });
     } catch (err: any) {
       setShopifyLookupStatus({
@@ -1234,20 +1237,24 @@ export function StaffFormsViewer({
                                 )}
                               </div>
                               {field.id === "invoice_vat_number" && vatLookupStatus && (
-                                <p className={cn(
-                                  "text-xs font-semibold px-2 animate-in fade-in slide-in-from-top-1 duration-200",
-                                  vatLookupStatus.success ? "text-emerald-400" : "text-red-400"
+                                <div className={cn(
+                                  "text-xs font-semibold px-4 py-3 whitespace-pre-line rounded-2xl border animate-in fade-in slide-in-from-top-1 duration-200 mt-2",
+                                  vatLookupStatus.success 
+                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" 
+                                    : "bg-red-500/10 border-red-500/20 text-red-300"
                                 )}>
                                   {vatLookupStatus.message}
-                                </p>
+                                </div>
                               )}
                               {field.id === "invoice_shopify_order" && shopifyLookupStatus && (
-                                <p className={cn(
-                                  "text-xs font-semibold px-2 animate-in fade-in slide-in-from-top-1 duration-200",
-                                  shopifyLookupStatus.success ? "text-emerald-400" : "text-red-400"
+                                <div className={cn(
+                                  "text-xs font-semibold px-4 py-3 whitespace-pre-line rounded-2xl border animate-in fade-in slide-in-from-top-1 duration-200 mt-2",
+                                  shopifyLookupStatus.success 
+                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" 
+                                    : "bg-red-500/10 border-red-500/20 text-red-300"
                                 )}>
                                   {shopifyLookupStatus.message}
-                                </p>
+                                </div>
                               )}
                             </div>
                           )}

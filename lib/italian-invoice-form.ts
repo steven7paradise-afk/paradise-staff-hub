@@ -35,11 +35,16 @@ export const ITALIAN_INVOICE_FORM_FIELDS = [
     description: "Inserisci il numero d'ordine (es. #12345) o il nome per importare i dati. Lascia vuoto e clicca 'Importa' per l'ordine più recente.",
   },
   {
-    id: ITALIAN_INVOICE_FIELD_IDS.clientName,
-    label: "NOME / RAGIONE SOCIALE",
+    id: ITALIAN_INVOICE_FIELD_IDS.vatNumber,
+    label: "PARTITA IVA",
     type: "text",
     required: true,
-    description: "Nome e cognome completi del privato o ragione sociale della ditta.",
+    description: "Partita IVA (11 cifre). Clicca su 'Cerca' per trovare i dati aziendali.",
+    show_if: {
+      field_id: ITALIAN_INVOICE_FIELD_IDS.clientType,
+      operator: "equals",
+      value: "Azienda / Libero Professionista (Partita IVA)",
+    },
   },
   {
     id: ITALIAN_INVOICE_FIELD_IDS.fiscalCode,
@@ -54,16 +59,18 @@ export const ITALIAN_INVOICE_FORM_FIELDS = [
     },
   },
   {
-    id: ITALIAN_INVOICE_FIELD_IDS.vatNumber,
-    label: "PARTITA IVA",
+    id: ITALIAN_INVOICE_FIELD_IDS.clientName,
+    label: "NOME / RAGIONE SOCIALE",
     type: "text",
     required: true,
-    description: "Partita IVA (11 cifre).",
-    show_if: {
-      field_id: ITALIAN_INVOICE_FIELD_IDS.clientType,
-      operator: "equals",
-      value: "Azienda / Libero Professionista (Partita IVA)",
-    },
+    description: "Nome e cognome completi del privato o ragione sociale della ditta (autocompilato se hai cercato la Partita IVA o l'ordine Shopify).",
+  },
+  {
+    id: ITALIAN_INVOICE_FIELD_IDS.address,
+    label: "INDIRIZZO DI FATTURAZIONE",
+    type: "text",
+    required: true,
+    description: "Via, civico, CAP, città e provincia (autocompilato se hai cercato la Partita IVA).",
   },
   {
     id: ITALIAN_INVOICE_FIELD_IDS.sdiCode,
@@ -88,13 +95,6 @@ export const ITALIAN_INVOICE_FORM_FIELDS = [
       operator: "equals",
       value: "Azienda / Libero Professionista (Partita IVA)",
     },
-  },
-  {
-    id: ITALIAN_INVOICE_FIELD_IDS.address,
-    label: "INDIRIZZO DI FATTURAZIONE",
-    type: "text",
-    required: true,
-    description: "Via, civico, CAP, città e provincia (es. Via Torino 45, 20123 Milano MI).",
   },
   {
     id: ITALIAN_INVOICE_FIELD_IDS.amount,
@@ -147,7 +147,7 @@ export async function ensureItalianInvoiceForm(createdById?: string | null) {
       existing.active &&
       JSON.stringify(roles ?? []) === JSON.stringify(expectedRoles) &&
       JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles) &&
-      Boolean(existing.fields);
+      JSON.stringify(existing.fields) === JSON.stringify(ITALIAN_INVOICE_FORM_FIELDS);
 
     if (alreadyReady) return existing;
 
