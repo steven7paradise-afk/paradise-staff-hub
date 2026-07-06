@@ -217,7 +217,7 @@ export function StaffFormsViewer({
   const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
   const cashClosingForm = forms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
   const italianInvoiceForm = forms.find(f => f.name.toUpperCase().includes("FATTURA ITALIANA") || f.category.toUpperCase().includes("FATTUR"));
-  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id, italianInvoiceForm?.id].filter(Boolean));
+  const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id].filter(Boolean));
   const regularForms = forms.filter((form) => !primaryFormIds.has(form.id));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
@@ -713,27 +713,6 @@ export function StaffFormsViewer({
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Generale</p>
                 <h2 className="mt-1 text-xl font-black">Candidatura</h2>
-              </div>
-            </button>
-          )}
-
-          {italianInvoiceForm && (
-            <button
-              type="button"
-              onClick={() => handleOpenForm(italianInvoiceForm)}
-              className="group flex min-h-36 flex-col justify-between rounded-[28px] bg-gradient-to-br from-[#7DD3FC] to-[#E0F2FE] p-5 text-left text-[#0369A1] shadow-lg transition hover:-translate-y-0.5 active:scale-[0.99]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="grid size-12 place-items-center rounded-2xl bg-white/65">
-                  <ReceiptText className="size-6 text-[#0369A1]" />
-                </div>
-                <span className="grid size-11 place-items-center rounded-full bg-white shadow-md transition group-hover:translate-x-1">
-                  <Plus className="size-5" />
-                </span>
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-55">Fatturazione</p>
-                <h2 className="mt-1 text-xl font-black">Fattura Italiana</h2>
               </div>
             </button>
           )}
