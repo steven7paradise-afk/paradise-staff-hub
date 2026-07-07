@@ -168,6 +168,78 @@ function orderTitle(order: OrderResponse) {
   return "Ordine senza titolo";
 }
 
+function orderClientName(order: OrderResponse) {
+  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  if (clientName) return clientName;
+  const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
+  if (title && isNaN(Number(title.replace("#", "").trim()))) {
+    return title;
+  }
+  return "Cliente non indicato";
+}
+
+function orderNumber(order: OrderResponse) {
+  const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
+  if (title) return title;
+  return `#${order.id.substring(0, 5).toUpperCase()}`;
+}
+
+function getOrderTaskType(order: OrderResponse): "conversione" | "acquisto" | "accessori" | "altro" {
+  const answers = order.answers || {};
+  const fields = order.form?.fields || [];
+  
+  const allText = Object.values(answers)
+    .map(v => typeof v === "object" ? (v?.name ?? "") : String(v))
+    .join(" ")
+    .toLowerCase();
+
+  const itemsText = (orderItems(order) || "").toLowerCase();
+  const titleText = (answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || "").toLowerCase();
+  
+  const haystack = `${allText} ${itemsText} ${titleText}`;
+
+  if (haystack.includes("conversione") || haystack.includes("conver")) {
+    return "conversione";
+  }
+  if (haystack.includes("accessori") || haystack.includes("accessorio")) {
+    return "accessori";
+  }
+  if (haystack.includes("acquisto") || haystack.includes("extension") || haystack.includes("nuove ext")) {
+    return "acquisto";
+  }
+  
+  return "altro";
+}
+
+function renderTaskBadge(taskType: "conversione" | "acquisto" | "accessori" | "altro") {
+  if (taskType === "conversione") {
+    return (
+      <span className="rounded-full bg-pink-50 border border-pink-200 text-pink-700 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider dark:bg-pink-950/20 dark:border-pink-900/30 dark:text-pink-400">
+        Conversione Capelli
+      </span>
+    );
+  }
+  if (taskType === "acquisto") {
+    return (
+      <span className="rounded-full bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-400">
+        Acquisto Extension
+      </span>
+    );
+  }
+  if (taskType === "accessori") {
+    return (
+      <span className="rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider dark:bg-indigo-950/20 dark:border-indigo-900/30 dark:text-indigo-400">
+        Accessori
+      </span>
+    );
+  }
+  return (
+    <span className="rounded-full bg-slate-50 border border-slate-200 text-slate-700 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400">
+      Altro
+    </span>
+  );
+}
+
 function orderItems(order: OrderResponse) {
   return answerById(order, "order_items") || fieldValue(order, ["cosa", "prodot", "material", "ordinare"]);
 }
@@ -507,7 +579,7 @@ export function OrderManager({
             const currentStatus = order.status || "NEW";
             const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
             const Icon = status.icon;
-            const sarta = isSartaOrder(order);
+            const taskType = getOrderTaskType(order);
             const photo = orderPhoto(order);
             return (
               <button
@@ -515,10 +587,14 @@ export function OrderManager({
                 type="button"
                 onClick={() => setSelected(order)}
                 className={cn(
-                  "w-full rounded-[24px] border border-black/5 p-4 text-left shadow-sm border-y border-r transition hover:-translate-y-0.5",
-                  sarta 
-                    ? "bg-[#FAF8FF] border-l-4 border-l-[#8064D8] border-[#EBE7F5]" 
-                    : "bg-[#FFFDFE] border-l-4 border-l-[#C66170] border-[#F7EFF2]"
+                  "w-full rounded-[24px] border p-4 text-left shadow-sm transition hover:-translate-y-0.5",
+                  taskType === "conversione"
+                    ? "border-l-4 border-l-pink-500 border-pink-200/60 bg-pink-50/10"
+                    : taskType === "acquisto"
+                    ? "border-l-4 border-l-amber-500 border-amber-200/60 bg-amber-50/10"
+                    : taskType === "accessori"
+                    ? "border-l-4 border-l-indigo-500 border-indigo-200/60 bg-indigo-50/10"
+                    : "border-l-4 border-l-slate-400 border-slate-200/60 bg-slate-50/10"
                 )}
               >
                 {photo ? (
@@ -530,15 +606,12 @@ export function OrderManager({
                       <Icon className="size-4" />
                       {status.label}
                     </div>
-                    {sarta ? (
-                      <span className="rounded-full bg-violet-100 border border-violet-200 text-violet-700 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">Sarta</span>
-                    ) : (
-                      <span className="rounded-full bg-emerald-100 border border-emerald-200 text-emerald-700 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">Acquisto</span>
-                    )}
+                    {renderTaskBadge(taskType)}
                   </div>
                   <Eye className="size-4 shrink-0 text-black/30" />
                 </div>
-                <h3 className="mt-3 line-clamp-2 text-lg font-extrabold leading-6 text-black">{orderTitle(order)}</h3>
+                <h3 className="mt-3 line-clamp-2 text-lg font-extrabold leading-6 text-black">{orderClientName(order)}</h3>
+                <p className="mt-0.5 text-xs font-semibold text-slate-500">Ordine: {orderNumber(order)}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-black/40">
                   <span>{order.user_location_name ?? "Salone non indicato"}</span>
                   <span>·</span>
@@ -571,16 +644,36 @@ export function OrderManager({
                 ) : null}
                 {columnOrders.map((order) => {
                   const photo = orderPhoto(order);
+                  const taskType = getOrderTaskType(order);
+                  const borderStyle = taskType === "conversione" 
+                    ? "border-l-4 border-l-pink-500 border-t border-r border-b border-pink-200/60" 
+                    : taskType === "acquisto"
+                    ? "border-l-4 border-l-amber-500 border-t border-r border-b border-amber-200/60"
+                    : taskType === "accessori"
+                    ? "border-l-4 border-l-indigo-500 border-t border-r border-b border-indigo-200/60"
+                    : "border-l-4 border-l-slate-400 border-t border-r border-b border-slate-200/60";
+
                   return (
-                    <button key={order.id} onClick={() => setSelected(order)} className="overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <button 
+                      key={order.id} 
+                      onClick={() => setSelected(order)} 
+                      className={cn(
+                        "overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md border border-slate-100",
+                        borderStyle
+                      )}
+                    >
                       {photo ? <img src={photo.url} alt={`Foto di ${orderTitle(order)}`} className="h-28 w-full object-cover" /> : null}
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="line-clamp-2 font-semibold leading-5 text-black">{orderTitle(order)}</h3>
+                          <div>
+                            <h3 className="line-clamp-2 font-bold leading-5 text-black">{orderClientName(order)}</h3>
+                            <p className="mt-0.5 text-[11px] font-semibold text-slate-500">Ordine: {orderNumber(order)}</p>
+                          </div>
                           <Eye className="size-4 shrink-0 text-black/35" />
                         </div>
                         <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap gap-2 items-center">
+                          {renderTaskBadge(taskType)}
                           <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
                           {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
                         </div>
@@ -629,8 +722,12 @@ export function OrderManager({
             </div>
             <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
               <Card className="bg-white">
-                <Badge tone="dark">{statusLabel(selected.status || "NEW")}</Badge>
-                <h2 className="mt-4 text-3xl font-semibold">{orderTitle(selected)}</h2>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Badge tone="dark">{statusLabel(selected.status || "NEW")}</Badge>
+                  {renderTaskBadge(getOrderTaskType(selected))}
+                </div>
+                <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-900">{orderClientName(selected)}</h2>
+                <p className="mt-1 text-sm font-semibold text-slate-500">Numero Ordine: {orderNumber(selected)}</p>
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-black/60">{orderItems(selected)}</p>
                 <div className="mt-5 grid gap-3">
                   {(selected.form?.fields ?? []).map((field) => {
