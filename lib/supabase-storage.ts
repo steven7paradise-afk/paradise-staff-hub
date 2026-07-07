@@ -86,3 +86,12 @@ export async function signedDocumentUrl(path: string) {
   if (error) throw new Error(error.message);
   return data.signedUrl;
 }
+
+export async function uploadInvoicePdf(userId: string, filename: string, buffer: ArrayBuffer) {
+  const client = storageClient();
+  const bucket = process.env.SUPABASE_PROFILE_BUCKET ?? "profile-images";
+  const path = `invoices/${userId}-${Date.now()}-${safeName(filename)}`;
+  const { error } = await client.storage.from(bucket).upload(path, buffer, { contentType: "application/pdf", upsert: true });
+  if (error) throw new Error(error.message);
+  return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}

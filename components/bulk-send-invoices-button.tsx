@@ -268,32 +268,34 @@ export function BulkSendInvoicesButton({ shopDomain, pendingInvoices }: BulkSend
         doc.text(`Generato automaticamente da Staff Hub il ${new Date().toLocaleDateString("it-IT")}`, 15, 285);
       });
 
-      // Save PDF file
+      // Save PDF file locally for safety
       const dateRangeClean = dateRangeStr.replace(/\s+/g, "").replace(/\//g, "-").replace(/-/g, "_");
       const fileName = `richiesta_fatture_${dateRangeClean}.pdf`;
       doc.save(fileName);
 
-      // Open Mail Client
-      const mailSubject = encodeURIComponent(`Richiesta Fatture Elettroniche ROSA FRANCESCA SRL (${dateRangeStr})`);
-      const mailBody = encodeURIComponent(
-        `Ciao,\n\nin allegato trovi il documento PDF contenente le richieste di fatturazione elettronica per il periodo ${dateRangeStr}.\n\nUn cordiale saluto.`
-      );
-      window.location.href = `mailto:${cleanEmail}?subject=${mailSubject}&body=${mailBody}`;
+      // Generate PDF Blob for upload
+      const pdfBlob = doc.output("blob");
 
-      // Perform bulk database update to 'EMESSA' automatically
-      const bulkRes = await fetch("/api/service-forms/responses/bulk-status", {
+      // Build Form Data for API upload and email sending
+      const formData = new FormData();
+      formData.append("file", pdfBlob, fileName);
+      formData.append("email", cleanEmail);
+      formData.append("ids", JSON.stringify(pendingInvoices.map(i => i.id)));
+      formData.append("dateRangeStr", dateRangeStr);
+      formData.append("pendingTotal", pendingTotal.toFixed(2));
+
+      // Call our API endpoint
+      const emailRes = await fetch("/api/service-forms/responses/send-invoice-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ids: pendingInvoices.map(i => i.id),
-          status: "EMESSA",
-        }),
+        body: formData,
       });
 
-      if (!bulkRes.ok) {
-        throw new Error("Errore durante l'aggiornamento dello stato nel database.");
+      if (!emailRes.ok) {
+        const errData = await emailRes.json();
+        throw new Error(errData.error || "Errore durante l'invio dell'email.");
       }
 
+      alert(`Riepilogo inviato con successo a: ${cleanEmail}\nLe richieste sono state contrassegnate come "Fattura Emessa".`);
       setShowModal(false);
       window.location.reload();
     } catch (err: any) {
