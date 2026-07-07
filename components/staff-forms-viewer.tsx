@@ -1440,28 +1440,21 @@ export function StaffFormsViewer({
                 {/* Footer buttons */}
                 <div className="sticky bottom-0 -mx-5 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur sm:-mx-7 sm:px-7">
                   <div>
-                    {currentActiveIndex > 0 ? (
-                      <Button
-                        type="button"
-                        variant="soft"
-                        onClick={() => {
+                    <Button
+                      type="button"
+                      variant="soft"
+                      onClick={() => {
+                        if (currentActiveIndex > 0) {
                           setErrorMsg("");
                           setActiveFieldIndex(currentActiveIndex - 1);
-                        }}
-                        className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      >
-                        Indietro
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="soft"
-                        onClick={() => setSelectedForm(null)}
-                        className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
-                      >
-                        Torna Indietro
-                      </Button>
-                    )}
+                        } else {
+                          setSelectedForm(null);
+                        }
+                      }}
+                      className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    >
+                      Indietro
+                    </Button>
                   </div>
 
                   <div className="flex items-center gap-3">
