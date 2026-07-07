@@ -26,6 +26,22 @@ export function BulkSendInvoicesButton({ shopDomain, pendingInvoices }: BulkSend
       return;
     }
 
+    const defaultEmail = typeof window !== "undefined" ? localStorage.getItem("accountant_email") || "" : "";
+    const email = prompt("Inserisci l'email del commercialista a cui inviare le fatture:", defaultEmail);
+    if (email === null) {
+      return; // User cancelled
+    }
+    
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      alert("Devi inserire un indirizzo email valido per procedere.");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem("accountant_email", cleanEmail);
+    }
+
     setProcessing(true);
     try {
       const doc = new jsPDF({
@@ -253,12 +269,20 @@ export function BulkSendInvoicesButton({ shopDomain, pendingInvoices }: BulkSend
       const fileName = `richiesta_fatture_dal_${dateRangeStr}.pdf`;
       doc.save(fileName);
 
-      // Open Shopify Content Files
-      const shopDomainUrl = shopDomain || "paradise-hair-spa.myshopify.com";
-      window.open(`https://${shopDomainUrl}/admin/content/files`, "_blank");
+      // Retrieve saved email
+      const savedEmail = typeof window !== "undefined" ? localStorage.getItem("accountant_email") || "" : "";
+      
+      // Open Mail Client prefilled
+      const dateRangeClean = dateRangeStr.replace(/_/g, " ");
+      const mailSubject = encodeURIComponent(`Richiesta Fatture Elettroniche ROSA FRANCESCA SRL (${dateRangeClean})`);
+      const mailBody = encodeURIComponent(
+        `Ciao,\n\nin allegato trovi il documento PDF contenente le richieste di fatturazione elettronica per il periodo ${dateRangeClean}.\n\nUn cordiale saluto.`
+      );
+      
+      window.location.href = `mailto:${savedEmail}?subject=${mailSubject}&body=${mailBody}`;
 
       // Prompt bulk update to 'EMESSA'
-      if (confirm(`PDF generato con successo (${pendingInvoices.length} fatture) e salvato come:\n"${fileName}"\n\nVuoi contrassegnare queste fatture come "Fattura Emessa" nel sistema?`)) {
+      if (confirm(`PDF generato con successo (${pendingInvoices.length} fatture) e salvato come:\n"${fileName}"\n\nOra si aprirà il client email. Vuoi contrassegnare queste fatture come "Fattura Emessa" nel sistema?`)) {
         const bulkRes = await fetch("/api/service-forms/responses/bulk-status", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
