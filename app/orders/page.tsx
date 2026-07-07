@@ -91,7 +91,7 @@ export default async function OrdersPage() {
       updated_at: response.updated_at.toISOString(),
     }));
 
-  const orders = isSarta ? allOrders.filter((order) => isSartaOrder(order)) : allOrders;
+  const orders = allOrders;
 
   return (
     <AppShell title="Ordini" subtitle="Pipeline ordini creati dai moduli operativi." role={role} hideHeader>
