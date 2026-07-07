@@ -74,6 +74,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           header_color: true,
           sidebar_color: true,
           mansione: true,
+          access_list: true,
           location: { select: { name: true } },
         },
       }).catch(() => null)
@@ -87,15 +88,37 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const planningAccessPromise = session?.user?.id
     ? prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }).catch(() => null)
     : Promise.resolve(null);
+  const sidebarConfigPromise = prisma.setting.findUnique({
+    where: { key: "sidebar_configuration" }
+  }).catch(() => null);
 
-  const [serviceSetting, formsAccessSettings, currentUser, unreadNotifications, tablesAccessSetting, planningAccessSetting] = await Promise.all([
+  const [serviceSetting, formsAccessSettings, currentUser, unreadNotifications, tablesAccessSetting, planningAccessSetting, sidebarConfigSetting] = await Promise.all([
     serviceSettingPromise,
     formsAccessPromise,
     currentUserPromise,
     unreadNotificationsPromise,
     tablesAccessPromise,
     planningAccessPromise,
+    sidebarConfigPromise,
   ]);
+
+  let userAccessList: string[] | undefined = undefined;
+  if (currentUser) {
+    if (currentUser.access_list && Array.isArray(currentUser.access_list)) {
+      userAccessList = currentUser.access_list as string[];
+    } else if (currentUser.mansione) {
+      const mansioneSettings = await prisma.setting.findUnique({
+        where: { key: "mansioni_permissions" }
+      });
+      if (mansioneSettings) {
+        const mapping = (mansioneSettings.value as Record<string, string[]>) || {};
+        const cleanMansione = currentUser.mansione.trim().toLowerCase();
+        if (mapping[cleanMansione]) {
+          userAccessList = mapping[cleanMansione];
+        }
+      }
+    }
+  }
 
   let servicePageNum = 1;
   let customLabel = "";
@@ -165,7 +188,52 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ];
   }
 
-  const items = currentRole === "DIPENDENTE"
+  const sidebarConfig = sidebarConfigSetting?.value as Array<{ id: string; title: string; routes: string[] }> | null;
+
+  const filterMenuItems = <T extends { href: string }>(menuList: T[]): T[] => {
+    if (!userAccessList || !Array.isArray(userAccessList) || currentRole === "SUPER_ADMIN" || currentRole === "ADMIN") {
+      return menuList;
+    }
+    return menuList.filter((item) => {
+      const matchedRoute = Object.keys(routePermissions)
+        .sort((a, b) => b.length - a.length)
+        .find((route) => item.href === route || item.href.startsWith(`${route}/`));
+      if (matchedRoute) {
+        return userAccessList.includes(matchedRoute);
+      }
+      return true;
+    });
+  };
+
+  const getStructuredMenuItems = <T extends { href: string }>(flatList: T[]): T[] => {
+    if (!sidebarConfig || !Array.isArray(sidebarConfig) || sidebarConfig.length === 0) {
+      return flatList;
+    }
+    const ordered: T[] = [];
+    const addedHrefs = new Set<string>();
+
+    sidebarConfig.forEach(sec => {
+      const matched = flatList.filter(item => sec.routes.includes(item.href))
+        .sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
+      
+      matched.forEach(item => {
+        if (!addedHrefs.has(item.href)) {
+          ordered.push(item);
+          addedHrefs.add(item.href);
+        }
+      });
+    });
+
+    flatList.forEach(item => {
+      if (!addedHrefs.has(item.href)) {
+        ordered.push(item);
+      }
+    });
+
+    return ordered;
+  };
+
+  const rawItems = currentRole === "DIPENDENTE"
     ? [
         ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar" && item.href !== "/cash"),
         ...(selectedServiceItem.href === "/tasks" ? [] : [selectedServiceItem]),
@@ -177,6 +245,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
     : baseItems;
+
+  const items = filterMenuItems(rawItems);
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
     month: "long",
@@ -211,36 +281,37 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               <LogoutButton className="flex w-full items-center gap-3 rounded-2xl border border-current/10 bg-white/20 px-4 py-3 text-sm font-bold text-[color:var(--sidebar-text)] shadow-sm transition hover:bg-white/30 active:scale-95" />
             }
           >
-            {(currentRole === "DIPENDENTE"
-              ? [
-                  { href: "/dashboard", label: "Home", iconName: "Home" },
-                  { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
-                  { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
-                  ...(userHasPlanningAccess
-                    ? [{ href: "/schedules", label: "Planning", iconName: "CalendarDays" }]
-                    : []),
-                  { href: "/documents", label: "Documenti", iconName: "FileText" },
-                  ...(userHasTaskAccess
-                    ? [{ href: "/tasks", label: "Task", iconName: "CheckSquare" }]
-                    : []),
-                  ...(servicePageNum === 3 || hasFormsAccess
-                    ? [{ href: "/service-forms", label: "Cassa", iconName: "ReceiptText" }]
-                    : []),
-                  ...(userHasTablesAccess
-                    ? [{ href: "/tables", label: "Tabelle", iconName: "Table2" }]
-                    : []),
-                  { href: "/orders", label: "Ordini", iconName: "ShoppingCart" },
-                  ...(servicePageNum === 1
-                    ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
-                    : []),
-                  ...(userHasSocialAccess
-                    ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
-                    : []),
-                  ...(userHasAppointmentsAccess
-                    ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" }]
-                    : []),
-                ]
-              : baseItems
+            {filterMenuItems(
+              currentRole === "DIPENDENTE"
+                ? [
+                    { href: "/dashboard", label: "Home", iconName: "Home" },
+                    { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
+                    { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
+                    ...(userHasPlanningAccess
+                      ? [{ href: "/schedules", label: "Planning", iconName: "CalendarDays" }]
+                      : []),
+                    { href: "/documents", label: "Documenti", iconName: "FileText" },
+                    ...(userHasTaskAccess
+                      ? [{ href: "/tasks", label: "Task", iconName: "CheckSquare" }]
+                      : []),
+                    ...(servicePageNum === 3 || hasFormsAccess
+                      ? [{ href: "/service-forms", label: "Cassa", iconName: "ReceiptText" }]
+                      : []),
+                    ...(userHasTablesAccess
+                      ? [{ href: "/tables", label: "Tabelle", iconName: "Table2" }]
+                      : []),
+                    { href: "/orders", label: "Ordini", iconName: "ShoppingCart" },
+                    ...(servicePageNum === 1
+                      ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
+                      : []),
+                    ...(userHasSocialAccess
+                      ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
+                      : []),
+                    ...(userHasAppointmentsAccess
+                      ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" }]
+                      : []),
+                  ]
+                : baseItems
             ).map((item) => (
               <InstantLink
                 key={item.href}
@@ -318,6 +389,54 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         </div>
         <nav className="luxury-scroll mt-5 xl:min-h-0 xl:flex-1 xl:space-y-1 xl:overflow-x-hidden xl:overflow-y-auto hidden xl:block">
           {(() => {
+            if (sidebarConfig && Array.isArray(sidebarConfig) && sidebarConfig.length > 0) {
+              const renderedHrefs = new Set<string>();
+              const sectionsToRender = sidebarConfig.map(sec => {
+                const matchedItems = items.filter(item => {
+                  const match = sec.routes.includes(item.href);
+                  if (match) renderedHrefs.add(item.href);
+                  return match;
+                }).sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
+
+                return {
+                  ...sec,
+                  items: matchedItems
+                };
+              });
+
+              const unassignedItems = items.filter(item => !renderedHrefs.has(item.href));
+
+              const allSections = [
+                ...sectionsToRender.filter(s => s.items.length > 0),
+                ...(unassignedItems.length > 0 ? [{ id: "fallback-unassigned", title: "Altre Pagine", items: unassignedItems }] : [])
+              ];
+
+              return allSections.map(sec => (
+                <div key={sec.id} className="space-y-0.5">
+                  <div className="sidebar-section-header mt-5 mb-2 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]/40 dark:text-[color:var(--dark-sidebar-text)]/40 sidebar-label select-none">
+                    {sec.title}
+                  </div>
+                  {sec.items.map(item => (
+                    <InstantLink
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
+                      activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
+                    >
+                      <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
+                      <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{item.label}</span>
+                      {item.href === "/notifications" && unreadNotifications > 0 ? (
+                        <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
+                          {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                        </span>
+                      ) : null}
+                    </InstantLink>
+                  ))}
+                </div>
+              ));
+            }
+
             let lastSection = "";
             return items.map((item) => {
               const showSectionHeader = currentRole !== "DIPENDENTE" && item.section && item.section !== lastSection;

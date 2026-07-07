@@ -100,16 +100,53 @@ export const authConfig = {
       }
       return session;
     },
-    authorized({ auth, request }) {
+    async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
       if (pathname === "/login") return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
-      return canAccess(
-        pathname, 
-        auth?.user?.role as Role | undefined, 
-        (auth?.user as any)?.mansione,
-        (auth?.user as any)?.accessList as string[] | undefined
-      );
+      
+      if (!auth?.user?.id) return false;
+
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: auth.user.id },
+          select: { role: true, mansione: true, access_list: true }
+        });
+
+        if (!dbUser) return false;
+
+        let finalAccessList: string[] | undefined = undefined;
+
+        if (dbUser.access_list && Array.isArray(dbUser.access_list)) {
+          finalAccessList = dbUser.access_list as string[];
+        } else if (dbUser.mansione) {
+          const mansioneSettings = await prisma.setting.findUnique({
+            where: { key: "mansioni_permissions" }
+          });
+          if (mansioneSettings) {
+            const mapping = (mansioneSettings.value as Record<string, string[]>) || {};
+            const cleanMansione = dbUser.mansione.trim().toLowerCase();
+            if (mapping[cleanMansione]) {
+              finalAccessList = mapping[cleanMansione];
+            }
+          }
+        }
+
+        return canAccess(
+          pathname, 
+          dbUser.role as Role, 
+          dbUser.mansione || undefined,
+          finalAccessList
+        );
+      } catch (err) {
+        console.error("Auth dynamic check error:", err);
+        return canAccess(
+          pathname, 
+          auth?.user?.role as Role | undefined, 
+          (auth?.user as any)?.mansione,
+          (auth?.user as any)?.accessList as string[] | undefined
+        );
+      }
     },
   },
 } satisfies NextAuthConfig;

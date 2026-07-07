@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
-import { ShieldAlert, ShieldCheck, UserCheck, Users, Settings, Edit, Loader2, Search } from "lucide-react";
+import React, { useState, useEffect, useTransition } from "react";
+import { ShieldAlert, ShieldCheck, UserCheck, Users, Settings, Edit, Loader2, Search, FolderPlus, ArrowUp, ArrowDown, Plus, Trash2, Folder, X, Menu, ChevronRight } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 
 type UserType = {
@@ -171,7 +171,7 @@ const ROUTE_GROUPS = [
 
 export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesSettingsClientProps) {
   const [users, setUsers] = useState(initialUsers);
-  const [activeTab, setActiveTab] = useState<"matrix" | "users">("matrix");
+  const [activeTab, setActiveTab] = useState<"matrix" | "users" | "mansioni" | "sidebar">("matrix");
   const [searchQuery, setSearchQuery] = useState("");
   
   // Track updates
@@ -181,11 +181,208 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
+  // Mansioni state
+  const [mansioni, setMansioni] = useState<Record<string, string[]>>({});
+  const [newMansioneName, setNewMansioneName] = useState("");
+  const [expandedMansione, setExpandedMansione] = useState<string | null>(null);
+
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
 
   const showMessage = (text: string, type: "success" | "error") => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  // Sidebar custom layout state
+  const [sidebarLayout, setSidebarLayout] = useState<Array<{ id: string; title: string; routes: string[] }>>([]);
+  const [newFolderName, setNewFolderName] = useState("");
+
+  React.useEffect(() => {
+    // Fetch mansioni
+    fetch("/api/settings/roles/mansioni")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setMansioni(data.mansioni || {});
+        }
+      });
+
+    // Fetch sidebar layout
+    fetch("/api/settings/roles/menu-layout")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.layout) {
+          setSidebarLayout(data.layout);
+        } else {
+          setSidebarLayout([
+            { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
+            { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
+            { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/team"] },
+            { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
+          ]);
+        }
+      });
+  }, []);
+
+  const handleCreateMansione = async () => {
+    const cleanName = newMansioneName.trim().toLowerCase();
+    if (!cleanName) return;
+    if (mansioni[cleanName]) {
+      showMessage("Questa mansione esiste già.", "error");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/settings/roles/mansioni", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", mansioneName: cleanName, accessList: [] })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile creare la mansione.");
+      setMansioni(data.mansioni);
+      setNewMansioneName("");
+      showMessage(`Mansione "${cleanName}" creata con successo!`, "success");
+    } catch (err: any) {
+      showMessage(err.message || "Errore durante la creazione.", "error");
+    }
+  };
+
+  const handleToggleMansioneAccess = async (mansioneName: string, path: string, isChecked: boolean) => {
+    if (!isSuperAdmin) {
+      showMessage("Solo i Super Admin possono modificare i permessi delle mansioni.", "error");
+      return;
+    }
+
+    let newList = [...(mansioni[mansioneName] || [])];
+    if (isChecked) {
+      if (!newList.includes(path)) newList.push(path);
+    } else {
+      newList = newList.filter(p => p !== path);
+    }
+
+    try {
+      const res = await fetch("/api/settings/roles/mansioni", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", mansioneName, accessList: newList })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile salvare i permessi.");
+      setMansioni(data.mansioni);
+      showMessage(`Permessi per la mansione "${mansioneName}" aggiornati!`, "success");
+    } catch (err: any) {
+      showMessage(err.message || "Errore durante l'aggiornamento.", "error");
+    }
+  };
+
+  const handleDeleteMansione = async (mansioneName: string) => {
+    if (!isSuperAdmin) {
+      showMessage("Solo i Super Admin possono eliminare le mansioni.", "error");
+      return;
+    }
+
+    if (!confirm(`Sei sicuro di voler eliminare la mansione "${mansioneName}"?`)) return;
+    try {
+      const res = await fetch("/api/settings/roles/mansioni", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete", mansioneName })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile eliminare la mansione.");
+      setMansioni(data.mansioni);
+      showMessage(`Mansione "${mansioneName}" eliminata con successo!`, "success");
+    } catch (err: any) {
+      showMessage(err.message || "Errore durante l'eliminazione.", "error");
+    }
+  };
+
+  const handleCreateFolder = () => {
+    const title = newFolderName.trim();
+    if (!title) return;
+    const id = `folder-${Date.now()}`;
+    const newLayout = [...sidebarLayout, { id, title, routes: [] }];
+    setSidebarLayout(newLayout);
+    setNewFolderName("");
+    saveSidebarLayout(newLayout);
+  };
+
+  const handleDeleteFolder = (id: string) => {
+    if (!confirm("Sei sicuro di voler eliminare questa cartella? I tasti al suo interno verranno spostati tra le pagine non assegnate.")) return;
+    const newLayout = sidebarLayout.filter(f => f.id !== id);
+    setSidebarLayout(newLayout);
+    saveSidebarLayout(newLayout);
+  };
+
+  const handleMoveRouteToFolder = (route: string, folderId: string) => {
+    const newLayout = sidebarLayout.map(f => {
+      let routes = f.routes.filter(r => r !== route);
+      if (f.id === folderId) {
+        routes.push(route);
+      }
+      return { ...f, routes };
+    });
+    setSidebarLayout(newLayout);
+    saveSidebarLayout(newLayout);
+  };
+
+  const handleRemoveRouteFromFolder = (route: string, folderId: string) => {
+    const newLayout = sidebarLayout.map(f => {
+      if (f.id === folderId) {
+        return { ...f, routes: f.routes.filter(r => r !== route) };
+      }
+      return f;
+    });
+    setSidebarLayout(newLayout);
+    saveSidebarLayout(newLayout);
+  };
+
+  const handleMoveFolder = (index: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= sidebarLayout.length) return;
+    const newLayout = [...sidebarLayout];
+    const temp = newLayout[index];
+    newLayout[index] = newLayout[targetIndex];
+    newLayout[targetIndex] = temp;
+    setSidebarLayout(newLayout);
+    saveSidebarLayout(newLayout);
+  };
+
+  const handleMoveRouteInFolder = (folderId: string, routeIndex: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? routeIndex - 1 : routeIndex + 1;
+    const folder = sidebarLayout.find(f => f.id === folderId);
+    if (!folder || targetIndex < 0 || targetIndex >= folder.routes.length) return;
+    
+    const newLayout = sidebarLayout.map(f => {
+      if (f.id === folderId) {
+        const newRoutes = [...f.routes];
+        const temp = newRoutes[routeIndex];
+        newRoutes[routeIndex] = newRoutes[targetIndex];
+        newRoutes[targetIndex] = temp;
+        return { ...f, routes: newRoutes };
+      }
+      return f;
+    });
+    setSidebarLayout(newLayout);
+    saveSidebarLayout(newLayout);
+  };
+
+  const saveSidebarLayout = async (layout: any) => {
+    try {
+      const res = await fetch("/api/settings/roles/menu-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Impossibile salvare il layout.");
+      }
+      showMessage("Layout del menu salvato con successo!", "success");
+    } catch (err: any) {
+      showMessage(err.message || "Errore durante il salvataggio del layout.", "error");
+    }
   };
 
   const handleTogglePageAccess = async (userId: string, path: string, isChecked: boolean, currentList: string[] | null) => {
@@ -366,6 +563,26 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
           <Users className="size-3.5" />
           Gestione Ruoli Staff ({users.length})
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("mansioni")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+            activeTab === "mansioni" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <UserCheck className="size-3.5" />
+          Gestione Mansioni ({Object.keys(mansioni).length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("sidebar")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+            activeTab === "sidebar" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Menu className="size-3.5" />
+          Organizzazione Menu
+        </button>
       </div>
 
       {activeTab === "matrix" ? (
@@ -504,13 +721,18 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                           <td className="px-6 py-4">
                             {isEditingMansione ? (
                               <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
+                                <select
                                   value={mansioneInput}
                                   onChange={(e) => setMansioneInput(e.target.value)}
                                   className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none focus:border-[#A74758] focus:bg-white bg-slate-50 transition"
-                                  placeholder="E.g. sarta, assistenza"
-                                />
+                                >
+                                  <option value="">Nessuna</option>
+                                  {Object.keys(mansioni).map((mKey) => (
+                                    <option key={mKey} value={mKey}>
+                                      {mKey.toUpperCase()}
+                                    </option>
+                                  ))}
+                                </select>
                                 <button
                                   type="button"
                                   onClick={() => handleMansioneSave(user.id)}
@@ -698,6 +920,342 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
               </table>
             </div>
           </Card>
+        </div>
+      )}
+
+      {activeTab === "mansioni" && (
+        <div className="space-y-6">
+          {/* Create new mansione container */}
+          {isSuperAdmin && (
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="space-y-1">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Crea Nuova Mansione</h4>
+                <p className="text-[10px] text-slate-500">Aggiungi una mansione per configurarne i permessi e assegnarla allo staff.</p>
+              </div>
+              <div className="flex gap-2 min-w-0 max-w-sm ml-auto">
+                <input
+                  type="text"
+                  value={newMansioneName}
+                  onChange={(e) => setNewMansioneName(e.target.value)}
+                  placeholder="Nome mansione (es. sarta)"
+                  className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#A74758] bg-slate-50 transition"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateMansione}
+                  className="h-9 rounded-lg bg-[#A74758] hover:bg-[#8e3848] text-white px-4 text-xs font-black uppercase tracking-wider transition shrink-0"
+                >
+                  Crea
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* List of mansioni */}
+          <div className="grid gap-4">
+            {Object.keys(mansioni).length === 0 ? (
+              <Card className="p-8 text-center text-slate-400 font-bold text-xs bg-white border-slate-100">
+                Nessuna mansione registrata. Crea una mansione in alto per iniziare.
+              </Card>
+            ) : null}
+
+            {Object.entries(mansioni).map(([mName, mList]) => {
+              const isMansioneExpanded = expandedMansione === mName;
+              return (
+                <Card key={mName} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
+                  {/* Header Row */}
+                  <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/20">
+                    <div className="flex items-center gap-2">
+                      <UserCheck className="size-4 text-slate-400" />
+                      <div>
+                        <h3 className="font-black text-slate-950 text-sm uppercase tracking-wider">{mName}</h3>
+                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                          {mList.length} Pagine Abilitate
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedMansione(isMansioneExpanded ? null : mName)}
+                        className="rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
+                      >
+                        {isMansioneExpanded ? "Chiudi Permessi" : "Gestisci Permessi"}
+                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMansione(mName)}
+                          className="rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
+                        >
+                          Elimina
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Accordion checkboxes */}
+                  {isMansioneExpanded && (
+                    <div className="p-5 bg-white space-y-6">
+                      {ROUTE_GROUPS.map((group) => {
+                        const groupPages = APP_PAGES_MATRIX.filter(p => group.routes.includes(p.path));
+                        if (groupPages.length === 0) return null;
+
+                        return (
+                          <div key={group.title} className="space-y-2.5">
+                            <h5 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest border-l-2 border-[#C66170] pl-2">
+                              {group.title}
+                            </h5>
+                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                              {groupPages.map((page) => {
+                                const isChecked = mList.includes(page.path);
+                                return (
+                                  <label
+                                    key={page.path}
+                                    className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition select-none ${
+                                      isChecked
+                                        ? "bg-white border-[#C66170]/30 shadow-sm"
+                                        : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      disabled={!isSuperAdmin}
+                                      onChange={(e) => handleToggleMansioneAccess(mName, page.path, e.target.checked)}
+                                      className="mt-0.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
+                                      <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                                    </div>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "sidebar" && (
+        <div className="space-y-6">
+          {/* Create new folder container */}
+          {isSuperAdmin && (
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="space-y-1">
+                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Crea Nuova Cartella Menu</h4>
+                <p className="text-[10px] text-slate-500">Raggruppa i pulsanti all'interno di una cartella personalizzata nella barra laterale.</p>
+              </div>
+              <div className="flex gap-2 min-w-0 max-w-sm ml-auto">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="Nome cartella (es. Area Tecnica)"
+                  className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#A74758] bg-slate-50 transition"
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateFolder}
+                  className="h-9 rounded-lg bg-[#A74758] hover:bg-[#8e3848] text-white px-4 text-xs font-black uppercase tracking-wider transition shrink-0"
+                >
+                  Crea Cartella
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Grid showing folders on the left, unassigned routes on the right */}
+          <div className="grid gap-6 lg:grid-cols-3">
+            {/* Folders column */}
+            <div className="lg:col-span-2 space-y-4">
+              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Cartelle e Pulsanti Attivi</h3>
+              {sidebarLayout.length === 0 ? (
+                <Card className="p-8 text-center text-slate-400 font-bold text-xs bg-white border-slate-100">
+                  Nessuna cartella configurata.
+                </Card>
+              ) : null}
+
+              {sidebarLayout.map((folder, folderIndex) => {
+                const unassignedRoutesForFolder = APP_PAGES_MATRIX.filter(p => !new Set(sidebarLayout.flatMap(f => f.routes)).has(p.path));
+                return (
+                  <Card key={folder.id} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
+                    {/* Folder Header Row */}
+                    <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/40">
+                      <div className="flex items-center gap-2">
+                        <Folder className="size-4 text-[#A74758] shrink-0" />
+                        <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">{folder.title}</h4>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={folderIndex === 0}
+                          onClick={() => handleMoveFolder(folderIndex, "up")}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={folderIndex === sidebarLayout.length - 1}
+                          onClick={() => handleMoveFolder(folderIndex, "down")}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFolder(folder.id)}
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Folder Content / Link List */}
+                    <div className="p-4 space-y-2 bg-white">
+                      {folder.routes.length === 0 ? (
+                        <p className="text-[10px] text-slate-400 italic py-2">
+                          Questa cartella è vuota. Aggiungi pulsanti dal selettore sottostante.
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {folder.routes.map((routeHref, routeIndex) => {
+                            const pageObj = APP_PAGES_MATRIX.find(p => p.path === routeHref) || { name: routeHref, path: routeHref };
+                            return (
+                              <div key={routeHref} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+                                <div className="min-w-0">
+                                  <p className="font-bold text-slate-800 text-xs">{pageObj.name}</p>
+                                  <p className="font-mono text-[9px] text-slate-400 mt-0.5">{pageObj.path}</p>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={routeIndex === 0}
+                                    onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "up")}
+                                    className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
+                                  >
+                                    <ArrowUp className="size-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={routeIndex === folder.routes.length - 1}
+                                    onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "down")}
+                                    className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
+                                  >
+                                    <ArrowDown className="size-3" />
+                                  </button>
+                                  {isSuperAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveRouteFromFolder(routeHref, folder.id)}
+                                      className="p-1 rounded-md hover:bg-rose-50 text-rose-600 ml-1"
+                                    >
+                                      <X className="size-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Dropdown to add route */}
+                      {isSuperAdmin && unassignedRoutesForFolder.length > 0 && (
+                        <div className="pt-2 border-t border-slate-50 mt-2">
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleMoveRouteToFolder(e.target.value, folder.id);
+                              }
+                            }}
+                            className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none bg-slate-50 focus:bg-white text-slate-700 transition w-full"
+                          >
+                            <option value="">+ Aggiungi tasto/pagina...</option>
+                            {unassignedRoutesForFolder.map(page => (
+                              <option key={page.path} value={page.path}>
+                                {page.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Unassigned column */}
+            <div className="space-y-4">
+              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Pagine Non Assegnate</h3>
+              <Card className="p-4 bg-white border-slate-100 shadow-sm space-y-3">
+                <p className="text-[10px] text-slate-500 leading-normal">
+                  Queste pagine non sono inserite in nessuna cartella. Verranno visualizzate in automatico all'interno di una cartella predefinita "Altre Pagine" in fondo al menu.
+                </p>
+
+                {(() => {
+                  const assignedRouteHrefs = new Set(sidebarLayout.flatMap(f => f.routes));
+                  const unassignedList = APP_PAGES_MATRIX.filter(p => !assignedRouteHrefs.has(p.path));
+
+                  if (unassignedList.length === 0) {
+                    return (
+                      <p className="text-xs text-slate-400 font-bold italic py-4 text-center">
+                        Tutte le pagine sono assegnate!
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <div className="divide-y divide-slate-100 max-h-[450px] overflow-y-auto pr-1 luxury-scroll">
+                      {unassignedList.map(page => (
+                        <div key={page.path} className="py-2.5 first:pt-0 last:pb-0">
+                          <p className="font-bold text-slate-800 text-xs">{page.name}</p>
+                          <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                          
+                          {/* Folder target assign dropdown */}
+                          {isSuperAdmin && sidebarLayout.length > 0 && (
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleMoveRouteToFolder(page.path, e.target.value);
+                                }
+                              }}
+                              className="h-7 rounded-lg border border-slate-200 px-2 text-[10px] font-bold outline-none bg-slate-50 focus:bg-white text-slate-600 transition w-full mt-1.5"
+                            >
+                              <option value="">Sposta in cartella...</option>
+                              {sidebarLayout.map(f => (
+                                <option key={f.id} value={f.id}>
+                                  {f.title}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Card>
+            </div>
+          </div>
         </div>
       )}
     </div>
