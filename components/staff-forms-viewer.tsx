@@ -53,6 +53,7 @@ export function StaffFormsViewer({
   currentUserRole,
   autoFillFormId,
   autoFillFormName,
+  pastCustomers = [],
 }: {
   forms: FormTemplate[];
   employees?: Array<{ id: string; name: string; locationId?: string | null; locationName?: string | null; isPresent?: boolean }>;
@@ -62,6 +63,15 @@ export function StaffFormsViewer({
   currentUserRole: string;
   autoFillFormId?: string;
   autoFillFormName?: string;
+  pastCustomers?: Array<{
+    name: string;
+    type: string;
+    fiscalCode: string;
+    vatNumber: string;
+    sdiCode: string;
+    pec: string;
+    address: string;
+  }>;
 }) {
   const [selectedForm, setSelectedForm] = useState<FormTemplate | null>(null);
   const [selectedFormForHistory, setSelectedFormForHistory] = useState<FormTemplate | null>(null);
@@ -70,6 +80,23 @@ export function StaffFormsViewer({
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
   const [customSelectValue, setCustomSelectValue] = useState<string>("");
+  const [showPastCustomers, setShowPastCustomers] = useState(false);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+
+  const handleSelectCustomer = (cust: any) => {
+    setAnswers((prev) => ({
+      ...prev,
+      invoice_client_type: cust.type,
+      invoice_client_name: cust.name,
+      invoice_fiscal_code: cust.fiscalCode,
+      invoice_vat_number: cust.vatNumber,
+      invoice_sdi_code: cust.sdiCode,
+      invoice_pec: cust.pec,
+      invoice_address: cust.address,
+    }));
+    setShowPastCustomers(false);
+    setCustomerSearchQuery("");
+  };
 
   const handleSaveAnswer = async (fieldId: string, newValue: string) => {
     if (!selectedResponse) return;
@@ -471,6 +498,8 @@ export function StaffFormsViewer({
     setSuccess(false);
     setErrorMsg("");
     setActiveFieldIndex(0);
+    setShowPastCustomers(false);
+    setCustomerSearchQuery("");
   };
 
   React.useEffect(() => {
@@ -1034,44 +1063,119 @@ export function StaffFormsViewer({
 
                           {field.type === "select" && (
                             <div className="space-y-2.5 w-full">
-                              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-                                {field.options?.map((opt) => {
-                                  const isSelected = answers[field.id] === opt;
-                                  return (
+                              {field.id === "invoice_client_type" && showPastCustomers ? (
+                                <div className="space-y-3.5 w-full">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <h4 className="text-sm font-black text-slate-800">Seleziona Cliente Registrato</h4>
                                     <button
-                                      key={opt}
                                       type="button"
-                                      onClick={() => handleSelectChange(field.id, opt)}
-                                      className={cn(
-                                        "flex min-h-14 w-full items-center justify-between rounded-2xl border p-4 text-left text-sm font-bold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
-                                        isSelected
-                                          ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm shadow-[#A74758]/5"
-                                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
-                                      )}
+                                      onClick={() => {
+                                        setShowPastCustomers(false);
+                                        setCustomerSearchQuery("");
+                                      }}
+                                      className="text-xs font-bold text-[#A74758] hover:underline"
                                     >
-                                      <span>{opt}</span>
-                                      <div className={cn(
-                                        "size-5 rounded-full border flex items-center justify-center transition-all",
-                                        isSelected 
-                                          ? "border-[#A74758] bg-[#A74758]/15 text-[#A74758]" 
-                                          : "border-slate-200 bg-slate-50"
-                                      )}>
-                                        {isSelected && <Check className="size-3" />}
-                                      </div>
+                                      Annulla
                                     </button>
-                                  );
-                                })}
-                              </div>
-                              {answers[field.id] === "Altro" && (
-                                <input
-                                  type="text"
-                                  required={field.required}
-                                  placeholder="Specifica..."
-                                  value={answers[field.id + "_altro"] || ""}
-                                  onChange={(e) => handleTextChange(field.id + "_altro", e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, "text")}
-                                  className="mt-2 h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
-                                />
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={customerSearchQuery}
+                                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                                    placeholder="Cerca per nome, codice fiscale o P.IVA..."
+                                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#A74758]"
+                                  />
+                                  <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 rounded-2xl bg-white p-2">
+                                    {(() => {
+                                      const filtered = pastCustomers.filter(c => 
+                                        c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                                        c.fiscalCode.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                                        c.vatNumber.toLowerCase().includes(customerSearchQuery.toLowerCase())
+                                      );
+                                      if (filtered.length === 0) {
+                                        return <p className="text-xs text-slate-400 text-center py-4">Nessun cliente registrato corrisponde alla ricerca.</p>;
+                                      }
+                                      return filtered.map((cust) => (
+                                        <button
+                                          key={cust.name}
+                                          type="button"
+                                          onClick={() => handleSelectCustomer(cust)}
+                                          className="flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-slate-50 border border-transparent hover:border-slate-100"
+                                        >
+                                          <div>
+                                            <p className="text-sm font-black text-slate-900">{cust.name}</p>
+                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                              {cust.vatNumber ? `P.IVA: ${cust.vatNumber}` : `CF: ${cust.fiscalCode.toUpperCase()}`}
+                                            </p>
+                                          </div>
+                                          <span className="text-[10px] font-black uppercase text-[#A74758] bg-[#A74758]/10 px-2.5 py-0.5 rounded-full">
+                                            {cust.type.includes("Azienda") ? "Azienda" : "Privato"}
+                                          </span>
+                                        </button>
+                                      ));
+                                    })()}
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                                    {field.options?.map((opt) => {
+                                      const isSelected = answers[field.id] === opt;
+                                      return (
+                                        <button
+                                          key={opt}
+                                          type="button"
+                                          onClick={() => handleSelectChange(field.id, opt)}
+                                          className={cn(
+                                            "flex min-h-14 w-full items-center justify-between rounded-2xl border p-4 text-left text-sm font-bold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                                            isSelected
+                                              ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm shadow-[#A74758]/5"
+                                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                                          )}
+                                        >
+                                          <span>{opt}</span>
+                                          <div className={cn(
+                                            "size-5 rounded-full border flex items-center justify-center transition-all",
+                                            isSelected 
+                                              ? "border-[#A74758] bg-[#A74758]/15 text-[#A74758]" 
+                                              : "border-slate-200 bg-slate-50"
+                                          )}>
+                                            {isSelected && <Check className="size-3" />}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {answers[field.id] === "Altro" && (
+                                    <input
+                                      type="text"
+                                      required={field.required}
+                                      placeholder="Specifica..."
+                                      value={answers[field.id + "_altro"] || ""}
+                                      onChange={(e) => handleTextChange(field.id + "_altro", e.target.value)}
+                                      onKeyDown={(e) => handleKeyDown(e, "text")}
+                                      className="mt-2 h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
+                                    />
+                                  )}
+                                  {field.id === "invoice_client_type" && pastCustomers.length > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                                      <p className="text-xs font-bold text-slate-400">Cliente già registrato in passato?</p>
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowPastCustomers(true)}
+                                        className="flex h-14 w-full items-center justify-between rounded-2xl border border-dashed border-[#A74758]/30 bg-[#A74758]/5 px-4 text-left text-sm font-extrabold text-[#A74758] transition hover:bg-[#A74758]/10 hover:border-[#A74758]/50 active:scale-[0.99]"
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <Search className="size-4" />
+                                          Cerca tra i Clienti Registrati
+                                        </span>
+                                        <span className="rounded-full bg-[#A74758] px-2.5 py-0.5 text-[10px] text-white">
+                                          {pastCustomers.length}
+                                        </span>
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}

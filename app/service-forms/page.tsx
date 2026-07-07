@@ -151,7 +151,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   }));
 
   // Retrieve active employees and their real-time presence for client-control forms.
-  const [activeEmployees, todayAttendanceLogs] = await Promise.all([
+  const [activeEmployees, todayAttendanceLogs, pastInvoiceResponses] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
       select: { id: true, name: true, sede_id: true, location: { select: { name: true } } },
@@ -162,7 +162,41 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
       select: { user_id: true, type: true, timestamp: true, location: { select: { name: true } } },
       orderBy: { timestamp: "desc" },
     }),
+    prisma.serviceFormResponse.findMany({
+      where: {
+        form: {
+          name: { contains: "fattura", mode: "insensitive" }
+        }
+      },
+      select: {
+        answers: true,
+      },
+      orderBy: { created_at: "desc" },
+      take: 400
+    }),
   ]);
+
+  // Extract unique past customers from responses
+  const pastCustomersMap = new Map<string, any>();
+  for (const resp of pastInvoiceResponses) {
+    const ans = resp.answers as Record<string, any> | null;
+    if (!ans) continue;
+    const name = String(ans.invoice_client_name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (!pastCustomersMap.has(key)) {
+      pastCustomersMap.set(key, {
+        name,
+        type: ans.invoice_client_type || "Privato (Codice Fiscale)",
+        fiscalCode: ans.invoice_fiscal_code || "",
+        vatNumber: ans.invoice_vat_number || "",
+        sdiCode: ans.invoice_sdi_code || "",
+        pec: ans.invoice_pec || "",
+        address: ans.invoice_address || "",
+      });
+    }
+  }
+  const pastCustomers = Array.from(pastCustomersMap.values());
 
   const latestLogByUser = new Map<string, (typeof todayAttendanceLogs)[number]>();
   for (const log of todayAttendanceLogs) {
@@ -191,6 +225,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         currentUserRole={role}
         autoFillFormId={fillId}
         autoFillFormName={fill}
+        pastCustomers={pastCustomers}
       />
     </AppShell>
   );
