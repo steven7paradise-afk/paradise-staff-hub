@@ -288,14 +288,18 @@ export function OrderManager({
   const [undoing, setUndoing] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
+    let result = orders;
+
     if (clean) {
       // Search is active on ALL orders in the list, bypassing the month filter.
-      return orders.filter((order) => {
+      result = orders.filter((order) => {
         const haystack = [
-          orderTitle(order),
+          orderClientName(order),
+          orderNumber(order),
           orderItems(order),
           order.user?.name ?? "",
           order.user_location_name ?? "",
@@ -303,16 +307,22 @@ export function OrderManager({
         ].join(" ").toLowerCase();
         return haystack.includes(clean);
       });
+    } else {
+      // Default board view: active columns show all active orders, completed column only shows those of selected month/year.
+      result = orders.filter((order) => {
+        const status = order.status || "NEW";
+        if (status !== "COMPLETED") return true;
+        const d = new Date(order.created_at);
+        return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
+      });
     }
 
-    // Default board view: active columns show all active orders, completed column only shows those of selected month/year.
-    return orders.filter((order) => {
-      const status = order.status || "NEW";
-      if (status !== "COMPLETED") return true;
-      const d = new Date(order.created_at);
-      return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
-    });
-  }, [orders, query, selectedMonth, selectedYear]);
+    if (selectedTaskType !== "ALL") {
+      result = result.filter(order => getOrderTaskType(order) === selectedTaskType);
+    }
+
+    return result;
+  }, [orders, query, selectedMonth, selectedYear, selectedTaskType]);
 
   const mobileOrders = useMemo(() => {
     if (mobileStatus === "ALL") return filteredOrders;
@@ -522,21 +532,25 @@ export function OrderManager({
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
             </div>
             
-            {canManage && (
-              <div className="flex gap-2">
-                <Button onClick={() => setShowCsvUpload(true)} variant="soft" className="rounded-2xl border-black/10">
-                  Importa CSV
-                </Button>
-                <Button 
-                  onClick={handleUndoImport} 
-                  disabled={undoing}
-                  variant="soft" 
-                  className="rounded-2xl border-red-200 hover:bg-red-50 text-red-600 hover:text-red-700 transition"
-                >
-                  {undoing ? "Annullamento..." : "Annulla Ultimo Caricamento"}
-                </Button>
-              </div>
-            )}
+            <div className="relative">
+              <select
+                value={selectedTaskType}
+                onChange={(e) => setSelectedTaskType(e.target.value as any)}
+                className="appearance-none bg-black/5 border border-black/10 text-black text-xs font-black rounded-full pl-4 pr-9 py-2 outline-none cursor-pointer hover:bg-black/10 transition"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23000000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
+                  backgroundPosition: "right 0.6rem center",
+                  backgroundSize: "0.85rem 0.85rem",
+                  backgroundRepeat: "no-repeat"
+                }}
+              >
+                <option value="ALL">TUTTI I COMPITI</option>
+                <option value="conversione">CONVERSIONE CAPELLI</option>
+                <option value="acquisto">ACQUISTO EXTENSION</option>
+                <option value="accessori">ACCESSORI</option>
+                <option value="altro">ALTRO</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -687,31 +701,6 @@ export function OrderManager({
           );
         })}
       </div>
-
-      {showCsvUpload ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <Card className="w-full max-w-md p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-lg">Importa Ordini da CSV</h3>
-              <button onClick={() => !uploadingCsv && setShowCsvUpload(false)} disabled={uploadingCsv} className="text-black/50 hover:text-black">
-                <X className="size-5" />
-              </button>
-            </div>
-            <p className="text-sm text-black/60">
-              Carica il file CSV scaricato dal modulo. Il sistema leggerà automaticamente i dati e raggrupperà le righe con lo stesso nome "CLIENTE" in un unico ordine.
-            </p>
-            {uploadError && <div className="text-red-500 text-sm p-3 bg-red-50 rounded-xl">{uploadError}</div>}
-            
-            <div className="flex justify-center border-2 border-dashed border-black/20 rounded-2xl p-6 hover:bg-black/5 transition cursor-pointer relative">
-              <input type="file" accept=".csv" onChange={handleFileUpload} disabled={uploadingCsv} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-              <div className="text-center">
-                {uploadingCsv ? <Loader2 className="size-6 animate-spin mx-auto text-paradise-pink" /> : <PackageCheck className="size-6 mx-auto text-black/30 mb-2" />}
-                <span className="text-sm font-semibold">{uploadingCsv ? "Elaborazione in corso..." : "Clicca o trascina qui il file CSV"}</span>
-              </div>
-            </div>
-          </Card>
-        </div>
-      ) : null}
 
       {selected ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4">
