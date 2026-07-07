@@ -9,13 +9,43 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const users = await prisma.user.findMany({
+      where: { active: true, NOT: { mansione: null } },
+      select: { mansione: true }
+    });
+
+    const dbMansioni = Array.from(new Set(users.map(u => String(u.mansione || "").trim().toLowerCase()).filter(Boolean)));
+
     const setting = await prisma.setting.findUnique({
       where: { key: "mansioni_permissions" }
     });
 
+    let currentMap: Record<string, string[]> = setting 
+      ? (setting.value as Record<string, string[]>) 
+      : {};
+
+    let changed = false;
+    dbMansioni.forEach(m => {
+      if (!currentMap[m]) {
+        currentMap[m] = [];
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      await prisma.setting.upsert({
+        where: { key: "mansioni_permissions" },
+        update: { value: currentMap },
+        create: {
+          key: "mansioni_permissions",
+          value: currentMap
+        }
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      mansioni: setting ? (setting.value as Record<string, string[]>) : {}
+      mansioni: currentMap
     });
   } catch (err: any) {
     console.error("Error reading mansioni permissions:", err);

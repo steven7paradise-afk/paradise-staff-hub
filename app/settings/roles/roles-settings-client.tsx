@@ -185,6 +185,22 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   const [mansioni, setMansioni] = useState<Record<string, string[]>>({});
   const [newMansioneName, setNewMansioneName] = useState("");
   const [expandedMansione, setExpandedMansione] = useState<string | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<string>("DIPENDENTE");
+
+  const getPreviewAccessList = (target: string): string[] => {
+    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(target)) {
+      return APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(target as any)).map(p => p.path);
+    }
+    const mName = target.toLowerCase();
+    return mansioni[mName] || [];
+  };
+
+  const getPreviewEditAccessList = (target: string): string[] => {
+    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(target)) {
+      return APP_PAGES_MATRIX.filter(p => p.editRoles.includes(target as any)).map(p => p.path);
+    }
+    return APP_PAGES_MATRIX.filter(p => p.editRoles.includes("DIPENDENTE")).map(p => p.path);
+  };
 
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
 
@@ -722,7 +738,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                             {isEditingMansione ? (
                               <div className="flex items-center gap-2">
                                 <select
-                                  value={mansioneInput}
+                                  value={mansioneInput.toLowerCase()}
                                   onChange={(e) => setMansioneInput(e.target.value)}
                                   className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none focus:border-[#A74758] focus:bg-white bg-slate-50 transition"
                                 >
@@ -1074,185 +1090,305 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
             </div>
           )}
 
-          {/* Grid showing folders on the left, unassigned routes on the right */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Folders column */}
-            <div className="lg:col-span-2 space-y-4">
-              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Cartelle e Pulsanti Attivi</h3>
-              {sidebarLayout.length === 0 ? (
-                <Card className="p-8 text-center text-slate-400 font-bold text-xs bg-white border-slate-100">
-                  Nessuna cartella configurata.
-                </Card>
-              ) : null}
+          {/* Grid showing folders on the left, unassigned routes in the middle, live preview on the right */}
+          <div className="grid gap-6 xl:grid-cols-3">
+            {/* Folders & Unassigned column (span 2) */}
+            <div className="xl:col-span-2 space-y-6">
+              {/* Folders column */}
+              <div className="space-y-4">
+                <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Cartelle e Pulsanti Attivi</h3>
+                {sidebarLayout.length === 0 ? (
+                  <Card className="p-8 text-center text-slate-400 font-bold text-xs bg-white border-slate-100">
+                    Nessuna cartella configurata.
+                  </Card>
+                ) : null}
 
-              {sidebarLayout.map((folder, folderIndex) => {
-                const unassignedRoutesForFolder = APP_PAGES_MATRIX.filter(p => !new Set(sidebarLayout.flatMap(f => f.routes)).has(p.path));
-                return (
-                  <Card key={folder.id} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
-                    {/* Folder Header Row */}
-                    <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/40">
-                      <div className="flex items-center gap-2">
-                        <Folder className="size-4 text-[#A74758] shrink-0" />
-                        <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">{folder.title}</h4>
-                      </div>
+                {sidebarLayout.map((folder, folderIndex) => {
+                  const unassignedRoutesForFolder = APP_PAGES_MATRIX.filter(p => !new Set(sidebarLayout.flatMap(f => f.routes)).has(p.path));
+                  return (
+                    <Card key={folder.id} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
+                      {/* Folder Header Row */}
+                      <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/40">
+                        <div className="flex items-center gap-2">
+                          <Folder className="size-4 text-[#A74758] shrink-0" />
+                          <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">{folder.title}</h4>
+                        </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          disabled={folderIndex === 0}
-                          onClick={() => handleMoveFolder(folderIndex, "up")}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
-                        >
-                          <ArrowUp className="size-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={folderIndex === sidebarLayout.length - 1}
-                          onClick={() => handleMoveFolder(folderIndex, "down")}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
-                        >
-                          <ArrowDown className="size-3.5" />
-                        </button>
-                        {isSuperAdmin && (
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleDeleteFolder(folder.id)}
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition"
+                            disabled={folderIndex === 0}
+                            onClick={() => handleMoveFolder(folderIndex, "up")}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
                           >
-                            <Trash2 className="size-3.5" />
+                            <ArrowUp className="size-3.5" />
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            disabled={folderIndex === sidebarLayout.length - 1}
+                            onClick={() => handleMoveFolder(folderIndex, "down")}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
+                          >
+                            <ArrowDown className="size-3.5" />
+                          </button>
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteFolder(folder.id)}
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Folder Content / Link List */}
-                    <div className="p-4 space-y-2 bg-white">
-                      {folder.routes.length === 0 ? (
-                        <p className="text-[10px] text-slate-400 italic py-2">
-                          Questa cartella è vuota. Aggiungi pulsanti dal selettore sottostante.
-                        </p>
-                      ) : (
-                        <div className="divide-y divide-slate-100">
-                          {folder.routes.map((routeHref, routeIndex) => {
-                            const pageObj = APP_PAGES_MATRIX.find(p => p.path === routeHref) || { name: routeHref, path: routeHref };
-                            return (
-                              <div key={routeHref} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
-                                <div className="min-w-0">
-                                  <p className="font-bold text-slate-800 text-xs">{pageObj.name}</p>
-                                  <p className="font-mono text-[9px] text-slate-400 mt-0.5">{pageObj.path}</p>
-                                </div>
+                      {/* Folder Content / Link List */}
+                      <div className="p-4 space-y-2 bg-white">
+                        {folder.routes.length === 0 ? (
+                          <p className="text-[10px] text-slate-400 italic py-2">
+                            Questa cartella è vuota. Aggiungi pulsanti dal selettore sottostante.
+                          </p>
+                        ) : (
+                          <div className="divide-y divide-slate-100">
+                            {folder.routes.map((routeHref, routeIndex) => {
+                              const pageObj = APP_PAGES_MATRIX.find(p => p.path === routeHref) || { name: routeHref, path: routeHref };
+                              return (
+                                <div key={routeHref} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-800 text-xs">{pageObj.name}</p>
+                                    <p className="font-mono text-[9px] text-slate-400 mt-0.5">{pageObj.path}</p>
+                                  </div>
 
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={routeIndex === 0}
-                                    onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "up")}
-                                    className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
-                                  >
-                                    <ArrowUp className="size-3" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={routeIndex === folder.routes.length - 1}
-                                    onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "down")}
-                                    className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
-                                  >
-                                    <ArrowDown className="size-3" />
-                                  </button>
-                                  {isSuperAdmin && (
+                                  <div className="flex items-center gap-1">
                                     <button
                                       type="button"
-                                      onClick={() => handleRemoveRouteFromFolder(routeHref, folder.id)}
-                                      className="p-1 rounded-md hover:bg-rose-50 text-rose-600 ml-1"
+                                      disabled={routeIndex === 0}
+                                      onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "up")}
+                                      className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
                                     >
-                                      <X className="size-3" />
+                                      <ArrowUp className="size-3" />
                                     </button>
-                                  )}
+                                    <button
+                                      type="button"
+                                      disabled={routeIndex === folder.routes.length - 1}
+                                      onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "down")}
+                                      className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
+                                    >
+                                      <ArrowDown className="size-3" />
+                                    </button>
+                                    {isSuperAdmin && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveRouteFromFolder(routeHref, folder.id)}
+                                        className="p-1 rounded-md hover:bg-rose-50 text-rose-600 ml-1"
+                                      >
+                                        <X className="size-3" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                              );
+                            })}
+                          </div>
+                        )}
 
-                      {/* Dropdown to add route */}
-                      {isSuperAdmin && unassignedRoutesForFolder.length > 0 && (
-                        <div className="pt-2 border-t border-slate-50 mt-2">
-                          <select
-                            value=""
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                handleMoveRouteToFolder(e.target.value, folder.id);
-                              }
-                            }}
-                            className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none bg-slate-50 focus:bg-white text-slate-700 transition w-full"
-                          >
-                            <option value="">+ Aggiungi tasto/pagina...</option>
-                            {unassignedRoutesForFolder.map(page => (
-                              <option key={page.path} value={page.path}>
-                                {page.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-
-            {/* Unassigned column */}
-            <div className="space-y-4">
-              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Pagine Non Assegnate</h3>
-              <Card className="p-4 bg-white border-slate-100 shadow-sm space-y-3">
-                <p className="text-[10px] text-slate-500 leading-normal">
-                  Queste pagine non sono inserite in nessuna cartella. Verranno visualizzate in automatico all'interno di una cartella predefinita "Altre Pagine" in fondo al menu.
-                </p>
-
-                {(() => {
-                  const assignedRouteHrefs = new Set(sidebarLayout.flatMap(f => f.routes));
-                  const unassignedList = APP_PAGES_MATRIX.filter(p => !assignedRouteHrefs.has(p.path));
-
-                  if (unassignedList.length === 0) {
-                    return (
-                      <p className="text-xs text-slate-400 font-bold italic py-4 text-center">
-                        Tutte le pagine sono assegnate!
-                      </p>
-                    );
-                  }
-
-                  return (
-                    <div className="divide-y divide-slate-100 max-h-[450px] overflow-y-auto pr-1 luxury-scroll">
-                      {unassignedList.map(page => (
-                        <div key={page.path} className="py-2.5 first:pt-0 last:pb-0">
-                          <p className="font-bold text-slate-800 text-xs">{page.name}</p>
-                          <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
-                          
-                          {/* Folder target assign dropdown */}
-                          {isSuperAdmin && sidebarLayout.length > 0 && (
+                        {/* Dropdown to add route */}
+                        {isSuperAdmin && unassignedRoutesForFolder.length > 0 && (
+                          <div className="pt-2 border-t border-slate-50 mt-2">
                             <select
                               value=""
                               onChange={(e) => {
                                 if (e.target.value) {
-                                  handleMoveRouteToFolder(page.path, e.target.value);
+                                  handleMoveRouteToFolder(e.target.value, folder.id);
                                 }
                               }}
-                              className="h-7 rounded-lg border border-slate-200 px-2 text-[10px] font-bold outline-none bg-slate-50 focus:bg-white text-slate-600 transition w-full mt-1.5"
+                              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none bg-slate-50 focus:bg-white text-slate-700 transition w-full"
                             >
-                              <option value="">Sposta in cartella...</option>
-                              {sidebarLayout.map(f => (
-                                <option key={f.id} value={f.id}>
-                                  {f.title}
+                              <option value="">+ Aggiungi tasto/pagina...</option>
+                              {unassignedRoutesForFolder.map(page => (
+                                <option key={page.path} value={page.path}>
+                                  {page.name}
                                 </option>
                               ))}
                             </select>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
                   );
-                })()}
+                })}
+              </div>
+
+              {/* Unassigned section */}
+              <div className="space-y-4">
+                <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Pagine Non Assegnate</h3>
+                <Card className="p-4 bg-white border-slate-100 shadow-sm space-y-3">
+                  <p className="text-[10px] text-slate-500 leading-normal">
+                    Queste pagine non sono inserite in nessuna cartella. Verranno visualizzate in automatico all'interno di una cartella predefinita "Altre Pagine" in fondo al menu.
+                  </p>
+
+                  {(() => {
+                    const assignedRouteHrefs = new Set(sidebarLayout.flatMap(f => f.routes));
+                    const unassignedList = APP_PAGES_MATRIX.filter(p => !assignedRouteHrefs.has(p.path));
+
+                    if (unassignedList.length === 0) {
+                      return (
+                        <p className="text-xs text-slate-400 font-bold italic py-4 text-center">
+                          Tutte le pagine sono assegnate!
+                        </p>
+                      );
+                    }
+
+                    return (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {unassignedList.map(page => (
+                          <div key={page.path} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between gap-2">
+                            <div>
+                              <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
+                              <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                            </div>
+                            
+                            {/* Folder target assign dropdown */}
+                            {isSuperAdmin && sidebarLayout.length > 0 && (
+                              <select
+                                value=""
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleMoveRouteToFolder(page.path, e.target.value);
+                                  }
+                                }}
+                                className="h-7 rounded-lg border border-slate-200 px-2 text-[10px] font-bold outline-none bg-white text-slate-600 transition w-full"
+                              >
+                                <option value="">Sposta in cartella...</option>
+                                {sidebarLayout.map(f => (
+                                  <option key={f.id} value={f.id}>
+                                    {f.title}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </Card>
+              </div>
+            </div>
+
+            {/* Live Sidebar Preview Mockup column */}
+            <div className="space-y-4">
+              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Live Sidebar Preview</h3>
+              
+              <Card className="p-4 bg-white border-slate-100 shadow-sm space-y-4">
+                {/* Selector Dropdown */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
+                    Anteprima per Mansione / Ruolo:
+                  </label>
+                  <select
+                    value={previewTarget}
+                    onChange={(e) => setPreviewTarget(e.target.value)}
+                    className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:border-[#A74758] bg-slate-50 focus:bg-white text-slate-700 transition w-full"
+                  >
+                    <optgroup label="Ruoli di Sistema">
+                      <option value="DIPENDENTE">Collaboratore (DIPENDENTE)</option>
+                      <option value="RESPONSABILE">Responsabile (RESPONSABILE)</option>
+                      <option value="ADMIN">Amministratore (ADMIN)</option>
+                      <option value="SUPER_ADMIN">Super Admin (SUPER_ADMIN)</option>
+                    </optgroup>
+                    <optgroup label="Mansioni Registrate">
+                      {Object.keys(mansioni).map(mKey => (
+                        <option key={mKey} value={mKey}>
+                          Mansione: {mKey.toUpperCase()}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Visual Representation of Sidebar */}
+                <div className="rounded-2xl border border-slate-200 bg-[#0E131F] text-slate-300 p-4 space-y-5 overflow-hidden shadow-inner font-sans max-h-[600px] overflow-y-auto luxury-scroll relative select-none">
+                  {/* Glass indicator of mockup */}
+                  <div className="absolute top-2 right-2 rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-[8px] font-black uppercase text-white/50 tracking-wider">
+                    Mockup Preview
+                  </div>
+
+                  {/* Logo block */}
+                  <div className="flex items-center gap-2 border-b border-white/5 pb-3 pt-1">
+                    <div className="size-7 rounded-full bg-white/10 grid place-items-center text-[10px] font-black text-rose-300">
+                      P
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold tracking-[0.15em] text-white uppercase">PARADISE</p>
+                      <p className="text-[8px] text-white/40">Staff Hub</p>
+                    </div>
+                  </div>
+
+                  {/* Sidebar list items */}
+                  <div className="space-y-4">
+                    {(() => {
+                      const allowedPages = getPreviewAccessList(previewTarget);
+                      const editablePages = getPreviewEditAccessList(previewTarget);
+
+                      // Helper: filter allowed ones inside each folder
+                      const renderedHrefs = new Set<string>();
+                      const structured = sidebarLayout.map(folder => {
+                        const matched = folder.routes.filter(r => {
+                          const hasView = allowedPages.includes(r);
+                          if (hasView) renderedHrefs.add(r);
+                          return hasView;
+                        });
+                        return { ...folder, matched };
+                      }).filter(f => f.matched.length > 0);
+
+                      // Fallback unassigned list
+                      const unassignedMatched = APP_PAGES_MATRIX.filter(p => allowedPages.includes(p.path) && !renderedHrefs.has(p.path));
+
+                      const displaySections = [
+                        ...structured,
+                        ...(unassignedMatched.length > 0 ? [{ id: "fallback-unassigned", title: "Altre Pagine", matched: unassignedMatched.map(p => p.path) }] : [])
+                      ];
+
+                      if (displaySections.length === 0) {
+                        return (
+                          <div className="py-8 text-center text-[10px] text-slate-500 font-bold italic">
+                            Nessuna pagina visibile per questa configurazione.
+                          </div>
+                        );
+                      }
+
+                      return displaySections.map(sec => (
+                        <div key={sec.id} className="space-y-1">
+                          <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-500 pb-1">
+                            {sec.title}
+                          </p>
+                          <div className="space-y-0.5">
+                            {sec.matched.map(rHref => {
+                              const pageInfo = APP_PAGES_MATRIX.find(p => p.path === rHref) || { name: rHref, path: rHref };
+                              const isEditable = editablePages.includes(rHref);
+                              return (
+                                <div
+                                  key={rHref}
+                                  className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[10px] font-semibold bg-white/5 hover:bg-white/10 text-slate-200 transition"
+                                >
+                                  <span>{pageInfo.name}</span>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <span title="Visibile (Lettura)" className="text-[10px]">👁️</span>
+                                    {isEditable && (
+                                      <span title="Modificabile (Scrittura)" className="text-[10px] text-amber-400">✍️</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
               </Card>
             </div>
           </div>
