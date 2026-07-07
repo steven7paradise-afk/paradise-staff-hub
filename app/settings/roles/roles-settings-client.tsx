@@ -24,97 +24,148 @@ type RolesSettingsClientProps = {
   };
 };
 
-const APP_PAGES_MATRIX = [
+import { routePermissions } from "@/lib/roles";
+
+const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
+  "/dashboard": { name: "Dashboard Principale", description: "Bacheca iniziale con timbrature e avvisi." },
+  "/my-shifts": { name: "I Miei Turni", description: "Visualizzazione dei propri turni personali." },
+  "/tasks": { name: "Task & Compiti", description: "Lista dei compiti assegnati e commenti." },
+  "/employees": { name: "Gestione Dipendenti", description: "Anagrafica completa e dati dello staff." },
+  "/attendance": { name: "Registro Presenze", description: "Log di entrata/uscita dei dipendenti." },
+  "/work-hours": { name: "Ore Lavorate", description: "Riepilogo ore ordinarie e straordinarie." },
+  "/schedules": { name: "Turni Saloni", description: "Pianificazione oraria settimanale dello staff." },
+  "/social-calendar": { name: "Calendario Social", description: "Pianificazione post e upload foto social." },
+  "/locations": { name: "Gestione Saloni", description: "Anagrafica dei saloni Paradise." },
+  "/tablet-clock": { name: "Timbratrice Tablet", description: "Accesso all'interfaccia timbrature per tablet salone." },
+  "/requests": { name: "Ferie & Permessi", description: "Richieste di congedo e approvazioni." },
+  "/documents": { name: "Buste Paga & Cedolini", description: "Archivio cedolini e documenti personali." },
+  "/service-notes": { name: "Note di Servizio", description: "Diario interno delle annotazioni operative." },
+  "/service-forms": { name: "Moduli Operativi", description: "Compilazione dei moduli tecnici dei servizi." },
+  "/tables": { name: "Tabelle Listini", description: "Visualizzazione tabelle listini e prezzi." },
+  "/orders": { name: "Ordini (Kanban)", description: "Pipeline ordini per acquisto extension, conversioni e accessori." },
+  "/appointments": { name: "Gestione Appuntamenti", description: "Planning e prenotazioni dei clienti." },
+  "/cash": { name: "Cassa & Chiusure", description: "Chiusure di cassa e monitoraggio cassaforte." },
+  "/invoices": { name: "Richieste Fatture", description: "Registro richieste ed export per commercialista." },
+  "/refunds": { name: "Rimborsi", description: "Gestione note di credito e rimborsi." },
+  "/client-control": { name: "Controllo Clienti", description: "Tablet clienti in salone per recensioni e dati." },
+  "/recruitment": { name: "HR Recruitment", description: "Candidature e colloqui di assunzione." },
+  "/staff": { name: "Organigramma Staff", description: "Mappa visuale delle posizioni e ruoli." },
+  "/team": { name: "Elenco Team", description: "Lista dei membri del team Paradise." },
+  "/notifications": { name: "Centro Notifiche", description: "Storico degli avvisi e delle comunicazioni." },
+  "/profile": { name: "Profilo Personale", description: "Dati personali, password e preferenze grafiche." },
+  "/settings": { name: "Impostazioni Generali", description: "Pannello principale di configurazione hub." },
+  "/settings/branding": { name: "Brand & Loghi", description: "Personalizzazione loghi, colori e testi dell'app." },
+  "/settings/devices": { name: "Configura Timbratrici", description: "Associazione e attivazione tablet salone." },
+  "/settings/google-sheet": { name: "Integrazione Fogli Google", description: "Collegamento fogli drive per i dati." },
+  "/settings/email": { name: "Configura Email", description: "Impostazioni server SMTP per notifiche." },
+  "/settings/roles": { name: "Sicurezza Ruoli & Permessi", description: "Gestione dei ruoli dipendenti e accessi pagine." },
+  "/settings/tasks": { name: "Configura Categorie Task", description: "Impostazione categorie compiti di staff." },
+  "/settings/tables": { name: "Configura Tabelle Listini", description: "Permessi di scrittura tabelle listini." },
+  "/settings/planning": { name: "Configura Planning", description: "Accesso e orari agende appuntamenti." },
+  "/settings/services": { name: "Gestione Servizi", description: "Configurazione dei trattamenti e durata." },
+  "/settings/forms": { name: "Gestione Moduli Operativi", description: "Creazione e modifica dei campi dei moduli." }
+};
+
+const APP_PAGES_MATRIX = Object.entries(routePermissions).map(([path, viewRoles]) => {
+  const meta = ROUTE_LABELS[path] || { 
+    name: path.split("/").filter(Boolean).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" > "), 
+    description: "Configurazione e modulo di sistema." 
+  };
+  
+  let editRoles = ["SUPER_ADMIN", "ADMIN"];
+  let exceptionsEdit = "";
+  if (path === "/social-calendar") {
+    editRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+  } else if (path === "/orders") {
+    editRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+    exceptionsEdit = "Jessinca Inturri, Biy Darwin Ramirez Castillo";
+  } else if (path === "/requests") {
+    exceptionsEdit = "I dipendenti possono creare o annullare le proprie richieste.";
+  } else if (path === "/recruitment") {
+    editRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  } else if (path.startsWith("/settings")) {
+    editRoles = ["SUPER_ADMIN"];
+    if (path === "/settings/tables" || path === "/settings/planning" || path === "/settings/forms") {
+      editRoles = ["SUPER_ADMIN", "ADMIN"];
+    }
+  }
+
+  let exceptions = "Nessuna eccezione";
+  if (path === "/orders") {
+    exceptions = "Tutti i dipendenti (incluse le sarte) vedono tutti gli ordini.";
+  } else if (path === "/schedules") {
+    exceptions = "Tutti i dipendenti possono vedere i turni propri e dei colleghi.";
+  } else if (path === "/requests") {
+    exceptions = "I dipendenti vedono solo le proprie richieste.";
+  } else if (path === "/documents") {
+    exceptions = "I dipendenti vedono solo i propri cedolini.";
+  } else if (path === "/appointments") {
+    exceptions = "I dipendenti con mansione 'assistenza' possono visualizzare.";
+  }
+
+  return {
+    path,
+    name: meta.name,
+    description: meta.description,
+    viewRoles,
+    exceptions,
+    editRoles,
+    exceptionsEdit
+  };
+});
+
+const ROUTE_GROUPS = [
   {
-    path: "/dashboard",
-    name: "Dashboard Principale",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    description: "Pagina iniziale con pannello timbrature, calendario compleanni, eventi recenti e notifiche."
+    title: "Area Operativa & Personale",
+    routes: [
+      "/dashboard",
+      "/my-shifts",
+      "/tasks",
+      "/schedules",
+      "/social-calendar",
+      "/requests",
+      "/documents",
+      "/service-notes",
+      "/service-forms",
+      "/tables",
+      "/orders",
+      "/appointments",
+      "/profile",
+      "/notifications"
+    ]
   },
   {
-    path: "/orders",
-    name: "Ordini (Kanban)",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    exceptions: "Tutti i dipendenti (incluse le sarte) vedono tutti gli ordini.",
-    editRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-    exceptionsEdit: "Jessinca Inturri, Biy Darwin Ramirez Castillo",
-    description: "Gestione e avanzamento degli ordini inseriti dallo staff. Include il filtro per tipologia di compito."
+    title: "Area Amministrazione & Cassa",
+    routes: [
+      "/employees",
+      "/attendance",
+      "/work-hours",
+      "/locations",
+      "/tablet-clock",
+      "/cash",
+      "/invoices",
+      "/refunds",
+      "/client-control",
+      "/recruitment",
+      "/staff",
+      "/team"
+    ]
   },
   {
-    path: "/invoices",
-    name: "Registro Richieste Fatture",
-    viewRoles: ["SUPER_ADMIN", "ADMIN"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    description: "Visualizzazione delle richieste di fattura elettronica, generazione PDF cumulativo e invio automatico al commercialista."
-  },
-  {
-    path: "/cash",
-    name: "Cassa & Chiusure",
-    viewRoles: ["SUPER_ADMIN", "ADMIN"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    description: "Monitoraggio delle chiusure di cassa settimanali/mensili e dei prelievi di cassaforte."
-  },
-  {
-    path: "/attendance",
-    name: "Registro Presenze & Timbrature",
-    viewRoles: ["SUPER_ADMIN", "ADMIN"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    description: "Gestione dei log di entrata/uscita, orari effettivi e inserimenti manuali delle ore lavorate."
-  },
-  {
-    path: "/schedules",
-    name: "Pianificazione Turni",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    exceptions: "Tutti i dipendenti possono vedere i turni propri e dei colleghi.",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    description: "Matrice di pianificazione oraria settimanale per i vari saloni Paradise."
-  },
-  {
-    path: "/social-calendar",
-    name: "Calendario Social",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    description: "Pianificazione dei post social e caricamento foto da parte del personale."
-  },
-  {
-    path: "/requests",
-    name: "Richieste Ferie & Permessi",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    exceptions: "I dipendenti vedono solo le proprie richieste. Responsabili/Admin vedono tutto.",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    exceptionsEdit: "I dipendenti possono creare o annullare le proprie richieste in sospeso.",
-    description: "Approvazione e gestione dei congedi, ferie e permessi richiesti dal personale."
-  },
-  {
-    path: "/recruitment",
-    name: "HR Recruitment & Candidati",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-    description: "Gestione delle candidature lavorative e dei processi di assunzione per i saloni."
-  },
-  {
-    path: "/documents",
-    name: "Buste Paga & Documenti",
-    viewRoles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-    exceptions: "I dipendenti vedono solo i propri cedolini. Admin caricano per tutti.",
-    editRoles: ["SUPER_ADMIN", "ADMIN"],
-    description: "Archivio documentale personale e invio sicuro delle buste paga mensili."
-  },
-  {
-    path: "/settings",
-    name: "Impostazioni Generali",
-    viewRoles: ["SUPER_ADMIN", "ADMIN"],
-    exceptions: "Nessuna exception",
-    editRoles: ["SUPER_ADMIN"],
-    exceptionsEdit: "Gli Admin hanno accesso limitato solo ad alcune schede di configurazione.",
-    description: "Configurazione di sistema, fogli Google di appoggio, credenziali mail e matrice permessi."
+    title: "Area Impostazioni & Configurazione",
+    routes: [
+      "/settings",
+      "/settings/branding",
+      "/settings/devices",
+      "/settings/google-sheet",
+      "/settings/email",
+      "/settings/roles",
+      "/settings/tasks",
+      "/settings/tables",
+      "/settings/planning",
+      "/settings/services",
+      "/settings/forms"
+    ]
   }
 ];
 
@@ -594,30 +645,44 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                                 </div>
 
                                 {hasCustomAccess && (
-                                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 pt-2">
-                                    {APP_PAGES_MATRIX.map((page) => {
-                                      const isChecked = user.access_list.includes(page.path);
+                                  <div className="space-y-6 pt-2">
+                                    {ROUTE_GROUPS.map((group) => {
+                                      const groupPages = APP_PAGES_MATRIX.filter(p => group.routes.includes(p.path));
+                                      if (groupPages.length === 0) return null;
+
                                       return (
-                                        <label
-                                          key={page.path}
-                                          className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition select-none ${
-                                            isChecked
-                                              ? "bg-white border-[#C66170]/30 shadow-sm"
-                                              : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
-                                          }`}
-                                        >
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            disabled={!isSuperAdmin}
-                                            onChange={(e) => handleTogglePageAccess(user.id, page.path, e.target.checked, user.access_list)}
-                                            className="mt-0.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                          />
-                                          <div className="min-w-0">
-                                            <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
-                                            <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                                        <div key={group.title} className="space-y-2.5">
+                                          <h5 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest border-l-2 border-[#C66170] pl-2">
+                                            {group.title}
+                                          </h5>
+                                          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                                            {groupPages.map((page) => {
+                                              const isChecked = user.access_list.includes(page.path);
+                                              return (
+                                                <label
+                                                  key={page.path}
+                                                  className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition select-none ${
+                                                    isChecked
+                                                      ? "bg-white border-[#C66170]/30 shadow-sm"
+                                                      : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
+                                                  }`}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    disabled={!isSuperAdmin}
+                                                    onChange={(e) => handleTogglePageAccess(user.id, page.path, e.target.checked, user.access_list)}
+                                                    className="mt-0.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                                  />
+                                                  <div className="min-w-0">
+                                                    <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
+                                                    <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                                                  </div>
+                                                </label>
+                                              );
+                                            })}
                                           </div>
-                                        </label>
+                                        </div>
                                       );
                                     })}
                                   </div>
