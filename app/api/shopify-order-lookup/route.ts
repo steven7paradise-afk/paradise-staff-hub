@@ -99,7 +99,13 @@ export async function GET(request: NextRequest) {
       orderName: matchingOrder.name,
       clientName: fullName || null,
       totalPrice: matchingOrder.total_price ? parseFloat(matchingOrder.total_price) : null,
-      lineItems: Array.isArray(matchingOrder.line_items) ? matchingOrder.line_items.map((item: any) => item.title) : [],
+      lineItems: Array.isArray(matchingOrder.line_items) 
+        ? matchingOrder.line_items.map((item: any) => ({
+            title: item.title,
+            quantity: item.quantity ? parseInt(item.quantity) : 1,
+            price: item.price ? parseFloat(item.price) : 0,
+          })) 
+        : [],
       note: matchingOrder.note || null,
       email: matchingOrder.customer?.email || null,
       phone: matchingOrder.customer?.phone || null,

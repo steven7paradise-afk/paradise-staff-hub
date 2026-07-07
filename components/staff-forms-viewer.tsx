@@ -213,18 +213,21 @@ export function StaffFormsViewer({
         if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
         if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
         if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
+        if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
         
+        const titles = Array.isArray(data.lineItems) ? data.lineItems.map((it: any) => it.title) : [];
         let productsNote = `Importato da ordine Shopify ${data.orderName || ""}`;
-        if (data.lineItems && data.lineItems.length > 0) {
-          productsNote += `\nProdotti: ${data.lineItems.join(", ")}`;
+        if (titles.length > 0) {
+          productsNote += `\nProdotti: ${titles.join(", ")}`;
         }
         nextAnswers["invoice_notes"] = productsNote;
 
         return nextAnswers;
       });
 
-      const prodList = data.lineItems && data.lineItems.length > 0 
-        ? data.lineItems.join(", ") 
+      const titles = Array.isArray(data.lineItems) ? data.lineItems.map((it: any) => it.title) : [];
+      const prodList = titles.length > 0 
+        ? titles.join(", ") 
         : "Nessuno";
       setShopifyLookupStatus({
         success: true,
@@ -1437,7 +1440,7 @@ export function StaffFormsViewer({
                 {/* Footer buttons */}
                 <div className="sticky bottom-0 -mx-5 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur sm:-mx-7 sm:px-7">
                   <div>
-                    {currentActiveIndex > 0 && (
+                    {currentActiveIndex > 0 ? (
                       <Button
                         type="button"
                         variant="soft"
@@ -1448,6 +1451,15 @@ export function StaffFormsViewer({
                         className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
                       >
                         Indietro
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="soft"
+                        onClick={() => setSelectedForm(null)}
+                        className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      >
+                        Torna Indietro
                       </Button>
                     )}
                   </div>

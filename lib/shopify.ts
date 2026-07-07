@@ -576,7 +576,7 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
 export async function getShopifyOrderDetails(orderName: string): Promise<{
   clientName: string | null;
   totalPrice: number | null;
-  lineItems: string[];
+  lineItems: Array<{ title: string; quantity: number; price: number }>;
   note: string | null;
   email: string | null;
   phone: string | null;
@@ -658,7 +658,11 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const totalPrice = orderData.total_price ? parseFloat(orderData.total_price) : null;
       
       const lineItems = Array.isArray(orderData.line_items) 
-        ? orderData.line_items.map((item: any) => item.title) 
+        ? orderData.line_items.map((item: any) => ({
+            title: item.title,
+            quantity: item.quantity ? parseInt(item.quantity) : 1,
+            price: item.price ? parseFloat(item.price) : 0,
+          })) 
         : [];
 
       const note = orderData.note || null;
