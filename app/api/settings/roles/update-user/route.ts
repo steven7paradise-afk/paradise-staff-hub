@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { userId, role, mansione } = body;
+    const { userId, role, mansione, accessList } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "ID utente mancante." }, { status: 400 });
@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
     if (mansione !== undefined) {
       updateData.mansione = mansione;
     }
+    if (accessList !== undefined) {
+      updateData.access_list = accessList;
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -36,6 +39,7 @@ export async function POST(request: NextRequest) {
         name: true,
         role: true,
         mansione: true,
+        access_list: true,
       }
     });
 

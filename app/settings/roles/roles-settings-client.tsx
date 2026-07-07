@@ -12,6 +12,7 @@ type UserType = {
   mansione: string | null;
   photo_url: string | null;
   location: { name: string } | null;
+  access_list: any;
 };
 
 type RolesSettingsClientProps = {
@@ -127,12 +128,86 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   const [editingMansioneId, setEditingMansioneId] = useState<string | null>(null);
   const [mansioneInput, setMansioneInput] = useState("");
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
 
   const showMessage = (text: string, type: "success" | "error") => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  const handleTogglePageAccess = async (userId: string, path: string, isChecked: boolean, currentList: string[] | null) => {
+    if (!isSuperAdmin) {
+      showMessage("Solo i Super Admin possono modificare i permessi delle pagine.", "error");
+      return;
+    }
+
+    let newList: string[] = [];
+    if (Array.isArray(currentList)) {
+      newList = [...currentList];
+    } else {
+      const userObj = users.find(u => u.id === userId);
+      const defaultPages = APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(userObj?.role || "DIPENDENTE")).map(p => p.path);
+      newList = defaultPages;
+    }
+
+    if (isChecked) {
+      if (!newList.includes(path)) newList.push(path);
+    } else {
+      newList = newList.filter(p => p !== path);
+    }
+
+    setUpdatingUserId(userId);
+    try {
+      const res = await fetch("/api/settings/roles/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, accessList: newList }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile aggiornare la lista accessi.");
+
+      setUsers(current =>
+        current.map(u => (u.id === userId ? { ...u, access_list: newList } : u))
+      );
+      showMessage(`Permessi di ${data.user.name} aggiornati con successo!`, "success");
+    } catch (err: any) {
+      console.error(err);
+      showMessage(err.message || "Errore durante l'aggiornamento.", "error");
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+  const handleResetToDefault = async (userId: string) => {
+    if (!isSuperAdmin) {
+      showMessage("Solo i Super Admin possono modificare i permessi delle pagine.", "error");
+      return;
+    }
+
+    setUpdatingUserId(userId);
+    try {
+      const res = await fetch("/api/settings/roles/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, accessList: null }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile ripristinare i permessi.");
+
+      setUsers(current =>
+        current.map(u => (u.id === userId ? { ...u, access_list: null } : u))
+      );
+      showMessage(`Permessi di ${data.user.name} ripristinati al default del ruolo!`, "success");
+    } catch (err: any) {
+      console.error(err);
+      showMessage(err.message || "Errore durante il ripristino.", "error");
+    } finally {
+      setUpdatingUserId(null);
+    }
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
@@ -325,13 +400,14 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                     <th className="px-6 py-4">Email</th>
                     <th className="px-6 py-4">Sede Salone</th>
                     <th className="px-6 py-4">Mansione</th>
+                    <th className="px-6 py-4">Permessi Pagine</th>
                     <th className="px-6 py-4">Ruolo System</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-slate-400 font-bold">
+                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400 font-bold">
                         Nessun dipendente trovato.
                       </td>
                     </tr>
@@ -339,112 +415,218 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                   {filteredUsers.map((user) => {
                     const isEditingMansione = editingMansioneId === user.id;
                     const isUpdating = updatingUserId === user.id;
+                    const isExpanded = expandedUserId === user.id;
+                    const hasCustomAccess = Array.isArray(user.access_list);
+                    const customPagesCount = hasCustomAccess ? user.access_list.length : 0;
 
                     return (
-                      <tr key={user.id} className="hover:bg-slate-50/50 transition">
-                        {/* Profile Photo & Name */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            {user.photo_url ? (
-                              <img src={user.photo_url} alt={user.name} className="size-9 rounded-full object-cover border border-slate-100" />
-                            ) : (
-                              <div className="grid size-9 place-items-center rounded-full bg-[#FAF7F9] font-black text-[#C66170] border border-pink-100">
-                                {user.name.charAt(0).toUpperCase()}
+                      <React.Fragment key={user.id}>
+                        <tr className="hover:bg-slate-50/30 transition">
+                          {/* Profile Photo & Name */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {user.photo_url ? (
+                                <img src={user.photo_url} alt={user.name} className="size-9 rounded-full object-cover border border-slate-100" />
+                              ) : (
+                                <div className="grid size-9 place-items-center rounded-full bg-[#FAF7F9] font-black text-[#C66170] border border-pink-100">
+                                  {(user.name || "S").charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-bold text-slate-900 text-sm">{user.name}</p>
+                                <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {user.id.substring(0, 8)}</p>
                               </div>
-                            )}
-                            <div>
-                              <p className="font-bold text-slate-900 text-sm">{user.name}</p>
-                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {user.id.substring(0, 8)}</p>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Email */}
-                        <td className="px-6 py-4 text-slate-600 font-mono">
-                          {user.email}
-                        </td>
+                          {/* Email */}
+                          <td className="px-6 py-4 text-slate-600 font-mono">
+                            {user.email}
+                          </td>
 
-                        {/* Sede / Salon */}
-                        <td className="px-6 py-4 text-slate-600 font-bold">
-                          {user.location?.name || <span className="text-slate-400 font-medium italic">Sede centrale</span>}
-                        </td>
+                          {/* Sede / Salon */}
+                          <td className="px-6 py-4 text-slate-600 font-bold">
+                            {user.location?.name || <span className="text-slate-400 font-medium italic">Sede centrale</span>}
+                          </td>
 
-                        {/* Mansione (Editable) */}
-                        <td className="px-6 py-4">
-                          {isEditingMansione ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={mansioneInput}
-                                onChange={(e) => setMansioneInput(e.target.value)}
-                                className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none focus:border-[#A74758] focus:bg-white bg-slate-50 transition"
-                                placeholder="E.g. sarta, assistenza"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => handleMansioneSave(user.id)}
-                                disabled={isUpdating}
-                                className="h-8 rounded-lg bg-emerald-600 text-white px-2.5 font-bold hover:bg-emerald-700 transition"
-                              >
-                                Salva
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingMansioneId(null)}
-                                className="h-8 rounded-lg bg-slate-200 text-slate-600 px-2.5 font-bold hover:bg-slate-300 transition"
-                              >
-                                Annulla
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-900 capitalize">
-                                {user.mansione || <span className="text-slate-400 font-medium italic">Nessuna</span>}
-                              </span>
-                              {isSuperAdmin && (
+                          {/* Mansione (Editable) */}
+                          <td className="px-6 py-4">
+                            {isEditingMansione ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={mansioneInput}
+                                  onChange={(e) => setMansioneInput(e.target.value)}
+                                  className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none focus:border-[#A74758] focus:bg-white bg-slate-50 transition"
+                                  placeholder="E.g. sarta, assistenza"
+                                />
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setEditingMansioneId(user.id);
-                                    setMansioneInput(user.mansione || "");
-                                  }}
-                                  className="text-slate-400 hover:text-slate-600 transition"
+                                  onClick={() => handleMansioneSave(user.id)}
+                                  disabled={isUpdating}
+                                  className="h-8 rounded-lg bg-emerald-600 text-white px-2.5 font-bold hover:bg-emerald-700 transition"
                                 >
-                                  <Edit className="size-3.5" />
+                                  Salva
                                 </button>
-                              )}
-                            </div>
-                          )}
-                        </td>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMansioneId(null)}
+                                  className="h-8 rounded-lg bg-slate-200 text-slate-600 px-2.5 font-bold hover:bg-slate-300 transition"
+                                >
+                                  Annulla
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900 capitalize">
+                                  {user.mansione || <span className="text-slate-400 font-medium italic">Nessuna</span>}
+                                </span>
+                                {isSuperAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingMansioneId(user.id);
+                                      setMansioneInput(user.mansione || "");
+                                    }}
+                                    className="text-slate-400 hover:text-slate-600 transition"
+                                  >
+                                    <Edit className="size-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
 
-                        {/* Role Selector */}
-                        <td className="px-6 py-4">
-                          {isUpdating ? (
-                            <div className="flex items-center gap-1 text-slate-500 font-bold">
-                              <Loader2 className="size-3.5 animate-spin" />
-                              Aggiornamento...
-                            </div>
-                          ) : (
-                            <select
-                              value={user.role}
-                              onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                              disabled={!isSuperAdmin}
-                              className="appearance-none bg-black/5 border border-black/10 text-slate-800 text-xs font-black rounded-xl pl-3 pr-8 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition disabled:opacity-75 disabled:cursor-not-allowed"
-                              style={{
-                                backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
-                                backgroundPosition: "right 0.5rem center",
-                                backgroundSize: "0.8rem 0.8rem",
-                                backgroundRepeat: "no-repeat"
-                              }}
+                          {/* Custom Page Permissions Selector Toggle */}
+                          <td className="px-6 py-4">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedUserId(isExpanded ? null : user.id)}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition ${
+                                hasCustomAccess
+                                  ? "bg-pink-50 border border-pink-200 text-pink-700 hover:bg-pink-100"
+                                  : "bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200"
+                              }`}
                             >
-                              <option value="SUPER_ADMIN">Super Admin</option>
-                              <option value="ADMIN">Admin</option>
-                              <option value="RESPONSABILE">Responsabile</option>
-                              <option value="DIPENDENTE">Dipendente</option>
-                            </select>
-                          )}
-                        </td>
-                      </tr>
+                              {hasCustomAccess ? `${customPagesCount} Pagine Abilitate` : "Default (Ruolo)"}
+                            </button>
+                          </td>
+
+                          {/* Role Selector */}
+                          <td className="px-6 py-4">
+                            {isUpdating ? (
+                              <div className="flex items-center gap-1 text-slate-500 font-bold">
+                                <Loader2 className="size-3.5 animate-spin" />
+                                Aggiornamento...
+                              </div>
+                            ) : (
+                              <select
+                                value={user.role}
+                                onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                                disabled={!isSuperAdmin}
+                                className="appearance-none bg-black/5 border border-black/10 text-slate-800 text-xs font-black rounded-xl pl-3 pr-8 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition disabled:opacity-75 disabled:cursor-not-allowed"
+                                style={{
+                                  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
+                                  backgroundPosition: "right 0.5rem center",
+                                  backgroundSize: "0.8rem 0.8rem",
+                                  backgroundRepeat: "no-repeat"
+                                }}
+                              >
+                                <option value="SUPER_ADMIN">Super Admin</option>
+                                <option value="ADMIN">Admin</option>
+                                <option value="RESPONSABILE">Responsabile</option>
+                                <option value="DIPENDENTE">Dipendente</option>
+                              </select>
+                            )}
+                          </td>
+                        </tr>
+
+                        {/* Accordion content for dynamic page selection */}
+                        {isExpanded && (
+                          <tr className="bg-slate-50/50">
+                            <td colSpan={6} className="px-8 py-6 border-t border-b border-slate-100">
+                              <div className="space-y-4 max-w-4xl">
+                                <div className="flex items-start justify-between gap-4 border-b border-slate-200/60 pb-3">
+                                  <div>
+                                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                                      Personalizza Accesso Pagine per {user.name}
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                      {hasCustomAccess
+                                        ? "Questo dipendente ha permessi personalizzati. Seleziona esattamente quali pagine può visualizzare."
+                                        : "Attualmente eredita i permessi di default basati sul ruolo di sistema. Attiva la personalizzazione per selezionare le pagine singolarmente."}
+                                    </p>
+                                  </div>
+                                  
+                                  {isSuperAdmin && (
+                                    hasCustomAccess ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResetToDefault(user.id)}
+                                        className="rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
+                                      >
+                                        Ripristina a Default (Ruolo)
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const defaultPages = APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(user.role)).map(p => p.path);
+                                          // Initialize custom access list with their role defaults
+                                          fetch("/api/settings/roles/update-user", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ userId: user.id, accessList: defaultPages }),
+                                          }).then(async (res) => {
+                                            const data = await res.json();
+                                            if (res.ok) {
+                                              setUsers(curr => curr.map(u => u.id === user.id ? { ...u, access_list: defaultPages } : u));
+                                              showMessage(`Personalizzazione abilitata per ${data.user.name}!`, "success");
+                                            }
+                                          });
+                                        }}
+                                        className="rounded-lg bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
+                                      >
+                                        Attiva Permessi Personalizzati
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+
+                                {hasCustomAccess && (
+                                  <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 pt-2">
+                                    {APP_PAGES_MATRIX.map((page) => {
+                                      const isChecked = user.access_list.includes(page.path);
+                                      return (
+                                        <label
+                                          key={page.path}
+                                          className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition select-none ${
+                                            isChecked
+                                              ? "bg-white border-[#C66170]/30 shadow-sm"
+                                              : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
+                                          }`}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            disabled={!isSuperAdmin}
+                                            onChange={(e) => handleTogglePageAccess(user.id, page.path, e.target.checked, user.access_list)}
+                                            className="mt-0.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                          />
+                                          <div className="min-w-0">
+                                            <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
+                                            <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                                          </div>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>

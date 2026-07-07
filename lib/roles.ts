@@ -47,8 +47,19 @@ export const routePermissions: Record<string, Role[]> = {
   "/settings/forms": ["SUPER_ADMIN", "ADMIN"],
 };
 
-export function canAccess(pathname: string, role?: Role, mansione?: string) {
+export function canAccess(pathname: string, role?: Role, mansione?: string, accessList?: string[]) {
   if (!role) return false;
+
+  // Custom access list check
+  if (accessList && Array.isArray(accessList) && role !== "SUPER_ADMIN" && role !== "ADMIN") {
+    const matchedRoute = Object.keys(routePermissions)
+      .sort((a, b) => b.length - a.length)
+      .find((route) => pathname === route || pathname.startsWith(`${route}/`));
+    
+    if (matchedRoute) {
+      return accessList.includes(matchedRoute);
+    }
+  }
 
   // Abilita la pagina appuntamenti per chiunque abbia "assistenza" nella mansione
   if (pathname === "/appointments" || pathname.startsWith("/appointments/")) {

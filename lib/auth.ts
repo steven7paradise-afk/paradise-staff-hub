@@ -49,6 +49,7 @@ export const authConfig = {
             email: user.email,
             role: user.role,
             sedeId: user.sede_id,
+            access_list: user.access_list,
           };
         }
 
@@ -69,6 +70,7 @@ export const authConfig = {
           role: user.role,
           sedeId: user.sede_id,
           mansione: user.mansione,
+          access_list: user.access_list,
         };
       },
     }),
@@ -82,6 +84,7 @@ export const authConfig = {
         token.role = (user as { role: Role }).role;
         token.sedeId = (user as { sedeId?: string }).sedeId;
         token.mansione = (user as { mansione?: string }).mansione;
+        token.accessList = (user as any).access_list;
       }
       return token;
     },
@@ -93,6 +96,7 @@ export const authConfig = {
         session.user.role = token.role as Role;
         session.user.sedeId = token.sedeId as string | undefined;
         (session.user as any).mansione = token.mansione as string | undefined;
+        (session.user as any).accessList = token.accessList as string[] | undefined;
       }
       return session;
     },
@@ -100,7 +104,12 @@ export const authConfig = {
       const pathname = request.nextUrl.pathname;
       if (pathname === "/login") return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
-      return canAccess(pathname, auth?.user?.role as Role | undefined, (auth?.user as any)?.mansione);
+      return canAccess(
+        pathname, 
+        auth?.user?.role as Role | undefined, 
+        (auth?.user as any)?.mansione,
+        (auth?.user as any)?.accessList as string[] | undefined
+      );
     },
   },
 } satisfies NextAuthConfig;

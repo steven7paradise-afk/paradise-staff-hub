@@ -26,6 +26,7 @@ export default async function RolesSettingsPage() {
       role: true,
       mansione: true,
       photo_url: true,
+      access_list: true,
       location: {
         select: {
           name: true,
