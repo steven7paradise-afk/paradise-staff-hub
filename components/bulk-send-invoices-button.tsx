@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Mail, Loader2, FileDown } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Mail, Loader2, FileDown, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 type BulkSendInvoicesButtonProps = {
@@ -19,22 +19,28 @@ type BulkSendInvoicesButtonProps = {
 
 export function BulkSendInvoicesButton({ shopDomain, pendingInvoices }: BulkSendInvoicesButtonProps) {
   const [processing, setProcessing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
 
-  const handleBulkSend = async () => {
-    if (pendingInvoices.length === 0) {
-      alert("Non ci sono richieste di fattura con stato 'Da Fare' da inviare.");
-      return;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setEmailInput(localStorage.getItem("accountant_email") || "");
     }
+  }, []);
 
-    const defaultEmail = typeof window !== "undefined" ? localStorage.getItem("accountant_email") || "" : "";
-    const email = prompt("Inserisci l'email del commercialista a cui inviare le fatture:", defaultEmail);
-    if (email === null) {
-      return; // User cancelled
-    }
-    
-    const cleanEmail = email.trim();
+  const pendingTotal = pendingInvoices.reduce((sum, inv) => {
+    const val = parseFloat(String(inv.answers.invoice_amount || "0").replace(",", "."));
+    return sum + (isNaN(val) ? 0 : val);
+  }, 0);
+
+  const oldestDate = pendingInvoices.length > 0 ? new Date(Math.min(...pendingInvoices.map(i => new Date(i.created_at).getTime()))) : new Date();
+  const newestDate = pendingInvoices.length > 0 ? new Date(Math.max(...pendingInvoices.map(i => new Date(i.created_at).getTime()))) : new Date();
+  const dateRangeStr = `${oldestDate.toLocaleDateString("it-IT")} - ${newestDate.toLocaleDateString("it-IT")}`;
+
+  const handleGenerateAndSend = async () => {
+    const cleanEmail = emailInput.trim();
     if (!cleanEmail) {
-      alert("Devi inserire un indirizzo email valido per procedere.");
+      alert("Devi inserire un indirizzo email valido.");
       return;
     }
 
@@ -262,41 +268,34 @@ export function BulkSendInvoicesButton({ shopDomain, pendingInvoices }: BulkSend
         doc.text(`Generato automaticamente da Staff Hub il ${new Date().toLocaleDateString("it-IT")}`, 15, 285);
       });
 
-      // Save the combined PDF file
-      const oldestDate = new Date(Math.min(...pendingInvoices.map(i => new Date(i.created_at).getTime())));
-      const newestDate = new Date(Math.max(...pendingInvoices.map(i => new Date(i.created_at).getTime())));
-      const dateRangeStr = `${oldestDate.toLocaleDateString("it-IT").replace(/\//g, "-")}_al_${newestDate.toLocaleDateString("it-IT").replace(/\//g, "-")}`;
-      const fileName = `richiesta_fatture_dal_${dateRangeStr}.pdf`;
+      // Save PDF file
+      const dateRangeClean = dateRangeStr.replace(/\s+/g, "").replace(/\//g, "-").replace(/-/g, "_");
+      const fileName = `richiesta_fatture_${dateRangeClean}.pdf`;
       doc.save(fileName);
 
-      // Retrieve saved email
-      const savedEmail = typeof window !== "undefined" ? localStorage.getItem("accountant_email") || "" : "";
-      
-      // Open Mail Client prefilled
-      const dateRangeClean = dateRangeStr.replace(/_/g, " ");
-      const mailSubject = encodeURIComponent(`Richiesta Fatture Elettroniche ROSA FRANCESCA SRL (${dateRangeClean})`);
+      // Open Mail Client
+      const mailSubject = encodeURIComponent(`Richiesta Fatture Elettroniche ROSA FRANCESCA SRL (${dateRangeStr})`);
       const mailBody = encodeURIComponent(
-        `Ciao,\n\nin allegato trovi il documento PDF contenente le richieste di fatturazione elettronica per il periodo ${dateRangeClean}.\n\nUn cordiale saluto.`
+        `Ciao,\n\nin allegato trovi il documento PDF contenente le richieste di fatturazione elettronica per il periodo ${dateRangeStr}.\n\nUn cordiale saluto.`
       );
-      
-      window.location.href = `mailto:${savedEmail}?subject=${mailSubject}&body=${mailBody}`;
+      window.location.href = `mailto:${cleanEmail}?subject=${mailSubject}&body=${mailBody}`;
 
-      // Prompt bulk update to 'EMESSA'
-      if (confirm(`PDF generato con successo (${pendingInvoices.length} fatture) e salvato come:\n"${fileName}"\n\nOra si aprirà il client email. Vuoi contrassegnare queste fatture come "Fattura Emessa" nel sistema?`)) {
-        const bulkRes = await fetch("/api/service-forms/responses/bulk-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ids: pendingInvoices.map(i => i.id),
-            status: "EMESSA",
-          }),
-        });
+      // Perform bulk database update to 'EMESSA' automatically
+      const bulkRes = await fetch("/api/service-forms/responses/bulk-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: pendingInvoices.map(i => i.id),
+          status: "EMESSA",
+        }),
+      });
 
-        if (!bulkRes.ok) {
-          throw new Error("Errore durante l'aggiornamento dello stato nel database.");
-        }
-        window.location.reload();
+      if (!bulkRes.ok) {
+        throw new Error("Errore durante l'aggiornamento dello stato nel database.");
       }
+
+      setShowModal(false);
+      window.location.reload();
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Errore durante l'invio cumulativo delle fatture.");
@@ -306,23 +305,119 @@ export function BulkSendInvoicesButton({ shopDomain, pendingInvoices }: BulkSend
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleBulkSend}
-      disabled={processing || pendingInvoices.length === 0}
-      className="inline-flex h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#A74758] to-[#c6556c] px-5 text-sm font-extrabold text-white shadow-lg shadow-[#A74758]/20 transition hover:scale-[1.02] active:scale-[0.98] disabled:opacity-55 disabled:scale-100 disabled:shadow-none"
-    >
-      {processing ? (
-        <>
-          <Loader2 className="size-4 animate-spin" />
-          Elaborazione...
-        </>
-      ) : (
-        <>
-          <Mail className="size-4" />
-          Invia al Commercialista ({pendingInvoices.length})
-        </>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (pendingInvoices.length === 0) {
+            alert("Non ci sono richieste di fattura con stato 'Da Fare' da inviare.");
+            return;
+          }
+          setShowModal(true);
+        }}
+        disabled={processing || pendingInvoices.length === 0}
+        className="inline-flex h-12 items-center gap-2 rounded-2xl bg-gradient-to-r from-[#A74758] to-[#c6556c] px-5 text-sm font-extrabold text-white shadow-lg shadow-[#A74758]/20 transition hover:scale-[1.02] active:scale-[0.98] disabled:opacity-55 disabled:scale-100 disabled:shadow-none"
+      >
+        <Mail className="size-4" />
+        Invia al Commercialista ({pendingInvoices.length})
+      </button>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-slate-100 bg-white text-slate-900 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="relative overflow-hidden border-b border-slate-100 bg-slate-50 px-6 py-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Invia al Commercialista</h3>
+                <p className="text-xs font-medium text-slate-500 mt-1">Genera il riepilogo cumulativo ed avvia l'email.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="grid size-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Email del Commercialista</label>
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="commercialista@studio.it"
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-800 outline-none focus:border-[#A74758] focus:bg-white transition"
+                />
+              </div>
+
+              {/* Data Summary Box */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2">
+                <div className="flex justify-between text-xs text-slate-500 font-bold">
+                  <span>FATTURE INCLUSE:</span>
+                  <span className="text-[#A74758] font-black">{pendingInvoices.length}</span>
+                </div>
+                <div className="flex justify-between text-xs text-slate-500 font-bold">
+                  <span>IMPORTO COMPLESSIVO:</span>
+                  <span className="text-slate-800 font-black">€ {pendingTotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-slate-500 font-bold">
+                  <span>PERIODO RIEPILOGO:</span>
+                  <span className="text-slate-800 font-black">{dateRangeStr}</span>
+                </div>
+              </div>
+
+              {/* Clients Preview List */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Elenco Clienti Inclusi</span>
+                <div className="max-h-36 overflow-y-auto space-y-1 rounded-xl border border-slate-100 bg-slate-50/50 p-2">
+                  {pendingInvoices.map((inv) => {
+                    const client = inv.answers.invoice_client_name || "N/A";
+                    const amountVal = parseFloat(inv.answers.invoice_amount || "0");
+                    return (
+                      <div key={inv.id} className="flex justify-between items-center text-xs p-1.5 hover:bg-white rounded-lg transition border border-transparent hover:border-slate-100">
+                        <span className="font-semibold text-slate-700 truncate max-w-[240px]">{client}</span>
+                        <span className="font-bold text-slate-900">€ {amountVal.toFixed(2)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-slate-100 bg-slate-50 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="h-10 px-4 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateAndSend}
+                disabled={processing || !emailInput.trim()}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#A74758] hover:bg-[#8e3948] px-5 text-xs font-bold text-white transition disabled:opacity-50"
+              >
+                {processing ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Generazione...
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="size-3.5" />
+                    Genera e Invia
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-    </button>
+    </>
   );
 }
