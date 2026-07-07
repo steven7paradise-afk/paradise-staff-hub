@@ -89,9 +89,13 @@ export async function signedDocumentUrl(path: string) {
 
 export async function uploadInvoicePdf(userId: string, filename: string, buffer: ArrayBuffer) {
   const client = storageClient();
-  const bucket = process.env.SUPABASE_PROFILE_BUCKET ?? "profile-images";
+  const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
   const path = `invoices/${userId}-${Date.now()}-${safeName(filename)}`;
   const { error } = await client.storage.from(bucket).upload(path, buffer, { contentType: "application/pdf", upsert: true });
   if (error) throw new Error(error.message);
-  return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  
+  // Generate a signed URL valid for 5 years (157680000 seconds)
+  const { data, error: signError } = await client.storage.from(bucket).createSignedUrl(path, 157680000);
+  if (signError) throw new Error(signError.message);
+  return data.signedUrl;
 }
