@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { ShieldAlert, ShieldCheck, UserCheck, Users, Settings, Edit, Loader2 } from "lucide-react";
+import { ShieldAlert, ShieldCheck, UserCheck, Users, Settings, Edit, Loader2, Search } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 
 type UserType = {
