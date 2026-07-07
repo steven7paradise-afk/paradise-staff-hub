@@ -187,7 +187,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  if (!managementRoles.has(session.user.role)) {
+  if (session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -200,10 +200,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     if (!response) {
       return NextResponse.json({ error: "Risposta non trovata" }, { status: 404 });
-    }
-
-    if (session.user.role === "RESPONSABILE" && session.user.sedeId && response.user_location_id !== session.user.sedeId) {
-      return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
     }
 
     await prisma.serviceFormResponse.delete({ where: { id } });

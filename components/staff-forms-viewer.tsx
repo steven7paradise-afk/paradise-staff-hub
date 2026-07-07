@@ -812,20 +812,20 @@ export function StaffFormsViewer({
       {/* FILL OUT MODAL */}
       {selectedForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[#121212] text-white shadow-[0_35px_120px_rgba(0,0,0,0.55)] animate-in fade-in zoom-in-95 duration-200">
-            <div className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.35),transparent_34%),linear-gradient(135deg,#202020,#121212_60%)] px-5 py-5 sm:px-7">
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-slate-100 bg-white text-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7">
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 gap-3">
-                  <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 shadow-inner">
-                    <DynamicIcon name={selectedForm.icon || "ClipboardList"} className="size-6 text-[#ff8bb2]" />
+                  <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-slate-100 bg-slate-50 shadow-sm">
+                    <DynamicIcon name={selectedForm.icon || "ClipboardList"} className="size-6 text-[#A74758]" />
                   </div>
                   <div className="min-w-0">
-                    <span className="inline-flex rounded-full border border-[#A74758]/35 bg-[#A74758]/15 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#ff8bb2]">
+                    <span className="inline-flex rounded-full border border-[#A74758]/20 bg-[#A74758]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">
                       {selectedForm.category}
                     </span>
-                    <h3 className="mt-2 truncate text-xl font-black text-white sm:text-2xl">{selectedForm.name}</h3>
-                    <p className="mt-1 text-xs font-medium text-white/50">
+                    <h3 className="mt-2 truncate text-xl font-black text-slate-900 sm:text-2xl">{selectedForm.name}</h3>
+                    <p className="mt-1 text-xs font-medium text-slate-500">
                       {visibleFields.length > 0
                         ? `Domanda ${currentActiveIndex + 1} di ${visibleFields.length} · ${answeredVisibleCount} compilate`
                         : "Modulo pronto per la compilazione"}
@@ -835,7 +835,7 @@ export function StaffFormsViewer({
                 <button
                   type="button"
                   onClick={() => !submitting && setSelectedForm(null)}
-                  className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-white/55 transition hover:bg-white/15 hover:text-white"
+                  className="grid size-10 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 >
                   <X className="size-5" />
                 </button>
@@ -843,11 +843,11 @@ export function StaffFormsViewer({
 
               {!success && visibleFields.length > 0 && (
                 <div className="mt-5 space-y-3">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-white/45">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
                     <span>Progresso compilazione</span>
                     <span>{progressPercentage}%</span>
                   </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                     <div 
                       className="h-full rounded-full bg-gradient-to-r from-[#A74758] via-[#ff7fb0] to-[#F7DFA7] transition-all duration-500 ease-out" 
                       style={{ width: `${progressPercentage}%` }}
@@ -870,10 +870,10 @@ export function StaffFormsViewer({
                           className={cn(
                             "grid size-8 shrink-0 place-items-center rounded-full border text-[11px] font-black transition",
                             isActive
-                              ? "border-[#ff8bb2] bg-[#ff8bb2] text-black"
+                              ? "border-[#A74758] bg-[#A74758] text-white"
                               : isDone
-                                ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-200"
-                                : "border-white/10 bg-white/5 text-white/35"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                                : "border-slate-200 bg-slate-50 text-slate-400"
                           )}
                           title={field.label}
                         >
@@ -887,12 +887,12 @@ export function StaffFormsViewer({
             </div>
 
             {success ? (
-              <div className="flex flex-1 flex-col items-center justify-center p-12 text-center">
-                <div className="grid size-20 place-items-center rounded-full border border-emerald-400/25 bg-emerald-400/15">
-                  <CheckCircle2 className="size-10 text-emerald-300" />
+              <div className="flex flex-1 flex-col items-center justify-center p-12 text-center bg-white">
+                <div className="grid size-20 place-items-center rounded-full border border-emerald-200 bg-emerald-50">
+                  <CheckCircle2 className="size-10 text-emerald-500" />
                 </div>
-                <h3 className="mt-5 text-2xl font-black text-white">Inviato con successo</h3>
-                <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/55">Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.</p>
+                <h3 className="mt-5 text-2xl font-black text-slate-900">Inviato con successo</h3>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.</p>
               </div>
             ) : (
               <form 
@@ -900,17 +900,17 @@ export function StaffFormsViewer({
                   e.preventDefault();
                   handleNextOrSubmit();
                 }} 
-                className="flex min-h-[430px] flex-1 flex-col justify-between overflow-y-auto p-5 sm:p-7"
+                className="flex min-h-[430px] flex-1 flex-col justify-between overflow-y-auto p-5 sm:p-7 bg-white"
               >
                 <div className="space-y-5 flex-1">
                   {selectedForm.description && currentActiveIndex === 0 && (
-                    <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4 text-sm leading-relaxed text-white/60">
+                    <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
                       {selectedForm.description}
                     </div>
                   )}
 
                   {errorMsg && (
-                    <div className="flex items-center gap-2 rounded-2xl border border-red-500/30 bg-red-950/45 p-3.5 text-sm text-red-200">
+                    <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">
                       <AlertCircle className="size-4 flex-shrink-0" />
                       <span>{errorMsg}</span>
                     </div>
@@ -925,16 +925,16 @@ export function StaffFormsViewer({
                         key={field.id} 
                         className="animate-in fade-in slide-in-from-right-5 duration-300"
                       >
-                        <div className="rounded-[28px] border border-white/10 bg-[#181818] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6">
+                        <div className="rounded-[28px] border border-slate-100 bg-slate-50/50 p-5 shadow-sm sm:p-6">
                           <div className="mb-5 space-y-2">
-                            <span className="inline-flex rounded-full bg-white/7 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white/40">
+                            <span className="inline-flex rounded-full bg-slate-200/50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                               Campo {currentActiveIndex + 1}
                             </span>
-                            <label className="block text-xl font-black leading-tight text-white sm:text-2xl">
-                              {field.label} {field.required && <span className="text-[#ff7fa5]">*</span>}
+                            <label className="block text-xl font-black leading-tight text-slate-900 sm:text-2xl">
+                              {field.label} {field.required && <span className="text-[#A74758]">*</span>}
                             </label>
                             {field.description && (
-                              <p className="text-sm leading-relaxed text-white/55">{field.description}</p>
+                              <p className="text-sm leading-relaxed text-slate-500">{field.description}</p>
                             )}
                           </div>
 
@@ -950,7 +950,7 @@ export function StaffFormsViewer({
                                   onKeyDown={(e) => handleKeyDown(e, field.type)}
                                   placeholder="Scrivi qui..."
                                   className={cn(
-                                    "h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]",
+                                    "h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white",
                                     (field.id === "invoice_vat_number" || field.id === "invoice_shopify_order") && "pr-32"
                                   )}
                                 />
@@ -959,7 +959,7 @@ export function StaffFormsViewer({
                                     type="button"
                                     onClick={handleVatLookup}
                                     disabled={loadingVat}
-                                    className="absolute right-2 h-10 px-4 rounded-xl bg-[#A74758] hover:bg-[#c25368] disabled:bg-white/5 disabled:text-white/30 text-white text-xs font-black transition flex items-center gap-1.5 active:scale-[0.98]"
+                                    className="absolute right-2 h-10 px-4 rounded-xl bg-[#A74758] hover:bg-[#8e3948] disabled:bg-slate-100 disabled:text-slate-400 text-white text-xs font-black transition flex items-center gap-1.5 active:scale-[0.98]"
                                   >
                                     {loadingVat ? (
                                       <Loader2 className="size-3.5 animate-spin" />
@@ -974,7 +974,7 @@ export function StaffFormsViewer({
                                     type="button"
                                     onClick={handleShopifyOrderLookup}
                                     disabled={loadingShopify}
-                                    className="absolute right-2 h-10 px-4 rounded-xl bg-[#A74758] hover:bg-[#c25368] disabled:bg-white/5 disabled:text-white/30 text-white text-xs font-black transition flex items-center gap-1.5 active:scale-[0.98]"
+                                    className="absolute right-2 h-10 px-4 rounded-xl bg-[#A74758] hover:bg-[#8e3948] disabled:bg-slate-100 disabled:text-slate-400 text-white text-xs font-black transition flex items-center gap-1.5 active:scale-[0.98]"
                                   >
                                     {loadingShopify ? (
                                       <Loader2 className="size-3.5 animate-spin" />
@@ -989,8 +989,8 @@ export function StaffFormsViewer({
                                 <div className={cn(
                                   "text-xs font-semibold px-4 py-3 whitespace-pre-line rounded-2xl border animate-in fade-in slide-in-from-top-1 duration-200 mt-2",
                                   vatLookupStatus.success 
-                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" 
-                                    : "bg-red-500/10 border-red-500/20 text-red-300"
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700" 
+                                    : "bg-red-50 border-red-200 text-red-700"
                                 )}>
                                   {vatLookupStatus.message}
                                 </div>
@@ -999,8 +999,8 @@ export function StaffFormsViewer({
                                 <div className={cn(
                                   "text-xs font-semibold px-4 py-3 whitespace-pre-line rounded-2xl border animate-in fade-in slide-in-from-top-1 duration-200 mt-2",
                                   shopifyLookupStatus.success 
-                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" 
-                                    : "bg-red-500/10 border-red-500/20 text-red-300"
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700" 
+                                    : "bg-red-50 border-red-200 text-red-700"
                                 )}>
                                   {shopifyLookupStatus.message}
                                 </div>
@@ -1016,7 +1016,7 @@ export function StaffFormsViewer({
                               onKeyDown={(e) => handleKeyDown(e, field.type)}
                               rows={5}
                               placeholder="Aggiungi dettagli..."
-                              className="w-full resize-none rounded-2xl border border-white/10 bg-[#101010] p-4 text-base font-medium text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                              className="w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                             />
                           )}
 
@@ -1028,7 +1028,7 @@ export function StaffFormsViewer({
                               onChange={(e) => handleTextChange(field.id, e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, field.type)}
                               placeholder="0"
-                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                              className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                             />
                           )}
 
@@ -1045,16 +1045,16 @@ export function StaffFormsViewer({
                                       className={cn(
                                         "flex min-h-14 w-full items-center justify-between rounded-2xl border p-4 text-left text-sm font-bold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
                                         isSelected
-                                          ? "bg-[#A74758]/20 border-[#A74758] text-[#ff8bb2] shadow-md shadow-[#A74758]/10"
-                                          : "bg-white/5 border-white/10 text-white/85 hover:bg-white/10 hover:border-white/20"
+                                          ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm shadow-[#A74758]/5"
+                                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                                       )}
                                     >
                                       <span>{opt}</span>
                                       <div className={cn(
                                         "size-5 rounded-full border flex items-center justify-center transition-all",
                                         isSelected 
-                                          ? "border-[#ff8bb2] bg-[#ff8bb2]/20 text-[#ff8bb2]" 
-                                          : "border-white/20 bg-white/5"
+                                          ? "border-[#A74758] bg-[#A74758]/15 text-[#A74758]" 
+                                          : "border-slate-200 bg-slate-50"
                                       )}>
                                         {isSelected && <Check className="size-3" />}
                                       </div>
@@ -1070,7 +1070,7 @@ export function StaffFormsViewer({
                                   value={answers[field.id + "_altro"] || ""}
                                   onChange={(e) => handleTextChange(field.id + "_altro", e.target.value)}
                                   onKeyDown={(e) => handleKeyDown(e, "text")}
-                                  className="mt-2 h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                                  className="mt-2 h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                                 />
                               )}
                             </div>
@@ -1078,7 +1078,7 @@ export function StaffFormsViewer({
 
                           {field.type === "money" && (
                             <div className="relative flex items-center">
-                              <span className="absolute left-4 text-base font-black text-white/45">€</span>
+                              <span className="absolute left-4 text-base font-black text-slate-400">€</span>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1086,7 +1086,7 @@ export function StaffFormsViewer({
                                 value={answers[field.id] || ""}
                                 onChange={(e) => handleTextChange(field.id, e.target.value)}
                                 onKeyDown={(e) => handleKeyDown(e, field.type)}
-                                className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] pl-9 pr-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                                className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                                 placeholder="0.00"
                               />
                             </div>
@@ -1099,7 +1099,7 @@ export function StaffFormsViewer({
                               value={answers[field.id] || ""}
                               onChange={(e) => handleTextChange(field.id, e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, field.type)}
-                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                              className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                             />
                           )}
 
@@ -1115,7 +1115,7 @@ export function StaffFormsViewer({
                               onChange={(e) => handleTextChange(field.id, e.target.value.replace(/\D/g, "").slice(0, 6))}
                               onKeyDown={(e) => handleKeyDown(e, field.type)}
                               placeholder="Inserisci PIN personale"
-                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-center text-2xl font-black tracking-[0.35em] text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                              className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-center text-2xl font-black tracking-[0.35em] text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                             />
                           )}
 
@@ -1137,11 +1137,11 @@ export function StaffFormsViewer({
                                   }, 350);
                                 }
                               }}
-                              className="h-14 w-full rounded-2xl border border-white/10 bg-[#101010] px-4 text-base font-semibold text-white outline-none transition focus:border-[#ff8bb2] focus:bg-[#151515]"
+                              className="h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                             >
-                              <option value="" className="bg-neutral-800 text-white">Seleziona collaboratore...</option>
+                              <option value="" className="bg-white text-black">Seleziona collaboratore...</option>
                               {employees.map((emp) => (
-                                <option key={emp.id} value={emp.name} className="bg-neutral-800 text-white">
+                                <option key={emp.id} value={emp.name} className="bg-white text-black">
                                   {emp.name}
                                 </option>
                               ))}
@@ -1160,14 +1160,14 @@ export function StaffFormsViewer({
                                     className={cn(
                                       "flex min-h-12 items-center justify-between rounded-2xl border px-4 text-left text-sm font-black transition active:scale-[0.99]",
                                       selected
-                                        ? "border-[#ff8bb2] bg-[#A74758]/25 text-[#ffb7cf]"
-                                        : "border-white/10 bg-white/5 text-white/80 hover:border-white/20 hover:bg-white/10"
+                                        ? "border-[#A74758] bg-[#A74758]/10 text-[#A74758]"
+                                        : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                                     )}
                                   >
                                     <span>{emp.name}</span>
                                     <span className={cn(
                                       "grid size-5 place-items-center rounded-full border",
-                                      selected ? "border-[#ff8bb2] bg-[#ff8bb2] text-[#171717]" : "border-white/25"
+                                      selected ? "border-[#A74758] bg-[#A74758] text-white" : "border-slate-200"
                                     )}>
                                       {selected && <Check className="size-3.5" />}
                                     </span>
@@ -1188,14 +1188,14 @@ export function StaffFormsViewer({
                               className={cn(
                                 "flex min-h-16 w-full items-center justify-between rounded-2xl border p-4 text-left transition active:scale-[0.99]",
                                 answers[field.id] === true
-                                  ? "border-emerald-300 bg-emerald-500/18 text-emerald-100"
-                                  : "border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                               )}
                             >
                               <span className="text-sm font-black">{field.description || field.label}</span>
                               <span className={cn(
                                 "grid size-7 place-items-center rounded-full border",
-                                answers[field.id] === true ? "border-emerald-200 bg-emerald-300 text-emerald-950" : "border-white/25"
+                                answers[field.id] === true ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-200"
                               )}>
                                 {answers[field.id] === true && <Check className="size-4" />}
                               </span>
@@ -1203,7 +1203,7 @@ export function StaffFormsViewer({
                           )}
 
                           {field.type === "file" && (
-                            <div className="group relative flex min-h-40 w-full items-center justify-center rounded-3xl border border-dashed border-white/20 bg-[#101010] transition hover:border-[#ff8bb2]/60 hover:bg-[#A74758]/10">
+                            <div className="group relative flex min-h-40 w-full items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white transition hover:border-[#A74758]/60 hover:bg-[#A74758]/5">
                               <input
                                 type="file"
                                 required={field.required && !files[field.id]}
@@ -1212,20 +1212,20 @@ export function StaffFormsViewer({
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                               />
                               <div className="flex flex-col items-center p-5 text-center pointer-events-none">
-                                <Upload className="size-9 text-white/40 transition group-hover:text-[#ff8bb2]" />
-                                <span className="mt-3 text-sm font-bold text-white/75">
+                                <Upload className="size-9 text-slate-400 transition group-hover:text-[#A74758]" />
+                                <span className="mt-3 text-sm font-bold text-slate-700">
                                   {files[field.id] ? files[field.id].name : "Carica o trascina un file"}
                                 </span>
                                 {!files[field.id] && (
-                                  <span className="text-[10px] text-white/40 mt-1">Dimensione max: 15 MB</span>
+                                  <span className="text-[10px] text-slate-400 mt-1">Dimensione max: 15 MB</span>
                                 )}
                               </div>
                             </div>
                           )}
 
                           {field.id === participaField?.id && isGroupCourse && (
-                            <div className="mt-5 p-4 rounded-2xl bg-white/5 border border-white/10 space-y-4">
-                              <label className="text-sm font-bold text-white/70 block">
+                            <div className="mt-5 p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-4">
+                              <label className="text-sm font-bold text-slate-700 block">
                                 Numero di Corsisti (Partecipanti) <span className="text-red-500">*</span>
                               </label>
                               <select
@@ -1233,71 +1233,87 @@ export function StaffFormsViewer({
                                 onChange={(e) => {
                                   handleTextChange("group_participants_count", e.target.value);
                                 }}
-                                className="w-full h-10 rounded-xl bg-neutral-800 border border-white/10 px-3 text-sm text-white outline-none focus:border-[#A74758]"
+                                className="w-full h-10 rounded-xl bg-white border border-slate-200 px-3 text-sm text-slate-800 outline-none focus:border-[#A74758]"
                               >
                                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                                  <option key={num} value={String(num)} className="bg-neutral-800 text-white">
+                                  <option key={num} value={String(num)} className="bg-white text-black">
                                     {num} {num === 1 ? "Corsista" : "Corsisti"}
                                   </option>
                                 ))}
                               </select>
 
-                              <div className="space-y-6 pt-4 border-t border-white/10">
+                              <div className="space-y-6 pt-4 border-t border-slate-200">
                                 {Array.from({ length: groupCount }).map((_, idx) => {
                                   const pIndex = idx + 1;
                                   return (
-                                    <div key={pIndex} className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3 text-left">
+                                    <div key={pIndex} className="p-4 rounded-xl bg-white border border-slate-100 space-y-3 text-left">
                                       <h5 className="text-xs font-bold uppercase tracking-wider text-[#A74758]">
-                                        Dati Corsista {pIndex}
+                                        Dati Corsista #{pIndex}
                                       </h5>
 
-                                      <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-white/60">
-                                          Nome Corsista {pIndex} <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                          type="text"
-                                          required={isGroupCourse}
-                                          value={answers[`participant_${pIndex}_name`] || ""}
-                                          onChange={(e) => handleTextChange(`participant_${pIndex}_name`, e.target.value)}
-                                          onKeyDown={(e) => handleKeyDown(e, "text")}
-                                          className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                                          placeholder={`Nome completo corsista ${pIndex}`}
-                                        />
-                                      </div>
-
-                                      <div className="grid grid-cols-2 gap-3">
+                                      <div className="grid gap-4 sm:grid-cols-2">
                                         <div className="space-y-1">
-                                          <label className="text-xs font-semibold text-white/60">Email</label>
-                                          <input
-                                            type="email"
-                                            value={answers[`participant_${pIndex}_email`] || ""}
-                                            onChange={(e) => handleTextChange(`participant_${pIndex}_email`, e.target.value)}
-                                            onKeyDown={(e) => handleKeyDown(e, "text")}
-                                            className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                                            placeholder="Email (opzionale)"
-                                          />
-                                        </div>
-                                        <div className="space-y-1">
-                                          <label className="text-xs font-semibold text-white/60">Telefono</label>
+                                          <label className="text-xs font-semibold text-slate-500">Nome e Cognome <span className="text-red-500">*</span></label>
                                           <input
                                             type="text"
+                                            required
+                                            value={answers[`participant_${pIndex}_name`] || ""}
+                                            onChange={(e) => handleTextChange(`participant_${pIndex}_name`, e.target.value)}
+                                            onKeyDown={(e) => handleKeyDown(e, "text")}
+                                            className="h-10 w-full rounded-lg bg-white border border-slate-200 px-3 text-xs text-slate-800 outline-none focus:border-[#A74758]"
+                                            placeholder="Nome e cognome"
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <label className="text-xs font-semibold text-slate-500">Codice Fiscale <span className="text-red-500">*</span></label>
+                                          <input
+                                            type="text"
+                                            required
+                                            value={answers[`participant_${pIndex}_cf`] || ""}
+                                            onChange={(e) => handleTextChange(`participant_${pIndex}_cf`, e.target.value.toUpperCase())}
+                                            onKeyDown={(e) => handleKeyDown(e, "text")}
+                                            className="h-10 w-full rounded-lg bg-white border border-slate-200 px-3 text-xs font-mono text-slate-800 outline-none focus:border-[#A74758]"
+                                            placeholder="Codice fiscale"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="space-y-1">
+                                          <label className="text-xs font-semibold text-slate-500">Email <span className="text-red-500">*</span></label>
+                                          <input
+                                            type="email"
+                                            required
+                                            value={answers[`participant_${pIndex}_email`] || ""}
+                                            onChange={(e) => handleTextChange(`participant_${pIndex}_email`, e.target.value.toLowerCase())}
+                                            onKeyDown={(e) => handleKeyDown(e, "text")}
+                                            className="h-10 w-full rounded-lg bg-white border border-slate-200 px-3 text-xs text-slate-800 outline-none focus:border-[#A74758]"
+                                            placeholder="Indirizzo email"
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <label className="text-xs font-semibold text-slate-500">Telefono <span className="text-red-500">*</span></label>
+                                          <input
+                                            type="tel"
+                                            required
                                             value={answers[`participant_${pIndex}_phone`] || ""}
                                             onChange={(e) => handleTextChange(`participant_${pIndex}_phone`, e.target.value)}
                                             onKeyDown={(e) => handleKeyDown(e, "text")}
-                                            className="w-full h-9 rounded-lg bg-white/5 border border-white/10 px-3 text-xs text-white outline-none focus:border-[#A74758]"
-                                            placeholder="Telefono (opzionale)"
+                                            className="h-10 w-full rounded-lg bg-white border border-slate-200 px-3 text-xs text-slate-800 outline-none focus:border-[#A74758]"
+                                            placeholder="Numero cellulare"
                                           />
                                         </div>
                                       </div>
 
                                       <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-white/60">Dati Professionali e Altre Info</label>
+                                        <label className="text-xs font-semibold text-slate-500">Dati Professionali e Altre Info</label>
                                         <textarea
                                           value={answers[`participant_${pIndex}_notes`] || ""}
                                           onChange={(e) => handleTextChange(`participant_${pIndex}_notes`, e.target.value)}
                                           rows={2}
-                                          className="w-full rounded-lg bg-white/5 border border-white/10 p-2 text-xs text-white outline-none focus:border-[#A74758] resize-none"
+                                          className="w-full rounded-lg bg-white border border-slate-200 p-2 text-xs text-slate-800 outline-none focus:border-[#A74758] resize-none"
                                           placeholder="Dati professionali, mansione o altre informazioni..."
                                         />
                                       </div>
@@ -1315,7 +1331,7 @@ export function StaffFormsViewer({
                 </div>
 
                 {/* Footer buttons */}
-                <div className="sticky bottom-0 -mx-5 mt-6 flex items-center justify-between border-t border-white/10 bg-[#121212]/95 px-5 pt-4 backdrop-blur sm:-mx-7 sm:px-7">
+                <div className="sticky bottom-0 -mx-5 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur sm:-mx-7 sm:px-7">
                   <div>
                     {currentActiveIndex > 0 && (
                       <Button
@@ -1325,7 +1341,7 @@ export function StaffFormsViewer({
                           setErrorMsg("");
                           setActiveFieldIndex(currentActiveIndex - 1);
                         }}
-                        className="rounded-2xl bg-white/5 text-white hover:bg-white/10"
+                        className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
                       >
                         Indietro
                       </Button>
@@ -1338,7 +1354,7 @@ export function StaffFormsViewer({
                       variant="soft"
                       disabled={submitting}
                       onClick={() => setSelectedForm(null)}
-                      className="rounded-2xl bg-white/5 text-white hover:bg-white/10"
+                      className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
                     >
                       Annulla
                     </Button>

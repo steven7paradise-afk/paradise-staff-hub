@@ -59,6 +59,18 @@ export async function POST(request: NextRequest) {
   }
 
   const actualTimestamp = new Date();
+
+  // Cooldown check (60 seconds)
+  if (latestLog) {
+    const secondsSinceLastLog = (actualTimestamp.getTime() - new Date(latestLog.timestamp).getTime()) / 1000;
+    if (secondsSinceLastLog < 60) {
+      return NextResponse.json(
+        { error: "Attendi 1 minuto prima di effettuare un'altra timbratura." },
+        { status: 429 }
+      );
+    }
+  }
+
   const savedRule = await prisma.setting.findUnique({ where: { key: clockRuleKey(logLocationId) } });
   const rule = parseClockRule(savedRule?.value);
 
@@ -74,6 +86,24 @@ export async function POST(request: NextRequest) {
 
   const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(timestamp);
   const dateOnly = new Date(`${localDate}T00:00:00.000Z`);
+
+  // Same day ENTRATA after USCITA check
+  if (type === "ENTRATA") {
+    const hasUscitaToday = await prisma.attendanceLog.findFirst({
+      where: {
+        user_id: user.id,
+        type: "USCITA",
+        date: dateOnly,
+      },
+    });
+
+    if (hasUscitaToday) {
+      return NextResponse.json(
+        { error: "Hai già registrato un'uscita oggi. Non puoi effettuare un'altra entrata nello stesso giorno." },
+        { status: 400 }
+      );
+    }
+  }
   const time = new Intl.DateTimeFormat("it-IT", {
     hour: "2-digit",
     minute: "2-digit",

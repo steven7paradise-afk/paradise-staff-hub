@@ -417,6 +417,8 @@ model CashVaultWithdrawal {
   date           DateTime
   amount         Float
   reason         String
+  receipt_path   String?
+  receipt_name   String?
   signature_name String
   signature_role String?
   signed_at      DateTime @default(now())
@@ -612,5 +614,4 @@ model ShopifyOrderComment {
   @@index([order_name])
   @@map("shopify_order_comments")
 }
-
 

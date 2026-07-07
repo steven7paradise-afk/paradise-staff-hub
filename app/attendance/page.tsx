@@ -12,14 +12,22 @@ export default async function AttendancePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   await closeForgottenShifts();
-  const where: Prisma.AttendanceLogWhereInput | undefined =
-    session.user.role === "RESPONSABILE" ? { location_id: session.user.sedeId } : undefined;
+  const dateLimit = new Date();
+  dateLimit.setMonth(dateLimit.getMonth() - 6);
+  dateLimit.setHours(0, 0, 0, 0);
+
+  const where: Prisma.AttendanceLogWhereInput = {
+    date: {
+      gte: dateLimit,
+    },
+    ...(session.user.role === "RESPONSABILE" ? { location_id: session.user.sedeId } : {}),
+  };
+
   const [logs, workers] = await Promise.all([
     prisma.attendanceLog.findMany({
       where,
       include: { user: true, location: true, device: true },
       orderBy: { timestamp: "desc" },
-      take: 150,
     }),
     session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
       ? prisma.user.findMany({ where: { active: true, role: { not: "SUPER_ADMIN" }, sede_id: { not: null } }, include: { location: true }, orderBy: { name: "asc" } })

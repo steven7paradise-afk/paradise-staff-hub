@@ -15,6 +15,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CashActions } from "@/components/cash-actions";
+import { CashHistory } from "@/components/cash-history";
 import { CashReviewActions } from "@/components/cash-review-actions";
 import { CashDaySelector } from "@/components/cash-day-selector";
 import { Badge, Card } from "@/components/ui";
@@ -175,6 +176,12 @@ function vaultWithdrawalRecordToResponse(record: any) {
       [VAULT_WITHDRAWAL_FIELD_IDS.date]: cashDateInput(record.date),
       [VAULT_WITHDRAWAL_FIELD_IDS.amount]: record.amount,
       [VAULT_WITHDRAWAL_FIELD_IDS.reason]: record.reason,
+      [VAULT_WITHDRAWAL_FIELD_IDS.receipt]: record.receipt_path
+        ? {
+            url: `/api/cash/vault-withdrawals/${record.id}/receipt`,
+            name: record.receipt_name || "Scontrino",
+          }
+        : null,
       _vault_withdrawal: true,
       _signature: {
         user_id: record.user_id,
@@ -226,7 +233,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const weekKey = getWeekKey(selectedDayStart);
 
-  const [locations, cashClosingRows, vaultWithdrawalRows, monthClose, selectedDayLogs, users, weekCloseSetting, scheduleEntries] = await Promise.all([
+  const [locations, cashClosingRows, vaultWithdrawalRows, monthClose, selectedDayLogs, users, allWeekCloses, scheduleEntries, allMonthCloses] = await Promise.all([
     prisma.location.findMany({
       where: {
         active: true,
@@ -269,12 +276,15 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       select: { id: true, name: true, sede_id: true },
       orderBy: { name: "asc" },
     }),
-    prisma.setting.findUnique({ where: { key: `cash_week_close:${weekKey}` } }).catch(() => null),
+    prisma.setting.findMany({
+      where: { key: { startsWith: "cash_week_close:" } },
+    }).catch(() => []),
     prisma.scheduleEntry.findMany({
       where: {
         date: { gte: selectedDayStart, lt: selectedDayEnd },
       },
     }),
+    prisma.cashMonthClose.findMany().catch(() => []),
   ]);
 
   const closingReviewRows = cashClosingRows.length
@@ -321,7 +331,178 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const totalWithdrawn = responses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
   const totalVaultOut = vaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
-  const netCash = totalWithdrawn - totalVaultOut;
+
+  const weekClosesList = Array.isArray(allWeekCloses) ? allWeekCloses : [];
+
+  // Calcolo cumulativo all-time (fino alla data 'end' del mese selezionato, azzerando all'ultimo mese chiuso)
+  const allClosedMonths = Array.isArray(allMonthCloses) ? allMonthCloses : [];
+  const sortedClosedMonths = [...allClosedMonths].sort((a, b) => b.month.localeCompare(a.month));
+  const latestClosedMonth = sortedClosedMonths[0]?.month || null; // es. "2026-06"
+  
+  let openPeriodStart: Date | null = null;
+  if (latestClosedMonth) {
+    const parts = latestClosedMonth.split("-");
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    // Primo giorno del mese successivo a quello chiuso (es. 1 Luglio 2026)
+    openPeriodStart = new Date(year, month, 1, 0, 0, 0);
+  }
+
+  const allTimeWeekCloses = weekClosesList.filter((setting) => {
+    const value = setting.value as any;
+    if (!value?.weekKey) return false;
+    const parts = value.weekKey.split(":");
+    const endStr = parts[1] || parts[0];
+    let endDate: Date;
+    if (parts.length === 1) {
+      const mondayDate = new Date(endStr + "T00:00:00");
+      endDate = new Date(mondayDate);
+      endDate.setDate(endDate.getDate() + 6);
+    } else {
+      endDate = new Date(endStr + "T00:00:00");
+    }
+    const keyParts = setting.key.split(":");
+    const settingLocationId = keyParts[1];
+    if (isResponsible && settingLocationId !== session.user.sedeId) {
+      return false;
+    }
+    if (openPeriodStart && endDate < openPeriodStart) {
+      return false;
+    }
+    return endDate < end;
+  });
+
+  const allTimeResponses = latestClosingsByLocationDay(closingRecords.filter((response) => {
+    const accountingDate = cashAccountingDate(response);
+    if (accountingDate >= end) return false;
+    
+    if (openPeriodStart) {
+      if (accountingDate >= openPeriodStart) return true;
+      const inActiveWeek = allTimeWeekCloses.some((setting) => {
+        const value = setting.value as any;
+        if (!value?.weekKey) return false;
+        const parts = value.weekKey.split(":");
+        const startRange = new Date(parts[0] + "T00:00:00");
+        let endRange: Date;
+        if (parts.length === 1) {
+          endRange = new Date(startRange);
+          endRange.setDate(endRange.getDate() + 7);
+        } else {
+          endRange = new Date(parts[1] + "T23:59:59");
+        }
+        return accountingDate >= startRange && accountingDate <= endRange;
+      });
+      return inActiveWeek;
+    }
+    return true;
+  }));
+
+  const allTimeVaultWithdrawals = vaultWithdrawalRecords.filter((response) => {
+    const accountingDate = vaultAccountingDate(response);
+    if (accountingDate >= end) return false;
+    
+    if (openPeriodStart) {
+      if (accountingDate >= openPeriodStart) return true;
+      const inActiveWeek = allTimeWeekCloses.some((setting) => {
+        const value = setting.value as any;
+        if (!value?.weekKey) return false;
+        const parts = value.weekKey.split(":");
+        const startRange = new Date(parts[0] + "T00:00:00");
+        let endRange: Date;
+        if (parts.length === 1) {
+          endRange = new Date(startRange);
+          endRange.setDate(endRange.getDate() + 7);
+        } else {
+          endRange = new Date(parts[1] + "T23:59:59");
+        }
+        return accountingDate >= startRange && accountingDate <= endRange;
+      });
+      return inActiveWeek;
+    }
+    return true;
+  });
+
+  const totalWithdrawnCumulative = allTimeResponses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
+  const totalVaultOutCumulative = allTimeVaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
+
+  const totalBankDepositsCumulative = allTimeWeekCloses.reduce((sum, setting) => {
+    const value = setting.value as any;
+    const deposit = Number(value?.bank_deposit || 0);
+    return sum + (isNaN(deposit) ? 0 : deposit);
+  }, 0);
+
+  const totalWeeklyWithdrawalsCumulative = allTimeWeekCloses.reduce((sum, setting) => {
+    const value = setting.value as any;
+    const withdrawals = Number(value?.withdrawals || 0);
+    return sum + (isNaN(withdrawals) ? 0 : withdrawals);
+  }, 0);
+
+  const totalClosedVaultOutCumulative = allTimeVaultWithdrawals.reduce((sum, vw: any) => {
+    const locId = vw.user_location_id;
+    const rawDate = vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || vw.date;
+    const vwDate = rawDate ? new Date(rawDate + "T00:00:00") : new Date(vw.created_at);
+    
+    const isClosed = allTimeWeekCloses.some((setting) => {
+      const value = setting.value as any;
+      if (!value?.weekKey) return false;
+      const keyParts = setting.key.split(":");
+      const settingLocationId = keyParts[1];
+      if (settingLocationId !== locId) return false;
+      
+      const parts = value.weekKey.split(":");
+      const startRange = new Date(parts[0] + "T00:00:00");
+      let endRange: Date;
+      if (parts.length === 1) {
+        endRange = new Date(startRange);
+        endRange.setDate(endRange.getDate() + 7);
+      } else {
+        endRange = new Date(parts[1] + "T23:59:59");
+      }
+      
+      return vwDate >= startRange && vwDate <= endRange;
+    });
+    
+    if (isClosed) {
+      return sum + moneyValue(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.amount] || vw.amount || 0);
+    }
+    return sum;
+  }, 0);
+
+  const netCash = totalWithdrawnCumulative - totalVaultOutCumulative - totalBankDepositsCumulative - totalWeeklyWithdrawalsCumulative + totalClosedVaultOutCumulative;
+  
+  // Filtra le chiusure settimanali che ricadono nel mese corrente (usando la domenica di fine settimana)
+  const monthWeekCloses = weekClosesList.filter((setting) => {
+    const value = setting.value as any;
+    if (!value?.weekKey) return false;
+    const parts = value.weekKey.split(":");
+    const endStr = parts[1] || parts[0];
+    let endDate: Date;
+    if (parts.length === 1) {
+      const mondayDate = new Date(endStr + "T00:00:00");
+      endDate = new Date(mondayDate);
+      endDate.setDate(endDate.getDate() + 6);
+    } else {
+      endDate = new Date(endStr + "T00:00:00");
+    }
+    const keyParts = setting.key.split(":");
+    const settingLocationId = keyParts[1];
+    if (isResponsible && settingLocationId !== session.user.sedeId) {
+      return false;
+    }
+    return endDate >= start && endDate < end;
+  });
+
+  const totalBankDeposits = monthWeekCloses.reduce((sum, setting) => {
+    const value = setting.value as any;
+    const deposit = Number(value?.bank_deposit || 0);
+    return sum + (isNaN(deposit) ? 0 : deposit);
+  }, 0);
+
+  const totalWeeklyWithdrawals = monthWeekCloses.reduce((sum, setting) => {
+    const value = setting.value as any;
+    const withdrawals = Number(value?.withdrawals || 0);
+    return sum + (isNaN(withdrawals) ? 0 : withdrawals);
+  }, 0);
   const todayWithdrawn = todayResponses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
   const discrepancyResponses = responses.filter((response) => Math.abs(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund)) - 50) > 0.009);
   const signedCount = responses.filter((response) => (response.answers as any)?._signature?.signed_at).length;
@@ -335,7 +516,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
         closed_by_role: monthClose.closed_by_role,
       }
     : null;
-  const weekCloseValue = weekCloseSetting ? (weekCloseSetting.value as any) : null;
+
+  const currentWeekCloses = weekClosesList.filter((s) => s.key.endsWith(`:${weekKey}`));
+  const weekCloseValue = isResponsible
+    ? (weekClosesList.find((s) => s.key === `cash_week_close:${session.user.sedeId}:${weekKey}`)?.value as any || null)
+    : (currentWeekCloses.length === locations.length && locations.length > 0
+        ? (currentWeekCloses[0]?.value as any)
+        : null);
   const monthDays = Array.from({ length: Math.round((end.getTime() - start.getTime()) / 86_400_000) }, (_, index) => {
     const date = new Date(start);
     date.setDate(date.getDate() + index);
@@ -487,17 +674,29 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               {monthCloseValue ? (
                 <span className="text-emerald-200">Mese chiuso da {monthCloseValue.closed_by_name}</span>
               ) : null}
-              {weekCloseValue ? (
-                <span className="text-amber-200">Settimana chiusa da {weekCloseValue.closed_by_name}</span>
-              ) : null}
+              {isResponsible ? (
+                weekCloseValue ? (
+                  <span className="text-amber-200">Settimana chiusa da {weekCloseValue.closed_by_name}</span>
+                ) : null
+              ) : (
+                currentWeekCloses.length > 0 ? (
+                  <span className="text-amber-200">
+                    Settimane chiuse: {currentWeekCloses.length} su {locations.length} saloni
+                  </span>
+                ) : null
+              )}
             </div>
             <CashActions
               month={selectedMonth}
               monthClosed={monthCloseValue}
               weekKey={weekKey}
-              weekClosed={weekCloseValue}
+              weekClosed={isResponsible ? (weekCloseValue ? [weekCloseValue] : []) : currentWeekCloses.map(c => c.value)}
               locations={locations.map((location) => ({ id: location.id, name: location.name }))}
               users={users.map((user) => ({ id: user.id, name: user.name, locationId: user.sede_id }))}
+              allClosings={closingRecords}
+              vaultWithdrawals={vaultWithdrawalRecords}
+              isResponsible={isResponsible}
+              userSedeId={session.user.sedeId}
             />
           </div>
         </section>
@@ -529,6 +728,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             ))}
           </div>
         </Card>
+
+        <CashHistory
+          weekCloses={monthWeekCloses}
+          locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
+          isResponsible={isResponsible}
+          userSedeId={session.user.sedeId}
+        />
 
         <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
           <div className="border-b border-black/5 p-5">
@@ -802,6 +1008,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           <div className="divide-y divide-black/5">
             {vaultWithdrawals.map((response) => {
               const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(vaultAccountingDate(response));
+              const receipt = answer(response, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null;
               return (
                 <div key={response.id} className="grid gap-4 p-5 lg:grid-cols-[160px_170px_1fr_220px] lg:items-center">
                   <div>
@@ -821,6 +1028,12 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       <MapPin className="size-3.5" />
                       {response.user_location_name || response.location?.name || "Sede non indicata"}
                     </p>
+                    {receipt?.url ? (
+                      <a href={receipt.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FAF7F9] p-2 pr-4 text-xs font-black text-[#A74758]">
+                        <img src={receipt.url} alt={receipt.name || "Foto scontrino"} className="size-14 rounded-xl object-cover" />
+                        Vedi foto scontrino
+                      </a>
+                    ) : null}
                   </div>
                   <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3">
                     <p className="text-[10px] font-black uppercase text-black/35">Prelevato da</p>

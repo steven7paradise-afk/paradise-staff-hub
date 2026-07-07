@@ -3,10 +3,19 @@
 import Papa from "papaparse";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, PackageCheck, Search, ShoppingCart, Truck, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, PackageCheck, Search, ShoppingCart, Truck, Upload, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
+
+const ORDER_PHOTO_KEY = "__orderPhoto";
+
+type OrderPhoto = {
+  url: string;
+  name?: string;
+  uploadedAt?: string;
+  uploadedBy?: string;
+};
 
 type OrderResponse = {
   id: string;
@@ -123,6 +132,34 @@ function fieldValue(order: OrderResponse, includes: string[]) {
   return answerById(order, field.id);
 }
 
+function isSartaOrder(order: OrderResponse) {
+  const answers = order.answers || {};
+  const fields = order.form?.fields || [];
+
+  const cosaDobbiamoFareField = fields.find((f: any) => 
+    f.label?.toLowerCase().includes("cosa dobbiamo fare")
+  );
+  const quanteFasceField = fields.find((f: any) => 
+    f.label?.toLowerCase().includes("quante fasce")
+  );
+
+  const cosaValue = cosaDobbiamoFareField ? answers[cosaDobbiamoFareField.id] : null;
+  const fasceValue = quanteFasceField ? answers[quanteFasceField.id] : null;
+
+  const directCosaValue = answers["field_1782212873121"];
+  const directFasceValue = answers["field_1782219581986"];
+
+  const matchesCosa = 
+    (cosaValue && (cosaValue.toLowerCase().includes("conversione") || cosaValue.toLowerCase().includes("conver"))) ||
+    (directCosaValue && (directCosaValue.toLowerCase().includes("conversione") || directCosaValue.toLowerCase().includes("conver")));
+
+  const matchesFasce = 
+    (fasceValue && fasceValue.toLowerCase().includes("personalizzato")) ||
+    (directFasceValue && directFasceValue.toLowerCase().includes("personalizzato"));
+
+  return Boolean(matchesCosa || matchesFasce);
+}
+
 function orderTitle(order: OrderResponse) {
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title) return title;
@@ -141,6 +178,12 @@ function orderPriority(order: OrderResponse) {
 
 function orderDate(order: OrderResponse) {
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(order.created_at));
+}
+
+function orderPhoto(order: OrderResponse): OrderPhoto | null {
+  const photo = order.answers?.[ORDER_PHOTO_KEY];
+  if (!photo || typeof photo !== "object" || typeof photo.url !== "string") return null;
+  return photo as OrderPhoto;
 }
 
 function statusLabel(status: string) {
@@ -171,6 +214,8 @@ export function OrderManager({
   const [uploadingCsv, setUploadingCsv] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [undoing, setUndoing] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -214,6 +259,38 @@ export function OrderManager({
     const updated = await response.json();
     setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
     setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+  }
+
+  async function uploadPhoto(order: OrderResponse, file?: File) {
+    if (!file) return;
+    setPhotoError("");
+
+    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+      setPhotoError("Scegli una foto JPG, PNG o WEBP fino a 10 MB.");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`/api/orders/${order.id}/photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Impossibile caricare la foto.");
+      }
+
+      const updated = result.order as OrderResponse;
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
+      setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Impossibile caricare la foto.");
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -430,20 +507,34 @@ export function OrderManager({
             const currentStatus = order.status || "NEW";
             const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
             const Icon = status.icon;
+            const sarta = isSartaOrder(order);
+            const photo = orderPhoto(order);
             return (
               <button
                 key={order.id}
                 type="button"
                 onClick={() => setSelected(order)}
-                className="w-full rounded-[24px] border border-black/5 bg-white p-4 text-left shadow-sm"
+                className={cn(
+                  "w-full rounded-[24px] border border-black/5 p-4 text-left shadow-sm border-y border-r transition hover:-translate-y-0.5",
+                  sarta 
+                    ? "bg-[#FAF8FF] border-l-4 border-l-[#8064D8] border-[#EBE7F5]" 
+                    : "bg-[#FFFDFE] border-l-4 border-l-[#C66170] border-[#F7EFF2]"
+                )}
               >
+                {photo ? (
+                  <img src={photo.url} alt={`Foto di ${orderTitle(order)}`} className="mb-3 h-36 w-full rounded-2xl object-cover" />
+                ) : null}
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-black/35">Stato ordine</p>
-                    <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#FAF7F9] px-3 py-1.5 text-xs font-extrabold text-[#C66170]">
+                  <div className="min-w-0 flex flex-wrap gap-2 items-center">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-[#FAF7F9] px-3 py-1.5 text-xs font-extrabold text-[#C66170]">
                       <Icon className="size-4" />
                       {status.label}
                     </div>
+                    {sarta ? (
+                      <span className="rounded-full bg-violet-100 border border-violet-200 text-violet-700 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">Sarta</span>
+                    ) : (
+                      <span className="rounded-full bg-emerald-100 border border-emerald-200 text-emerald-700 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">Acquisto</span>
+                    )}
                   </div>
                   <Eye className="size-4 shrink-0 text-black/30" />
                 </div>
@@ -478,20 +569,26 @@ export function OrderManager({
                 {columnOrders.length === 0 ? (
                   <p className="rounded-2xl bg-white/70 p-4 text-sm text-black/40">Nessun ordine.</p>
                 ) : null}
-                {columnOrders.map((order) => (
-                  <button key={order.id} onClick={() => setSelected(order)} className="rounded-2xl bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="line-clamp-2 font-semibold leading-5 text-black">{orderTitle(order)}</h3>
-                      <Eye className="size-4 shrink-0 text-black/35" />
-                    </div>
-                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
-                      {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
-                    </div>
-                    <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderDate(order)}</p>
-                  </button>
-                ))}
+                {columnOrders.map((order) => {
+                  const photo = orderPhoto(order);
+                  return (
+                    <button key={order.id} onClick={() => setSelected(order)} className="overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      {photo ? <img src={photo.url} alt={`Foto di ${orderTitle(order)}`} className="h-28 w-full object-cover" /> : null}
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="line-clamp-2 font-semibold leading-5 text-black">{orderTitle(order)}</h3>
+                          <Eye className="size-4 shrink-0 text-black/35" />
+                        </div>
+                        <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
+                          {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
+                        </div>
+                        <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderDate(order)}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </Card>
           );
@@ -634,6 +731,43 @@ export function OrderManager({
               </Card>
               <div className="space-y-4">
                 <Card className="bg-white">
+                  <div className="flex items-center gap-2">
+                    <Camera className="size-5 text-[#C66170]" />
+                    <h3 className="font-semibold">Foto ordine</h3>
+                  </div>
+                  {orderPhoto(selected) ? (
+                    <a href={orderPhoto(selected)!.url} target="_blank" rel="noreferrer" className="mt-4 block overflow-hidden rounded-2xl bg-black/5">
+                      <img src={orderPhoto(selected)!.url} alt={`Foto di ${orderTitle(selected)}`} className="max-h-72 w-full object-cover" />
+                    </a>
+                  ) : (
+                    <div className="mt-4 grid h-36 place-items-center rounded-2xl border-2 border-dashed border-black/10 bg-black/[0.02] text-center text-sm text-black/40">
+                      <div>
+                        <Camera className="mx-auto mb-2 size-7" />
+                        Nessuna foto caricata
+                      </div>
+                    </div>
+                  )}
+                  <label className={cn(
+                    "mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#C66170] px-4 text-sm font-bold text-white transition hover:bg-[#B45464]",
+                    uploadingPhoto && "pointer-events-none opacity-60"
+                  )}>
+                    {uploadingPhoto ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                    {uploadingPhoto ? "Caricamento..." : orderPhoto(selected) ? "Sostituisci foto" : "Carica foto"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingPhoto}
+                      onChange={(event) => {
+                        void uploadPhoto(selected, event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <p className="mt-2 text-center text-[11px] text-black/35">JPG, PNG o WEBP · massimo 10 MB</p>
+                  {photoError ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600">{photoError}</p> : null}
+                </Card>
+                <Card className="bg-white">
                   <h3 className="font-semibold">{canManage ? "Stato ordine" : "Avanzamento ordine"}</h3>
                   {!canManage ? <p className="mt-1 text-xs text-black/45">Puoi controllare lo stato. Le modifiche sono riservate ai responsabili.</p> : null}
                   {changingStatusTo ? (
@@ -720,6 +854,30 @@ export function OrderManager({
                     <p className="inline-flex items-center gap-2"><CalendarDays className="size-4 text-black/40" /> {orderDate(selected)}</p>
                   </div>
                 </Card>
+                {currentUserRole === "SUPER_ADMIN" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm("Sei sicuro di voler eliminare definitivamente questo ordine? Questa azione non può essere annullata.")) return;
+                      try {
+                        const response = await fetch(`/api/service-forms/responses/${selected.id}`, {
+                          method: "DELETE"
+                        });
+                        if (response.ok) {
+                          setOrders(current => current.filter(item => item.id !== selected.id));
+                          setSelected(null);
+                        } else {
+                          alert("Errore durante l'eliminazione dell'ordine.");
+                        }
+                      } catch (err) {
+                        alert("Errore di connessione.");
+                      }
+                    }}
+                    className="w-full inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-sm font-black text-red-700 transition hover:bg-red-100"
+                  >
+                    Elimina Ordine
+                  </button>
+                )}
               </div>
             </div>
           </div>

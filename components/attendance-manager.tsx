@@ -110,7 +110,7 @@ export function AttendanceManager({
     
     // Filter logs that belong to today
     const todayLogs = logs.filter(log => {
-      const datePart = log.timestamp.split("T")[0];
+      const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(log.timestamp));
       return datePart === todayStr;
     });
 
@@ -181,7 +181,7 @@ export function AttendanceManager({
     const sortedLogs = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     for (const log of sortedLogs) {
-      const datePart = log.timestamp.split("T")[0];
+      const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date(log.timestamp));
       const groupKey = `${log.userId}-${datePart}`;
       const workerProfile = peopleById.get(log.userId);
 
@@ -814,7 +814,7 @@ export function AttendanceManager({
                                 className={`grid w-full grid-cols-1 gap-0.5 rounded-xl border px-1.5 py-1 text-left text-[9px] font-bold sm:grid-cols-[1fr_auto] sm:items-center sm:gap-2 sm:px-2 sm:text-[11px] ${log ? typeStyles[type] : "border-black/5 bg-black/[0.02] text-black/35 dark:border-white/10 dark:bg-white/[0.03] dark:text-white/35"}`}
                               >
                                 <span className="truncate">{typeLabels[type]}</span>
-                                <span className="font-black">{log?.time ?? "+"}</span>
+                                <span className="font-black">{log ? visibleClockTime(log) : "+"}</span>
                               </button>
                             );
                           })}

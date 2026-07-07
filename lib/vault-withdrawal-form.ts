@@ -7,6 +7,7 @@ export const VAULT_WITHDRAWAL_FIELD_IDS = {
   date: "vault_date",
   amount: "vault_amount",
   reason: "vault_reason",
+  receipt: "vault_receipt",
 } as const;
 
 export async function ensureVaultWithdrawalForm(createdById?: string | null) {

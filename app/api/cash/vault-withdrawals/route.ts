@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { cashDateFromInput } from "@/lib/cash-records";
 import { prisma } from "@/lib/prisma";
+import { uploadCashReceipt } from "@/lib/supabase-storage";
+
+const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -10,14 +13,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null);
-  const locationId = String(body?.locationId ?? "").trim();
-  const date = String(body?.date ?? "").trim();
-  const amount = Number(String(body?.amount ?? "").replace(",", "."));
-  const reason = String(body?.reason ?? "").trim();
+  const body = await request.formData().catch(() => null);
+  const locationId = String(body?.get("locationId") ?? "").trim();
+  const date = String(body?.get("date") ?? "").trim();
+  const amount = Number(String(body?.get("amount") ?? "").replace(",", "."));
+  const reason = String(body?.get("reason") ?? "").trim();
+  const receipt = body?.get("receipt");
 
   if (!locationId || !date || !Number.isFinite(amount) || amount <= 0 || !reason) {
     return NextResponse.json({ error: "Salone, data, importo e motivo sono obbligatori." }, { status: 400 });
+  }
+  if (!(receipt instanceof File) || !receipt.type.startsWith("image/") || receipt.size > MAX_RECEIPT_SIZE) {
+    return NextResponse.json({ error: "La foto dello scontrino è obbligatoria e deve pesare al massimo 10 MB." }, { status: 400 });
   }
 
   if (session.user.role === "RESPONSABILE" && session.user.sedeId && locationId !== session.user.sedeId && !isDarwin) {
@@ -35,6 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Data prelievo non valida." }, { status: 400 });
   }
 
+  const receiptPath = await uploadCashReceipt(session.user.id, receipt);
   const response = await prisma.cashVaultWithdrawal.create({
     data: {
       user_id: session.user.id,
@@ -42,6 +50,8 @@ export async function POST(request: Request) {
       date: accountingDate,
       amount,
       reason,
+      receipt_path: receiptPath,
+      receipt_name: receipt.name,
       signature_name: session.user.name ?? "Admin",
       signature_role: session.user.role,
       signed_at: new Date(),
