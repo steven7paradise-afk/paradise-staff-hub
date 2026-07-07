@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { DownloadInvoicePdfButton } from "@/components/download-invoice-pdf-button";
 import { InvoiceStatusSelector } from "@/components/invoice-status-selector";
+import { BulkSendInvoicesButton } from "@/components/bulk-send-invoices-button";
 import {
   CircleDollarSign,
   FileText,
@@ -81,6 +82,18 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
     return sum + (isNaN(val) ? 0 : val);
   }, 0);
 
+  const pendingInvoices = responses
+    .filter(r => r.status === "NEW")
+    .map(r => ({
+      id: r.id,
+      created_at: r.created_at.toISOString(),
+      user_location_name: r.user_location_name,
+      user: {
+        name: r.user?.name || null,
+      },
+      answers: r.answers,
+    }));
+
   return (
     <AppShell
       title="Registro Fatture"
@@ -108,23 +121,32 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                 Elenco completo e strumenti di esportazione per le richieste di fatture italiane emesse dal personale nei saloni.
               </p>
               
-              {/* Month Selector */}
-              <div className="mt-6 flex items-center gap-2">
-                <Link
-                  href={`/invoices?month=${monthKey(prevMonth)}`}
-                  className="inline-flex size-9 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 active:scale-95"
-                >
-                  <ChevronLeft className="size-4" />
-                </Link>
-                <span className="rounded-2xl bg-white px-4 py-2 text-xs font-black capitalize text-black min-w-[120px] text-center shadow-md">
-                  {monthLabel}
-                </span>
-                <Link
-                  href={`/invoices?month=${monthKey(nextMonth)}`}
-                  className="inline-flex size-9 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 active:scale-95"
-                >
-                  <ChevronRight className="size-4" />
-                </Link>
+              {/* Controls Wrapper */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+                {/* Month Selector */}
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/invoices?month=${monthKey(prevMonth)}`}
+                    className="inline-flex size-9 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 active:scale-95"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Link>
+                  <span className="rounded-2xl bg-white px-4 py-2 text-xs font-black capitalize text-black min-w-[120px] text-center shadow-md">
+                    {monthLabel}
+                  </span>
+                  <Link
+                    href={`/invoices?month=${monthKey(nextMonth)}`}
+                    className="inline-flex size-9 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white transition hover:bg-white/15 active:scale-95"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Link>
+                </div>
+
+                {/* Bulk Send Invoices Button */}
+                <BulkSendInvoicesButton 
+                  shopDomain={process.env.SHOPIFY_SHOP_DOMAIN || ""}
+                  pendingInvoices={pendingInvoices}
+                />
               </div>
             </div>
 
