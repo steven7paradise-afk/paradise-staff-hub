@@ -247,9 +247,9 @@ export function DownloadInvoicePdfButton({ invoice }: DownloadInvoicePdfButtonPr
       // Footer disclaimer
       doc.setTextColor(148, 163, 184); // Slate 400
       doc.setFont("helvetica", "italic");
-      doc.setFontSize(7.5);
-      doc.text("Questo documento costituisce una richiesta di emissione fattura. Non sostituisce la fattura elettronica inviata allo SDI.", 15, 275);
-      doc.text(`Generato automaticamente da Staff Hub il ${new Date().toLocaleDateString("it-IT")}`, 150, 275);
+      doc.setFontSize(7);
+      doc.text("Questo documento costituisce una richiesta di emissione fattura. Non sostituisce la fattura elettronica inviata allo SDI.", 15, 281);
+      doc.text(`Generato automaticamente da Staff Hub il ${new Date().toLocaleDateString("it-IT")}`, 15, 285);
 
       // Output as blob URL and open in new tab
       const blob = doc.output("blob");
