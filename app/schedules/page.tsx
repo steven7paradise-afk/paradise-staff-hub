@@ -3,7 +3,7 @@ import { MonthlySchedulePlanner } from "@/components/monthly-schedule-planner";
 import { auth } from "@/lib/auth";
 import { canEditPlanning, canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,14 @@ export default async function SchedulesPage() {
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
 
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true },
+  });
   const accessSetting = await prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } });
   const planningAccess = normalizePlanningAccess(accessSetting?.value);
-  if (!canViewPlanning(role, session.user.id, planningAccess)) redirect("/dashboard");
+  const canViewByPagePermission = accessUser ? await canAccessForUser(prisma, "/schedules", accessUser) : false;
+  if (!canViewByPagePermission && !canViewPlanning(role, session.user.id, planningAccess)) redirect("/dashboard");
 
   const userCanEditPlanning = canEditPlanning(role);
   const [employees, locations, categories, entries, workerOverrides, workersOrderSetting] = await Promise.all([

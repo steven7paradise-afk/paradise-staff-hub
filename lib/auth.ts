@@ -115,16 +115,22 @@ export const authConfig = {
 
         if (!dbUser) return false;
 
-        let finalAccessList: string[] | undefined = undefined;
+        let finalAccessList: any = undefined;
 
-        if (dbUser.access_list && Array.isArray(dbUser.access_list)) {
-          finalAccessList = dbUser.access_list as string[];
+        if (
+          dbUser.access_list &&
+          (
+            (Array.isArray(dbUser.access_list) && dbUser.access_list.length > 0) ||
+            (!Array.isArray(dbUser.access_list) && typeof dbUser.access_list === "object")
+          )
+        ) {
+          finalAccessList = dbUser.access_list;
         } else if (dbUser.mansione) {
           const mansioneSettings = await prisma.setting.findUnique({
             where: { key: "mansioni_permissions" }
           });
           if (mansioneSettings) {
-            const mapping = (mansioneSettings.value as Record<string, string[]>) || {};
+            const mapping = (mansioneSettings.value as Record<string, any>) || {};
             const cleanMansione = dbUser.mansione.trim().toLowerCase();
             if (mapping[cleanMansione]) {
               finalAccessList = mapping[cleanMansione];

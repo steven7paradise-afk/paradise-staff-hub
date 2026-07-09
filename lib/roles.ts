@@ -47,17 +47,32 @@ export const routePermissions: Record<string, Role[]> = {
   "/settings/forms": ["SUPER_ADMIN", "ADMIN"],
 };
 
-export function canAccess(pathname: string, role?: Role, mansione?: string, accessList?: string[]) {
+export function canAccess(pathname: string, role?: Role, mansione?: string, accessList?: any) {
   if (!role) return false;
 
   // Custom access list check
-  if (accessList && Array.isArray(accessList) && role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  if (
+    accessList &&
+    role !== "SUPER_ADMIN" &&
+    role !== "ADMIN" &&
+    (
+      (Array.isArray(accessList) && accessList.length > 0) ||
+      (!Array.isArray(accessList) && typeof accessList === "object")
+    )
+  ) {
+    let viewRoutes: string[] = [];
+    if (Array.isArray(accessList)) {
+      viewRoutes = accessList;
+    } else if (accessList && typeof accessList === "object" && Array.isArray(accessList.view)) {
+      viewRoutes = accessList.view;
+    }
+
     const matchedRoute = Object.keys(routePermissions)
       .sort((a, b) => b.length - a.length)
       .find((route) => pathname === route || pathname.startsWith(`${route}/`));
     
     if (matchedRoute) {
-      return accessList.includes(matchedRoute);
+      return viewRoutes.includes(matchedRoute);
     }
   }
 
@@ -73,6 +88,74 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
     .find(([route]) => pathname === route || pathname.startsWith(`${route}/`));
 
   return match ? match[1].includes(role) : true;
+}
+
+export function canEdit(pathname: string, role?: Role, mansione?: string, accessList?: any) {
+  if (!role) return false;
+
+  if (role === "SUPER_ADMIN") return true;
+
+  // Custom edit list check
+  if (accessList && role !== "SUPER_ADMIN") {
+    if (accessList && typeof accessList === "object" && Array.isArray(accessList.edit)) {
+      const matchedRoute = Object.keys(routePermissions)
+        .sort((a, b) => b.length - a.length)
+        .find((route) => pathname === route || pathname.startsWith(`${route}/`));
+      
+      if (matchedRoute) {
+        return accessList.edit.includes(matchedRoute);
+      }
+    }
+  }
+
+  // Fallback to default edit rules defined in the matrix
+  const isSettings = pathname.startsWith("/settings");
+  if (isSettings) {
+    if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") {
+      return role === "ADMIN";
+    }
+    return false;
+  }
+
+  if (pathname === "/social-calendar" || pathname.startsWith("/social-calendar/")) {
+    return ["ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(role);
+  }
+
+  if (pathname === "/orders" || pathname.startsWith("/orders/")) {
+    return ["ADMIN", "RESPONSABILE"].includes(role);
+  }
+
+  if (pathname === "/recruitment" || pathname.startsWith("/recruitment/")) {
+    return ["ADMIN", "RESPONSABILE"].includes(role);
+  }
+
+  return ["ADMIN"].includes(role);
+}
+
+export async function getEffectiveAccessList(prisma: any, user: { id: string; access_list?: any; mansione?: string | null }) {
+  if (
+    user.access_list &&
+    (
+      (Array.isArray(user.access_list) && user.access_list.length > 0) ||
+      (!Array.isArray(user.access_list) && typeof user.access_list === "object")
+    )
+  ) {
+    return user.access_list;
+  }
+
+  if (!user.mansione) return undefined;
+
+  const mansioneSettings = await prisma.setting.findUnique({
+    where: { key: "mansioni_permissions" }
+  });
+  const mapping = (mansioneSettings?.value as Record<string, any>) || {};
+  const cleanMansione = user.mansione.trim().toLowerCase();
+  return mapping[cleanMansione];
+}
+
+export async function canAccessForUser(prisma: any, pathname: string, user: { id: string; role?: Role | string; mansione?: string | null; access_list?: any }) {
+  const accessList = await getEffectiveAccessList(prisma, user);
+  return canAccess(pathname, user.role as Role | undefined, user.mansione || undefined, accessList);
 }
 
 export function visibleForRole<T extends { roles: Role[] }>(items: T[], role: Role) {

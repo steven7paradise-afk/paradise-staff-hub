@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 
 
@@ -101,10 +101,16 @@ export default async function AppointmentsPage() {
   if (!session?.user?.id) redirect("/login");
 
   const role = session.user.role as Role;
-  const mansione = (session.user as any).mansione as string | undefined;
 
-  let canView = allowedRoles.has(role);
-  if (!canView && role === "DIPENDENTE" && mansione && mansione.toLowerCase().includes("assistenza")) {
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true },
+  });
+
+  let canView = accessUser
+    ? await canAccessForUser(prisma, "/appointments", accessUser)
+    : allowedRoles.has(role);
+  if (!canView && role === "DIPENDENTE" && accessUser?.mansione && accessUser.mansione.toLowerCase().includes("assistenza")) {
     canView = true;
   }
 

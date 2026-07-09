@@ -2,6 +2,45 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 
+type MansionePermissionSet = {
+  view: string[];
+  edit: string[];
+};
+
+type MansioniPermissionsMap = Record<string, MansionePermissionSet>;
+
+function normalizePermissionSet(value: unknown): MansionePermissionSet {
+  if (Array.isArray(value)) {
+    return {
+      view: value.filter((item): item is string => typeof item === "string"),
+      edit: [],
+    };
+  }
+
+  if (value && typeof value === "object") {
+    const raw = value as { view?: unknown; edit?: unknown };
+    return {
+      view: Array.isArray(raw.view) ? raw.view.filter((item): item is string => typeof item === "string") : [],
+      edit: Array.isArray(raw.edit) ? raw.edit.filter((item): item is string => typeof item === "string") : [],
+    };
+  }
+
+  return { view: [], edit: [] };
+}
+
+function normalizePermissionsMap(value: unknown): MansioniPermissionsMap {
+  const rawMap = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+  return Object.fromEntries(
+    Object.entries(rawMap).map(([mansione, permissions]) => [
+      mansione,
+      normalizePermissionSet(permissions),
+    ])
+  );
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
@@ -20,14 +59,12 @@ export async function GET(request: NextRequest) {
       where: { key: "mansioni_permissions" }
     });
 
-    let currentMap: Record<string, string[]> = setting 
-      ? (setting.value as Record<string, string[]>) 
-      : {};
+    let currentMap = normalizePermissionsMap(setting?.value);
 
     let changed = false;
     dbMansioni.forEach(m => {
       if (!currentMap[m]) {
-        currentMap[m] = [];
+        currentMap[m] = { view: [], edit: [] };
         changed = true;
       }
     });
@@ -72,9 +109,7 @@ export async function POST(request: NextRequest) {
       where: { key: "mansioni_permissions" }
     });
 
-    let currentMap: Record<string, string[]> = currentSetting 
-      ? (currentSetting.value as Record<string, string[]>) 
-      : {};
+    let currentMap = normalizePermissionsMap(currentSetting?.value);
 
     const cleanName = String(mansioneName || "").trim().toLowerCase();
 
@@ -82,7 +117,7 @@ export async function POST(request: NextRequest) {
       if (!cleanName) {
         return NextResponse.json({ error: "Nome mansione mancante." }, { status: 400 });
       }
-      currentMap[cleanName] = Array.isArray(accessList) ? accessList : [];
+      currentMap[cleanName] = normalizePermissionSet(accessList);
     } else if (action === "delete") {
       if (!cleanName) {
         return NextResponse.json({ error: "Nome mansione mancante." }, { status: 400 });

@@ -195,9 +195,34 @@ function isLeaveCategory(category: ScheduleCategory): boolean {
 function buildScheduleEvent(entry: ScheduleEntryForCalendar) {
   const startTime = entry.start_time ?? entry.category.start_time;
   const endTime = entry.end_time ?? entry.category.end_time;
-  const timeLabel = startTime && endTime ? ` ${startTime}-${endTime}` : "";
   const salone = entry.location?.name ?? "Sede non specificata";
 
+  const code = entry.category.code.toUpperCase();
+  const name = entry.category.name.toLowerCase();
+  const isMalattiaOrRiposo = 
+    code === "M" || code === "MA" || code === "ML" || name.includes("malattia") ||
+    code === "R" || code === "RI" || name.includes("riposo");
+
+  if (isMalattiaOrRiposo) {
+    const originalTimeLabel = startTime && endTime ? `Orario programmato: ${startTime} - ${endTime}` : null;
+    return {
+      summary: `${entry.category.name} - ${entry.user.name}`,
+      description: [
+        `Dipendente: ${entry.user.name}`,
+        `Email: ${entry.user.email}`,
+        `Salone: ${salone}`,
+        `Categoria: ${entry.category.code} - ${entry.category.name}`,
+        originalTimeLabel,
+        entry.note ? `Note: ${entry.note}` : null,
+        "Creato automaticamente dal planning Paradise Staff Hub.",
+      ].filter(Boolean).join("\n"),
+      start: eventDate(entry.date),
+      end: eventDate(addDays(entry.date, 1)),
+      colorId: scheduleColorId(entry.category),
+    };
+  }
+
+  const timeLabel = startTime && endTime ? ` ${startTime}-${endTime}` : "";
   return {
     summary: `${entry.category.name}${timeLabel} - ${entry.user.name}`,
     description: [
@@ -516,6 +541,31 @@ function buildLeaveEvent(leave: LeaveRequestWithUser) {
         : "";
 
   const summary = `${statusPrefix}${leave.type} - ${leave.user.name}`;
+  
+  const isMalattiaOrRiposo = 
+    typeLabel.includes("malattia") || 
+    typeLabel.includes("riposo");
+
+  if (isMalattiaOrRiposo) {
+    const originalTimeLabel = leave.start_time && leave.end_time ? `Orario richiesto: ${leave.start_time} - ${leave.end_time}` : null;
+    const description = [
+      `Dipendente: ${leave.user.name}`,
+      `Email: ${leave.user.email}`,
+      `Tipo: ${typeLabel}`,
+      `Stato: ${leave.status}`,
+      originalTimeLabel,
+      leave.reason ? `Note: ${leave.reason}` : null,
+      "Creato automaticamente da Paradise Staff Hub.",
+    ].filter(Boolean).join("\n");
+
+    return {
+      summary,
+      description,
+      start: eventDate(leave.start_date),
+      end: eventDate(addDays(leave.end_date, 1)),
+    };
+  }
+
   const description = [
     `Dipendente: ${leave.user.name}`,
     `Email: ${leave.user.email}`,

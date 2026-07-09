@@ -24,6 +24,108 @@ type RolesSettingsClientProps = {
   };
 };
 
+type PagePermissionSet = {
+  view: string[];
+  edit: string[];
+};
+
+type MansioniPermissions = Record<string, PagePermissionSet>;
+type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string> };
+type SidebarLayoutSetting =
+  | SidebarFolder[]
+  | {
+      default?: SidebarFolder[];
+      targets?: Record<string, SidebarFolder[]>;
+    };
+
+const DEFAULT_SIDEBAR_LAYOUT: SidebarFolder[] = [
+  { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
+  { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
+  { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/team"] },
+  { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
+];
+
+function normalizeSidebarLayout(value: unknown): SidebarFolder[] {
+  if (!Array.isArray(value)) return DEFAULT_SIDEBAR_LAYOUT;
+  const folders = value
+    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown } => Boolean(folder) && typeof folder === "object")
+    .map((folder) => ({
+      id: typeof folder.id === "string" ? folder.id : `folder-${Date.now()}`,
+      title: typeof folder.title === "string" ? folder.title : "Cartella",
+      routes: Array.isArray(folder.routes) ? folder.routes.filter((route): route is string => typeof route === "string") : [],
+      labels: folder && typeof (folder as any).labels === "object" && !Array.isArray((folder as any).labels)
+        ? Object.fromEntries(
+            Object.entries((folder as any).labels).filter(([route, label]) => typeof route === "string" && typeof label === "string")
+          )
+        : {},
+    }));
+
+  return folders.length > 0 ? folders : DEFAULT_SIDEBAR_LAYOUT;
+}
+
+function normalizeSidebarLayoutSetting(value: unknown): { default: SidebarFolder[]; targets: Record<string, SidebarFolder[]> } {
+  if (Array.isArray(value)) {
+    return {
+      default: normalizeSidebarLayout(value),
+      targets: {},
+    };
+  }
+
+  if (value && typeof value === "object") {
+    const raw = value as { default?: unknown; targets?: unknown };
+    const rawTargets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
+      ? raw.targets as Record<string, unknown>
+      : {};
+
+    return {
+      default: normalizeSidebarLayout(raw.default),
+      targets: Object.fromEntries(
+        Object.entries(rawTargets).map(([target, layout]) => [
+          target,
+          normalizeSidebarLayout(layout),
+        ])
+      ),
+    };
+  }
+
+  return {
+    default: DEFAULT_SIDEBAR_LAYOUT,
+    targets: {},
+  };
+}
+
+function normalizePermissionSet(value: unknown): PagePermissionSet {
+  if (Array.isArray(value)) {
+    return {
+      view: value.filter((item): item is string => typeof item === "string"),
+      edit: [],
+    };
+  }
+
+  if (value && typeof value === "object") {
+    const raw = value as { view?: unknown; edit?: unknown };
+    return {
+      view: Array.isArray(raw.view) ? raw.view.filter((item): item is string => typeof item === "string") : [],
+      edit: Array.isArray(raw.edit) ? raw.edit.filter((item): item is string => typeof item === "string") : [],
+    };
+  }
+
+  return { view: [], edit: [] };
+}
+
+function normalizeMansioniPermissions(value: unknown): MansioniPermissions {
+  const rawMap = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+  return Object.fromEntries(
+    Object.entries(rawMap).map(([mansione, permissions]) => [
+      mansione,
+      normalizePermissionSet(permissions),
+    ])
+  );
+}
+
 import { routePermissions } from "@/lib/roles";
 
 const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
@@ -182,7 +284,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   // Mansioni state
-  const [mansioni, setMansioni] = useState<Record<string, string[]>>({});
+  const [mansioni, setMansioni] = useState<MansioniPermissions>({});
   const [newMansioneName, setNewMansioneName] = useState("");
   const [expandedMansione, setExpandedMansione] = useState<string | null>(null);
   const [previewTarget, setPreviewTarget] = useState<string>("DIPENDENTE");
@@ -192,14 +294,15 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       return APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(target as any)).map(p => p.path);
     }
     const mName = target.toLowerCase();
-    return mansioni[mName] || [];
+    return normalizePermissionSet(mansioni[mName]).view;
   };
 
   const getPreviewEditAccessList = (target: string): string[] => {
     if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(target)) {
       return APP_PAGES_MATRIX.filter(p => p.editRoles.includes(target as any)).map(p => p.path);
     }
-    return APP_PAGES_MATRIX.filter(p => p.editRoles.includes("DIPENDENTE")).map(p => p.path);
+    const mName = target.toLowerCase();
+    return normalizePermissionSet(mansioni[mName]).edit;
   };
 
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
@@ -210,8 +313,24 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   };
 
   // Sidebar custom layout state
-  const [sidebarLayout, setSidebarLayout] = useState<Array<{ id: string; title: string; routes: string[] }>>([]);
+  const [sidebarLayouts, setSidebarLayouts] = useState<{ default: SidebarFolder[]; targets: Record<string, SidebarFolder[]> }>({
+    default: DEFAULT_SIDEBAR_LAYOUT,
+    targets: {},
+  });
+  const [menuLayoutTarget, setMenuLayoutTarget] = useState<string>("default");
   const [newFolderName, setNewFolderName] = useState("");
+  const sidebarLayout = menuLayoutTarget === "default"
+    ? sidebarLayouts.default
+    : (sidebarLayouts.targets[menuLayoutTarget] || sidebarLayouts.default);
+  const getCustomRouteLabel = (route: string) => {
+    const folder = sidebarLayout.find((item) => item.routes.includes(route));
+    return folder?.labels?.[route] || "";
+  };
+  const getRouteDisplayName = (route: string) => {
+    const custom = getCustomRouteLabel(route);
+    if (custom) return custom;
+    return APP_PAGES_MATRIX.find(p => p.path === route)?.name || route;
+  };
 
   React.useEffect(() => {
     // Fetch mansioni
@@ -219,7 +338,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          setMansioni(data.mansioni || {});
+          setMansioni(normalizeMansioniPermissions(data.mansioni));
         }
       });
 
@@ -227,18 +346,51 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     fetch("/api/settings/roles/menu-layout")
       .then(res => res.json())
       .then(data => {
-        if (data.success && data.layout) {
-          setSidebarLayout(data.layout);
-        } else {
-          setSidebarLayout([
-            { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
-            { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
-            { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/team"] },
-            { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
-          ]);
-        }
+        setSidebarLayouts(normalizeSidebarLayoutSetting(data.success ? data.layout : null));
       });
   }, []);
+
+  const commitSidebarLayout = (layout: SidebarFolder[]) => {
+    const nextLayouts = menuLayoutTarget === "default"
+      ? { ...sidebarLayouts, default: layout }
+      : { ...sidebarLayouts, targets: { ...sidebarLayouts.targets, [menuLayoutTarget]: layout } };
+
+    setSidebarLayouts(nextLayouts);
+    saveSidebarLayout(nextLayouts);
+  };
+
+  const handleMenuTargetChange = (target: string) => {
+    setMenuLayoutTarget(target);
+    if (target !== "default") setPreviewTarget(target);
+  };
+
+  const handleCopyDefaultLayoutToTarget = () => {
+    if (menuLayoutTarget === "default") return;
+    const copied = sidebarLayouts.default.map((folder) => ({
+      ...folder,
+      id: `${folder.id}-${menuLayoutTarget}-${Date.now()}`,
+      routes: [...folder.routes],
+    }));
+    const nextLayouts = {
+      ...sidebarLayouts,
+      targets: {
+        ...sidebarLayouts.targets,
+        [menuLayoutTarget]: copied,
+      },
+    };
+    setSidebarLayouts(nextLayouts);
+    saveSidebarLayout(nextLayouts);
+  };
+
+  const handleResetTargetLayout = () => {
+    if (menuLayoutTarget === "default") return;
+    if (!confirm("Vuoi eliminare l'organizzazione personalizzata per questo ruolo/mansione e usare il menu generale?")) return;
+    const nextTargets = { ...sidebarLayouts.targets };
+    delete nextTargets[menuLayoutTarget];
+    const nextLayouts = { ...sidebarLayouts, targets: nextTargets };
+    setSidebarLayouts(nextLayouts);
+    saveSidebarLayout(nextLayouts);
+  };
 
   const handleCreateMansione = async () => {
     const cleanName = newMansioneName.trim().toLowerCase();
@@ -252,11 +404,11 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       const res = await fetch("/api/settings/roles/mansioni", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", mansioneName: cleanName, accessList: [] })
+        body: JSON.stringify({ action: "save", mansioneName: cleanName, accessList: { view: [], edit: [] } })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Impossibile creare la mansione.");
-      setMansioni(data.mansioni);
+      setMansioni(normalizeMansioniPermissions(data.mansioni));
       setNewMansioneName("");
       showMessage(`Mansione "${cleanName}" creata con successo!`, "success");
     } catch (err: any) {
@@ -264,28 +416,37 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     }
   };
 
-  const handleToggleMansioneAccess = async (mansioneName: string, path: string, isChecked: boolean) => {
+  const handleToggleMansioneAccess = async (mansioneName: string, path: string, kind: "view" | "edit", isChecked: boolean) => {
     if (!isSuperAdmin) {
       showMessage("Solo i Super Admin possono modificare i permessi delle mansioni.", "error");
       return;
     }
 
-    let newList = [...(mansioni[mansioneName] || [])];
+    const nextPermissions = normalizePermissionSet(mansioni[mansioneName]);
+    let newList = [...nextPermissions[kind]];
     if (isChecked) {
       if (!newList.includes(path)) newList.push(path);
     } else {
       newList = newList.filter(p => p !== path);
+    }
+    nextPermissions[kind] = newList;
+
+    if (kind === "edit" && isChecked && !nextPermissions.view.includes(path)) {
+      nextPermissions.view.push(path);
+    }
+    if (kind === "view" && !isChecked) {
+      nextPermissions.edit = nextPermissions.edit.filter(p => p !== path);
     }
 
     try {
       const res = await fetch("/api/settings/roles/mansioni", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", mansioneName, accessList: newList })
+        body: JSON.stringify({ action: "save", mansioneName, accessList: nextPermissions })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Impossibile salvare i permessi.");
-      setMansioni(data.mansioni);
+      setMansioni(normalizeMansioniPermissions(data.mansioni));
       showMessage(`Permessi per la mansione "${mansioneName}" aggiornati!`, "success");
     } catch (err: any) {
       showMessage(err.message || "Errore durante l'aggiornamento.", "error");
@@ -307,7 +468,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Impossibile eliminare la mansione.");
-      setMansioni(data.mansioni);
+      setMansioni(normalizeMansioniPermissions(data.mansioni));
       showMessage(`Mansione "${mansioneName}" eliminata con successo!`, "success");
     } catch (err: any) {
       showMessage(err.message || "Errore durante l'eliminazione.", "error");
@@ -319,16 +480,14 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     if (!title) return;
     const id = `folder-${Date.now()}`;
     const newLayout = [...sidebarLayout, { id, title, routes: [] }];
-    setSidebarLayout(newLayout);
     setNewFolderName("");
-    saveSidebarLayout(newLayout);
+    commitSidebarLayout(newLayout);
   };
 
   const handleDeleteFolder = (id: string) => {
     if (!confirm("Sei sicuro di voler eliminare questa cartella? I tasti al suo interno verranno spostati tra le pagine non assegnate.")) return;
     const newLayout = sidebarLayout.filter(f => f.id !== id);
-    setSidebarLayout(newLayout);
-    saveSidebarLayout(newLayout);
+    commitSidebarLayout(newLayout);
   };
 
   const handleMoveRouteToFolder = (route: string, folderId: string) => {
@@ -339,8 +498,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       }
       return { ...f, routes };
     });
-    setSidebarLayout(newLayout);
-    saveSidebarLayout(newLayout);
+    commitSidebarLayout(newLayout);
   };
 
   const handleRemoveRouteFromFolder = (route: string, folderId: string) => {
@@ -350,8 +508,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       }
       return f;
     });
-    setSidebarLayout(newLayout);
-    saveSidebarLayout(newLayout);
+    commitSidebarLayout(newLayout);
   };
 
   const handleMoveFolder = (index: number, direction: "up" | "down") => {
@@ -361,8 +518,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     const temp = newLayout[index];
     newLayout[index] = newLayout[targetIndex];
     newLayout[targetIndex] = temp;
-    setSidebarLayout(newLayout);
-    saveSidebarLayout(newLayout);
+    commitSidebarLayout(newLayout);
   };
 
   const handleMoveRouteInFolder = (folderId: string, routeIndex: number, direction: "up" | "down") => {
@@ -380,11 +536,25 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       }
       return f;
     });
-    setSidebarLayout(newLayout);
-    saveSidebarLayout(newLayout);
+    commitSidebarLayout(newLayout);
   };
 
-  const saveSidebarLayout = async (layout: any) => {
+  const handleRouteLabelChange = (folderId: string, route: string, label: string) => {
+    const newLayout = sidebarLayout.map(f => {
+      if (f.id !== folderId) return f;
+      const nextLabels = { ...(f.labels || {}) };
+      const cleanLabel = label.trim();
+      if (cleanLabel) {
+        nextLabels[route] = cleanLabel;
+      } else {
+        delete nextLabels[route];
+      }
+      return { ...f, labels: nextLabels };
+    });
+    commitSidebarLayout(newLayout);
+  };
+
+  const saveSidebarLayout = async (layout: { default: SidebarFolder[]; targets: Record<string, SidebarFolder[]> }) => {
     try {
       const res = await fetch("/api/settings/roles/menu-layout", {
         method: "POST",
@@ -601,7 +771,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
         </button>
       </div>
 
-      {activeTab === "matrix" ? (
+      {activeTab === "matrix" && (
         <Card className="overflow-hidden border-slate-100 p-0 bg-white">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
@@ -661,7 +831,9 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
             </table>
           </div>
         </Card>
-      ) : (
+      )}
+
+      {activeTab === "users" && (
         <div className="space-y-4">
           {/* Search bar */}
           <div className="flex max-w-md items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
@@ -977,6 +1149,9 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
 
             {Object.entries(mansioni).map(([mName, mList]) => {
               const isMansioneExpanded = expandedMansione === mName;
+              const permissions = normalizePermissionSet(mList);
+              const viewCount = permissions.view.length;
+              const editCount = permissions.edit.length;
               return (
                 <Card key={mName} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
                   {/* Header Row */}
@@ -986,7 +1161,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                       <div>
                         <h3 className="font-black text-slate-950 text-sm uppercase tracking-wider">{mName}</h3>
                         <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                          {mList.length} Pagine Abilitate
+                          {viewCount} pagine visibili · {editCount} modificabili
                         </p>
                       </div>
                     </div>
@@ -1025,28 +1200,44 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                             </h5>
                             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                               {groupPages.map((page) => {
-                                const isChecked = mList.includes(page.path);
+                                const canView = permissions.view.includes(page.path);
+                                const canEdit = permissions.edit.includes(page.path);
                                 return (
-                                  <label
+                                  <div
                                     key={page.path}
-                                    className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition select-none ${
-                                      isChecked
+                                    className={`rounded-xl border p-3 transition select-none ${
+                                      canView
                                         ? "bg-white border-[#C66170]/30 shadow-sm"
                                         : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
                                     }`}
                                   >
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      disabled={!isSuperAdmin}
-                                      onChange={(e) => handleToggleMansioneAccess(mName, page.path, e.target.checked)}
-                                      className="mt-0.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                    />
                                     <div className="min-w-0">
                                       <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
                                       <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
                                     </div>
-                                  </label>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                      <label className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-slate-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={canView}
+                                          disabled={!isSuperAdmin}
+                                          onChange={(e) => handleToggleMansioneAccess(mName, page.path, "view", e.target.checked)}
+                                          className="rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                        />
+                                        Vedi
+                                      </label>
+                                      <label className="flex items-center gap-2 rounded-lg bg-pink-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-pink-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={canEdit}
+                                          disabled={!isSuperAdmin}
+                                          onChange={(e) => handleToggleMansioneAccess(mName, page.path, "edit", e.target.checked)}
+                                          className="rounded border-pink-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                        />
+                                        Modifica
+                                      </label>
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -1064,6 +1255,55 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
 
       {activeTab === "sidebar" && (
         <div className="space-y-6">
+          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_auto]">
+            <div className="space-y-1">
+              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Organizza menu per ruolo / mansione</h4>
+              <p className="text-[10px] text-slate-500">
+                Scegli per chi vuoi ordinare cartelle, tasti e testi. La preview a destra mostra esattamente cosa vedrà quel gruppo.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={menuLayoutTarget}
+                onChange={(e) => handleMenuTargetChange(e.target.value)}
+                className="h-9 min-w-[260px] rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#A74758] focus:bg-white"
+              >
+                <option value="default">Menu generale / fallback</option>
+                <optgroup label="Ruoli di Sistema">
+                  <option value="DIPENDENTE">Collaboratore (DIPENDENTE)</option>
+                  <option value="RESPONSABILE">Responsabile (RESPONSABILE)</option>
+                  <option value="ADMIN">Amministratore (ADMIN)</option>
+                  <option value="SUPER_ADMIN">Super Admin (SUPER_ADMIN)</option>
+                </optgroup>
+                <optgroup label="Mansioni Registrate">
+                  {Object.keys(mansioni).map(mKey => (
+                    <option key={mKey} value={mKey}>
+                      Mansione: {mKey.toUpperCase()}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              {menuLayoutTarget !== "default" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCopyDefaultLayoutToTarget}
+                    className="h-9 rounded-lg bg-slate-100 px-3 text-[10px] font-black uppercase tracking-wider text-slate-700 transition hover:bg-slate-200"
+                  >
+                    Copia menu generale
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetTargetLayout}
+                    className="h-9 rounded-lg bg-rose-50 px-3 text-[10px] font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100"
+                  >
+                    Usa generale
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Create new folder container */}
           {isSuperAdmin && (
             <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
@@ -1153,11 +1393,26 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                           <div className="divide-y divide-slate-100">
                             {folder.routes.map((routeHref, routeIndex) => {
                               const pageObj = APP_PAGES_MATRIX.find(p => p.path === routeHref) || { name: routeHref, path: routeHref };
+                              const customLabel = folder.labels?.[routeHref] || "";
                               return (
-                                <div key={routeHref} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
-                                  <div className="min-w-0">
-                                    <p className="font-bold text-slate-800 text-xs">{pageObj.name}</p>
+                                <div key={routeHref} className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1fr_auto] sm:items-center">
+                                  <div className="min-w-0 space-y-2">
+                                    <p className="font-bold text-slate-800 text-xs">{customLabel || pageObj.name}</p>
                                     <p className="font-mono text-[9px] text-slate-400 mt-0.5">{pageObj.path}</p>
+                                    {isSuperAdmin && (
+                                      <input
+                                        type="text"
+                                        defaultValue={customLabel}
+                                        placeholder={`Testo tasto: ${pageObj.name}`}
+                                        onBlur={(e) => handleRouteLabelChange(folder.id, routeHref, e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            e.currentTarget.blur();
+                                          }
+                                        }}
+                                        className="h-8 w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-[10px] font-bold text-slate-700 outline-none transition focus:border-[#A74758] focus:bg-white"
+                                      />
+                                    )}
                                   </div>
 
                                   <div className="flex items-center gap-1">
@@ -1289,7 +1544,10 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                   </label>
                   <select
                     value={previewTarget}
-                    onChange={(e) => setPreviewTarget(e.target.value)}
+                    onChange={(e) => {
+                      setPreviewTarget(e.target.value);
+                      setMenuLayoutTarget(e.target.value);
+                    }}
                     className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:border-[#A74758] bg-slate-50 focus:bg-white text-slate-700 transition w-full"
                   >
                     <optgroup label="Ruoli di Sistema">
@@ -1373,7 +1631,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                                   key={rHref}
                                   className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[10px] font-semibold bg-white/5 hover:bg-white/10 text-slate-200 transition"
                                 >
-                                  <span>{pageInfo.name}</span>
+                                  <span>{getRouteDisplayName(rHref) || pageInfo.name}</span>
                                   <div className="flex items-center gap-1 shrink-0">
                                     <span title="Visibile (Lettura)" className="text-[10px]">👁️</span>
                                     {isEditable && (

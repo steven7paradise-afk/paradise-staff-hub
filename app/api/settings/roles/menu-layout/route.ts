@@ -33,7 +33,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { layout } = body;
 
-    if (!Array.isArray(layout)) {
+    const isScopedLayout =
+      layout &&
+      typeof layout === "object" &&
+      !Array.isArray(layout) &&
+      (Array.isArray(layout.default) || (layout.targets && typeof layout.targets === "object"));
+
+    if (!Array.isArray(layout) && !isScopedLayout) {
       return NextResponse.json({ error: "Il layout inviato non è valido." }, { status: 400 });
     }
 

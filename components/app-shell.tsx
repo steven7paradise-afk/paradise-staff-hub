@@ -53,6 +53,63 @@ const nav = [
   { href: "/settings", label: "Impostazioni", iconName: "Settings", roles: ["SUPER_ADMIN", "ADMIN"], section: "Impostazioni" },
 ] satisfies { href: string; label: string; iconName: string; roles: Role[]; section?: string }[];
 
+const permissionMenuOverrides = [
+  { href: "/service-notes", label: "NOTE", iconName: "FilePenLine", section: "Generale" },
+  { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "Planning & Saloni" },
+] satisfies { href: string; label: string; iconName: string; section?: string }[];
+
+type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string> };
+
+function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown } => Boolean(folder) && typeof folder === "object")
+    .map((folder) => ({
+      id: typeof folder.id === "string" ? folder.id : "folder",
+      title: typeof folder.title === "string" ? folder.title : "Menu",
+      routes: Array.isArray(folder.routes) ? folder.routes.filter((route): route is string => typeof route === "string") : [],
+      labels: folder.labels && typeof folder.labels === "object" && !Array.isArray(folder.labels)
+        ? Object.fromEntries(
+            Object.entries(folder.labels as Record<string, unknown>)
+              .filter(([route, label]) => typeof route === "string" && typeof label === "string")
+          )
+        : {},
+    }));
+}
+
+function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | null): SidebarFolder[] | null {
+  if (Array.isArray(value)) return normalizeSidebarFolders(value);
+
+  if (value && typeof value === "object") {
+    const raw = value as { default?: unknown; targets?: unknown };
+    const targets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
+      ? raw.targets as Record<string, unknown>
+      : {};
+    const cleanMansione = mansione?.trim().toLowerCase();
+    const targetLayout = cleanMansione && targets[cleanMansione]
+      ? targets[cleanMansione]
+      : targets[role];
+    const folders = normalizeSidebarFolders(targetLayout || raw.default);
+    return folders.length > 0 ? folders : null;
+  }
+
+  return null;
+}
+
+function uniqueMenuItemsForAccess(role: Role) {
+  const items = [
+    ...nav.map((item) => ({ ...item, roles: [role] as Role[] })),
+    ...permissionMenuOverrides.map((item) => ({ ...item, roles: [role] as Role[] })),
+  ];
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    if (seen.has(item.href)) return false;
+    seen.add(item.href);
+    return true;
+  });
+}
+
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
@@ -104,18 +161,33 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   let userAccessList: string[] | undefined = undefined;
   if (currentUser) {
-    if (currentUser.access_list && Array.isArray(currentUser.access_list)) {
-      userAccessList = currentUser.access_list as string[];
+    let rawAccess: any = undefined;
+    if (
+      currentUser.access_list &&
+      (
+        (Array.isArray(currentUser.access_list) && currentUser.access_list.length > 0) ||
+        (!Array.isArray(currentUser.access_list) && typeof currentUser.access_list === "object")
+      )
+    ) {
+      rawAccess = currentUser.access_list;
     } else if (currentUser.mansione) {
       const mansioneSettings = await prisma.setting.findUnique({
         where: { key: "mansioni_permissions" }
       });
       if (mansioneSettings) {
-        const mapping = (mansioneSettings.value as Record<string, string[]>) || {};
+        const mapping = (mansioneSettings.value as Record<string, any>) || {};
         const cleanMansione = currentUser.mansione.trim().toLowerCase();
         if (mapping[cleanMansione]) {
-          userAccessList = mapping[cleanMansione];
+          rawAccess = mapping[cleanMansione];
         }
+      }
+    }
+
+    if (rawAccess) {
+      if (Array.isArray(rawAccess)) {
+        userAccessList = rawAccess;
+      } else if (rawAccess && typeof rawAccess === "object" && Array.isArray(rawAccess.view)) {
+        userAccessList = rawAccess.view;
       }
     }
   }
@@ -188,7 +260,11 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ];
   }
 
-  const sidebarConfig = sidebarConfigSetting?.value as Array<{ id: string; title: string; routes: string[] }> | null;
+  const sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
+  const getSidebarLabel = (href: string, fallback: string) => {
+    const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
+    return folder?.labels?.[href] || fallback;
+  };
 
   const filterMenuItems = <T extends { href: string }>(menuList: T[]): T[] => {
     if (!userAccessList || !Array.isArray(userAccessList) || currentRole === "SUPER_ADMIN" || currentRole === "ADMIN") {
@@ -233,7 +309,16 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     return ordered;
   };
 
-  const rawItems = currentRole === "DIPENDENTE"
+  const hasCustomPageAccess = Boolean(
+    userAccessList &&
+    Array.isArray(userAccessList) &&
+    currentRole !== "SUPER_ADMIN" &&
+    currentRole !== "ADMIN"
+  );
+
+  const rawItems = hasCustomPageAccess
+    ? uniqueMenuItemsForAccess(currentRole)
+    : currentRole === "DIPENDENTE"
     ? [
         ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar" && item.href !== "/cash"),
         ...(selectedServiceItem.href === "/tasks" ? [] : [selectedServiceItem]),
@@ -375,17 +460,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               </div>
             )}
           </div>
-          {currentRole === "DIPENDENTE" && (
-            <InstantLink href="/notifications" className="sidebar-role relative inline-flex items-center gap-2 rounded-full bg-paradise-softPink px-3 py-1 text-xs font-semibold xl:mt-3 transition-transform duration-300 hover:scale-105">
-              <DynamicIcon name="Bell" className="size-3.5" />
-              Avvisi
-              {unreadNotifications > 0 ? (
-                <span className="absolute -right-2 -top-2 min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
-                  {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                </span>
-              ) : null}
-            </InstantLink>
-          )}
         </div>
         <nav className="luxury-scroll mt-5 xl:min-h-0 xl:flex-1 xl:space-y-1 xl:overflow-x-hidden xl:overflow-y-auto hidden xl:block">
           {(() => {
@@ -420,12 +494,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                     <InstantLink
                       key={item.href}
                       href={item.href}
-                      title={item.label}
+                      title={getSidebarLabel(item.href, item.label)}
                       className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
                       activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
                     >
                       <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
-                      <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{item.label}</span>
+                      <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{getSidebarLabel(item.href, item.label)}</span>
                       {item.href === "/notifications" && unreadNotifications > 0 ? (
                         <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
                           {unreadNotifications > 99 ? "99+" : unreadNotifications}
@@ -453,12 +527,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                   )}
                   <InstantLink
                     href={item.href}
-                    title={item.label}
+                    title={getSidebarLabel(item.href, item.label)}
                     className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
                     activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
                   >
                     <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
-                    <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{item.label}</span>
+                    <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{getSidebarLabel(item.href, item.label)}</span>
                     {item.href === "/notifications" && unreadNotifications > 0 ? (
                       <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
                         {unreadNotifications > 99 ? "99+" : unreadNotifications}
