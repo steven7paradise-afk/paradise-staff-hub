@@ -85,7 +85,11 @@ function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | nu
     const targets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
       ? raw.targets as Record<string, unknown>
       : {};
-    const cleanMansione = mansione?.trim().toLowerCase();
+    
+    // Ignore mansione layouts for ADMIN / SUPER_ADMIN roles so they always get the full admin/system layout
+    const isSystemAdmin = role === "SUPER_ADMIN" || role === "ADMIN";
+    const cleanMansione = !isSystemAdmin && mansione?.trim().toLowerCase();
+    
     const targetLayout = cleanMansione && targets[cleanMansione]
       ? targets[cleanMansione]
       : targets[role];
@@ -160,7 +164,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   ]);
 
   let userAccessList: string[] | undefined = undefined;
-  if (currentUser) {
+  if (currentUser && currentRole !== "SUPER_ADMIN" && currentRole !== "ADMIN") {
     let rawAccess: any = undefined;
     if (
       currentUser.access_list &&
