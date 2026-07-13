@@ -20,11 +20,14 @@ export const routePermissions: Record<string, Role[]> = {
   "/tablet-clock": ["SUPER_ADMIN", "ADMIN"],
   "/requests": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/documents": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/cedolini": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/malattie": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/service-notes": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/service-forms": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/consulenza-online": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/cash": ["SUPER_ADMIN", "ADMIN"],
   "/invoices": ["SUPER_ADMIN", "ADMIN"],
   "/refunds": ["SUPER_ADMIN", "ADMIN"],
@@ -54,7 +57,6 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
   if (
     accessList &&
     role !== "SUPER_ADMIN" &&
-    role !== "ADMIN" &&
     (
       (Array.isArray(accessList) && accessList.length > 0) ||
       (!Array.isArray(accessList) && typeof accessList === "object")
