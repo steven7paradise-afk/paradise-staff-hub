@@ -143,20 +143,7 @@ export function OnlineConsultationsBrowser({
 
   return (
     <div className="space-y-6">
-      {/* Reminder Banner */}
-      {serviceAccountEmail && (
-        <div className="rounded-[24px] border border-pink-100 bg-[#FFF7F9] p-5 text-sm text-[#A74758] shadow-sm flex items-start gap-3">
-          <Info className="size-5 shrink-0 mt-0.5 text-[#C66170]" />
-          <div>
-            <p className="font-extrabold text-[#A74758]">Sincronizzazione Google Calendar</p>
-            <p className="mt-1 leading-relaxed text-xs text-black/60 font-semibold">
-              Per consentire l'esportazione automatica delle consulenze in tempo reale, assicurati di aver condiviso il tuo Google Calendar con l'account di servizio con autorizzazione di modifica:
-              <br />
-              <strong className="select-all bg-white px-2 py-0.5 rounded border border-pink-200 mt-2 inline-block text-[11px] font-mono text-[#A74758] shadow-sm">{serviceAccountEmail}</strong>
-            </p>
-          </div>
-        </div>
-      )}
+
 
       {/* Main Grid */}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

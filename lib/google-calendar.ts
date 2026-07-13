@@ -854,10 +854,10 @@ export async function syncCowlendarConsultations(bookings: any[]) {
     return { skipped: true, reason: "Google Calendar service account not configured." };
   }
 
-  // Filter for consultations
+  // Filter for consultations (only online consultations)
   const consultations = bookings.filter((b) => {
     const title = (b.serviceTitle || "").toLowerCase();
-    return title.includes("consulenza");
+    return title.includes("consulenza") && title.includes("online");
   });
 
   if (consultations.length === 0) {
