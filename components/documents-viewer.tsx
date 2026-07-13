@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   Briefcase,
@@ -12,6 +13,8 @@ import {
   Image as ImageIcon,
   Sparkles,
   UserRound,
+  Trash2,
+  Search,
   X,
 } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
@@ -221,7 +224,17 @@ function MobileDocumentCard({
   );
 }
 
-function DesktopPreview({ document, employeeView }: { document: DocumentRecord; employeeView: boolean }) {
+function DesktopPreview({
+  document,
+  employeeView,
+  onDelete,
+  deletingId
+}: {
+  document: DocumentRecord;
+  employeeView: boolean;
+  onDelete?: (id: string) => void;
+  deletingId?: string;
+}) {
   const url = getDocumentUrl(document);
 
   return (
@@ -234,13 +247,26 @@ function DesktopPreview({ document, employeeView }: { document: DocumentRecord; 
             <DocumentMeta document={document} employeeView={employeeView} />
           </div>
         </div>
-        <a
-          href={url}
-          className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl bg-paradise-pink px-4 text-sm font-bold text-paradise-noir shadow-sm transition hover:brightness-105"
-        >
-          <Download className="size-4" />
-          Scarica
-        </a>
+        <div className="flex items-center gap-2 shrink-0">
+          {!employeeView && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(document.id)}
+              disabled={deletingId === document.id}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-55 px-4 text-sm font-bold text-red-700 shadow-sm border border-red-100 hover:bg-red-100 transition disabled:opacity-50"
+            >
+              <Trash2 className="size-4" />
+              {deletingId === document.id ? "Eliminazione..." : "Elimina"}
+            </button>
+          )}
+          <a
+            href={url}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-paradise-pink px-4 text-sm font-bold text-paradise-noir shadow-sm transition hover:brightness-105"
+          >
+            <Download className="size-4" />
+            Scarica
+          </a>
+        </div>
       </div>
       <div className="h-[calc(100%-120px)] p-4">
         <PreviewFrame document={document} className="min-h-0 rounded-3xl" />
@@ -290,11 +316,78 @@ function MobilePreviewModal({
 }
 
 export function DocumentsViewer({ documents, employeeView }: { documents: DocumentRecord[]; employeeView: boolean }) {
+  const router = useRouter();
+  const [deletingId, setDeletingId] = useState("");
   const [selectedId, setSelectedId] = useState(documents[0]?.id ?? "");
   const [mobilePreview, setMobilePreview] = useState<DocumentRecord | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(documents[0]?.id ?? null);
 
-  const selectedDocument = useMemo(() => documents.find((document) => document.id === selectedId) ?? documents[0], [documents, selectedId]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedYear, setSelectedYear] = useState("ALL");
+
+  const workersList = useMemo(() => {
+    const list: { id: string; name: string }[] = [];
+    const ids = new Set<string>();
+    documents.forEach((doc) => {
+      if (doc.user && !ids.has(doc.user.id)) {
+        ids.add(doc.user.id);
+        list.push({ id: doc.user.id, name: doc.user.name });
+      }
+    });
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [documents]);
+
+  const yearsList = useMemo(() => {
+    const years = new Set<number>();
+    documents.forEach((doc) => {
+      if (doc.year) years.add(doc.year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [documents]);
+
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const matchTitle = doc.title.toLowerCase().includes(query);
+        const matchUser = doc.user?.name.toLowerCase().includes(query);
+        if (!matchTitle && !matchUser) return false;
+      }
+      if (selectedWorkerId && doc.user?.id !== selectedWorkerId) {
+        return false;
+      }
+      if (selectedType !== "ALL" && doc.type !== selectedType) {
+        return false;
+      }
+      if (selectedYear !== "ALL" && String(doc.year) !== selectedYear) {
+        return false;
+      }
+      return true;
+    });
+  }, [documents, searchQuery, selectedWorkerId, selectedType, selectedYear]);
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Sei sicuro di voler eliminare questo documento per sempre?")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Errore durante l'eliminazione.");
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Errore di connessione.");
+    } finally {
+      setDeletingId("");
+    }
+  }
+
+  const selectedDocument = useMemo(() => filteredDocuments.find((document) => document.id === selectedId) ?? filteredDocuments[0], [filteredDocuments, selectedId]);
 
   if (documents.length === 0) {
     return (
@@ -324,7 +417,96 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
         }
       `}} />
       <div className="space-y-4 lg:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl documents-page">
-        {documents.map((doc, idx) => {
+        {/* Mobile Filters Panel */}
+        <div className="space-y-3 bg-white/5 p-4 rounded-[24px] border border-white/5 mb-2">
+          {/* Search bar */}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Cerca per titolo o collaboratore..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-11 pl-9 pr-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/30" />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-white/30 hover:text-white/60">
+                <X className="size-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {/* Employee Filter */}
+            {!employeeView && (
+              <select
+                value={selectedWorkerId}
+                onChange={(e) => setSelectedWorkerId(e.target.value)}
+                className="h-10 rounded-xl border border-white/10 bg-white/5 text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-white/[0.02]"
+              >
+                <option value="" className="bg-[#0A0A0A] text-white">Tutti i dipendenti</option>
+                {workersList.map((w) => (
+                  <option key={w.id} value={w.id} className="bg-[#0A0A0A] text-white">
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Document Type Filter */}
+            <select
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+              className={cn(
+                "h-10 rounded-xl border border-white/10 bg-white/5 text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-white/[0.02]",
+                employeeView && "col-span-2"
+              )}
+            >
+              <option value="ALL" className="bg-[#0A0A0A] text-white">Tutti i tipi</option>
+              <option value="BUSTA_PAGA" className="bg-[#0A0A0A] text-white">Busta paga</option>
+              <option value="CONTRATTO" className="bg-[#0A0A0A] text-white">Contratto</option>
+              <option value="DOCUMENTO" className="bg-[#0A0A0A] text-white">Documento HR</option>
+            </select>
+          </div>
+
+          {/* Year Chips */}
+          {yearsList.length > 0 && (
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <button
+                onClick={() => setSelectedYear("ALL")}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
+                  selectedYear === "ALL"
+                    ? "bg-[#B85B68] text-white"
+                    : "bg-white/5 text-white/70 hover:bg-white/10"
+                )}
+              >
+                Tutti gli anni
+              </button>
+              {yearsList.map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setSelectedYear(String(y))}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
+                    selectedYear === String(y)
+                      ? "bg-[#B85B68] text-white"
+                      : "bg-white/5 text-white/70 hover:bg-white/10"
+                )}
+              >
+                {y}
+              </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {filteredDocuments.length === 0 ? (
+          <div className="border border-white/5 bg-white/5 py-12 text-center text-sm text-white/45 rounded-[24px]">
+            Nessun documento corrispondente ai filtri.
+          </div>
+        ) : (
+          filteredDocuments.map((doc, idx) => {
           const colors = [
             { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
             { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
@@ -391,26 +573,42 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
                     </div>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-2 gap-3 pt-3 border-t border-black/10">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMobilePreview(doc);
-                      }}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
-                    >
-                      <Eye className="size-4" />
-                      Visualizza
-                    </button>
-                    <a
-                      href={url}
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
-                    >
-                      <Download className="size-4" />
-                      Scarica
-                    </a>
+                  <div className="mt-5 space-y-2 pt-3 border-t border-black/10">
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMobilePreview(doc);
+                        }}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
+                      >
+                        <Eye className="size-4" />
+                        Visualizza
+                      </button>
+                      <a
+                        href={url}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                      >
+                        <Download className="size-4" />
+                        Scarica
+                      </a>
+                    </div>
+                    {!employeeView && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(doc.id);
+                        }}
+                        disabled={deletingId === doc.id}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-red-600/90 text-white text-sm font-bold active:scale-[0.97] transition disabled:opacity-50"
+                      >
+                        <Trash2 className="size-4" />
+                        {deletingId === doc.id ? "Eliminazione..." : "Elimina"}
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -429,29 +627,124 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
               )}
             </div>
           );
-        })}
+        }))}
       </div>
 
       <div className="hidden grid-cols-12 gap-5 lg:grid">
-        <Card className="col-span-5 max-h-[calc(100dvh-8rem)] overflow-hidden p-0 hover:translate-y-0">
-          <div className="border-b border-black/5 bg-white/80 p-5">
+        <Card className="col-span-5 max-h-[calc(100dvh-8rem)] overflow-hidden p-0 hover:translate-y-0 flex flex-col">
+          <div className="border-b border-black/5 bg-white/80 p-5 shrink-0">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-black/35">Archivio documenti</p>
-            <h2 className="mt-1 text-xl font-extrabold text-paradise-noir">{documents.length} file disponibili</h2>
+            <h2 className="mt-1 text-xl font-extrabold text-paradise-noir">
+              {filteredDocuments.length === documents.length
+                ? `${documents.length} file disponibili`
+                : `${filteredDocuments.length} di ${documents.length} file`}
+            </h2>
           </div>
-          <div className="max-h-[calc(100dvh-14rem)] space-y-3 overflow-y-auto p-4">
-            {documents.map((document) => (
-              <DesktopDocumentRow
-                key={document.id}
-                document={document}
-                employeeView={employeeView}
-                selected={selectedDocument?.id === document.id}
-                onSelect={() => setSelectedId(document.id)}
+
+          {/* Desktop Filters Panel */}
+          <div className="border-b border-black/5 bg-slate-50/50 p-4 space-y-3 shrink-0">
+            {/* Search bar */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Cerca per titolo o collaboratore..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 pl-9 pr-4 rounded-xl border border-black/10 bg-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
               />
-            ))}
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-black/30 hover:text-black/60">
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Employee Filter */}
+              {!employeeView && (
+                <select
+                  value={selectedWorkerId}
+                  onChange={(e) => setSelectedWorkerId(e.target.value)}
+                  className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                >
+                  <option value="">Tutti i dipendenti</option>
+                  {workersList.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Document Type Filter */}
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className={cn(
+                  "h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]",
+                  employeeView && "col-span-2"
+                )}
+              >
+                <option value="ALL">Tutti i tipi</option>
+                <option value="BUSTA_PAGA">Busta paga</option>
+                <option value="CONTRATTO">Contratto</option>
+                <option value="DOCUMENTO">Documento HR</option>
+              </select>
+            </div>
+
+            {/* Year Chips */}
+            {yearsList.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  onClick={() => setSelectedYear("ALL")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
+                    selectedYear === "ALL"
+                      ? "bg-[#B85B68] text-white"
+                      : "bg-white border border-black/5 text-black/55 hover:bg-black/[0.02]"
+                  )}
+                >
+                  Tutti gli anni
+                </button>
+                {yearsList.map((y) => (
+                  <button
+                    key={y}
+                    onClick={() => setSelectedYear(String(y))}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
+                      selectedYear === String(y)
+                        ? "bg-[#B85B68] text-white"
+                        : "bg-white border border-black/5 text-black/55 hover:bg-black/[0.02]"
+                    )}
+                  >
+                    {y}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-3 p-4 min-h-0">
+            {filteredDocuments.length === 0 ? (
+              <div className="border border-black/5 bg-white/70 py-12 text-center text-sm text-black/45 rounded-3xl">
+                Nessun documento corrispondente ai filtri.
+              </div>
+            ) : (
+              filteredDocuments.map((document) => (
+                <DesktopDocumentRow
+                  key={document.id}
+                  document={document}
+                  employeeView={employeeView}
+                  selected={selectedDocument?.id === document.id}
+                  onSelect={() => setSelectedId(document.id)}
+                />
+              ))
+            )}
           </div>
         </Card>
 
-        <div className="col-span-7 min-w-0">{selectedDocument ? <DesktopPreview document={selectedDocument} employeeView={employeeView} /> : null}</div>
+        <div className="col-span-7 min-w-0">{selectedDocument ? <DesktopPreview document={selectedDocument} employeeView={employeeView} onDelete={handleDelete} deletingId={deletingId} /> : null}</div>
       </div>
 
       {mobilePreview ? <MobilePreviewModal document={mobilePreview} employeeView={employeeView} onClose={() => setMobilePreview(null)} /> : null}

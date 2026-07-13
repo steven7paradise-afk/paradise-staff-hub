@@ -3,11 +3,23 @@
 import React, { useState } from "react";
 import { Loader2, Check, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DownloadRefundPdfButton } from "@/components/download-refund-pdf-button";
 
 type RefundRowActionsProps = {
   responseId: string;
   initialStatus: string;
   initialNotes: any;
+  refund: {
+    id: string;
+    created_at: string;
+    user_location_name?: string | null;
+    user: {
+      name: string | null;
+    } | null;
+    status: string;
+    internal_notes?: any;
+    answers: any;
+  };
 };
 
 const REFUND_STATUSES = [
@@ -25,7 +37,7 @@ function parseNoteText(notes: any): string {
   return String(notes);
 }
 
-export function RefundRowActions({ responseId, initialStatus, initialNotes }: RefundRowActionsProps) {
+export function RefundRowActions({ responseId, initialStatus, initialNotes, refund }: RefundRowActionsProps) {
   const [status, setStatus] = useState(initialStatus);
   const [noteText, setNoteText] = useState(() => parseNoteText(initialNotes));
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -141,6 +153,17 @@ export function RefundRowActions({ responseId, initialStatus, initialNotes }: Re
             </button>
           </div>
         </div>
+      </div>
+      
+      {/* PDF View/Download Button */}
+      <div className="pt-2 border-t border-black/5 dark:border-white/5">
+        <DownloadRefundPdfButton 
+          refund={{
+            ...refund,
+            status,
+            internal_notes: { text: noteText }
+          }} 
+        />
       </div>
     </div>
   );

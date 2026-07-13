@@ -4,15 +4,25 @@ import { PlanningAccessSettings } from "@/components/planning-access-settings";
 import { auth } from "@/lib/auth";
 import { normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlanningSettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
   const role = session.user.role as Role;
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN") redirect("/dashboard");
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/settings/planning", accessUser)
+    : (role === "SUPER_ADMIN" || role === "ADMIN");
+
+  if (!canAccessPage) redirect("/dashboard");
 
   const [accessSetting, users] = await Promise.all([
     prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }),

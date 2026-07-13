@@ -4,7 +4,7 @@ import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateDocument } from "@/lib/supabase-storage";
 
-const uploadRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const uploadRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function POST(request: NextRequest) {
   const session = await auth();

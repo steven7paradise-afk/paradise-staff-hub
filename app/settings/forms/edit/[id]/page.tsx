@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { FormBuilder } from "@/components/form-builder";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +18,18 @@ export default async function SettingsFormEditPage(props: {
 
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const role = session.user.role as Role;
 
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN" && role !== "RESPONSABILE") {
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
+  const role = session.user.role as Role;
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/settings/forms", accessUser)
+    : (role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE");
+
+  if (!canAccessPage) {
     redirect("/dashboard");
   }
 

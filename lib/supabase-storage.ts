@@ -99,3 +99,11 @@ export async function uploadInvoicePdf(userId: string, filename: string, buffer:
   if (signError) throw new Error(signError.message);
   return data.signedUrl;
 }
+
+export async function deletePrivateDocument(path: string) {
+  const client = storageClient();
+  const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
+  const { error } = await client.storage.from(bucket).remove([path]);
+  if (error) throw new Error(error.message);
+  return true;
+}

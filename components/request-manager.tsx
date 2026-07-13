@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Send, X, Flag, Calendar, Clock, User, Heart, Coffee, FileText, Sparkles, Plus } from "lucide-react";
+import { Check, Send, X, Flag, Calendar, Clock, User, Heart, Coffee, FileText, Sparkles, Plus, AlertCircle, ShieldCheck } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -16,12 +16,19 @@ type RequestRecord = {
   endTime: string | null;
   reason: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+  medicalCode: string | null;
+  sicknessUnjustified: boolean;
 };
 
 type WorkerOption = { id: string; name: string; location: string | null };
+type ActiveRequestFilter = "JUSTIFY" | RequestRecord["type"];
 
 const typeLabels = { FERIE: "Ferie", PERMESSO: "Permesso", RIPOSO: "Riposo", MALATTIA: "Malattia", ALTRO: "Altro" };
 const statusLabels = { PENDING: "In attesa", APPROVED: "Approvata", REJECTED: "Rifiutata", FLAGGED: "Segnalata" };
+
+function needsSicknessJustification(request: RequestRecord) {
+  return request.type === "MALATTIA" && !request.medicalCode && !request.sicknessUnjustified;
+}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
@@ -85,12 +92,33 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [openForm, setOpenForm] = useState(false);
   const today = new Date();
   const todayValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const [form, setForm] = useState({ userId: workers[0]?.id ?? "", type: "FERIE", startDate: todayValue, endDate: todayValue, startTime: "", endTime: "", reason: "", approveNow: false });
+  const [form, setForm] = useState({ userId: workers[0]?.id ?? "", type: "FERIE", startDate: todayValue, endDate: todayValue, startTime: "", endTime: "", reason: "", approveNow: false, medicalCode: "" });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
+  const [medicalDrafts, setMedicalDrafts] = useState<Record<string, string>>({});
+  const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>("JUSTIFY");
   const employeeView = role === "DIPENDENTE";
   const canApprove = role === "ADMIN" || role === "SUPER_ADMIN";
   const canCreateForWorkers = role === "ADMIN" || role === "SUPER_ADMIN";
+  const orderedRequests = [...requests].sort((a, b) => Number(needsSicknessJustification(b)) - Number(needsSicknessJustification(a)));
+  const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
+  const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
+  const pendingRequests = requests.filter((request) => request.status === "PENDING").length;
+  const requestSections: Array<{ type: RequestRecord["type"]; title: string; description: string; tone: "pink" | "gold" | "green" | "dark"; items: RequestRecord[] }> = [
+    { type: "PERMESSO", title: "Permessi", description: "Entrate posticipate, uscite anticipate e permessi orari.", tone: "pink", items: [] },
+    { type: "FERIE", title: "Ferie", description: "Giorni di ferie richiesti o già approvati.", tone: "gold", items: [] },
+    { type: "RIPOSO", title: "Riposo", description: "Riposi programmati e richieste di assenza ordinaria.", tone: "green", items: [] },
+    { type: "MALATTIA", title: "Malattia", description: "Malattie già giustificate o segnate come non giustificate.", tone: "pink", items: [] },
+    { type: "ALTRO", title: "Altro", description: "Richieste fuori categoria standard.", tone: "dark", items: [] },
+  ].map((section) => ({
+    ...section,
+    items: archiveRequests.filter((request) => request.type === section.type),
+  }));
+  const activeSection = requestSections.find((section) => section.type === activeFilter);
+  const filterButtons: Array<{ key: ActiveRequestFilter; label: string; count: number; tone: "pink" | "gold" | "green" | "dark" }> = [
+    { key: "JUSTIFY", label: "Da giustificare", count: urgentSicknessRequests.length, tone: "pink" },
+    ...requestSections.map((section) => ({ key: section.type, label: section.title, count: section.items.length, tone: section.tone })),
+  ];
 
   async function createRequest() {
     if (!form.startDate || !form.endDate) {
@@ -101,7 +129,11 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     const response = await fetch("/api/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, userId: canCreateForWorkers ? form.userId : undefined }),
+      body: JSON.stringify({
+        ...form,
+        userId: canCreateForWorkers ? form.userId : undefined,
+        medicalCode: form.type === "MALATTIA" ? form.medicalCode : undefined
+      }),
     });
     const data = await response.json();
     setSaving(null);
@@ -120,8 +152,10 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       endTime: savedRequest.end_time,
       reason: savedRequest.reason,
       status: savedRequest.status,
+      medicalCode: savedRequest.medical_code,
+      sicknessUnjustified: savedRequest.sickness_unjustified,
     }, ...current]);
-    setForm({ userId: workers[0]?.id ?? "", type: "FERIE", startDate: todayValue, endDate: todayValue, startTime: "", endTime: "", reason: "", approveNow: false });
+    setForm({ userId: workers[0]?.id ?? "", type: "FERIE", startDate: todayValue, endDate: todayValue, startTime: "", endTime: "", reason: "", approveNow: false, medicalCode: "" });
     setOpenForm(false);
     if (savedRequest.status === "APPROVED") {
       if (data.calendarSync?.skipped) {
@@ -155,14 +189,35 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     setMessage(status === "APPROVED" ? "Richiesta approvata, inserita nel planning e sincronizzata su Google Calendar." : "Stato richiesta aggiornato.");
   }
 
+  async function updateSicknessJustification(id: string, payload: { medicalCode?: string | null; sicknessUnjustified?: boolean }) {
+    setSaving(id);
+    const response = await fetch(`/api/requests/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    setSaving(null);
+    if (!response.ok) {
+      setMessage(data.error ?? "Giustificazione malattia non salvata.");
+      return;
+    }
+    setRequests((current) => current.map((request) => request.id === id ? {
+      ...request,
+      medicalCode: data.leaveRequest.medical_code,
+      sicknessUnjustified: data.leaveRequest.sickness_unjustified,
+    } : request));
+    setMessage(data.leaveRequest.medical_code ? "Protocollo malattia salvato. Assenza giustificata." : "Malattia contrassegnata come non giustificata.");
+  }
+
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Button 
+        <Button
           onClick={() => setOpenForm((current) => !current)}
           className="rounded-[20px] bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300"
         >
-          {openForm ? <X className="size-4" /> : <Plus className="size-4" />} 
+          {openForm ? <X className="size-4" /> : <Plus className="size-4" />}
           {openForm ? "Annulla" : (canCreateForWorkers ? "Aggiungi richiesta" : "Invia nuova richiesta")}
         </Button>
       </div>
@@ -175,7 +230,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
               {canCreateForWorkers ? "Compila ferie / permesso per dipendente" : "Invia richiesta personale"}
             </h2>
           </div>
-          
+
           <div className="grid gap-4 sm:grid-cols-2">
             {canCreateForWorkers ? (
               <label className="space-y-2">
@@ -195,6 +250,21 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
               <span className="text-xs font-bold tracking-wide uppercase text-black/55">Motivo / Note</span>
               <Field placeholder="Descrivi il motivo della richiesta..." value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} />
             </label>
+            {form.type === "MALATTIA" && (
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-xs font-bold tracking-wide uppercase text-red-600 flex items-center gap-1.5 animate-pulse">
+                  <Heart className="size-3.5 text-red-500" /> Codice Certificato Medico (INPS / Ricetta)
+                </span>
+                <Field
+                  placeholder="Inserisci il codice di protocollo del medico (es. INPS123456)..."
+                  value={form.medicalCode}
+                  onChange={(event) => setForm({ ...form, medicalCode: event.target.value })}
+                />
+                <p className="text-[10px] text-black/45 leading-normal">
+                  In assenza di codice medico, l'assenza rimarrà registrata come non giustificata.
+                </p>
+              </label>
+            )}
             <DatePickerStable label="Data Inizio (Dal)" value={form.startDate} onChange={(startDate) => setForm({ ...form, startDate, endDate: form.endDate < startDate ? startDate : form.endDate })} />
             <DatePickerStable label="Data Fine (Al)" value={form.endDate} onChange={(endDate) => setForm({ ...form, endDate })} />
             <label className="space-y-2">
@@ -227,48 +297,201 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
         </p>
       ) : null}
 
-      {/* Grid of leave requests */}
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {requests.length === 0 ? (
-          <Card className="text-sm text-black/45 border border-black/5 bg-white/70 py-10 text-center col-span-full">
-            <Calendar className="size-8 mx-auto text-black/20 mb-2" />
-            Nessuna richiesta inserita in archivio.
-          </Card>
-        ) : null}
-        
-        {requests.map((request) => {
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-[22px] border border-black/5 bg-white px-5 py-4 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Totale</p>
+          <p className="mt-1 text-2xl font-black text-paradise-noir">{requests.length}</p>
+        </div>
+        <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-500">Da giustificare</p>
+          <p className="mt-1 text-2xl font-black text-rose-700">{urgentSicknessRequests.length}</p>
+        </div>
+        <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">In attesa</p>
+          <p className="mt-1 text-2xl font-black text-amber-900">{pendingRequests}</p>
+        </div>
+      </div>
+
+      {requests.length > 0 ? (
+        <div className="mb-5 overflow-x-auto rounded-[26px] border border-black/5 bg-white p-2 shadow-sm">
+          <div className="flex min-w-max gap-2">
+            {filterButtons.map((filter) => {
+              const selected = activeFilter === filter.key;
+              return (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => setActiveFilter(filter.key)}
+                  className={cn(
+                    "flex min-h-12 items-center gap-3 rounded-[20px] px-4 text-sm font-black transition active:scale-[0.98]",
+                    selected ? "bg-paradise-noir text-white shadow-sm" : "bg-neutral-50 text-paradise-noir hover:bg-paradise-nude/50"
+                  )}
+                >
+                  <span>{filter.label}</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-xs",
+                      selected ? "bg-white/15 text-white" : filter.tone === "pink" ? "bg-paradise-softPink/70 text-[#B85B68]" : filter.tone === "gold" ? "bg-paradise-gold/20 text-[#9E7A3B]" : filter.tone === "green" ? "bg-emerald-500/10 text-emerald-700" : "bg-black/10 text-black/65"
+                    )}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {requests.length === 0 ? (
+        <Card className="text-sm text-black/45 border border-black/5 bg-white/70 py-10 text-center">
+          <Calendar className="size-8 mx-auto text-black/20 mb-2" />
+          Nessuna richiesta inserita in archivio.
+        </Card>
+      ) : null}
+
+      {activeFilter === "JUSTIFY" ? (
+        <section className="mb-6 overflow-hidden rounded-[26px] border border-rose-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-5 py-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500">Priorità</p>
+              <h2 className="mt-1 text-lg font-black text-paradise-noir">Malattie da giustificare</h2>
+            </div>
+            <Badge tone="pink">{urgentSicknessRequests.length} senza protocollo</Badge>
+          </div>
+          {urgentSicknessRequests.length === 0 ? (
+            <div className="px-5 py-8 text-sm font-semibold text-black/35">
+              Nessuna malattia da giustificare.
+            </div>
+          ) : (
+            <div className="divide-y divide-black/5">
+              {urgentSicknessRequests.map((request) => {
+              const isPending = request.status === "PENDING";
+              const draft = medicalDrafts[request.id] ?? "";
+              return (
+                <div key={request.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1.1fr_1fr_minmax(340px,1.2fr)] lg:items-center">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-500 ring-1 ring-rose-100">
+                      <Heart className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-paradise-noir">{request.employee}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">Malattia</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-black/5 bg-neutral-50 px-4 py-3">
+                    <p className="flex items-center gap-2 text-sm font-bold text-paradise-noir">
+                      <Calendar className="size-3.5 text-black/35" />
+                      {formatDate(request.startDate)}
+                      <span className="text-black/25">→</span>
+                      {formatDate(request.endDate)}
+                    </p>
+                    {request.reason ? (
+                      <p className="mt-1 line-clamp-1 text-xs italic text-black/45">{request.reason}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-100 bg-rose-50/40 p-3">
+                    <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-rose-700">
+                      <AlertCircle className="size-3.5" />
+                      Protocollo obbligatorio
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                      <input
+                        type="text"
+                        value={draft}
+                        placeholder="Es. INPS123456"
+                        onChange={(event) => setMedicalDrafts((current) => ({ ...current, [request.id]: event.target.value }))}
+                        className="h-10 min-w-0 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
+                      />
+                      <button
+                        onClick={async () => {
+                          const inputVal = draft.trim();
+                          if (!inputVal) return alert("Inserisci un codice valido.");
+                          await updateSicknessJustification(request.id, { medicalCode: inputVal });
+                          setMedicalDrafts((current) => ({ ...current, [request.id]: "" }));
+                        }}
+                        disabled={saving === request.id}
+                        className="h-10 rounded-xl bg-rose-600 px-4 text-sm font-black text-white transition hover:bg-rose-700 active:scale-95 disabled:opacity-50"
+                      >
+                        Salva
+                      </button>
+                      <button
+                        onClick={() => updateSicknessJustification(request.id, { sicknessUnjustified: true })}
+                        disabled={saving === request.id}
+                        className="h-10 rounded-xl border border-rose-200 bg-white px-4 text-sm font-black text-rose-700 transition hover:bg-rose-50 active:scale-95 disabled:opacity-50"
+                      >
+                        Non giustificata
+                      </button>
+                    </div>
+                    {canApprove && isPending ? (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button
+                          disabled={saving === request.id}
+                          onClick={() => changeStatus(request.id, "APPROVED")}
+                          className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                        >
+                          <Check className="size-3.5" /> Approva
+                        </button>
+                        <button
+                          disabled={saving === request.id}
+                          onClick={() => changeStatus(request.id, "REJECTED")}
+                          className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          <X className="size-3.5" /> Rifiuta
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {activeFilter !== "JUSTIFY" && activeSection ? (
+        <section className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-neutral-50 ring-1 ring-black/5">
+                    {getRequestIcon(activeSection.type)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/35">Categoria</p>
+                    <h2 className="mt-1 text-lg font-black text-paradise-noir">{activeSection.title}</h2>
+                    <p className="mt-0.5 text-xs text-black/45">{activeSection.description}</p>
+                  </div>
+                </div>
+                <Badge tone={activeSection.tone}>{activeSection.items.length} richieste</Badge>
+              </div>
+
+              {activeSection.items.length === 0 ? (
+                <div className="px-5 py-6 text-sm font-semibold text-black/35">
+                  Nessuna richiesta in questa categoria.
+                </div>
+              ) : (
+                <div className="divide-y divide-black/5">
+                  {activeSection.items.map((request) => {
           const isPending = request.status === "PENDING";
           const isApproved = request.status === "APPROVED";
           const isRejected = request.status === "REJECTED";
           const isFlagged = request.status === "FLAGGED";
-          
+
           return (
-            <Card 
+            <div
               key={request.id}
               className={cn(
-                "relative overflow-hidden p-5 border transition-all duration-300 hover:shadow-luxury bg-white/95",
-                isApproved && "border-emerald-500/30 bg-gradient-to-br from-white to-emerald-500/5",
-                isRejected && "border-rose-500/20 bg-gradient-to-br from-white to-rose-500/5",
-                isFlagged && "border-paradise-gold/30 bg-gradient-to-br from-white to-paradise-gold/5",
-                isPending && "border-black/5"
+                "grid gap-4 px-5 py-4 transition-colors hover:bg-neutral-50/70 xl:grid-cols-[1.2fr_1fr_1.3fr_auto] xl:items-center",
+                isRejected && "bg-rose-50/25",
+                isFlagged && "bg-amber-50/30"
               )}
             >
-              {/* Colored status line indicator */}
-              <div 
-                className={cn(
-                  "absolute top-0 left-0 right-0 h-1",
-                  isApproved && "bg-emerald-500",
-                  isRejected && "bg-rose-500",
-                  isFlagged && "bg-paradise-gold",
-                  isPending && "bg-neutral-300"
-                )}
-              />
-
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  {/* Category icon indicator */}
+              <div className="flex min-w-0 items-center gap-3">
                   <div className={cn(
-                    "flex size-9 items-center justify-center rounded-xl shadow-sm border",
+                    "flex size-10 shrink-0 items-center justify-center rounded-2xl border",
                     isApproved && "bg-emerald-500/10 border-emerald-500/20",
                     isRejected && "bg-rose-500/10 border-rose-500/20",
                     isFlagged && "bg-paradise-gold/15 border-paradise-gold/30",
@@ -276,70 +499,69 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   )}>
                     {getRequestIcon(request.type)}
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-paradise-noir">
-                      {typeLabels[request.type] || request.type}
-                    </h3>
-                    <p className="text-[10px] text-black/40 font-semibold tracking-wide uppercase mt-0.5">
-                      Categoria
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? typeLabels[request.type] : request.employee}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">
+                      {employeeView ? statusLabels[request.status] : typeLabels[request.type]}
                     </p>
                   </div>
-                </div>
-
-                <Badge tone={isApproved ? "green" : isFlagged ? "gold" : "pink"}>
-                  {statusLabels[request.status]}
-                </Badge>
               </div>
 
-              {/* Date details and duration */}
-              <div className="mt-4 rounded-xl border border-black/5 bg-neutral-50/50 p-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-paradise-noir">
+              <div className="rounded-2xl border border-black/5 bg-neutral-50 px-4 py-3">
+                <p className="flex items-center gap-2 text-sm font-bold text-paradise-noir">
                   <Calendar className="size-3.5 text-black/35" />
-                  <span>{formatDate(request.startDate)}</span>
-                  <span className="text-black/30">→</span>
-                  <span>{formatDate(request.endDate)}</span>
-                </div>
-                
-                {(request.startTime || request.endTime) && (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-black/55 border-t border-black/5 pt-2">
-                    <Clock className="size-3.5 text-black/35" />
-                    <span>Orario: <strong>{request.startTime ?? "--:--"} - {request.endTime ?? "--:--"}</strong></span>
-                  </div>
+                  {formatDate(request.startDate)}
+                  <span className="text-black/25">→</span>
+                  {formatDate(request.endDate)}
+                </p>
+                {(request.startTime || request.endTime) ? (
+                  <p className="mt-1 flex items-center gap-2 text-xs font-semibold text-black/50">
+                    <Clock className="size-3.5 text-black/30" />
+                    {request.startTime ?? "--:--"} - {request.endTime ?? "--:--"}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="min-w-0">
+                {request.type === "MALATTIA" ? (
+                  <Badge tone={request.medicalCode ? (isApproved ? "green" : "gold") : request.sicknessUnjustified ? "pink" : "gold"}>
+                    {request.medicalCode
+                      ? (isApproved ? "Malattia Giustificata" : "Malattia (Certificato Inviato)")
+                      : request.sicknessUnjustified ? "Non Giustificata" : "Protocollo Mancante"}
+                  </Badge>
+                ) : (
+                  <Badge tone={isApproved ? "green" : isFlagged ? "gold" : "pink"}>
+                    {statusLabels[request.status]}
+                  </Badge>
                 )}
+                {request.medicalCode ? (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                    <ShieldCheck className="size-3.5" />
+                    <span className="font-mono">{request.medicalCode}</span>
+                  </p>
+                ) : request.sicknessUnjustified ? (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-rose-700">
+                    <AlertCircle className="size-3.5" />
+                    Non giustificata
+                  </p>
+                ) : request.reason ? (
+                  <p className="mt-2 line-clamp-1 text-xs italic text-black/45">{request.reason}</p>
+                ) : null}
               </div>
 
-              {/* Notes block */}
-              <div className="mt-4 min-h-[48px] rounded-xl border border-neutral-100 bg-neutral-50/30 px-3.5 py-2.5 text-xs text-black/60 italic leading-relaxed">
-                {request.reason ? `"${request.reason}"` : "Nessuna motivazione inserita."}
-              </div>
-
-              {/* Employee ID tag if manager view */}
-              {!employeeView && (
-                <div className="mt-4 flex items-center gap-2.5 border-t border-black/5 pt-3.5">
-                  <div className="flex size-7.5 items-center justify-center rounded-full bg-paradise-pink/20 text-[#B85B68] text-xs font-extrabold shadow-sm border border-paradise-pink/30">
-                    {request.employee.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-paradise-noir leading-none">{request.employee}</p>
-                    <p className="text-[9px] text-black/40 font-semibold uppercase tracking-wide mt-0.5">Dipendente</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Manager decision actions */}
               {canApprove && isPending && (
-                <div className="mt-5 flex gap-2 border-t border-black/5 pt-4">
-                  <button 
-                    disabled={saving === request.id} 
+                <div className="flex gap-2">
+                  <button
+                    disabled={saving === request.id}
                     onClick={() => changeStatus(request.id, "APPROVED")}
-                    className="flex-1 flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-white font-bold text-xs shadow-sm hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white shadow-sm transition-colors hover:bg-emerald-600 disabled:opacity-50"
                   >
                     <Check className="size-3.5" /> Approva
                   </button>
-                  <button 
-                    disabled={saving === request.id} 
+                  <button
+                    disabled={saving === request.id}
                     onClick={() => changeStatus(request.id, "REJECTED")}
-                    className="flex-1 flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-white border border-rose-200 text-rose-600 font-bold text-xs shadow-sm hover:bg-rose-50 transition-colors disabled:opacity-50"
+                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 shadow-sm transition-colors hover:bg-rose-50 disabled:opacity-50"
                   >
                     <X className="size-3.5" /> Rifiuta
                   </button>
@@ -347,9 +569,9 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
               )}
 
               {role === "RESPONSABILE" && isPending && (
-                <div className="mt-4 border-t border-black/5 pt-4">
-                  <button 
-                    disabled={saving === request.id} 
+                <div>
+                  <button
+                    disabled={saving === request.id}
                     onClick={() => changeStatus(request.id, "FLAGGED")}
                     className="w-full flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-paradise-gold/20 border border-paradise-gold/30 text-amber-800 font-bold text-xs shadow-sm hover:bg-paradise-gold/30 transition-colors disabled:opacity-50"
                   >
@@ -357,11 +579,13 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   </button>
                 </div>
               )}
-            </Card>
+            </div>
           );
-        })}
-      </div>
+                  })}
+                </div>
+              )}
+        </section>
+      ) : null}
     </>
   );
 }
-

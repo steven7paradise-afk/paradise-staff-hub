@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
           start_time: startTime,
           end_time: endTime,
           reason: payload.reason ? String(payload.reason) : null,
+          medical_code: payload.medicalCode ? String(payload.medicalCode).trim() : null,
+          sickness_unjustified: false,
           status: managementRoles.has(session.user.role) && payload.approveNow === true ? "APPROVED" : "PENDING",
           approved_by: managementRoles.has(session.user.role) && payload.approveNow === true ? session.user.id : null,
         },

@@ -29,6 +29,9 @@ type WorkRecord = {
   plannedStart: string | null;
   plannedEnd: string | null;
   categoryCode: string | null;
+  leaveType: "FERIE" | "PERMESSO" | "RIPOSO" | "MALATTIA" | "ALTRO" | null;
+  medicalCode: string | null;
+  sicknessUnjustified: boolean;
 };
 
 const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
@@ -53,6 +56,34 @@ function getControlHours(record?: Omit<WorkRecord, "userId" | "date"> & { schedu
     return controlHours;
   }
   return record.scheduledHours ?? 0;
+}
+
+function getAbsenceLabel(record?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
+  if (!record) return "-";
+  const type = record.leaveType;
+  const code = record.categoryCode?.toUpperCase() ?? "";
+
+  if (type === "PERMESSO" || code === "P" || code === "PE") return "Permesso";
+  if (type === "FERIE" || code === "F" || code === "FE") return "Ferie";
+  if (type === "RIPOSO" || code === "R" || code === "RI" || code === "R3") return "Riposo";
+  if (type === "MALATTIA" || code === "M" || code === "MA" || code === "ML") {
+    if (record.medicalCode) return "Malattia giustificata";
+    if (record.sicknessUnjustified) return "Malattia non giustificata";
+    return "Malattia da giustificare";
+  }
+  if (type === "ALTRO" || code === "A" || code === "AI") return "Altro";
+  return "-";
+}
+
+function getAbsenceClass(label: string) {
+  if (label === "Permesso") return "bg-amber-50 text-amber-800 border-amber-200";
+  if (label === "Ferie") return "bg-sky-50 text-sky-800 border-sky-200";
+  if (label === "Riposo") return "bg-emerald-50 text-emerald-800 border-emerald-200";
+  if (label === "Malattia giustificata") return "bg-emerald-50 text-emerald-800 border-emerald-200";
+  if (label === "Malattia non giustificata") return "bg-rose-50 text-rose-800 border-rose-200";
+  if (label === "Malattia da giustificare") return "bg-red-50 text-red-800 border-red-200";
+  if (label === "Altro") return "bg-neutral-100 text-neutral-700 border-neutral-200";
+  return "text-black/35";
 }
 
 export function WorkHoursManager({
@@ -146,6 +177,9 @@ export function WorkHoursManager({
         plannedStart: record.plannedStart ?? null,
         plannedEnd: record.plannedEnd ?? null,
         categoryCode: record.categoryCode ?? null,
+        leaveType: record.leaveType ?? null,
+        medicalCode: record.medicalCode ?? null,
+        sicknessUnjustified: record.sicknessUnjustified ?? false,
       };
     });
     setRecords(map);
@@ -214,7 +248,7 @@ export function WorkHoursManager({
   }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
-    return { hours: "", note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null };
+    return { hours: "", note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null, leaveType: null, medicalCode: null, sicknessUnjustified: false };
   }
 
   function updateLocal(day: Date, key: "hours" | "note" | "paidBreak" | "manualOverride", value: string | boolean) {
@@ -310,6 +344,9 @@ export function WorkHoursManager({
           plannedStart: data.plannedStart ?? record.plannedStart,
           plannedEnd: data.plannedEnd ?? record.plannedEnd,
           categoryCode: data.categoryCode ?? record.categoryCode,
+          leaveType: data.leaveType ?? record.leaveType,
+          medicalCode: data.medicalCode ?? record.medicalCode,
+          sicknessUnjustified: data.sicknessUnjustified ?? record.sicknessUnjustified,
         },
       };
     });
@@ -734,6 +771,12 @@ export function WorkHoursManager({
                         </Badge>
                       </div>
 
+                      {getAbsenceLabel(record) !== "-" ? (
+                        <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-black ${getAbsenceClass(getAbsenceLabel(record))}`}>
+                          {getAbsenceLabel(record)}
+                        </div>
+                      ) : null}
+
                       <div className="mt-4 grid grid-cols-2 gap-3">
                         <div className="rounded-2xl border border-black/5 bg-neutral-50 p-3">
                           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-black/40">Lavorate</p>
@@ -835,7 +878,7 @@ export function WorkHoursManager({
                 <th className="px-3.5 py-4">Pausa</th>
                 <th className="px-3.5 py-4">Entrata (Timbr.)</th>
                 <th className="px-3.5 py-4">Uscita (Timbr.)</th>
-                <th className="px-3.5 py-4">Permessi</th>
+                <th className="px-3.5 py-4">Segnalazione</th>
                 <th className="px-3.5 py-4">Totale Ore</th>
                 <th className="px-3.5 py-4">Controllo</th>
                 <th className="px-3.5 py-4">Note</th>
@@ -927,11 +970,15 @@ export function WorkHoursManager({
                           <td className="px-3.5 py-3.5 text-xs font-semibold text-black/55 dark:text-white/55">
                             {record.lastExit ?? "-"}
                           </td>
-                          {/* 8. Permessi */}
-                          <td className="px-3.5 py-3.5 text-xs font-bold text-amber-700 dark:text-paradise-gold">
-                            {record.categoryCode === "P" || record.categoryCode === "PE" ? "Permesso" :
-                             record.categoryCode === "FE" || record.categoryCode === "F" ? "Ferie" :
-                             record.categoryCode === "M" || record.categoryCode === "MA" ? "Malattia" : "-"}
+                          {/* 8. Segnalazione */}
+                          <td className="px-3.5 py-3.5">
+                            {getAbsenceLabel(record) === "-" ? (
+                              <span className="text-xs font-bold text-black/30">-</span>
+                            ) : (
+                              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black ${getAbsenceClass(getAbsenceLabel(record))}`}>
+                                {getAbsenceLabel(record)}
+                              </span>
+                            )}
                           </td>
                           {/* 9. Totale Ore */}
                           <td className="px-3.5 py-3.5 font-bold text-black/65 dark:text-white/65">

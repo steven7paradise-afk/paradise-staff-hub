@@ -301,6 +301,8 @@ model LeaveRequest {
   approved_by String?
   google_calendar_event_id String?
   created_at  DateTime      @default(now())
+  medical_code String?
+  sickness_unjustified Boolean @default(false)
   user        User          @relation("UserLeaveRequests", fields: [user_id], references: [id])
   approver    User?         @relation("LeaveApprover", fields: [approved_by], references: [id])
 
@@ -614,4 +616,3 @@ model ShopifyOrderComment {
   @@index([order_name])
   @@map("shopify_order_comments")
 }
-

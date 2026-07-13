@@ -164,6 +164,50 @@ type TabletBranding = {
   button_color: string;
 };
 
+interface SmoothInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
+  value: string;
+  onChange: (val: string) => void;
+}
+
+function SmoothInput({ value, onChange, ...props }: SmoothInputProps) {
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  return (
+    <input
+      {...props}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={() => onChange(localValue)}
+    />
+  );
+}
+
+interface SmoothTextareaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange"> {
+  value: string;
+  onChange: (val: string) => void;
+}
+
+function SmoothTextarea({ value, onChange, ...props }: SmoothTextareaProps) {
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  return (
+    <textarea
+      {...props}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={() => onChange(localValue)}
+    />
+  );
+}
+
 export function TabletClock({
   device,
   branding,
@@ -1789,9 +1833,9 @@ export function TabletClock({
                           <div className="grid gap-3 md:grid-cols-2">
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Nome cliente *</span>
-                              <input
+                              <SmoothInput
                                 value={appointmentForm.clientName}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, clientName: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, clientName: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="Nome cliente"
                               />
@@ -1799,9 +1843,9 @@ export function TabletClock({
 
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Email cliente</span>
-                              <input
+                              <SmoothInput
                                 value={appointmentForm.email}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, email: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, email: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="email@esempio.com"
                               />
@@ -1809,9 +1853,9 @@ export function TabletClock({
 
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Telefono cliente</span>
-                              <input
+                              <SmoothInput
                                 value={appointmentForm.phone}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, phone: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, phone: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="+39..."
                               />
@@ -1829,9 +1873,9 @@ export function TabletClock({
 
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Ordine Shopify *</span>
-                              <input
+                              <SmoothInput
                                 value={appointmentForm.shopifyOrder}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, shopifyOrder: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, shopifyOrder: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="Numero ordine (es. 22910)"
                               />
@@ -1839,10 +1883,10 @@ export function TabletClock({
 
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Acconto pagato (€)</span>
-                              <input
+                              <SmoothInput
                                 inputMode="decimal"
                                 value={appointmentForm.depositPaid}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, depositPaid: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, depositPaid: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="0.00"
                               />
@@ -1850,10 +1894,10 @@ export function TabletClock({
 
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Pagato (€)</span>
-                              <input
+                              <SmoothInput
                                 inputMode="decimal"
                                 value={appointmentForm.paid}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, paid: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, paid: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="0.00"
                               />
@@ -1861,9 +1905,9 @@ export function TabletClock({
 
                             <label className="block">
                               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">IG tag</span>
-                              <input
+                              <SmoothInput
                                 value={appointmentForm.instagramTag}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, instagramTag: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, instagramTag: val }))}
                                 className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                                 placeholder="@cliente"
                               />
@@ -1896,9 +1940,9 @@ export function TabletClock({
                                   )}
                                 </button>
                               </div>
-                              <textarea
+                              <SmoothTextarea
                                 value={appointmentForm.customNoteText}
-                                onChange={(e) => setAppointmentForm((prev) => ({ ...prev, customNoteText: e.target.value }))}
+                                onChange={(val) => setAppointmentForm((prev) => ({ ...prev, customNoteText: val }))}
                                 className="mt-1 min-h-20 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
                                 placeholder="Scrivi qui la nota da aggiungere o clicca 'Ditta a voce' per registrare"
                               />
@@ -2305,23 +2349,23 @@ export function TabletClock({
                             ))}
                           </select>
                         ) : field.type === "textarea" ? (
-                          <textarea
+                          <SmoothTextarea
                             value={String(val ?? "")}
-                            onChange={(e) =>
+                            onChange={(val) =>
                               setClientResponseDraft((prev) => ({
                                 ...prev,
-                                [field.id]: e.target.value,
+                                [field.id]: val,
                               }))
                             }
                             className="mt-2 min-h-28 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm outline-none"
                           />
                         ) : (
-                          <input
+                          <SmoothInput
                             value={Array.isArray(val) ? val.join(", ") : String(val ?? "")}
-                            onChange={(e) =>
+                            onChange={(val) =>
                               setClientResponseDraft((prev) => ({
                                 ...prev,
-                                [field.id]: field.type === "worker_multi" ? e.target.value.split(",").map((s) => s.trim()).filter(Boolean) : e.target.value,
+                                [field.id]: field.type === "worker_multi" ? val.split(",").map((s) => s.trim()).filter(Boolean) : val,
                               }))
                             }
                             className="mt-2 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none"

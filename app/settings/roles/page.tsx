@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { RolesSettingsClient } from "./roles-settings-client";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +11,17 @@ export default async function RolesSettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
   const role = session.user.role as Role;
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/settings/roles", accessUser)
+    : (role === "SUPER_ADMIN" || role === "ADMIN");
+
+  if (!canAccessPage) {
     redirect("/dashboard");
   }
 

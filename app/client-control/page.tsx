@@ -4,7 +4,7 @@ import { ClientControlDashboard } from "@/app/client-control/client-control-dash
 import { auth } from "@/lib/auth";
 import { ensureClientControlForm, isClientControlFormName, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,19 @@ export default async function ClientControlPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
   const role = session.user.role as Role;
-  if (!allowedRoles.has(role)) redirect("/dashboard");
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/client-control", accessUser)
+    : allowedRoles.has(role);
+
+  if (!canAccessPage) {
+    redirect("/dashboard");
+  }
 
   await ensureClientControlForm(session.user.id);
 

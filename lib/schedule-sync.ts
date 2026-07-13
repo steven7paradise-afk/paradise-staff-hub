@@ -127,3 +127,25 @@ export async function syncApprovedLeaveToSchedule(
 
   return { syncedDays: days.length, categoryCode: category.code };
 }
+
+export async function revertApprovedLeaveFromSchedule(
+  prisma: any,
+  leaveRequestId: string,
+) {
+  const leaveRequest = await prisma.leaveRequest.findUnique({
+    where: { id: leaveRequestId },
+  });
+
+  if (!leaveRequest) return;
+
+  const days = daysBetweenInclusive(leaveRequest.start_date, leaveRequest.end_date);
+
+  await prisma.scheduleEntry.deleteMany({
+    where: {
+      user_id: leaveRequest.user_id,
+      date: {
+        in: days,
+      },
+    },
+  });
+}

@@ -60,12 +60,12 @@ export async function POST(request: NextRequest) {
 
   const actualTimestamp = new Date();
 
-  // Cooldown check (60 seconds)
+  // Cooldown check (5 seconds)
   if (latestLog) {
     const secondsSinceLastLog = (actualTimestamp.getTime() - new Date(latestLog.timestamp).getTime()) / 1000;
-    if (secondsSinceLastLog < 60) {
+    if (secondsSinceLastLog < 5) {
       return NextResponse.json(
-        { error: "Attendi 1 minuto prima di effettuare un'altra timbratura." },
+        { error: "Attendi qualche secondo prima di effettuare un'altra timbratura." },
         { status: 429 }
       );
     }
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
       const breakInfo = `Pausa durata: ${breakDurationMins} min`;
       finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;
     }
-    await appendAttendanceToGoogleSheet({
+    appendAttendanceToGoogleSheet({
       date: new Intl.DateTimeFormat("it-IT").format(timestamp),
       time,
       employeeName: user.name,
@@ -210,6 +210,8 @@ export async function POST(request: NextRequest) {
       type,
       deviceName: device.device_name,
       note: finalNote,
+    }).catch((err) => {
+      console.error("Failed to append to Google Sheet asynchronously:", err);
     });
   }
 

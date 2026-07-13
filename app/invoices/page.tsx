@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { DownloadInvoicePdfButton } from "@/components/download-invoice-pdf-button";
@@ -38,8 +38,17 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
   const role = session.user.role as Role;
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/invoices", accessUser)
+    : (role === "SUPER_ADMIN" || role === "ADMIN");
+
+  if (!canAccessPage) {
     redirect("/dashboard");
   }
 

@@ -37,6 +37,23 @@ function isWorkCategory(category: { code: string; name: string }) {
   return true;
 }
 
+function dayKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetweenInclusive(startDate: Date, endDate: Date) {
+  const days: Date[] = [];
+  const cursor = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+  const end = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()));
+
+  while (cursor <= end) {
+    days.push(new Date(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return days;
+}
+
 const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
@@ -53,7 +70,7 @@ export async function GET(request: NextRequest) {
 
   const start = new Date(Date.UTC(year, month, 1));
   const end = new Date(Date.UTC(year, month + 1, 1));
-  const [records, logs, scheduleEntries] = await Promise.all([
+  const [records, logs, scheduleEntries, leaveRequests] = await Promise.all([
     prisma.workHourRecord.findMany({ where: { date: { gte: start, lt: end } } }),
     prisma.attendanceLog.findMany({
       where: { date: { gte: start, lt: end }, user: { role: { not: "SUPER_ADMIN" } } },
@@ -63,6 +80,22 @@ export async function GET(request: NextRequest) {
     prisma.scheduleEntry.findMany({
       where: { date: { gte: start, lt: end }, user: { role: { not: "SUPER_ADMIN" } } },
       include: { category: true },
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        status: "APPROVED",
+        user: { role: { not: "SUPER_ADMIN" } },
+        start_date: { lt: end },
+        end_date: { gte: start },
+      },
+      select: {
+        user_id: true,
+        type: true,
+        start_date: true,
+        end_date: true,
+        medical_code: true,
+        sickness_unjustified: true,
+      },
     }),
   ]);
 
@@ -78,8 +111,20 @@ export async function GET(request: NextRequest) {
     scheduleGroups.set(key, entry);
   });
 
+  const leaveGroups = new Map<string, typeof leaveRequests[0]>();
+  leaveRequests.forEach((leave) => {
+    daysBetweenInclusive(leave.start_date, leave.end_date).forEach((date) => {
+      if (date < start || date >= end) return;
+      const key = `${leave.user_id}-${dayKey(date)}`;
+      const existing = leaveGroups.get(key);
+      if (!existing || leave.type === "MALATTIA") {
+        leaveGroups.set(key, leave);
+      }
+    });
+  });
+
   const stored = new Map(records.map((record) => [`${record.user_id}-${record.date.toISOString().slice(0, 10)}`, record]));
-  const keys = new Set([...clockGroups.keys(), ...stored.keys(), ...scheduleGroups.keys()]);
+  const keys = new Set([...clockGroups.keys(), ...stored.keys(), ...scheduleGroups.keys(), ...leaveGroups.keys()]);
   const rows = Array.from(keys).map((key) => {
     const record = stored.get(key);
     const clock = calculateClockHours(clockGroups.get(key) ?? []);
@@ -87,6 +132,7 @@ export async function GET(request: NextRequest) {
     const automaticHours = paidBreak ? clock.grossHours : clock.netHours;
 
     const schedule = scheduleGroups.get(key);
+    const leave = leaveGroups.get(key);
     let scheduledHours = 0;
     let plannedStart: string | null = null;
     let plannedEnd: string | null = null;
@@ -115,6 +161,9 @@ export async function GET(request: NextRequest) {
       plannedStart,
       plannedEnd,
       categoryCode,
+      leaveType: leave?.type ?? null,
+      medicalCode: leave?.medical_code ?? null,
+      sicknessUnjustified: leave?.sickness_unjustified ?? false,
       ...clock,
     };
   });
@@ -165,6 +214,20 @@ export async function PUT(request: NextRequest) {
   if (schedule && !isWorkCategory(schedule.category)) {
     defaultNote = schedule.category.name;
   }
+  const leave = await prisma.leaveRequest.findFirst({
+    where: {
+      user_id: userId,
+      status: "APPROVED",
+      start_date: { lte: dayStart },
+      end_date: { gte: dayStart },
+    },
+    orderBy: [{ type: "desc" }, { created_at: "desc" }],
+    select: {
+      type: true,
+      medical_code: true,
+      sickness_unjustified: true,
+    },
+  });
 
   const record = await prisma.workHourRecord.upsert({
     where: { user_id_date: { user_id: userId, date } },
@@ -180,6 +243,12 @@ export async function PUT(request: NextRequest) {
     note: record.note ?? defaultNote,
     paidBreak: record.paid_break,
     manualOverride: record.manual_override,
+    plannedStart: schedule?.start_time ?? schedule?.category.start_time ?? null,
+    plannedEnd: schedule?.end_time ?? schedule?.category.end_time ?? null,
+    categoryCode: schedule?.category.code ?? null,
+    leaveType: leave?.type ?? null,
+    medicalCode: leave?.medical_code ?? null,
+    sicknessUnjustified: leave?.sickness_unjustified ?? false,
     ...clock,
   });
 }

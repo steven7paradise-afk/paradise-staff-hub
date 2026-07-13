@@ -7,16 +7,27 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export default async function DocumentsPage() {
+const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+
+export default async function CedoliniPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const employeeView = true;
   
-  const documents = await prisma.document.findMany({
-    where: { user_id: session.user.id },
-    include: { user: true },
-    orderBy: { created_at: "desc" },
-  });
+  if (!allowedRoles.has(session.user.role)) {
+    redirect("/dashboard");
+  }
+
+  const [documents, workers] = await Promise.all([
+    prisma.document.findMany({
+      include: { user: true },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.user.findMany({
+      where: { active: true, role: { not: "SUPER_ADMIN" } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const documentItems: DocumentRecord[] = documents.map((document) => ({
     id: document.id,
@@ -36,17 +47,15 @@ export default async function DocumentsPage() {
 
   return (
     <AppShell 
-      title="Documenti" 
-      subtitle={employeeView ? "Le tue buste paga e i tuoi documenti HR riservati." : "Buste paga, contratti e documenti HR con accesso riservato al dipendente corretto."}
+      title="Cedolini" 
+      subtitle="Carica e gestisci i cedolini, contratti e documenti HR di tutti i collaboratori."
       hidePageHeaderOnMobile
     >
-      {!employeeView ? (
-        <div className="mb-6">
-          <DocumentUpload workers={workers} />
-        </div>
-      ) : null}
+      <div className="mb-6">
+        <DocumentUpload workers={workers} />
+      </div>
       
-      <DocumentsViewer documents={documentItems} employeeView={employeeView} />
+      <DocumentsViewer documents={documentItems} employeeView={false} />
     </AppShell>
   );
 }

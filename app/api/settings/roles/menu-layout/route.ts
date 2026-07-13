@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || session.user.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Non autorizzato. Solo i Super Admin possono modificare il layout della sidebar." }, { status: 403 });
+  if (!session?.user?.id || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
+    return NextResponse.json({ error: "Non autorizzato. Solo gli Admin e Super Admin possono modificare il layout della sidebar." }, { status: 403 });
   }
 
   try {

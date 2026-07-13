@@ -5,7 +5,7 @@ import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { syncApprovedLeaveToSchedule } from "@/lib/schedule-sync";
+import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule } from "@/lib/schedule-sync";
 
 const approverRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 
@@ -20,21 +20,41 @@ export async function PATCH(
 
   const { id } = await context.params;
   const payload = await request.json();
-  const status = String(payload.status ?? "") as RequestStatus;
-
-  if (!Object.values(RequestStatus).includes(status)) {
-    return NextResponse.json({ error: "Stato richiesta non valido" }, { status: 400 });
-  }
-  if (!approverRoles.has(session.user.role) && !(session.user.role === "RESPONSABILE" && status === "FLAGGED")) {
-    return NextResponse.json({ error: "Operazione non consentita per il ruolo" }, { status: 403 });
-  }
+  const status = payload.status ? (String(payload.status) as RequestStatus) : undefined;
+  const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
+  const sicknessUnjustified = payload.sicknessUnjustified !== undefined ? Boolean(payload.sicknessUnjustified) : undefined;
 
   const existing = await prisma.leaveRequest.findUnique({ where: { id }, include: { user: true } });
   if (!existing) {
     return NextResponse.json({ error: "Richiesta non trovata" }, { status: 404 });
   }
-  if (session.user.role === "RESPONSABILE" && existing.user.sede_id !== session.user.sedeId) {
-    return NextResponse.json({ error: "Richiesta fuori dalla propria sede" }, { status: 403 });
+
+  const isOwnRequest = existing.user_id === session.user.id;
+  const isAdmin = approverRoles.has(session.user.role);
+  const isResponsabile = session.user.role === "RESPONSABILE";
+
+  // Check permissions for status change
+  if (status !== undefined) {
+    if (!Object.values(RequestStatus).includes(status)) {
+      return NextResponse.json({ error: "Stato richiesta non valido" }, { status: 400 });
+    }
+    if (!isAdmin && !(isResponsabile && status === "FLAGGED")) {
+      return NextResponse.json({ error: "Operazione non consentita per il ruolo" }, { status: 403 });
+    }
+    if (isResponsabile && existing.user.sede_id !== session.user.sedeId) {
+      return NextResponse.json({ error: "Richiesta fuori dalla propria sede" }, { status: 403 });
+    }
+  }
+
+  // Check permissions for sickness justification changes
+  if (medicalCode !== undefined || sicknessUnjustified !== undefined) {
+    const canUpdateCode = isOwnRequest || isAdmin || (isResponsabile && existing.user.sede_id === session.user.sedeId);
+    if (!canUpdateCode) {
+      return NextResponse.json({ error: "Non autorizzato a modificare la giustificazione della malattia" }, { status: 403 });
+    }
+    if (existing.type !== "MALATTIA") {
+      return NextResponse.json({ error: "La giustificazione si applica solo alle malattie." }, { status: 400 });
+    }
   }
 
   let leaveRequest;
@@ -45,8 +65,10 @@ export async function PATCH(
       const updated = await tx.leaveRequest.update({
         where: { id },
         data: {
-          status,
-          approved_by: status === "APPROVED" ? session.user.id : null,
+          ...(status !== undefined ? { status } : {}),
+          ...(status === "APPROVED" ? { approved_by: session.user.id } : status === "REJECTED" || status === "PENDING" ? { approved_by: null } : {}),
+          ...(medicalCode !== undefined ? { medical_code: medicalCode, sickness_unjustified: false } : {}),
+          ...(sicknessUnjustified !== undefined ? { sickness_unjustified: sicknessUnjustified, ...(sicknessUnjustified ? { medical_code: null } : {}) } : {}),
         },
         include: { user: true },
       });
@@ -54,6 +76,8 @@ export async function PATCH(
       let syncResult = null;
       if (status === "APPROVED") {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
+      } else if (status !== undefined && existing.status === "APPROVED") {
+        await revertApprovedLeaveFromSchedule(tx, updated.id);
       }
 
       return { updated, syncResult };
@@ -80,33 +104,35 @@ export async function PATCH(
     };
   }
 
-  const template = emailTemplates.leaveRequestDecision(
-    leaveRequest.user.name,
-    status,
-    leaveRequest.type,
-    leaveRequest.start_date,
-    leaveRequest.end_date
-  );
+  if (status !== undefined) {
+    const template = emailTemplates.leaveRequestDecision(
+      leaveRequest.user.name,
+      status,
+      leaveRequest.type,
+      leaveRequest.start_date,
+      leaveRequest.end_date
+    );
 
-  // Send email (non-blocking, failure won't rollback or crash HTTP response)
-  try {
-    await sendEmail({ to: leaveRequest.user.email, ...template });
-  } catch (error) {
-    console.error("Errore nell'invio dell'email per la decisione sulla richiesta:", error);
-  }
+    // Send email (non-blocking, failure won't rollback or crash HTTP response)
+    try {
+      await sendEmail({ to: leaveRequest.user.email, ...template });
+    } catch (error) {
+      console.error("Errore nell'invio dell'email per la decisione sulla richiesta:", error);
+    }
 
-  // Create notification in database and trigger push/WhatsApp (non-blocking)
-  try {
-    await createNotification({
-      user_id: leaveRequest.user_id,
-      title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
-      message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
-      type: "RICHIESTA",
-      action_url: "/requests",
-      read: false,
-    });
-  } catch (error) {
-    console.error("Errore nella creazione della notifica in database:", error);
+    // Create notification in database and trigger push/WhatsApp (non-blocking)
+    try {
+      await createNotification({
+        user_id: leaveRequest.user_id,
+        title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
+        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
+        type: "RICHIESTA",
+        action_url: "/requests",
+        read: false,
+      });
+    } catch (error) {
+      console.error("Errore nella creazione della notifica in database:", error);
+    }
   }
 
   return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });

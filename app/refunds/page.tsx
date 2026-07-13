@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { RefundRowActions } from "@/components/refund-row-actions";
@@ -35,8 +35,17 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
   const role = session.user.role as Role;
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/refunds", accessUser)
+    : (role === "SUPER_ADMIN" || role === "ADMIN");
+
+  if (!canAccessPage) {
     redirect("/dashboard");
   }
 
@@ -238,6 +247,15 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
                             responseId={res.id}
                             initialStatus={res.status}
                             initialNotes={res.internal_notes}
+                            refund={{
+                              id: res.id,
+                              created_at: res.created_at.toISOString(),
+                              user_location_name: res.user_location_name,
+                              user: res.user,
+                              status: res.status,
+                              internal_notes: res.internal_notes,
+                              answers: res.answers
+                            }}
                           />
                         </td>
                       </tr>

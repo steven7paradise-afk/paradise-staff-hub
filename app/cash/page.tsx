@@ -25,7 +25,7 @@ import {
 } from "@/lib/cash-closing-form";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { cashDateInput } from "@/lib/cash-records";
 import { VAULT_WITHDRAWAL_FIELD_IDS } from "@/lib/vault-withdrawal-form";
 import { calculateClockHours } from "@/lib/work-hours";
@@ -204,7 +204,17 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const isDarwin = session.user.id === "cmpms4o9h0003l809zof30mni" || !!session.user.email?.toLowerCase().includes("darwin");
   const role = session.user.role as Role;
-  if (role === "DIPENDENTE" && !isDarwin) redirect("/dashboard");
+
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
+  const canAccessPage = accessUser 
+    ? await canAccessForUser(prisma, "/cash", accessUser)
+    : (role !== "DIPENDENTE" || isDarwin);
+
+  if (!canAccessPage) redirect("/dashboard");
 
   await ensureCashClosingForm(session.user.id);
 

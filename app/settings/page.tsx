@@ -7,6 +7,8 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
 const allSettings = [
   { href: "/settings/branding", title: "Branding", text: "Colori, logo, dark mode e look premium.", icon: Palette, superAdminOnly: true },
@@ -24,9 +26,19 @@ const allSettings = [
 
 export default async function SettingsPage() {
   const session = await auth();
-  const role = session?.user?.role;
-  
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  if (!session?.user?.id) redirect("/login");
+
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
+  const role = session.user.role;
+  const canAccessPage = accessUser
+    ? await canAccessForUser(prisma, "/settings", accessUser)
+    : (role === "SUPER_ADMIN" || role === "ADMIN");
+
+  if (!canAccessPage) {
     redirect("/dashboard");
   }
 

@@ -47,6 +47,8 @@ export default async function RequestsPage() {
           endTime: request.end_time,
           reason: request.reason,
           status: request.status,
+          medicalCode: request.medical_code,
+          sicknessUnjustified: request.sickness_unjustified,
         }))}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? null }))}
       />
