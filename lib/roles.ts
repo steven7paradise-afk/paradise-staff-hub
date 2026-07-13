@@ -85,6 +85,13 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
     }
   }
 
+  // Abilita la pagina consulenza online per chiunque abbia "assistenza" nella mansione
+  if (pathname === "/consulenza-online" || pathname.startsWith("/consulenza-online/")) {
+    if (role === "DIPENDENTE" && mansione && mansione.toLowerCase().includes("assistenza")) {
+      return true;
+    }
+  }
+
   const match = Object.entries(routePermissions)
     .sort(([a], [b]) => b.length - a.length)
     .find(([route]) => pathname === route || pathname.startsWith(`${route}/`));

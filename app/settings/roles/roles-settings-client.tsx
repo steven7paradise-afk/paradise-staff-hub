@@ -235,6 +235,7 @@ const ROUTE_GROUPS = [
       "/tables",
       "/orders",
       "/appointments",
+      "/consulenza-online",
       "/profile",
       "/notifications"
     ]

@@ -246,6 +246,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   const userHasSocialAccess = currentUser?.mansione?.toLowerCase().includes("social");
   const userHasAppointmentsAccess = currentUser?.mansione?.toLowerCase().includes("assistenza");
+  const userHasOnlineConsultationsAccess = currentUser?.mansione?.toLowerCase().includes("assistenza");
   const userHasTaskAccess = hasTaskAccess(currentRole, currentUser?.mansione, currentUser?.location?.name);
   const tablesAccess = normalizeAssistanceTablesAccess(tablesAccessSetting?.value);
   const userHasTablesAccess = canUseAssistanceTables(currentRole, currentUser?.mansione, session?.user?.id, tablesAccess);
@@ -332,7 +333,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         ...(userHasTaskAccess ? [taskNavItem] : []),
         ...(userHasSocialAccess ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
         ...(userHasAppointmentsAccess ? [
-          { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" },
+          { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }
+        ] : []),
+        ...(userHasOnlineConsultationsAccess ? [
           { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }
         ] : []),
         ...(userHasTablesAccess ? [tablesNavItem] : []),
@@ -402,10 +405,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                       ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
                       : []),
                     ...(userHasAppointmentsAccess
-                      ? [
-                          { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" },
-                          { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video" }
-                        ]
+                      ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" }]
+                      : []),
+                    ...(userHasOnlineConsultationsAccess
+                      ? [{ href: "/consulenza-online", label: "Consulenza Online", iconName: "Video" }]
                       : []),
                   ]
                 : baseItems) as any
