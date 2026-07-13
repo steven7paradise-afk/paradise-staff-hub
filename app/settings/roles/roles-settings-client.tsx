@@ -41,7 +41,7 @@ type SidebarLayoutSetting =
 const DEFAULT_SIDEBAR_LAYOUT: SidebarFolder[] = [
   { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
   { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
-  { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/team"] },
+  { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/cedolini", "/malattie", "/team"] },
   { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
 ];
 
@@ -140,12 +140,15 @@ const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
   "/locations": { name: "Gestione Saloni", description: "Anagrafica dei saloni Paradise." },
   "/tablet-clock": { name: "Timbratrice Tablet", description: "Accesso all'interfaccia timbrature per tablet salone." },
   "/requests": { name: "Ferie & Permessi", description: "Richieste di congedo e approvazioni." },
-  "/documents": { name: "Buste Paga & Cedolini", description: "Archivio cedolini e documenti personali." },
+  "/documents": { name: "Documenti Personali", description: "Archivio personale di buste paga, contratti e documenti HR." },
+  "/cedolini": { name: "Cedolini", description: "Caricamento e gestione dei cedolini HR dei collaboratori." },
+  "/malattie": { name: "Malattie", description: "Registro malattie dello staff e verifica certificati medici." },
   "/service-notes": { name: "Note di Servizio", description: "Diario interno delle annotazioni operative." },
   "/service-forms": { name: "Moduli Operativi", description: "Compilazione dei moduli tecnici dei servizi." },
   "/tables": { name: "Tabelle Listini", description: "Visualizzazione tabelle listini e prezzi." },
   "/orders": { name: "Ordini (Kanban)", description: "Pipeline ordini per acquisto extension, conversioni e accessori." },
   "/appointments": { name: "Gestione Appuntamenti", description: "Planning e prenotazioni dei clienti." },
+  "/consulenza-online": { name: "Consulenza Online", description: "Calendario delle prenotazioni di consulenza online." },
   "/cash": { name: "Cassa & Chiusure", description: "Chiusure di cassa e monitoraggio cassaforte." },
   "/invoices": { name: "Richieste Fatture", description: "Registro richieste ed export per commercialista." },
   "/refunds": { name: "Rimborsi", description: "Gestione note di credito e rimborsi." },
@@ -250,7 +253,9 @@ const ROUTE_GROUPS = [
       "/client-control",
       "/recruitment",
       "/staff",
-      "/team"
+      "/team",
+      "/cedolini",
+      "/malattie"
     ]
   },
   {
@@ -305,7 +310,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     return normalizePermissionSet(mansioni[mName]).edit;
   };
 
-  const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
+  const isSuperAdmin = currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
 
   const showMessage = (text: string, type: "success" | "error") => {
     setMessage({ text, type });
@@ -571,40 +576,47 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     }
   };
 
-  const handleTogglePageAccess = async (userId: string, path: string, isChecked: boolean, currentList: string[] | null) => {
+  const handleTogglePageAccess = async (userId: string, path: string, type: "view" | "edit", isChecked: boolean, currentAccess: any) => {
     if (!isSuperAdmin) {
       showMessage("Solo i Super Admin possono modificare i permessi delle pagine.", "error");
       return;
     }
 
-    let newList: string[] = [];
-    if (Array.isArray(currentList)) {
-      newList = [...currentList];
-    } else {
-      const userObj = users.find(u => u.id === userId);
-      const defaultPages = APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(userObj?.role || "DIPENDENTE")).map(p => p.path);
-      newList = defaultPages;
+    const permissions = normalizePermissionSet(currentAccess);
+    let viewList = [...permissions.view];
+    let editList = [...permissions.edit];
+
+    if (type === "view") {
+      if (isChecked) {
+        if (!viewList.includes(path)) viewList.push(path);
+      } else {
+        viewList = viewList.filter(p => p !== path);
+        editList = editList.filter(p => p !== path);
+      }
+    } else if (type === "edit") {
+      if (isChecked) {
+        if (!editList.includes(path)) editList.push(path);
+        if (!viewList.includes(path)) viewList.push(path);
+      } else {
+        editList = editList.filter(p => p !== path);
+      }
     }
 
-    if (isChecked) {
-      if (!newList.includes(path)) newList.push(path);
-    } else {
-      newList = newList.filter(p => p !== path);
-    }
+    const payload = { view: viewList, edit: editList };
 
     setUpdatingUserId(userId);
     try {
       const res = await fetch("/api/settings/roles/update-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, accessList: newList }),
+        body: JSON.stringify({ userId, accessList: payload }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Impossibile aggiornare la lista accessi.");
 
       setUsers(current =>
-        current.map(u => (u.id === userId ? { ...u, access_list: newList } : u))
+        current.map(u => (u.id === userId ? { ...u, access_list: payload } : u))
       );
       showMessage(`Permessi di ${data.user.name} aggiornati con successo!`, "success");
     } catch (err: any) {
@@ -872,8 +884,9 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                     const isEditingMansione = editingMansioneId === user.id;
                     const isUpdating = updatingUserId === user.id;
                     const isExpanded = expandedUserId === user.id;
-                    const hasCustomAccess = Array.isArray(user.access_list);
-                    const customPagesCount = hasCustomAccess ? user.access_list.length : 0;
+                    const hasCustomAccess = user.access_list !== null && user.access_list !== undefined;
+                    const userPermissions = normalizePermissionSet(user.access_list);
+                    const customPagesCount = userPermissions.view.length;
 
                     return (
                       <React.Fragment key={user.id}>
@@ -1033,15 +1046,17 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                                         type="button"
                                         onClick={() => {
                                           const defaultPages = APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(user.role)).map(p => p.path);
+                                          const defaultEditPages = APP_PAGES_MATRIX.filter(p => p.editRoles.includes(user.role)).map(p => p.path);
+                                          const defaultPayload = { view: defaultPages, edit: defaultEditPages };
                                           // Initialize custom access list with their role defaults
                                           fetch("/api/settings/roles/update-user", {
                                             method: "POST",
                                             headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ userId: user.id, accessList: defaultPages }),
+                                            body: JSON.stringify({ userId: user.id, accessList: defaultPayload }),
                                           }).then(async (res) => {
                                             const data = await res.json();
                                             if (res.ok) {
-                                              setUsers(curr => curr.map(u => u.id === user.id ? { ...u, access_list: defaultPages } : u));
+                                              setUsers(curr => curr.map(u => u.id === user.id ? { ...u, access_list: defaultPayload } : u));
                                               showMessage(`Personalizzazione abilitata per ${data.user.name}!`, "success");
                                             }
                                           });
@@ -1053,50 +1068,69 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                                     )
                                   )}
                                 </div>
+                                
+                                {hasCustomAccess && (() => {
+                                  const uPermissions = normalizePermissionSet(user.access_list);
+                                  return (
+                                    <div className="space-y-6 pt-2">
+                                      {ROUTE_GROUPS.map((group) => {
+                                        const groupPages = APP_PAGES_MATRIX.filter(p => group.routes.includes(p.path));
+                                        if (groupPages.length === 0) return null;
 
-                                {hasCustomAccess && (
-                                  <div className="space-y-6 pt-2">
-                                    {ROUTE_GROUPS.map((group) => {
-                                      const groupPages = APP_PAGES_MATRIX.filter(p => group.routes.includes(p.path));
-                                      if (groupPages.length === 0) return null;
-
-                                      return (
-                                        <div key={group.title} className="space-y-2.5">
-                                          <h5 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest border-l-2 border-[#C66170] pl-2">
-                                            {group.title}
-                                          </h5>
-                                          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                                            {groupPages.map((page) => {
-                                              const isChecked = user.access_list.includes(page.path);
-                                              return (
-                                                <label
-                                                  key={page.path}
-                                                  className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition select-none ${
-                                                    isChecked
-                                                      ? "bg-white border-[#C66170]/30 shadow-sm"
-                                                      : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
-                                                  }`}
-                                                >
-                                                  <input
-                                                    type="checkbox"
-                                                    checked={isChecked}
-                                                    disabled={!isSuperAdmin}
-                                                    onChange={(e) => handleTogglePageAccess(user.id, page.path, e.target.checked, user.access_list)}
-                                                    className="mt-0.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                                  />
-                                                  <div className="min-w-0">
-                                                    <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
-                                                    <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                                        return (
+                                          <div key={group.title} className="space-y-2.5">
+                                            <h5 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest border-l-2 border-[#C66170] pl-2">
+                                              {group.title}
+                                            </h5>
+                                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                                              {groupPages.map((page) => {
+                                                const canView = uPermissions.view.includes(page.path);
+                                                const canEdit = uPermissions.edit.includes(page.path);
+                                                return (
+                                                  <div
+                                                    key={page.path}
+                                                    className={`rounded-xl border p-3 transition select-none ${
+                                                      canView
+                                                        ? "bg-white border-[#C66170]/30 shadow-sm"
+                                                        : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
+                                                    }`}
+                                                  >
+                                                    <div className="min-w-0">
+                                                      <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
+                                                      <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
+                                                    </div>
+                                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                                      <label className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-slate-700 cursor-pointer">
+                                                        <input
+                                                          type="checkbox"
+                                                          checked={canView}
+                                                          disabled={!isSuperAdmin}
+                                                          onChange={(e) => handleTogglePageAccess(user.id, page.path, "view", e.target.checked, user.access_list)}
+                                                          className="rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                                        />
+                                                        Vedi
+                                                      </label>
+                                                      <label className="flex items-center gap-2 rounded-lg bg-pink-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-pink-700 cursor-pointer">
+                                                        <input
+                                                          type="checkbox"
+                                                          checked={canEdit}
+                                                          disabled={!isSuperAdmin}
+                                                          onChange={(e) => handleTogglePageAccess(user.id, page.path, "edit", e.target.checked, user.access_list)}
+                                                          className="rounded border-pink-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
+                                                        />
+                                                        Modifica
+                                                      </label>
+                                                    </div>
                                                   </div>
-                                                </label>
-                                              );
-                                            })}
+                                                );
+                                              })}
+                                            </div>
                                           </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </td>
                           </tr>

@@ -25,27 +25,38 @@ export function OnlineConsultationsBrowser({
 
   // Parse details from calendar description
   const parsedEvents = useMemo(() => {
-    return initialEvents.map((evt) => {
-      const desc = evt.description || "";
-      
-      const phoneMatch = desc.match(/Telefono:\s*(.+)/i);
-      const orderMatch = desc.match(/Ordine Shopify:\s*(.+)/i);
-      const clientMatch = desc.match(/Cliente:\s*(.+)/i);
-      const serviceMatch = desc.match(/Servizio:\s*(.+)/i);
+    return initialEvents
+      .map((evt) => {
+        const desc = evt.description || "";
+        
+        const phoneMatch = desc.match(/Telefono:\s*(.+)/i);
+        const orderMatch = desc.match(/Ordine Shopify:\s*(.+)/i);
+        const clientMatch = desc.match(/Cliente:\s*(.+)/i);
+        const serviceMatch = desc.match(/Servizio:\s*(.+)/i);
 
-      // Clean the summary
-      let cleanedSummary = evt.summary.replace(/^Consulenza Online - /i, "").trim();
+        // Clean the summary
+        let cleanedSummary = evt.summary.replace(/^Consulenza Online - /i, "").trim();
 
-      return {
-        ...evt,
-        customerName: clientMatch ? clientMatch[1].trim() : (cleanedSummary || "Cliente"),
-        customerPhone: phoneMatch ? phoneMatch[1].trim() : null,
-        orderNumber: orderMatch ? orderMatch[1].trim() : null,
-        serviceTitle: serviceMatch ? serviceMatch[1].trim() : "Consulenza Online",
-        start: new Date(evt.startDate),
-        end: new Date(evt.endDate),
-      };
-    });
+        return {
+          ...evt,
+          customerName: clientMatch ? clientMatch[1].trim() : (cleanedSummary || "Cliente"),
+          customerPhone: phoneMatch ? phoneMatch[1].trim() : null,
+          orderNumber: orderMatch ? orderMatch[1].trim() : null,
+          serviceTitle: serviceMatch ? serviceMatch[1].trim() : "Consulenza Online",
+          start: new Date(evt.startDate),
+          end: new Date(evt.endDate),
+        };
+      })
+      .filter((evt) => {
+        const titleLower = evt.summary.toLowerCase();
+        const serviceLower = evt.serviceTitle.toLowerCase();
+        
+        // Exclude any in-salon events
+        if (titleLower.includes("salone") || serviceLower.includes("salone")) return false;
+        
+        // Must be online, or has no description but title has consulenza
+        return titleLower.includes("online") || serviceLower.includes("online") || (!evt.description && titleLower.includes("consulenza"));
+      });
   }, [initialEvents]);
 
   // Search filter
