@@ -844,3 +844,101 @@ export async function deleteSocialPostFromGoogleCalendar(eventId?: string | null
     return { deleted: false, error };
   }
 }
+
+export async function syncCowlendarConsultations(bookings: any[]) {
+  const calendarId = "7492abf79691e5602a3b97a1765aefa2e9dab2e862a2add021338adefb197a55@group.calendar.google.com";
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  if (!clientEmail || !privateKey) {
+    return { skipped: true, reason: "Google Calendar service account not configured." };
+  }
+
+  // Filter for consultations
+  const consultations = bookings.filter((b) => {
+    const title = (b.serviceTitle || "").toLowerCase();
+    return title.includes("consulenza");
+  });
+
+  if (consultations.length === 0) {
+    return { skipped: true, reason: "No consultations found in range." };
+  }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/calendar.events"],
+  });
+
+  const calendar = google.calendar({ version: "v3", auth });
+
+  try {
+    // Check calendar events from 1 month ago to 3 months in the future to detect duplicates
+    const timeMin = new Date();
+    timeMin.setMonth(timeMin.getMonth() - 1);
+    const timeMax = new Date();
+    timeMax.setMonth(timeMax.getMonth() + 3);
+
+    const existingEventsRes = await calendar.events.list({
+      calendarId,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      maxResults: 2500,
+    });
+
+    const existingEvents = existingEventsRes.data.items || [];
+    const syncedBookingIds = new Set<string>();
+
+    for (const event of existingEvents) {
+      const desc = event.description || "";
+      const match = desc.match(/\[Cowlendar ID:\s*([^\]\s]+)\]/);
+      if (match && match[1]) {
+        syncedBookingIds.add(match[1]);
+      }
+    }
+
+    let syncedCount = 0;
+
+    for (const b of consultations) {
+      const bookingId = String(b.id);
+      if (syncedBookingIds.has(bookingId)) {
+        continue;
+      }
+
+      const name = b.customerName || "Cliente";
+      const phone = b.customerPhone || "Non indicato";
+      const order = b.bookingStr || "Non indicato";
+      const service = b.serviceTitle || "Consulenza";
+
+      const start = b.startDate;
+      const end = b.endDate || new Date(new Date(start).getTime() + 30 * 60 * 1000).toISOString();
+
+      const description = [
+        `Servizio: ${service}`,
+        `Cliente: ${name}`,
+        `Telefono: ${phone}`,
+        `Ordine Shopify: ${order}`,
+        `\n[Cowlendar ID: ${bookingId}]`
+      ].join("\n");
+
+      await calendar.events.insert({
+        calendarId,
+        requestBody: {
+          summary: `Consulenza Online - ${name}`,
+          description,
+          start: { dateTime: start },
+          end: { dateTime: end },
+        },
+      });
+
+      syncedCount++;
+    }
+
+    return { success: true, syncedCount };
+  } catch (error: any) {
+    console.error("Failed to sync Cowlendar consultations:", error);
+    return { success: false, error: error.message };
+  }
+}
+

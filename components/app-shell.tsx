@@ -30,6 +30,7 @@ const nav = [
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
@@ -46,6 +47,8 @@ const nav = [
   { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/requests", label: "Ferie e permessi", iconName: "ShieldCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
   { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
+  { href: "/cedolini", label: "Cedolini", iconName: "FileCheck2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/malattie", label: "Malattie", iconName: "Heart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
   { href: "/team", label: "Team", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
 
   // Section: Impostazioni
@@ -164,7 +167,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   ]);
 
   let userAccessList: string[] | undefined = undefined;
-  if (currentUser && currentRole !== "SUPER_ADMIN" && currentRole !== "ADMIN") {
+  if (currentUser && currentRole !== "SUPER_ADMIN") {
     let rawAccess: any = undefined;
     if (
       currentUser.access_list &&
@@ -271,7 +274,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   };
 
   const filterMenuItems = <T extends { href: string }>(menuList: T[]): T[] => {
-    if (!userAccessList || !Array.isArray(userAccessList) || currentRole === "SUPER_ADMIN" || currentRole === "ADMIN") {
+    if (!userAccessList || !Array.isArray(userAccessList) || currentRole === "SUPER_ADMIN") {
       return menuList;
     }
     return menuList.filter((item) => {
@@ -316,8 +319,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const hasCustomPageAccess = Boolean(
     userAccessList &&
     Array.isArray(userAccessList) &&
-    currentRole !== "SUPER_ADMIN" &&
-    currentRole !== "ADMIN"
+    currentRole !== "SUPER_ADMIN"
   );
 
   const rawItems = hasCustomPageAccess
@@ -329,7 +331,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         ...(showFormsLinkSeparately ? [formsLinkItem] : []),
         ...(userHasTaskAccess ? [taskNavItem] : []),
         ...(userHasSocialAccess ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
-        ...(userHasAppointmentsAccess ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
+        ...(userHasAppointmentsAccess ? [
+          { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" },
+          { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }
+        ] : []),
         ...(userHasTablesAccess ? [tablesNavItem] : []),
         ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
@@ -371,7 +376,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             }
           >
             {filterMenuItems(
-              currentRole === "DIPENDENTE"
+              (currentRole === "DIPENDENTE"
                 ? [
                     { href: "/dashboard", label: "Home", iconName: "Home" },
                     { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
@@ -397,11 +402,14 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                       ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
                       : []),
                     ...(userHasAppointmentsAccess
-                      ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" }]
+                      ? [
+                          { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" },
+                          { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video" }
+                        ]
                       : []),
                   ]
-                : baseItems
-            ).map((item) => (
+                : baseItems) as any
+            ).map((item: any) => (
               <InstantLink
                 key={item.href}
                 href={item.href}

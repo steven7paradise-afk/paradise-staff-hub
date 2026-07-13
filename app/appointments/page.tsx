@@ -6,7 +6,7 @@ import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
-
+import { syncCowlendarConsultations } from "@/lib/google-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -262,6 +262,14 @@ export default async function AppointmentsPage() {
       };
     })
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+  if (hasCowlendarToken() && serializedBookings.length > 0) {
+    try {
+      await syncCowlendarConsultations(serializedBookings);
+    } catch (err) {
+      console.error("Auto-sync Cowlendar consultations failed:", err);
+    }
+  }
 
   return (
     <AppShell title="Appuntamenti" subtitle="Agenda interna appuntamenti." role={role} hideHeader>
