@@ -129,8 +129,7 @@ export function ClientControlDashboard({
   const [responses, setResponses] = useState(initialResponses);
   const [query, setQuery] = useState("");
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
-  const [showOnlyDiscrepancies, setShowOnlyDiscrepancies] = useState(false);
-  const [showOnlyNoShows, setShowOnlyNoShows] = useState(false);
+  const [currentTabFilter, setCurrentTabFilter] = useState<"all" | "discrepancies" | "noshows">("all");
   const [activeSalon, setActiveSalon] = useState("Tutti");
   const [selected, setSelected] = useState<ResponseItem | null>(null);
   const [draftAnswers, setDraftAnswers] = useState<Record<string, any>>({});
@@ -417,14 +416,20 @@ export function ClientControlDashboard({
         hasMismatch = true;
       }
     }
-    const matchesDiscrepancy = !showOnlyDiscrepancies || hasMismatch;
-
+    
     // No Show logic
     const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").toLowerCase();
     const isNoShow = correctness === "no show" || 
                      String(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]).toLowerCase() === "no show" || 
                      selectedStaff.some(name => name.toLowerCase() === "no show");
-    const matchesNoShow = !showOnlyNoShows || isNoShow;
+
+    // Tab Filter
+    let matchesTab = true;
+    if (currentTabFilter === "discrepancies") {
+      matchesTab = hasMismatch;
+    } else if (currentTabFilter === "noshows") {
+      matchesTab = isNoShow;
+    }
 
     const haystack = [
       response.user.name,
@@ -436,8 +441,7 @@ export function ClientControlDashboard({
     
     return (activeSalon === "Tutti" || salon === activeSalon) && 
            matchesWorker &&
-           matchesDiscrepancy &&
-           matchesNoShow &&
+           matchesTab &&
            haystack.includes(query.trim().toLowerCase());
   });
 
@@ -664,40 +668,46 @@ export function ClientControlDashboard({
             </label>
           </div>
         </div>
-
-        {/* Toggle Filters bar */}
-        <div className="flex flex-wrap gap-2 px-5 pb-4 border-b border-black/5 bg-neutral-50/30">
-          <button
-            type="button"
-            onClick={() => {
-              setShowOnlyDiscrepancies(prev => !prev);
-              if (showOnlyNoShows) setShowOnlyNoShows(false);
-            }}
-            className={cn(
-              "px-4 py-2 rounded-full text-xs font-bold border transition duration-200 select-none cursor-pointer",
-              showOnlyDiscrepancies
-                ? "bg-red-50 border-red-200 text-red-700 font-extrabold"
-                : "bg-white border-black/10 text-neutral-600 hover:bg-neutral-50"
-            )}
-          >
-            ⚠️ Solo Discrepanze
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowOnlyNoShows(prev => !prev);
-              if (showOnlyDiscrepancies) setShowOnlyDiscrepancies(false);
-            }}
-            className={cn(
-              "px-4 py-2 rounded-full text-xs font-bold border transition duration-200 select-none cursor-pointer",
-              showOnlyNoShows
-                ? "bg-purple-50 border-purple-200 text-[#C661A0] font-extrabold"
-                : "bg-white border-black/10 text-neutral-600 hover:bg-neutral-50"
-            )}
-          >
-            🚫 Solo No Show
-          </button>
+        {/* Modern Tab Filter Segmented Control */}
+        <div className="px-5 pb-4 border-b border-black/5 bg-neutral-50/30 flex flex-wrap gap-2">
+          <div className="inline-flex rounded-2xl bg-neutral-100 p-1 border border-black/[0.03]">
+            <button
+              type="button"
+              onClick={() => setCurrentTabFilter("all")}
+              className={cn(
+                "px-5 py-2 rounded-xl text-xs font-black transition duration-200 cursor-pointer select-none",
+                currentTabFilter === "all"
+                  ? "bg-white text-black shadow-sm"
+                  : "text-neutral-500 hover:text-black"
+              )}
+            >
+              Tutti i moduli
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentTabFilter("discrepancies")}
+              className={cn(
+                "px-5 py-2 rounded-xl text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                currentTabFilter === "discrepancies"
+                  ? "bg-red-500 text-white shadow-sm font-extrabold"
+                  : "text-neutral-500 hover:text-red-600"
+              )}
+            >
+              ⚠️ Discrepanze
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentTabFilter("noshows")}
+              className={cn(
+                "px-5 py-2 rounded-xl text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                currentTabFilter === "noshows"
+                  ? "bg-[#EA8CCD] text-white shadow-sm font-extrabold"
+                  : "text-neutral-500 hover:text-[#C661A0]"
+              )}
+            >
+              🚫 No Show
+            </button>
+          </div>
         </div>
 
         {workerReport && (
