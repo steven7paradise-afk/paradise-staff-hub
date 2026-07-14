@@ -55,6 +55,7 @@ export default async function StaffPage() {
           managerName: user.manager?.name ?? "",
           hrNotes: user.hr_notes ?? "",
           accessList: (user.access_list as string[]) ?? [],
+          iban: user.iban ?? "",
         }))}
         locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
         managers={managers.map((m) => ({ id: m.id, name: m.name, role: m.role }))}

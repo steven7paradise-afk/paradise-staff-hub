@@ -70,6 +70,7 @@ model User {
   candidate_id      String?
   header_color      String?
   sidebar_color     String?
+  iban              String?
   
   manager           User?            @relation("UserManager", fields: [manager_id], references: [id])
   subordinates      User[]           @relation("UserManager")

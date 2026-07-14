@@ -32,6 +32,7 @@ type Employee = {
   managerName: string;
   hrNotes: string;
   accessList: string[];
+  iban?: string;
 };
 
 type Location = { id: string; name: string };
@@ -247,6 +248,7 @@ export function StaffDirectory({
           managerId: editForm.managerId || null,
           accessList: editForm.accessList,
           hrNotes: editForm.hrNotes || undefined,
+          iban: editForm.iban || undefined,
           pin: pinInput || undefined,
           password: passwordInput || undefined
         })
@@ -282,6 +284,7 @@ export function StaffDirectory({
         managerName: mgrName,
         hrNotes: data.hr_notes ?? "",
         accessList: (data.access_list as string[]) ?? [],
+        iban: data.iban ?? "",
       };
 
       setStaff((prev) => prev.map((emp) => emp.id === updated.id ? updated : emp));
@@ -359,6 +362,7 @@ export function StaffDirectory({
           managerId: newEmployeeForm.managerId || null,
           accessList: newEmployeeForm.accessList || [],
           hrNotes: newEmployeeForm.hrNotes || undefined,
+          iban: newEmployeeForm.iban || undefined,
           pin: pinInput || undefined,
           password: passwordInput || undefined
         })
@@ -393,6 +397,7 @@ export function StaffDirectory({
         managerName: mgrName,
         hrNotes: data.hr_notes ?? "",
         accessList: (data.access_list as string[]) ?? [],
+        iban: data.iban ?? "",
       };
 
       setStaff((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -486,7 +491,8 @@ export function StaffDirectory({
                     employeeStatus: "Attivo",
                     managerId: "",
                     hrNotes: "",
-                    accessList: []
+                    accessList: [],
+                    iban: ""
                   });
                   setCreationMessage("");
                   setErrorMsg("");
@@ -833,7 +839,7 @@ export function StaffDirectory({
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
                       <Field 
@@ -842,13 +848,20 @@ export function StaffDirectory({
                         placeholder="Codice..."
                       />
                     </label>
-
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
                       <Field 
                         type="date"
                         value={editForm.birthDate}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">IBAN</span>
+                      <Field 
+                        value={editForm.iban || ""}
+                        onChange={(e) => setEditForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
+                        placeholder="IT..."
                       />
                     </label>
                   </div>
@@ -1007,6 +1020,13 @@ export function StaffDirectory({
                         {selectedEmployee.birthDate ? new Date(selectedEmployee.birthDate).toLocaleDateString("it-IT") : "Non inserita"}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">IBAN</span>
+                    <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 font-mono tracking-wide">
+                      {selectedEmployee.iban || "Non inserito"}
+                    </span>
                   </div>
 
                   {/* Access details */}
@@ -1201,7 +1221,7 @@ export function StaffDirectory({
                 </label>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="space-y-1">
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
                   <Field 
@@ -1210,6 +1230,17 @@ export function StaffDirectory({
                     placeholder="Codice..."
                   />
                 </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">IBAN</span>
+                  <Field 
+                    value={newEmployeeForm.iban || ""}
+                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
+                    placeholder="IT..."
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="space-y-1">
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Inizio Rapporto *</span>
                   <Field 

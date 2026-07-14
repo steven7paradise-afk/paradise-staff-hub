@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       google_calendar_id: data.googleCalendarId ? String(data.googleCalendarId).trim() : null,
       google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : false,
       active: data.active !== false,
+      iban: data.iban ? String(data.iban).trim().toUpperCase() : null,
     },
   });
 

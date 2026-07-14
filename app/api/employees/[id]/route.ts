@@ -58,6 +58,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       photo_url: data.photoUrl !== undefined ? (data.photoUrl ? String(data.photoUrl).trim() : null) : undefined,
       whatsapp_phone: data.whatsappPhone !== undefined ? (data.whatsappPhone ? String(data.whatsappPhone).trim() : null) : undefined,
       mansione: data.mansione !== undefined ? (data.mansione ? String(data.mansione).trim() : null) : undefined,
+      iban: data.iban !== undefined ? (data.iban ? String(data.iban).trim().toUpperCase() : null) : undefined,
       active: data.active !== undefined ? Boolean(data.active) : undefined,
       employee_status: data.employeeStatus !== undefined ? String(data.employeeStatus) : undefined,
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
