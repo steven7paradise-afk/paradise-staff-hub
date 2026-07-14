@@ -342,7 +342,7 @@ export function StaffDirectory({
     if (!editForm) return;
     setEditForm(prev => {
       if (!prev) return prev;
-      const current = prev.accessList || [];
+      const current = Array.isArray(prev.accessList) ? prev.accessList : [];
       const updated = current.includes(access)
         ? current.filter(a => a !== access)
         : [...current, access];
@@ -458,7 +458,7 @@ export function StaffDirectory({
     if (!newEmployeeForm) return;
     setNewEmployeeForm(prev => {
       if (!prev) return prev;
-      const current = prev.accessList || [];
+      const current = Array.isArray(prev.accessList) ? prev.accessList : [];
       const updated = current.includes(access)
         ? current.filter(a => a !== access)
         : [...current, access];
@@ -949,7 +949,7 @@ export function StaffDirectory({
                     <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
                     <div className="flex flex-wrap gap-2">
                       {ACCESS_PRESETS.map((access) => {
-                        const active = editForm.accessList?.includes(access) || false;
+                        const active = Array.isArray(editForm.accessList) ? editForm.accessList.includes(access) : false;
                         return (
                           <button
                             key={access}
@@ -1324,7 +1324,7 @@ export function StaffDirectory({
                 <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
                 <div className="flex flex-wrap gap-2">
                   {ACCESS_PRESETS.map((access) => {
-                    const active = newEmployeeForm.accessList?.includes(access) || false;
+                    const active = Array.isArray(newEmployeeForm.accessList) ? newEmployeeForm.accessList.includes(access) : false;
                     return (
                       <button
                         key={access}
