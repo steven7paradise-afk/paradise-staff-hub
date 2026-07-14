@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle } from "lucide-react";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { cn } from "@/lib/utils";
@@ -670,42 +670,45 @@ export function ClientControlDashboard({
         </div>
         {/* Modern Tab Filter Segmented Control */}
         <div className="px-5 pb-4 border-b border-black/5 bg-neutral-50/30 flex flex-wrap gap-2">
-          <div className="inline-flex rounded-2xl bg-neutral-100 p-1 border border-black/[0.03]">
+          <div className="inline-flex rounded-full bg-neutral-100 p-1 border border-black/[0.03]">
             <button
               type="button"
               onClick={() => setCurrentTabFilter("all")}
               className={cn(
-                "px-5 py-2 rounded-xl text-xs font-black transition duration-200 cursor-pointer select-none",
+                "px-5 py-2 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
                 currentTabFilter === "all"
                   ? "bg-white text-black shadow-sm"
                   : "text-neutral-500 hover:text-black"
               )}
             >
+              <Layers className="size-3.5" />
               Tutti i moduli
             </button>
             <button
               type="button"
               onClick={() => setCurrentTabFilter("discrepancies")}
               className={cn(
-                "px-5 py-2 rounded-xl text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "px-5 py-2 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
                 currentTabFilter === "discrepancies"
                   ? "bg-red-500 text-white shadow-sm font-extrabold"
                   : "text-neutral-500 hover:text-red-600"
               )}
             >
-              ⚠️ Discrepanze
+              <AlertTriangle className="size-3.5" />
+              Discrepanze
             </button>
             <button
               type="button"
               onClick={() => setCurrentTabFilter("noshows")}
               className={cn(
-                "px-5 py-2 rounded-xl text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "px-5 py-2 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
                 currentTabFilter === "noshows"
                   ? "bg-[#EA8CCD] text-white shadow-sm font-extrabold"
                   : "text-neutral-500 hover:text-[#C661A0]"
               )}
             >
-              🚫 No Show
+              <UserX className="size-3.5" />
+              No Show
             </button>
           </div>
         </div>
