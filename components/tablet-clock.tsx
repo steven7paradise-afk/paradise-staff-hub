@@ -79,6 +79,61 @@ const allowedActionsByStatus: Record<ClockStatus, string[]> = {
   BREAK: ["RIENTRO", "USCITA"],
 };
 
+function compressImage(file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new globalThis.Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                type: "image/jpeg",
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+}
+
 function formatDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -2088,10 +2143,13 @@ export function TabletClock({
                                     onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (file) {
+                                        let targetFile = file;
                                         const isHEIC = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
-                                        if (isHEIC) {
-                                          try {
-                                            setAppointmentMessage({ type: "success", text: "Conversione file HEIC in corso..." });
+                                        
+                                        try {
+                                          setAppointmentMessage({ type: "success", text: "Elaborazione immagine..." });
+                                          
+                                          if (isHEIC) {
                                             const heic2any = (await import("heic2any")).default;
                                             const convertedBlob = await heic2any({
                                               blob: file,
@@ -2099,19 +2157,19 @@ export function TabletClock({
                                               quality: 0.8,
                                             });
                                             const convertedBlobSingle = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-                                            const convertedFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
+                                            targetFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
                                               type: "image/jpeg",
                                             });
-                                            setClientPhotoFile(convertedFile);
-                                            setClientPhotoPreview(URL.createObjectURL(convertedFile));
-                                            setAppointmentMessage(null);
-                                          } catch (err) {
-                                            console.error("HEIC conversion failed:", err);
-                                            setAppointmentMessage({ type: "error", text: "Impossibile convertire il file HEIC. Riprova o usa una foto JPEG/PNG." });
                                           }
-                                        } else {
-                                          setClientPhotoFile(file);
-                                          setClientPhotoPreview(URL.createObjectURL(file));
+                                          
+                                          // Compress the image to minimize its upload size
+                                          const compressed = await compressImage(targetFile, 800, 800, 0.7);
+                                          setClientPhotoFile(compressed);
+                                          setClientPhotoPreview(URL.createObjectURL(compressed));
+                                          setAppointmentMessage(null);
+                                        } catch (err) {
+                                          console.error("Image processing failed:", err);
+                                          setAppointmentMessage({ type: "error", text: "Impossibile elaborare l'immagine. Riprova." });
                                         }
                                       }
                                     }}
