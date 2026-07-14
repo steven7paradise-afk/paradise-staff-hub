@@ -305,7 +305,7 @@ export function StaffDirectory({
     if (!editForm) return;
     setEditForm(prev => {
       if (!prev) return prev;
-      const current = prev.accessList;
+      const current = prev.accessList || [];
       const updated = current.includes(access)
         ? current.filter(a => a !== access)
         : [...current, access];
@@ -750,7 +750,7 @@ export function StaffDirectory({
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">URL Foto Profilo</span>
                       <Field 
-                        value={editForm.photoUrl}
+                        value={editForm.photoUrl || ""}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)}
                         placeholder="https://..."
                       />
@@ -758,7 +758,7 @@ export function StaffDirectory({
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Numero WhatsApp</span>
                       <Field 
-                        value={editForm.whatsappPhone}
+                        value={editForm.whatsappPhone || ""}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)}
                         placeholder="+39..."
                       />
@@ -769,7 +769,7 @@ export function StaffDirectory({
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Mansione / Ruolo</span>
                       <Field 
-                        value={editForm.mansione}
+                        value={editForm.mansione || ""}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
                         placeholder="E.g. Onicotecnica"
                       />
@@ -852,7 +852,7 @@ export function StaffDirectory({
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
                       <Field 
                         type="date"
-                        value={editForm.birthDate}
+                        value={editForm.birthDate || ""}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
                       />
                     </label>
@@ -871,7 +871,7 @@ export function StaffDirectory({
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data Inizio Contratto</span>
                       <Field 
                         type="date"
-                        value={editForm.contractStart}
+                        value={editForm.contractStart || ""}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)}
                       />
                     </label>
@@ -880,7 +880,7 @@ export function StaffDirectory({
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data Fine Contratto</span>
                       <Field 
                         type="date"
-                        value={editForm.contractEnd}
+                        value={editForm.contractEnd || ""}
                         onChange={(e) => setEditForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
                       />
                     </label>
@@ -911,7 +911,7 @@ export function StaffDirectory({
                     <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
                     <div className="flex flex-wrap gap-2">
                       {ACCESS_PRESETS.map((access) => {
-                        const active = editForm.accessList.includes(access);
+                        const active = editForm.accessList?.includes(access) || false;
                         return (
                           <button
                             key={access}
@@ -934,7 +934,7 @@ export function StaffDirectory({
                   <label className="block space-y-1">
                     <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Note Amministrazione HR (Interne)</span>
                     <textarea 
-                      value={editForm.hrNotes}
+                      value={editForm.hrNotes || ""}
                       onChange={(e) => setEditForm(prev => prev ? { ...prev, hrNotes: e.target.value } : null)}
                       placeholder="Note interne dell'amministrazione..."
                       rows={3}
@@ -1042,7 +1042,7 @@ export function StaffDirectory({
                       </Badge>
                     </div>
 
-                    {selectedEmployee.accessList.length > 0 ? (
+                    {selectedEmployee.accessList && selectedEmployee.accessList.length > 0 ? (
                       <div className="space-y-1 pt-2">
                         <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block">Servizi/Piattaforme autorizzate</span>
                         <div className="flex flex-wrap gap-1.5">
