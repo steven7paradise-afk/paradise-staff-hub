@@ -129,6 +129,8 @@ export function ClientControlDashboard({
   const [responses, setResponses] = useState(initialResponses);
   const [query, setQuery] = useState("");
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
+  const [showOnlyDiscrepancies, setShowOnlyDiscrepancies] = useState(false);
+  const [showOnlyNoShows, setShowOnlyNoShows] = useState(false);
   const [activeSalon, setActiveSalon] = useState("Tutti");
   const [selected, setSelected] = useState<ResponseItem | null>(null);
   const [draftAnswers, setDraftAnswers] = useState<Record<string, any>>({});
@@ -401,6 +403,29 @@ export function ClientControlDashboard({
 
     const matchesWorker = !selectedWorkerName || staffNames.includes(selectedWorkerName);
 
+    // Mismatch logic
+    const declaredPaid = answers[CLIENT_CONTROL_FIELD_IDS.paid];
+    const expectedPaid = answers["client_control_shopify_expected_paid"];
+    let hasMismatch = false;
+    if (
+      declaredPaid !== undefined && declaredPaid !== null && declaredPaid !== "" &&
+      expectedPaid !== undefined && expectedPaid !== null && expectedPaid !== ""
+    ) {
+      const declaredNum = parseFloat(String(declaredPaid).replace(",", "."));
+      const expectedNum = parseFloat(String(expectedPaid).replace(",", "."));
+      if (!Number.isNaN(declaredNum) && !Number.isNaN(expectedNum) && declaredNum !== expectedNum) {
+        hasMismatch = true;
+      }
+    }
+    const matchesDiscrepancy = !showOnlyDiscrepancies || hasMismatch;
+
+    // No Show logic
+    const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").toLowerCase();
+    const isNoShow = correctness === "no show" || 
+                     String(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]).toLowerCase() === "no show" || 
+                     selectedStaff.some(name => name.toLowerCase() === "no show");
+    const matchesNoShow = !showOnlyNoShows || isNoShow;
+
     const haystack = [
       response.user.name,
       salon,
@@ -411,6 +436,8 @@ export function ClientControlDashboard({
     
     return (activeSalon === "Tutti" || salon === activeSalon) && 
            matchesWorker &&
+           matchesDiscrepancy &&
+           matchesNoShow &&
            haystack.includes(query.trim().toLowerCase());
   });
 
@@ -614,7 +641,7 @@ export function ClientControlDashboard({
       </section>
 
       <section className="rounded-[28px] border border-black/10 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-black/10 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 border-b border-black/10 p-5 lg:flex-row lg:items-center lg:justify-between pb-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Cronologia</p>
             <h2 className="text-2xl font-black">Tutti i moduli Controllo Cliente</h2>
@@ -636,6 +663,41 @@ export function ClientControlDashboard({
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca cliente, staff, ordine..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </label>
           </div>
+        </div>
+
+        {/* Toggle Filters bar */}
+        <div className="flex flex-wrap gap-2 px-5 pb-4 border-b border-black/5 bg-neutral-50/30">
+          <button
+            type="button"
+            onClick={() => {
+              setShowOnlyDiscrepancies(prev => !prev);
+              if (showOnlyNoShows) setShowOnlyNoShows(false);
+            }}
+            className={cn(
+              "px-4 py-2 rounded-full text-xs font-bold border transition duration-200 select-none cursor-pointer",
+              showOnlyDiscrepancies
+                ? "bg-red-50 border-red-200 text-red-700 font-extrabold"
+                : "bg-white border-black/10 text-neutral-600 hover:bg-neutral-50"
+            )}
+          >
+            ⚠️ Solo Discrepanze
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowOnlyNoShows(prev => !prev);
+              if (showOnlyDiscrepancies) setShowOnlyDiscrepancies(false);
+            }}
+            className={cn(
+              "px-4 py-2 rounded-full text-xs font-bold border transition duration-200 select-none cursor-pointer",
+              showOnlyNoShows
+                ? "bg-purple-50 border-purple-200 text-[#C661A0] font-extrabold"
+                : "bg-white border-black/10 text-neutral-600 hover:bg-neutral-50"
+            )}
+          >
+            🚫 Solo No Show
+          </button>
         </div>
 
         {workerReport && (
