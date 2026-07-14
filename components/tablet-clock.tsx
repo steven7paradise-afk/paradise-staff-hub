@@ -31,7 +31,9 @@ import {
   Check,
   ShoppingBag,
   ChevronRight,
-  Mic
+  Mic,
+  Camera,
+  Trash2
 } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
 import { cn } from "@/lib/utils";
@@ -263,6 +265,8 @@ export function TabletClock({
     review: false,
     bookingId: null as string | null,
   });
+  const [clientPhotoFile, setClientPhotoFile] = useState<File | null>(null);
+  const [clientPhotoPreview, setClientPhotoPreview] = useState<string | null>(null);
   const [appointmentSubmitting, setAppointmentSubmitting] = useState(false);
   const [appointmentMessage, setAppointmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -508,14 +512,35 @@ export function TabletClock({
     }
     setAppointmentSubmitting(true);
     try {
+      let clientPhotoBase64: string | null = null;
+      if (clientPhotoFile) {
+        clientPhotoBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(clientPhotoFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+      }
+
+      const payload = {
+        ...appointmentForm,
+        clientPhoto: clientPhotoBase64,
+      };
+
       const res = await fetch("/api/client-control/tablet-submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(appointmentForm),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Errore durante il salvataggio.");
+      }
+      
+      setClientPhotoFile(null);
+      if (clientPhotoPreview) {
+        URL.revokeObjectURL(clientPhotoPreview);
+        setClientPhotoPreview(null);
       }
       // Auto-filter from appointments tray list if pre-filled from drawer or direct list buttons
       if (selectedBookingForDetails) {
@@ -1793,6 +1818,11 @@ export function TabletClock({
                       setClientControlOpen(false);
                       setAppointmentMessage(null);
                       setCurrentBookingId(null);
+                      setClientPhotoFile(null);
+                      if (clientPhotoPreview) {
+                        URL.revokeObjectURL(clientPhotoPreview);
+                        setClientPhotoPreview(null);
+                      }
                     }}
                     className="grid size-11 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm active:scale-95 hover:bg-black/[0.02]"
                   >
@@ -2015,6 +2045,90 @@ export function TabletClock({
                                 <span>{fieldLabel}</span>
                               </label>
                             ))}
+                          </div>
+
+                          {/* Foto Volto Cliente */}
+                          <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-xs font-black uppercase tracking-wider text-black/60 font-bold">Foto volto cliente</h4>
+                                <p className="text-[10px] text-black/40 font-semibold mt-0.5">Scatta o seleziona una foto identificativa per la scheda del cliente.</p>
+                              </div>
+                              {clientPhotoPreview && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setClientPhotoFile(null);
+                                    if (clientPhotoPreview) {
+                                      URL.revokeObjectURL(clientPhotoPreview);
+                                      setClientPhotoPreview(null);
+                                    }
+                                  }}
+                                  className="flex items-center gap-1 text-[10px] font-black uppercase text-red-500 hover:text-red-750 transition"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                  Rimuovi
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row items-center gap-4">
+                              {clientPhotoPreview ? (
+                                <div className="relative size-32 rounded-2xl overflow-hidden border border-black/10 bg-black/5 flex items-center justify-center shrink-0">
+                                  <img src={clientPhotoPreview} alt="Anteprima volto" className="size-full object-cover" />
+                                </div>
+                              ) : (
+                                <label className="flex size-32 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-black/15 bg-black/[0.01] hover:bg-black/[0.02] transition shrink-0 active:scale-95">
+                                  <Camera className="size-6 text-black/30" />
+                                  <span className="text-[9px] font-black uppercase text-black/40 mt-1.5 text-center px-2">Aggiungi Foto</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*,.heic,.HEIC,.heif,.HEIF"
+                                    capture="user"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const isHEIC = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
+                                        if (isHEIC) {
+                                          try {
+                                            setAppointmentMessage({ type: "success", text: "Conversione file HEIC in corso..." });
+                                            const heic2any = (await import("heic2any")).default;
+                                            const convertedBlob = await heic2any({
+                                              blob: file,
+                                              toType: "image/jpeg",
+                                              quality: 0.8,
+                                            });
+                                            const convertedBlobSingle = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                                            const convertedFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
+                                              type: "image/jpeg",
+                                            });
+                                            setClientPhotoFile(convertedFile);
+                                            setClientPhotoPreview(URL.createObjectURL(convertedFile));
+                                            setAppointmentMessage(null);
+                                          } catch (err) {
+                                            console.error("HEIC conversion failed:", err);
+                                            setAppointmentMessage({ type: "error", text: "Impossibile convertire il file HEIC. Riprova o usa una foto JPEG/PNG." });
+                                          }
+                                        } else {
+                                          setClientPhotoFile(file);
+                                          setClientPhotoPreview(URL.createObjectURL(file));
+                                        }
+                                      }
+                                    }}
+                                    className="hidden"
+                                  />
+                                </label>
+                              )}
+                              
+                              <div className="text-left space-y-1">
+                                <p className="text-xs font-bold text-black/60">
+                                  {clientPhotoFile ? `File: ${clientPhotoFile.name}` : "Nessuna foto inserita"}
+                                </p>
+                                <p className="text-[10px] text-black/45 leading-relaxed max-w-md">
+                                  Questa foto verrà associata permanentemente alla scheda di controllo qualità del cliente e sarà visibile nella dashboard amministrativa. Supporta anche il formato HEIC dei dispositivi Apple.
+                                </p>
+                              </div>
+                            </div>
                           </div>
 
                           {/* Message banner */}

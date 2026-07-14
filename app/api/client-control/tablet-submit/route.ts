@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
     bookingId?: string | null;
     isFinito?: boolean;
     isNoShow?: boolean;
+    clientPhoto?: string | null;
   } | null;
 
   const isFinito = !!body?.isFinito;
@@ -146,6 +147,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let uploadedPhotoAnswer = null;
+  if (body?.clientPhoto && body.clientPhoto.startsWith("data:image/")) {
+    try {
+      const { uploadPrivateDocumentBytes } = await import("@/lib/supabase-storage");
+      const mimeType = body.clientPhoto.split(";")[0].split(":")[1];
+      const extension = mimeType.split("/")[1] || "png";
+      const base64Data = body.clientPhoto.split(",")[1];
+      const buffer = Buffer.from(base64Data, "base64");
+      
+      const storagePath = await uploadPrivateDocumentBytes(
+        submitter.id, 
+        buffer, 
+        `foto_volto_${Date.now()}.${extension}`, 
+        mimeType
+      );
+      
+      uploadedPhotoAnswer = {
+        storagePath,
+        name: `foto_volto_${Date.now()}.${extension}`,
+        type: mimeType,
+      };
+    } catch (err) {
+      console.error("Failed to upload client photo:", err);
+    }
+  }
+
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isNoShow ? "No Show" : "Finito"),
@@ -159,6 +186,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: isNoShow ? ["NO SHOW"] : undefined,
+    [CLIENT_CONTROL_FIELD_IDS.clientPhoto]: uploadedPhotoAnswer || undefined,
     booking_id: textValue(body?.bookingId),
     client_control_created_from: isNoShow ? "Tablet Clock No Show" : "Tablet Clock Finito",
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
@@ -184,6 +212,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
     [CLIENT_CONTROL_FIELD_IDS.review]: boolValue(body?.review),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
+    [CLIENT_CONTROL_FIELD_IDS.clientPhoto]: uploadedPhotoAnswer || undefined,
     client_control_created_from: "Tablet Clock",
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,

@@ -21,6 +21,7 @@ export const CLIENT_CONTROL_FIELD_IDS = {
   productsList: "client_control_products_list",
   review: "client_control_review",
   correctness: "client_control_correctness",
+  clientPhoto: "client_control_photo",
 } as const;
 
 export const CLIENT_CONTROL_FORM_FIELDS = [
@@ -135,6 +136,13 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     type: "checkbox",
     required: false,
     description: "La cliente ha fatto la recensione su Shopify.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.clientPhoto,
+    label: "Foto volto cliente",
+    type: "file",
+    required: false,
+    description: "Carica la foto volto/cliente.",
   },
   {
     id: CLIENT_CONTROL_FIELD_IDS.correctness,

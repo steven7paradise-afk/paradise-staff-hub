@@ -27,6 +27,7 @@
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "googleapis": "^172.0.0",
+    "heic2any": "^0.0.4",
     "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",

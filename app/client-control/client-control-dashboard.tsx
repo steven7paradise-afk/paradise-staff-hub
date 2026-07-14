@@ -1219,6 +1219,28 @@ export function ClientControlDashboard({
                   </p>
                 </div>
               ) : null}
+
+              {/* Client Face Photo Section */}
+              {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.clientPhoto] ? (
+                <div className="bg-[#FAF7F9] rounded-2xl p-4 border border-black/5 space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#C66170] font-bold">Foto Volto Cliente</p>
+                  <div className="relative rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-sm aspect-video flex items-center justify-center">
+                    <img
+                      src={`/api/service-forms/responses/file?path=${encodeURIComponent(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].storagePath)}`}
+                      alt="Foto Volto Cliente"
+                      className="object-contain max-h-48 w-full"
+                    />
+                  </div>
+                  <a
+                    href={`/api/service-forms/responses/file?path=${encodeURIComponent(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].storagePath)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-white px-3 py-1.5 text-xs font-semibold text-[#C66170] shadow-sm hover:bg-[#C66170]/5 transition mt-1"
+                  >
+                    Visualizza / Scarica Foto
+                  </a>
+                </div>
+              ) : null}
             </div>
             
             <div className="border-t border-black/10 p-5 flex justify-end bg-[#FAF6F9]">

@@ -79,6 +79,15 @@ export async function uploadPrivateDocument(userId: string, file: File) {
   return path;
 }
 
+export async function uploadPrivateDocumentBytes(userId: string, bytes: ArrayBuffer | Buffer, filename: string, contentType: string) {
+  const client = storageClient();
+  const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
+  const path = `${userId}/${Date.now()}-${safeName(filename)}`;
+  const { error } = await client.storage.from(bucket).upload(path, bytes, { contentType, upsert: false });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
 export async function signedDocumentUrl(path: string) {
   const client = storageClient();
   const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
