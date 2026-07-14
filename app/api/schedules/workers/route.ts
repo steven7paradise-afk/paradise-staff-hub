@@ -19,7 +19,18 @@ export async function POST(request: NextRequest) {
 
   const [location, worker] = await Promise.all([
     prisma.location.findFirst({ where: { id: locationId, active: true } }),
-    prisma.user.findFirst({ where: { id: userId, active: true } }),
+    prisma.user.findFirst({
+      where: {
+        id: userId,
+        active: true,
+        NOT: {
+          mansione: {
+            in: ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
+            mode: "insensitive"
+          }
+        }
+      }
+    }),
   ]);
   if (!location || !worker || worker.role === "SUPER_ADMIN") {
     return NextResponse.json({ error: "Lavoratore o salone non valido." }, { status: 400 });

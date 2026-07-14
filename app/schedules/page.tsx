@@ -25,7 +25,15 @@ export default async function SchedulesPage() {
   const userCanEditPlanning = canEditPlanning(role);
   const [employees, locations, categories, entries, workerOverrides, workersOrderSetting] = await Promise.all([
     prisma.user.findMany({
-      where: { active: true },
+      where: {
+        active: true,
+        NOT: {
+          mansione: {
+            in: ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
+            mode: "insensitive"
+          }
+        }
+      },
       orderBy: { name: "asc" },
     }),
     prisma.location.findMany({
