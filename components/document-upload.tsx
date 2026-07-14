@@ -279,7 +279,10 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
                   />
                   <Upload className="size-8 mx-auto text-neutral-400 mb-2" />
                   <p className="text-sm font-bold text-neutral-700 dark:text-neutral-300">Seleziona o trascina i file qui</p>
-                  <p className="text-[11px] text-neutral-400 font-semibold mt-1">Carica file PDF o immagini. Il sistema rileverà automaticamente dipendente, mese e anno.</p>
+                  <p className="text-[11px] text-neutral-400 font-semibold mt-2 leading-relaxed max-w-lg mx-auto">
+                    Il sistema rileva i dati leggendo il <strong>nome del file</strong> (es. <code className="bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 rounded text-neutral-600 dark:text-neutral-300 font-mono">Busta Aprile Steven Alvarez 2026.pdf</code>).<br />
+                    Assicurati che il file contenga nel nome il <strong>Nome del Dipendente</strong> e la <strong>Mensilità (Mese e Anno)</strong>.
+                  </p>
                 </div>
 
                 {bulkFiles.length > 0 ? (
