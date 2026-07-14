@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     const details = await getShopifyOrderDetails(shopifyOrder).catch(() => null);
     if (details) {
       if (details.lineItems.length > 0) {
-        productsListStr = details.lineItems.join(", ");
+        productsListStr = details.lineItems.map(item => item.quantity > 1 ? `${item.title} (x${item.quantity})` : item.title).join(", ");
       }
       shopifyClientName = details.clientName;
       shopifyTotalPrice = details.totalPrice;
@@ -136,6 +136,15 @@ export async function POST(request: NextRequest) {
   }
 
   const isNoShow = !!body?.isNoShow;
+
+  // Auto-mark as "Da controllare" if there's a payment mismatch
+  let correctnessVal = isNoShow ? "No Show" : isFinito ? "Finito" : "Controllato";
+  if (!isNoShow && shopifyTotalPrice !== null) {
+    const declaredPaid = moneyValue(body?.paid);
+    if (declaredPaid !== null && parseFloat(String(declaredPaid)) !== parseFloat(String(shopifyTotalPrice))) {
+      correctnessVal = "Da controllare";
+    }
+  }
 
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
@@ -147,7 +156,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,
     [CLIENT_CONTROL_FIELD_IDS.products]: productsListStr !== "",
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
-    [CLIENT_CONTROL_FIELD_IDS.correctness]: isNoShow ? "No Show" : "Finito",
+    [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: isNoShow ? ["NO SHOW"] : undefined,
     booking_id: textValue(body?.bookingId),
@@ -174,7 +183,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.products]: boolValue(body?.products) || (productsListStr !== ""),
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
     [CLIENT_CONTROL_FIELD_IDS.review]: boolValue(body?.review),
-    [CLIENT_CONTROL_FIELD_IDS.correctness]: "Controllato",
+    [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
     client_control_created_from: "Tablet Clock",
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,

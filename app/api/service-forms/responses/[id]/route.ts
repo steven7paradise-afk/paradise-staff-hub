@@ -76,12 +76,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     if (comments) dataToUpdate.comments = comments; // JSON array of comments
     if (answers) {
       const orderNum = String(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim();
+      const originalAnswers = (response.answers as Record<string, any>) || {};
+      const originalCorrectness = originalAnswers[CLIENT_CONTROL_FIELD_IDS.correctness];
+      const newCorrectness = answers[CLIENT_CONTROL_FIELD_IDS.correctness];
+
       if (orderNum) {
         const { getShopifyOrderDetails } = await import("@/lib/shopify");
         const details = await getShopifyOrderDetails(orderNum).catch(() => null);
         if (details) {
           if (details.lineItems.length > 0) {
-            answers[CLIENT_CONTROL_FIELD_IDS.productsList] = details.lineItems.join(", ");
+            answers[CLIENT_CONTROL_FIELD_IDS.productsList] = details.lineItems.map(item => item.quantity > 1 ? `${item.title} (x${item.quantity})` : item.title).join(", ");
             answers[CLIENT_CONTROL_FIELD_IDS.products] = true;
           }
           if (details.clientName && !answers[CLIENT_CONTROL_FIELD_IDS.clientName]) {
@@ -94,10 +98,24 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             answers[CLIENT_CONTROL_FIELD_IDS.phone] = details.phone;
           }
           if (details.totalPrice !== null) {
-            answers[CLIENT_CONTROL_FIELD_IDS.paid] = details.totalPrice;
+            if (answers[CLIENT_CONTROL_FIELD_IDS.paid] === undefined || answers[CLIENT_CONTROL_FIELD_IDS.paid] === null || answers[CLIENT_CONTROL_FIELD_IDS.paid] === "") {
+              answers[CLIENT_CONTROL_FIELD_IDS.paid] = details.totalPrice;
+            }
             answers["client_control_shopify_expected_paid"] = details.totalPrice;
           }
           answers["client_control_shopify_order_note"] = details.note || "";
+
+          // Auto-mark as "Da controllare" if there's a payment mismatch, EXCEPT if the user explicitly changed correctness in this request
+          const userExplicitlyChangedCorrectness = newCorrectness !== undefined && newCorrectness !== originalCorrectness;
+          if (!userExplicitlyChangedCorrectness) {
+            const declaredPaid = answers[CLIENT_CONTROL_FIELD_IDS.paid];
+            if (declaredPaid !== undefined && declaredPaid !== null && declaredPaid !== "") {
+              const declaredNum = parseFloat(String(declaredPaid).replace(",", "."));
+              if (!Number.isNaN(declaredNum) && details.totalPrice !== null && declaredNum !== details.totalPrice) {
+                answers[CLIENT_CONTROL_FIELD_IDS.correctness] = "Da controllare";
+              }
+            }
+          }
         }
       }
       dataToUpdate.answers = answers; // JSON object of answers
