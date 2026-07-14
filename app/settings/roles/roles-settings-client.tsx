@@ -1192,12 +1192,28 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                   {/* Header Row */}
                   <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/20">
                     <div className="flex items-center gap-2">
-                      <UserCheck className="size-4 text-slate-400" />
+                      <UserCheck className="size-4 text-slate-400 shrink-0" />
                       <div>
                         <h3 className="font-black text-slate-950 text-sm uppercase tracking-wider">{mName}</h3>
                         <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
                           {viewCount} pagine visibili · {editCount} modificabili
                         </p>
+                        {(() => {
+                          const assignedEmployees = users.filter(
+                            (u) => (u.mansione || "").trim().toLowerCase() === mName.trim().toLowerCase()
+                          );
+                          if (assignedEmployees.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              <span className="text-[9px] font-extrabold text-slate-400 uppercase mr-1 select-none">Personale:</span>
+                              {assignedEmployees.map((emp) => (
+                                <span key={emp.id} className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-650">
+                                  {emp.name}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
