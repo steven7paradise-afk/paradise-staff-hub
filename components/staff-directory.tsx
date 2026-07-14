@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
@@ -83,6 +83,18 @@ const ROLE_OPTIONS = [
 ];
 const ACCESS_PRESETS = ["Shopify", "WhatsApp", "Google Calendar", "Phorest", "Treatwell", "Drive Condiviso"];
 
+const DEFAULT_MANSIONI = [
+  "Amministratore",
+  "Assistenza",
+  "Collaboratore",
+  "Magazzino",
+  "Parrucchiera",
+  "Responsabile salone",
+  "Sarta",
+  "Social",
+  "Vice responsabile salone"
+];
+
 export function StaffDirectory({
   initialStaff,
   locations,
@@ -118,6 +130,37 @@ export function StaffDirectory({
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const [mansioniList, setMansioniList] = useState<string[]>(DEFAULT_MANSIONI);
+  const [customMansioneEdit, setCustomMansioneEdit] = useState(false);
+  const [customMansioneCreate, setCustomMansioneCreate] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/roles/mansioni")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.mansioni) {
+          const fetched = Object.keys(data.mansioni).map(m => {
+            return m.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+          });
+          const merged = Array.from(new Set([...DEFAULT_MANSIONI, ...fetched])).sort();
+          setMansioniList(merged);
+        }
+      })
+      .catch(err => console.error("Error fetching mansioni:", err));
+  }, []);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setCustomMansioneEdit(false);
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    if (!showCreateModal) {
+      setCustomMansioneCreate(false);
+    }
+  }, [showCreateModal]);
 
   const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
@@ -737,11 +780,16 @@ export function StaffDirectory({
                     <Button 
                       variant="soft" 
                       onClick={() => {
-                        setIsEditing(true);
-                        setEditForm({ ...selectedEmployee });
-                        setPinInput("");
-                        setPasswordInput("");
-                        setErrorMsg("");
+                      setIsEditing(true);
+                      setEditForm({ ...selectedEmployee });
+                      setPinInput("");
+                      setPasswordInput("");
+                      setErrorMsg("");
+                      
+                      // Check if mansione is custom
+                      const isCustom = selectedEmployee.mansione && 
+                        !mansioniList.map(m => m.toLowerCase()).includes(selectedEmployee.mansione.toLowerCase());
+                      setCustomMansioneEdit(Boolean(isCustom));
                       }}
                       className="min-h-8 rounded-xl text-xs py-1 px-3 border border-black/10 hover:bg-paradise-nude"
                     >
@@ -762,7 +810,6 @@ export function StaffDirectory({
 
               {isEditing && editForm ? (
                 <SafetyErrorBoundary>
-                  /* EDIT FORM FOR ADMIN */
                   <form onSubmit={handleSaveEmployee} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="space-y-1">
@@ -806,11 +853,34 @@ export function StaffDirectory({
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Mansione / Ruolo</span>
-                      <Field 
-                        value={editForm.mansione || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
-                        placeholder="E.g. Onicotecnica"
-                      />
+                      <Select 
+                        value={customMansioneEdit ? "custom" : (editForm.mansione || "").toLowerCase()}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setCustomMansioneEdit(true);
+                            setEditForm(prev => prev ? { ...prev, mansione: "" } : null);
+                          } else {
+                            setCustomMansioneEdit(false);
+                            setEditForm(prev => prev ? { ...prev, mansione: val } : null);
+                          }
+                        }}
+                      >
+                        <option value="">Seleziona mansione...</option>
+                        {mansioniList.map((m) => (
+                          <option key={m} value={m.toLowerCase()}>{m}</option>
+                        ))}
+                        <option value="custom">+ Aggiungi altra mansione...</option>
+                      </Select>
+                      {customMansioneEdit && (
+                        <Field 
+                          required
+                          value={editForm.mansione || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
+                          placeholder="Inserisci nuova mansione..."
+                          className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                        />
+                      )}
                     </label>
 
                     <label className="space-y-1">
@@ -1195,12 +1265,34 @@ export function StaffDirectory({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <label className="space-y-1">
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Mansione *</span>
-                  <Field 
-                    required
-                    value={newEmployeeForm.mansione || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
-                    placeholder="E.g. Estetista"
-                  />
+                  <Select 
+                    value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "custom") {
+                        setCustomMansioneCreate(true);
+                        setNewEmployeeForm(prev => prev ? { ...prev, mansione: "" } : null);
+                      } else {
+                        setCustomMansioneCreate(false);
+                        setNewEmployeeForm(prev => prev ? { ...prev, mansione: val } : null);
+                      }
+                    }}
+                  >
+                    <option value="">Seleziona mansione...</option>
+                    {mansioniList.map((m) => (
+                      <option key={m} value={m.toLowerCase()}>{m}</option>
+                    ))}
+                    <option value="custom">+ Aggiungi altra mansione...</option>
+                  </Select>
+                  {customMansioneCreate && (
+                    <Field 
+                      required
+                      value={newEmployeeForm.mansione || ""}
+                      onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
+                      placeholder="Inserisci nuova mansione..."
+                      className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                    />
+                  )}
                 </label>
                 <label className="space-y-1">
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Stato Dipendente *</span>
