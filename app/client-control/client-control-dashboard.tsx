@@ -130,6 +130,7 @@ export function ClientControlDashboard({
   const [query, setQuery] = useState("");
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
   const [currentTabFilter, setCurrentTabFilter] = useState<"all" | "discrepancies" | "noshows">("all");
+  const [showAllProducts, setShowAllProducts] = useState(false);
   const [activeSalon, setActiveSalon] = useState("Tutti");
   const [selected, setSelected] = useState<ResponseItem | null>(null);
   const [draftAnswers, setDraftAnswers] = useState<Record<string, any>>({});
@@ -725,46 +726,47 @@ export function ClientControlDashboard({
             </label>
           </div>
         </div>
+        
         {/* Modern Tab Filter Segmented Control */}
-        <div className="px-5 pb-4 border-b border-black/5 bg-neutral-50/30 flex flex-wrap gap-2">
+        <div className="px-5 pb-4 border-b border-black/5 bg-white flex flex-wrap gap-2">
           <div className="inline-flex rounded-full bg-neutral-100 p-1 border border-black/[0.03]">
             <button
               type="button"
               onClick={() => setCurrentTabFilter("all")}
               className={cn(
-                "px-5 py-2 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
                 currentTabFilter === "all"
-                  ? "bg-white text-black shadow-sm"
+                  ? "bg-white text-neutral-800 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03]"
                   : "text-neutral-500 hover:text-black"
               )}
             >
-              <Layers className="size-3.5" />
+              <Layers className={cn("size-3.5", currentTabFilter === "all" ? "text-neutral-800" : "text-neutral-400")} />
               Tutti i moduli ({tabCounts.all})
             </button>
             <button
               type="button"
               onClick={() => setCurrentTabFilter("discrepancies")}
               className={cn(
-                "px-5 py-2 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
                 currentTabFilter === "discrepancies"
-                  ? "bg-red-500 text-white shadow-sm font-extrabold"
+                  ? "bg-white text-red-600 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03] font-extrabold"
                   : "text-neutral-500 hover:text-red-600"
               )}
             >
-              <AlertTriangle className="size-3.5" />
+              <AlertTriangle className={cn("size-3.5", currentTabFilter === "discrepancies" ? "text-red-500" : "text-neutral-400")} />
               Discrepanze ({tabCounts.discrepancies})
             </button>
             <button
               type="button"
               onClick={() => setCurrentTabFilter("noshows")}
               className={cn(
-                "px-5 py-2 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
                 currentTabFilter === "noshows"
-                  ? "bg-[#EA8CCD] text-white shadow-sm font-extrabold"
+                  ? "bg-white text-[#C661A0] shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03] font-extrabold"
                   : "text-neutral-500 hover:text-[#C661A0]"
               )}
             >
-              <UserX className="size-3.5" />
+              <UserX className={cn("size-3.5", currentTabFilter === "noshows" ? "text-[#C661A0]" : "text-neutral-400")} />
               No Show ({tabCounts.noshows})
             </button>
           </div>
@@ -801,15 +803,27 @@ export function ClientControlDashboard({
             </div>
 
             {workerReport.productsList.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#C661A0] mt-2">Dettaglio Prodotti / Servizi Venduti (da Shopify)</p>
-                <div className="flex flex-wrap gap-2">
-                  {workerReport.productsList.map((prod) => (
-                    <div key={prod.name} className="flex items-center gap-2 rounded-xl bg-white border border-black/5 px-3 py-1.5 shadow-sm text-xs text-neutral-700 font-bold">
-                      <span className="inline-flex size-5 items-center justify-center rounded-full bg-[#F39BD1]/20 text-[#C661A0] font-black text-[10px]">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-black/[0.04] pb-1.5 mt-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#C661A0]">Dettaglio Prodotti / Servizi Venduti (da Shopify)</p>
+                  {workerReport.productsList.length > 6 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllProducts(prev => !prev)}
+                      className="text-[10px] font-bold text-neutral-500 hover:text-black transition underline cursor-pointer select-none"
+                    >
+                      {showAllProducts ? "Mostra meno" : `Mostra tutti (${workerReport.productsList.length})`}
+                    </button>
+                  )}
+                </div>
+                
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {(showAllProducts ? workerReport.productsList : workerReport.productsList.slice(0, 6)).map((prod) => (
+                    <div key={prod.name} className="flex items-center justify-between rounded-xl border border-black/[0.04] bg-white p-2.5 shadow-sm text-xs font-semibold text-neutral-700 hover:border-black/[0.08] transition duration-150">
+                      <span className="truncate pr-2" title={prod.name}>{prod.name}</span>
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-[#F39BD1]/10 px-1.5 text-[#C661A0] font-black text-[10px] shrink-0">
                         {prod.count}
                       </span>
-                      <span>{prod.name}</span>
                     </div>
                   ))}
                 </div>
