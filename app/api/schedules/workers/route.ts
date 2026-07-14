@@ -24,10 +24,20 @@ export async function POST(request: NextRequest) {
         id: userId,
         active: true,
         NOT: {
-          mansione: {
-            in: ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
-            mode: "insensitive"
-          }
+          OR: [
+            {
+              mansione: {
+                in: ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
+                mode: "insensitive"
+              }
+            },
+            {
+              employee_status: {
+                in: ["ex dipendente", "exdipendenti", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
+                mode: "insensitive"
+              }
+            }
+          ]
         }
       }
     }),

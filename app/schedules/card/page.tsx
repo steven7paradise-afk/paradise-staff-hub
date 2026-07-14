@@ -78,10 +78,20 @@ export default async function ScheduleCardPage({
         active: true,
         role: { not: "SUPER_ADMIN" },
         NOT: {
-          mansione: {
-            in: ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
-            mode: "insensitive"
-          }
+          OR: [
+            {
+              mansione: {
+                in: ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
+                mode: "insensitive"
+              }
+            },
+            {
+              employee_status: {
+                in: ["ex dipendente", "exdipendenti", "ex dipendenti", "ex-dipendente", "ex-dipendenti"],
+                mode: "insensitive"
+              }
+            }
+          ]
         },
         ...(currentUserRole === "RESPONSABILE" ? { sede_id: currentUserSedeId } : {}),
       },
