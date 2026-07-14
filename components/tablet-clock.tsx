@@ -2139,7 +2139,6 @@ export function TabletClock({
                                   <input
                                     type="file"
                                     accept="image/*,.heic,.HEIC,.heif,.HEIF"
-                                    capture="user"
                                     onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (file) {
