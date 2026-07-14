@@ -391,6 +391,63 @@ export function ClientControlDashboard({
     };
   }, [monthlyResponses, selectedWorkerName, employeeNames]);
 
+  const tabCounts = useMemo(() => {
+    let all = 0;
+    let discrepancies = 0;
+    let noshows = 0;
+
+    monthlyResponses.forEach((response) => {
+      const answers = response.answers ?? {};
+      const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
+
+      const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
+      const fallbackOwner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
+      const staffNames = (selectedStaff.length ? selectedStaff : fallbackOwner.length ? fallbackOwner : [response.user.name ?? "Senza nome"])
+        .map((name) => resolveCanonicalStaffName(name, employeeNames));
+
+      const matchesWorker = !selectedWorkerName || staffNames.includes(selectedWorkerName);
+      const matchesSalon = activeSalon === "Tutti" || salon === activeSalon;
+
+      const haystack = [
+        response.user.name,
+        salon,
+        answers[CLIENT_CONTROL_FIELD_IDS.clientName],
+        answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder],
+        answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff],
+      ].flat().join(" ").toLowerCase();
+      const matchesQuery = haystack.includes(query.trim().toLowerCase());
+
+      if (matchesSalon && matchesWorker && matchesQuery) {
+        all++;
+
+        // Mismatch logic
+        const declaredPaid = answers[CLIENT_CONTROL_FIELD_IDS.paid];
+        const expectedPaid = answers["client_control_shopify_expected_paid"];
+        let hasMismatch = false;
+        if (
+          declaredPaid !== undefined && declaredPaid !== null && declaredPaid !== "" &&
+          expectedPaid !== undefined && expectedPaid !== null && expectedPaid !== ""
+        ) {
+          const declaredNum = parseFloat(String(declaredPaid).replace(",", "."));
+          const expectedNum = parseFloat(String(expectedPaid).replace(",", "."));
+          if (!Number.isNaN(declaredNum) && !Number.isNaN(expectedNum) && declaredNum !== expectedNum) {
+            hasMismatch = true;
+          }
+        }
+        if (hasMismatch) discrepancies++;
+
+        // No Show logic
+        const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").toLowerCase();
+        const isNoShow = correctness === "no show" || 
+                         String(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]).toLowerCase() === "no show" || 
+                         selectedStaff.some(name => name.toLowerCase() === "no show");
+        if (isNoShow) noshows++;
+      }
+    });
+
+    return { all, discrepancies, noshows };
+  }, [monthlyResponses, activeSalon, selectedWorkerName, query, employeeNames]);
+
   const filteredResponses = monthlyResponses.filter((response) => {
     const answers = response.answers ?? {};
     const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
@@ -682,7 +739,7 @@ export function ClientControlDashboard({
               )}
             >
               <Layers className="size-3.5" />
-              Tutti i moduli
+              Tutti i moduli ({tabCounts.all})
             </button>
             <button
               type="button"
@@ -695,7 +752,7 @@ export function ClientControlDashboard({
               )}
             >
               <AlertTriangle className="size-3.5" />
-              Discrepanze
+              Discrepanze ({tabCounts.discrepancies})
             </button>
             <button
               type="button"
@@ -708,7 +765,7 @@ export function ClientControlDashboard({
               )}
             >
               <UserX className="size-3.5" />
-              No Show
+              No Show ({tabCounts.noshows})
             </button>
           </div>
         </div>
