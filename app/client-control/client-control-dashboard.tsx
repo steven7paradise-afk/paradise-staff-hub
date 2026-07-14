@@ -128,6 +128,7 @@ export function ClientControlDashboard({
 }) {
   const [responses, setResponses] = useState(initialResponses);
   const [query, setQuery] = useState("");
+  const [selectedWorkerName, setSelectedWorkerName] = useState("");
   const [activeSalon, setActiveSalon] = useState("Tutti");
   const [selected, setSelected] = useState<ResponseItem | null>(null);
   const [draftAnswers, setDraftAnswers] = useState<Record<string, any>>({});
@@ -325,9 +326,81 @@ export function ClientControlDashboard({
     doc.save(filename);
   };
 
+  const workerReport = useMemo(() => {
+    if (!selectedWorkerName) return null;
+
+    let totalServices = 0;
+    let totalPaid = 0;
+    let totalReviews = 0;
+    let totalNotePhoto = 0;
+    let totalConsulenze = 0;
+    const productsMap = new Map<string, number>();
+
+    monthlyResponses.forEach((response) => {
+      const answers = response.answers ?? {};
+      const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
+      const fallbackOwner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
+      const staffNames = (selectedStaff.length ? selectedStaff : fallbackOwner.length ? fallbackOwner : [response.user.name ?? "Senza nome"])
+        .map((name) => resolveCanonicalStaffName(name, employeeNames));
+
+      if (staffNames.includes(selectedWorkerName) && countsInAnalytics(answers)) {
+        totalServices++;
+        
+        const paidVal = Number(String(answers[CLIENT_CONTROL_FIELD_IDS.paid] ?? "0").replace(",", "."));
+        if (Number.isFinite(paidVal)) {
+          totalPaid += paidVal;
+        }
+
+        if (truthy(answers[CLIENT_CONTROL_FIELD_IDS.review])) {
+          totalReviews++;
+        }
+
+        let notePhotoCount = 0;
+        if (truthy(answers[CLIENT_CONTROL_FIELD_IDS.notes])) notePhotoCount++;
+        if (truthy(answers[CLIENT_CONTROL_FIELD_IDS.beforeMedia])) notePhotoCount++;
+        if (truthy(answers[CLIENT_CONTROL_FIELD_IDS.afterMedia])) notePhotoCount++;
+        totalNotePhoto += notePhotoCount;
+
+        const prodList = String(answers[CLIENT_CONTROL_FIELD_IDS.productsList] || "").trim();
+        if (prodList && prodList !== "undefined" && prodList !== "null") {
+          prodList.split(",").forEach((item) => {
+            const cleanItem = item.trim();
+            if (cleanItem && cleanItem !== "[object Object]") {
+              if (cleanItem.toLowerCase().includes("consulenz")) {
+                totalConsulenze++;
+              }
+              productsMap.set(cleanItem, (productsMap.get(cleanItem) ?? 0) + 1);
+            }
+          });
+        }
+      }
+    });
+
+    const productsList = Array.from(productsMap.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      totalServices,
+      totalPaid,
+      totalReviews,
+      totalNotePhoto,
+      totalConsulenze,
+      productsList
+    };
+  }, [monthlyResponses, selectedWorkerName, employeeNames]);
+
   const filteredResponses = monthlyResponses.filter((response) => {
     const answers = response.answers ?? {};
     const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
+
+    const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
+    const fallbackOwner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
+    const staffNames = (selectedStaff.length ? selectedStaff : fallbackOwner.length ? fallbackOwner : [response.user.name ?? "Senza nome"])
+      .map((name) => resolveCanonicalStaffName(name, employeeNames));
+
+    const matchesWorker = !selectedWorkerName || staffNames.includes(selectedWorkerName);
+
     const haystack = [
       response.user.name,
       salon,
@@ -335,7 +408,10 @@ export function ClientControlDashboard({
       answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder],
       answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff],
     ].flat().join(" ").toLowerCase();
-    return (activeSalon === "Tutti" || salon === activeSalon) && haystack.includes(query.trim().toLowerCase());
+    
+    return (activeSalon === "Tutti" || salon === activeSalon) && 
+           matchesWorker &&
+           haystack.includes(query.trim().toLowerCase());
   });
 
   function openResponse(response: ResponseItem) {
@@ -543,13 +619,75 @@ export function ClientControlDashboard({
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Cronologia</p>
             <h2 className="text-2xl font-black">Tutti i moduli Controllo Cliente</h2>
           </div>
-          <div className="flex min-w-0 flex-1 gap-2 lg:max-w-xl">
-            <label className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-3">
+          <div className="flex flex-col sm:flex-row flex-1 gap-3 lg:max-w-2xl w-full">
+            <select
+              value={selectedWorkerName}
+              onChange={(e) => setSelectedWorkerName(e.target.value)}
+              className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none cursor-pointer hover:bg-neutral-50 transition"
+            >
+              <option value="">Tutti i collaboratori</option>
+              {employeeNames.slice().sort((a, b) => a.localeCompare(b)).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+
+            <label className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 h-12">
               <Search className="size-4 text-black/35" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca cliente, staff, ordine..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </label>
           </div>
         </div>
+
+        {workerReport && (
+          <div className="mx-5 mb-5 p-5 rounded-[24px] bg-[#FAF6F9]/60 border border-black/[0.05] space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-black/[0.05] pb-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#C661A0]">REPORT MENSILE COLLABORATORE</p>
+                <h3 className="text-xl font-black text-neutral-800">{selectedWorkerName}</h3>
+              </div>
+              <button 
+                onClick={() => setSelectedWorkerName("")}
+                className="text-xs text-neutral-500 hover:text-black font-semibold underline self-start sm:self-center"
+              >
+                Azzera filtro collaboratore
+              </button>
+            </div>
+
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+              {[
+                { label: "Servizi svolti", value: workerReport.totalServices },
+                { label: "Valore servizi", value: money(workerReport.totalPaid) },
+                { label: "Recensioni ricevute", value: workerReport.totalReviews },
+                { label: "Note e Foto fatte", value: workerReport.totalNotePhoto },
+                { label: "Consulenze fatte", value: workerReport.totalConsulenze },
+              ].map((card) => (
+                <div key={card.label} className="rounded-2xl border border-black/[0.03] bg-white p-4 shadow-sm">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-neutral-400 leading-tight">{card.label}</p>
+                  <p className="mt-2 text-lg font-black text-neutral-800">{card.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {workerReport.productsList.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#C661A0] mt-2">Dettaglio Prodotti / Servizi Venduti (da Shopify)</p>
+                <div className="flex flex-wrap gap-2">
+                  {workerReport.productsList.map((prod) => (
+                    <div key={prod.name} className="flex items-center gap-2 rounded-xl bg-white border border-black/5 px-3 py-1.5 shadow-sm text-xs text-neutral-700 font-bold">
+                      <span className="inline-flex size-5 items-center justify-center rounded-full bg-[#F39BD1]/20 text-[#C661A0] font-black text-[10px]">
+                        {prod.count}
+                      </span>
+                      <span>{prod.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-400 italic">Nessun prodotto registrato per questo collaboratore nel mese selezionato.</p>
+            )}
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-[#fbf7fa] text-[10px] uppercase tracking-[0.18em] text-black/42">
