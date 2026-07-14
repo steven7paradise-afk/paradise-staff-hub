@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deleteScheduleEventFromGoogleCalendar, syncScheduleEntryToGoogleCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
+import { canEditForUser } from "@/lib/roles";
 
 const planningRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -114,7 +115,17 @@ async function syncUserSickness(userId: string, approverId: string) {
 
 export async function PUT(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || !planningRoles.has(session.user.role)) {
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true }
+  });
+
+  const isAuthorized = user && (user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

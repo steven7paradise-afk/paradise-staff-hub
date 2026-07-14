@@ -167,6 +167,11 @@ export async function canAccessForUser(prisma: any, pathname: string, user: { id
   return canAccess(pathname, user.role as Role | undefined, user.mansione || undefined, accessList);
 }
 
+export async function canEditForUser(prisma: any, pathname: string, user: { id: string; role?: Role | string; mansione?: string | null; access_list?: any }) {
+  const accessList = await getEffectiveAccessList(prisma, user);
+  return canEdit(pathname, user.role as Role | undefined, user.mansione || undefined, accessList);
+}
+
 export function visibleForRole<T extends { roles: Role[] }>(items: T[], role: Role) {
   return items.filter((item) => item.roles.includes(role));
 }
