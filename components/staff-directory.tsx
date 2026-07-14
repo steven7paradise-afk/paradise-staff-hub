@@ -1,7 +1,7 @@
 "use client";
 
+import React, { useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
 import { 
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
@@ -37,6 +37,43 @@ type Employee = {
 
 type Location = { id: string; name: string };
 type Manager = { id: string; name: string; role: string };
+
+class SafetyErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 bg-rose-50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-200 rounded-3xl border border-rose-200 dark:border-rose-900 space-y-4">
+          <h3 className="text-lg font-bold">Si è verificato un errore nel modulo di modifica:</h3>
+          <p className="text-sm font-semibold font-mono">{this.state.error?.toString()}</p>
+          <pre className="text-xs font-mono whitespace-pre-wrap max-h-60 overflow-y-auto p-4 bg-black/5 dark:bg-black/40 rounded-xl">
+            {this.state.error?.stack}
+          </pre>
+          <button 
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-4 py-2 bg-rose-600 text-white rounded-xl font-bold text-xs"
+          >
+            Riprova
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const STATUS_OPTIONS = ["Attivo", "In prova", "Sospeso", "Ex dipendente"];
 const ROLE_OPTIONS = [
@@ -724,8 +761,9 @@ export function StaffDirectory({
               )}
 
               {isEditing && editForm ? (
-                /* EDIT FORM FOR ADMIN */
-                <form onSubmit={handleSaveEmployee} className="space-y-4">
+                <SafetyErrorBoundary>
+                  /* EDIT FORM FOR ADMIN */
+                  <form onSubmit={handleSaveEmployee} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <label className="space-y-1">
                       <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Nome e Cognome</span>
@@ -954,7 +992,8 @@ export function StaffDirectory({
                       {submitting ? "Salvataggio..." : "Salva Modifiche"}
                     </Button>
                   </div>
-                </form>
+                 </form>
+                </SafetyErrorBoundary>
               ) : (
                 /* READ-ONLY INFO VIEW (ADMIN/RESPONSABILE) */
                 <div className="space-y-6">
