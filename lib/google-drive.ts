@@ -2,6 +2,12 @@ import { google } from "googleapis";
 import { Readable } from "stream";
 
 function getPrivateKey() {
+  if (process.env.DRIVE_PRIVATE_KEY_BASE64) {
+    return Buffer.from(process.env.DRIVE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
+  }
+  if (process.env.DRIVE_PRIVATE_KEY) {
+    return process.env.DRIVE_PRIVATE_KEY.replace(/\\n/g, "\n");
+  }
   if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
     return Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
   }
@@ -57,7 +63,7 @@ export async function uploadFileToGoogleDrive(
   mimeType: string
 ) {
   const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || "1LbwCUQSwbaWZ3BH9gnn8dm1dmhQbluvC";
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
   if (!clientEmail || !privateKey) {
