@@ -575,9 +575,12 @@ export function TabletClock({
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
       }
+      setCameraStream(null);
+      await new Promise((resolve) => setTimeout(resolve, 150)); // Wait for hardware to release
+
       const constraints = {
         video: {
-          facingMode: facing,
+          facingMode: { ideal: facing },
           width: { ideal: 1920 },
           height: { ideal: 1080 }
         },
@@ -585,18 +588,28 @@ export function TabletClock({
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setCameraStream(stream);
-      // Wait a tick for video element to mount/be ready
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }, 50);
     } catch (err) {
-      console.error("Failed to start camera:", err);
-      setAppointmentMessage({ type: "error", text: "Impossibile accedere alla fotocamera. Controlla i permessi." });
-      setActiveCameraSlot(null);
+      console.error("Failed to start camera with constraints:", err);
+      // Fallback
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facing },
+          audio: false
+        });
+        setCameraStream(stream);
+      } catch (err2) {
+        console.error("Fallback camera failed:", err2);
+        setAppointmentMessage({ type: "error", text: "Impossibile accedere alla fotocamera. Controlla i permessi." });
+        setActiveCameraSlot(null);
+      }
     }
   };
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
 
   const stopCamera = () => {
     if (cameraStream) {
