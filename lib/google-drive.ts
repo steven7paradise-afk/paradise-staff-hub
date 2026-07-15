@@ -2,16 +2,25 @@ import { google } from "googleapis";
 import { Readable } from "stream";
 
 function getPrivateKey() {
+  let key: string | undefined;
+  let source = "";
+
   if (process.env.DRIVE_PRIVATE_KEY_BASE64) {
-    return Buffer.from(process.env.DRIVE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
+    key = Buffer.from(process.env.DRIVE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
+    source = "DRIVE_PRIVATE_KEY_BASE64";
+  } else if (process.env.DRIVE_PRIVATE_KEY) {
+    key = process.env.DRIVE_PRIVATE_KEY.replace(/\\n/g, "\n");
+    source = "DRIVE_PRIVATE_KEY";
+  } else if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
+    key = Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
+    source = "GOOGLE_PRIVATE_KEY_BASE64";
+  } else {
+    key = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    source = "GOOGLE_PRIVATE_KEY";
   }
-  if (process.env.DRIVE_PRIVATE_KEY) {
-    return process.env.DRIVE_PRIVATE_KEY.replace(/\\n/g, "\n");
-  }
-  if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
-    return Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
-  }
-  return process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  console.log(`[Google Drive Auth] Loaded private key from source: ${source}. Key exists: ${!!key}. Length: ${key?.length || 0}. Prefix: ${key ? key.substring(0, 28) : "none"}`);
+  return key;
 }
 
 async function getOrCreateDateFolder(drive: any, parentFolderId: string, dateStr: string): Promise<string> {
