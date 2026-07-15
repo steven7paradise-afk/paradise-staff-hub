@@ -24,7 +24,7 @@ export default async function CedoliniPage() {
     }),
     prisma.user.findMany({
       where: { active: true, role: { not: "SUPER_ADMIN" } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, role: true, mansione: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -55,7 +55,7 @@ export default async function CedoliniPage() {
         <DocumentUpload workers={workers} />
       </div>
       
-      <DocumentsViewer documents={documentItems} employeeView={false} />
+      <DocumentsViewer documents={documentItems} employeeView={false} workers={workers} />
     </AppShell>
   );
 }

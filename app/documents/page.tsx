@@ -42,7 +42,7 @@ export default async function DocumentsPage() {
     >
       {!employeeView ? (
         <div className="mb-6">
-          <DocumentUpload workers={workers} />
+          <DocumentUpload workers={[]} />
         </div>
       ) : null}
       

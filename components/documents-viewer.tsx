@@ -16,6 +16,10 @@ import {
   Trash2,
   Search,
   X,
+  CheckCircle2,
+  ChevronRight,
+  ArrowLeft,
+  AlertCircle,
 } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -315,7 +319,15 @@ function MobilePreviewModal({
   );
 }
 
-export function DocumentsViewer({ documents, employeeView }: { documents: DocumentRecord[]; employeeView: boolean }) {
+export function DocumentsViewer({
+  documents,
+  employeeView,
+  workers = [],
+}: {
+  documents: DocumentRecord[];
+  employeeView: boolean;
+  workers?: { id: string; name: string; role?: string; mansione?: string | null }[];
+}) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState("");
   const [selectedId, setSelectedId] = useState(documents[0]?.id ?? "");
@@ -326,6 +338,19 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
   const [selectedType, setSelectedType] = useState("ALL");
   const [selectedYear, setSelectedYear] = useState("ALL");
+
+  // Delivery status verification states
+  const now = new Date();
+  let defaultMonth = now.getMonth(); // 0-indexed, so 6 is July. 6 in 1-indexed is June.
+  let defaultYear = now.getFullYear();
+  if (defaultMonth === 0) {
+    defaultMonth = 12;
+    defaultYear -= 1;
+  }
+
+  const [statusMonth, setStatusMonth] = useState(defaultMonth);
+  const [statusYear, setStatusYear] = useState(defaultYear);
+  const [workerSearchQuery, setWorkerSearchQuery] = useState("");
 
   const workersList = useMemo(() => {
     const list: { id: string; name: string }[] = [];
@@ -346,6 +371,51 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
     });
     return Array.from(years).sort((a, b) => b - a);
   }, [documents]);
+
+  const workersWithStatus = useMemo(() => {
+    if (employeeView) return [];
+    
+    // Map workerId -> has BUSTA_PAGA for selected month and year
+    const statusMap = new Map<string, { hasDoc: boolean; docId?: string; dateUploaded?: string }>();
+    
+    documents.forEach((doc) => {
+      if (doc.type === "BUSTA_PAGA" && doc.month === statusMonth && doc.year === statusYear) {
+        statusMap.set(doc.user.id, {
+          hasDoc: true,
+          docId: doc.id,
+          dateUploaded: doc.created_at,
+        });
+      }
+    });
+    
+    return workers.map((w) => {
+      const statusInfo = statusMap.get(w.id);
+      return {
+        ...w,
+        hasDoc: statusInfo?.hasDoc ?? false,
+        docId: statusInfo?.docId,
+        dateUploaded: statusInfo?.dateUploaded,
+      };
+    });
+  }, [workers, documents, statusMonth, statusYear, employeeView]);
+
+  const filteredWorkers = useMemo(() => {
+    if (!workerSearchQuery.trim()) return workersWithStatus;
+    const query = workerSearchQuery.toLowerCase();
+    return workersWithStatus.filter((w) => w.name.toLowerCase().includes(query));
+  }, [workersWithStatus, workerSearchQuery]);
+
+  const stats = useMemo(() => {
+    const total = workersWithStatus.length;
+    const completed = workersWithStatus.filter((w) => w.hasDoc).length;
+    const missing = total - completed;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    const missingWorkers = workersWithStatus.filter((w) => !w.hasDoc);
+    const completedWorkers = workersWithStatus.filter((w) => w.hasDoc);
+    
+    return { total, completed, missing, percentage, missingWorkers, completedWorkers };
+  }, [workersWithStatus]);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
@@ -389,14 +459,26 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
 
   const selectedDocument = useMemo(() => filteredDocuments.find((document) => document.id === selectedId) ?? filteredDocuments[0], [filteredDocuments, selectedId]);
 
-  if (documents.length === 0) {
+  const handleSelectWorker = (workerId: string) => {
+    setSelectedWorkerId(workerId);
+    const workerDocs = documents.filter((d) => d.user.id === workerId);
+    if (workerDocs.length > 0) {
+      setSelectedId(workerDocs[0].id);
+    } else {
+      setSelectedId("");
+    }
+  };
+
+  if (documents.length === 0 && workers.length === 0) {
     return (
       <Card className="border border-black/5 bg-white/70 py-12 text-center text-sm text-black/45 hover:translate-y-0">
         <FolderOpen className="mx-auto mb-2 size-10 text-black/20" />
-        Nessun documento disponibile nel tuo archivio.
+        Nessun documento o collaboratore disponibile nel tuo archivio.
       </Card>
     );
   }
+
+  const showPersonnelTable = !employeeView && workers.length > 0 && selectedWorkerId === "";
 
   return (
     <>
@@ -416,335 +498,578 @@ export function DocumentsViewer({ documents, employeeView }: { documents: Docume
           }
         }
       `}} />
+      
+      {/* MOBILE VERSION (lg:hidden) */}
       <div className="space-y-4 lg:hidden bg-[#0A0A0A] rounded-[32px] p-5 border border-white/5 shadow-2xl documents-page">
-        {/* Mobile Filters Panel */}
-        <div className="space-y-3 bg-white/5 p-4 rounded-[24px] border border-white/5 mb-2">
-          {/* Search bar */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Cerca per titolo o collaboratore..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-11 pl-9 pr-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/30" />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-white/30 hover:text-white/60">
-                <X className="size-3" />
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {/* Employee Filter */}
-            {!employeeView && (
-              <select
-                value={selectedWorkerId}
-                onChange={(e) => setSelectedWorkerId(e.target.value)}
-                className="h-10 rounded-xl border border-white/10 bg-white/5 text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-white/[0.02]"
-              >
-                <option value="" className="bg-[#0A0A0A] text-white">Tutti i dipendenti</option>
-                {workersList.map((w) => (
-                  <option key={w.id} value={w.id} className="bg-[#0A0A0A] text-white">
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {/* Document Type Filter */}
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className={cn(
-                "h-10 rounded-xl border border-white/10 bg-white/5 text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-white/[0.02]",
-                employeeView && "col-span-2"
-              )}
-            >
-              <option value="ALL" className="bg-[#0A0A0A] text-white">Tutti i tipi</option>
-              <option value="BUSTA_PAGA" className="bg-[#0A0A0A] text-white">Busta paga</option>
-              <option value="CONTRATTO" className="bg-[#0A0A0A] text-white">Contratto</option>
-              <option value="DOCUMENTO" className="bg-[#0A0A0A] text-white">Documento HR</option>
-            </select>
-          </div>
-
-          {/* Year Chips */}
-          {yearsList.length > 0 && (
-            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-              <button
-                onClick={() => setSelectedYear("ALL")}
-                className={cn(
-                  "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
-                  selectedYear === "ALL"
-                    ? "bg-[#B85B68] text-white"
-                    : "bg-white/5 text-white/70 hover:bg-white/10"
+        {showPersonnelTable ? (
+          /* MOBILE: Personnel Status Table */
+          <div className="space-y-4">
+            <div className="bg-white/5 p-4 rounded-[24px] border border-white/5 space-y-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.24em] text-[#B85B68]">Stato Consegne</p>
+              <h2 className="text-lg font-extrabold text-white">Consegna Cedolini</h2>
+              
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Cerca collaboratore..."
+                  value={workerSearchQuery}
+                  onChange={(e) => setWorkerSearchQuery(e.target.value)}
+                  className="w-full h-11 pl-9 pr-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/30" />
+                {workerSearchQuery && (
+                  <button onClick={() => setWorkerSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30">
+                    <X className="size-3" />
+                  </button>
                 )}
-              >
-                Tutti gli anni
-              </button>
-              {yearsList.map((y) => (
-                <button
-                  key={y}
-                  onClick={() => setSelectedYear(String(y))}
-                  className={cn(
-                    "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
-                    selectedYear === String(y)
-                      ? "bg-[#B85B68] text-white"
-                      : "bg-white/5 text-white/70 hover:bg-white/10"
-                )}
-              >
-                {y}
-              </button>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
 
-        {filteredDocuments.length === 0 ? (
-          <div className="border border-white/5 bg-white/5 py-12 text-center text-sm text-white/45 rounded-[24px]">
-            Nessun documento corrispondente ai filtri.
-          </div>
-        ) : (
-          filteredDocuments.map((doc, idx) => {
-          const colors = [
-            { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-            { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
-          ];
-          const color = colors[idx % colors.length];
-          const isExpanded = expandedId === doc.id;
-          const period = documentPeriod(doc);
-          const url = getDocumentUrl(doc);
-
-          return (
-            <div
-              key={doc.id}
-              onClick={() => setExpandedId(isExpanded ? null : doc.id)}
-              className={cn(
-                "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
-                color.bg,
-                color.text,
-                isExpanded ? "flex flex-col gap-4 animate-in fade-in-50 duration-200" : "h-[72px] flex items-center justify-between"
-              )}
-            >
-              {isExpanded ? (
-                <div className="flex flex-col justify-between w-full">
-                  <div>
-                    <div className="flex justify-between items-start gap-3">
-                      <h3 className="text-base font-extrabold pr-8 leading-tight line-clamp-2">{doc.title}</h3>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMobilePreview(doc);
-                        }}
-                        className={cn(
-                          "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
-                          color.arrowBg,
-                          color.arrowText
-                        )}
-                      >
-                        <ArrowUpRight className="size-4.5" />
-                      </button>
-                    </div>
-
-                    <div className="mt-4 space-y-2 text-xs font-semibold opacity-85">
-                      <p className="flex items-center gap-2">
-                        <span className="opacity-60">Tipo:</span>
-                        <span>{typeLabels[doc.type] || doc.type}</span>
-                      </p>
-                      {period && (
-                        <p className="flex items-center gap-2">
-                          <span className="opacity-60">Periodo:</span>
-                          <span>{period}</span>
-                        </p>
-                      )}
-                      <p className="flex items-center gap-2">
-                        <span className="opacity-60">Caricato il:</span>
-                        <span>{formatDate(doc.created_at)}</span>
-                      </p>
-                      {!employeeView && (
-                        <p className="flex items-center gap-2">
-                          <span className="opacity-60">Collaboratore:</span>
-                          <span>{doc.user.name}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 space-y-2 pt-3 border-t border-black/10">
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMobilePreview(doc);
-                        }}
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
-                      >
-                        <Eye className="size-4" />
-                        Visualizza
-                      </button>
-                      <a
-                        href={url}
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
-                      >
-                        <Download className="size-4" />
-                        Scarica
-                      </a>
-                    </div>
-                    {!employeeView && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(doc.id);
-                        }}
-                        disabled={deletingId === doc.id}
-                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-red-600/90 text-white text-sm font-bold active:scale-[0.97] transition disabled:opacity-50"
-                      >
-                        <Trash2 className="size-4" />
-                        {deletingId === doc.id ? "Eliminazione..." : "Elimina"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <h3 className="text-sm font-extrabold truncate pr-4">{doc.title}</h3>
-                  <div
-                    className={cn(
-                      "size-9 rounded-full flex items-center justify-center shadow-sm shrink-0",
-                      color.arrowBg,
-                      color.arrowText
-                    )}
-                  >
-                    <ArrowUpRight className="size-4" />
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        }))}
-      </div>
-
-      <div className="hidden grid-cols-12 gap-5 lg:grid">
-        <Card className="col-span-5 max-h-[calc(100dvh-8rem)] overflow-hidden p-0 hover:translate-y-0 flex flex-col">
-          <div className="border-b border-black/5 bg-white/80 p-5 shrink-0">
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-black/35">Archivio documenti</p>
-            <h2 className="mt-1 text-xl font-extrabold text-paradise-noir">
-              {filteredDocuments.length === documents.length
-                ? `${documents.length} file disponibili`
-                : `${filteredDocuments.length} di ${documents.length} file`}
-            </h2>
-          </div>
-
-          {/* Desktop Filters Panel */}
-          <div className="border-b border-black/5 bg-slate-50/50 p-4 space-y-3 shrink-0">
-            {/* Search bar */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Cerca per titolo o collaboratore..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-10 pl-9 pr-4 rounded-xl border border-black/10 bg-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-black/30 hover:text-black/60">
-                  <X className="size-3" />
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {/* Employee Filter */}
-              {!employeeView && (
+              <div className="grid grid-cols-2 gap-2">
                 <select
-                  value={selectedWorkerId}
-                  onChange={(e) => setSelectedWorkerId(e.target.value)}
-                  className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                  value={statusMonth}
+                  onChange={(e) => setStatusMonth(Number(e.target.value))}
+                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
                 >
-                  <option value="">Tutti i dipendenti</option>
-                  {workersList.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
+                  {monthNames.map((name, idx) => (
+                    <option key={idx} value={idx + 1}>{name}</option>
                   ))}
                 </select>
-              )}
-
-              {/* Document Type Filter */}
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className={cn(
-                  "h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]",
-                  employeeView && "col-span-2"
-                )}
-              >
-                <option value="ALL">Tutti i tipi</option>
-                <option value="BUSTA_PAGA">Busta paga</option>
-                <option value="CONTRATTO">Contratto</option>
-                <option value="DOCUMENTO">Documento HR</option>
-              </select>
+                <select
+                  value={statusYear}
+                  onChange={(e) => setStatusYear(Number(e.target.value))}
+                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                >
+                  {[2024, 2025, 2026, 2027, 2028].map((year) => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            {/* Year Chips */}
-            {yearsList.length > 0 && (
-              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            <div className="space-y-2">
+              {filteredWorkers.map((worker) => (
                 <button
-                  onClick={() => setSelectedYear("ALL")}
-                  className={cn(
-                    "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
-                    selectedYear === "ALL"
-                      ? "bg-[#B85B68] text-white"
-                      : "bg-white border border-black/5 text-black/55 hover:bg-black/[0.02]"
-                  )}
+                  key={worker.id}
+                  type="button"
+                  onClick={() => handleSelectWorker(worker.id)}
+                  className="w-full rounded-2xl border border-white/5 bg-white/5 p-4 text-left flex items-center justify-between transition-all active:scale-[0.98]"
                 >
-                  Tutti gli anni
-                </button>
-                {yearsList.map((y) => (
-                  <button
-                    key={y}
-                    onClick={() => setSelectedYear(String(y))}
-                    className={cn(
-                      "px-2.5 py-1 rounded-full text-[10px] font-extrabold transition shrink-0",
-                      selectedYear === String(y)
-                        ? "bg-[#B85B68] text-white"
-                        : "bg-white border border-black/5 text-black/55 hover:bg-black/[0.02]"
+                  <div className="min-w-0 flex-1 pr-3">
+                    <h3 className="text-sm font-extrabold text-white truncate">{worker.name}</h3>
+                    <p className="text-xs text-white/40 mt-0.5 font-semibold truncate">
+                      {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    {worker.hasDoc ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-extrabold text-emerald-400 border border-emerald-500/20">
+                        <span className="size-1.5 rounded-full bg-emerald-400" />
+                        Caricato
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-extrabold text-rose-400 border border-rose-500/20">
+                        <span className="size-1.5 rounded-full bg-rose-400" />
+                        Mancante
+                      </span>
                     )}
-                  >
-                    {y}
-                  </button>
-                ))}
-              </div>
-            )}
+                    <ChevronRight className="size-4 text-white/30" />
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
+        ) : (
+          /* MOBILE: User Document List (Original View adjusted for specific worker or self) */
+          <>
+            <div className="bg-white/5 p-4 rounded-[24px] border border-white/5 space-y-3">
+              {!employeeView && (
+                <button
+                  onClick={() => setSelectedWorkerId("")}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#B85B68] hover:underline mb-1"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  Torna al personale
+                </button>
+              )}
+              
+              <h2 className="text-lg font-extrabold text-white">
+                {employeeView ? "I tuoi documenti" : `Documenti di ${workers.find((w) => w.id === selectedWorkerId)?.name}`}
+              </h2>
 
-          <div className="flex-1 overflow-y-auto space-y-3 p-4 min-h-0">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Cerca per titolo..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-11 pl-9 pr-4 rounded-xl border border-white/10 bg-white/5 text-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/30" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                >
+                  <option value="ALL">Tutti i tipi</option>
+                  <option value="BUSTA_PAGA">Busta paga</option>
+                  <option value="CONTRATTO">Contratto</option>
+                  <option value="DOCUMENTO">Documento HR</option>
+                </select>
+
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                >
+                  <option value="ALL">Tutti gli anni</option>
+                  {yearsList.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {filteredDocuments.length === 0 ? (
-              <div className="border border-black/5 bg-white/70 py-12 text-center text-sm text-black/45 rounded-3xl">
-                Nessun documento corrispondente ai filtri.
+              <div className="border border-white/5 bg-white/5 py-12 text-center text-sm text-white/45 rounded-[24px]">
+                Nessun documento trovato.
               </div>
             ) : (
-              filteredDocuments.map((document) => (
-                <DesktopDocumentRow
-                  key={document.id}
-                  document={document}
-                  employeeView={employeeView}
-                  selected={selectedDocument?.id === document.id}
-                  onSelect={() => setSelectedId(document.id)}
-                />
-              ))
+              filteredDocuments.map((doc, idx) => {
+                const colors = [
+                  { bg: "bg-[#A1B5FD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                  { bg: "bg-[#FDCB82]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                  { bg: "bg-[#8DE0BD]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                  { bg: "bg-[#F7A1C4]", text: "text-[#1E293B]", arrowBg: "bg-white", arrowText: "text-[#1E293B]" },
+                ];
+                const color = colors[idx % colors.length];
+                const isExpanded = expandedId === doc.id;
+                const period = documentPeriod(doc);
+                const url = getDocumentUrl(doc);
+
+                return (
+                  <div
+                    key={doc.id}
+                    onClick={() => setExpandedId(isExpanded ? null : doc.id)}
+                    className={cn(
+                      "w-full rounded-[28px] p-5 transition-all duration-300 cursor-pointer shadow-sm relative overflow-hidden select-none",
+                      color.bg,
+                      color.text,
+                      isExpanded ? "flex flex-col gap-4" : "h-[72px] flex items-center justify-between"
+                    )}
+                  >
+                    {isExpanded ? (
+                      <div className="flex flex-col justify-between w-full">
+                        <div>
+                          <div className="flex justify-between items-start gap-3">
+                            <h3 className="text-base font-extrabold pr-8 leading-tight line-clamp-2">{doc.title}</h3>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMobilePreview(doc);
+                              }}
+                              className={cn(
+                                "size-9 rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform shrink-0",
+                                color.arrowBg,
+                                color.arrowText
+                              )}
+                            >
+                              <ArrowUpRight className="size-4.5" />
+                            </button>
+                          </div>
+                          <div className="mt-4 space-y-2 text-xs font-semibold opacity-85">
+                            <p className="flex items-center gap-2">
+                              <span className="opacity-60">Tipo:</span>
+                              <span>{typeLabels[doc.type] || doc.type}</span>
+                            </p>
+                            {period && (
+                              <p className="flex items-center gap-2">
+                                <span className="opacity-60">Periodo:</span>
+                                <span>{period}</span>
+                              </p>
+                            )}
+                            <p className="flex items-center gap-2">
+                              <span className="opacity-60">Caricato il:</span>
+                              <span>{formatDate(doc.created_at)}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-5 space-y-2 pt-3 border-t border-black/10">
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMobilePreview(doc);
+                              }}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-white/40 backdrop-blur-sm text-sm font-bold text-current border border-black/5 active:scale-95 transition"
+                            >
+                              <Eye className="size-4" />
+                              Visualizza
+                            </button>
+                            <a
+                              href={url}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 text-white text-sm font-bold active:scale-95 transition"
+                            >
+                              <Download className="size-4" />
+                              Scarica
+                            </a>
+                          </div>
+                          {!employeeView && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(doc.id);
+                              }}
+                              disabled={deletingId === doc.id}
+                              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-red-600/90 text-white text-sm font-bold active:scale-[0.97] transition disabled:opacity-50"
+                            >
+                              <Trash2 className="size-4" />
+                              {deletingId === doc.id ? "Eliminazione..." : "Elimina"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="text-sm font-extrabold truncate pr-4">{doc.title}</h3>
+                        <div className={cn("size-9 rounded-full flex items-center justify-center shadow-sm shrink-0", color.arrowBg, color.arrowText)}>
+                          <ArrowUpRight className="size-4" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })
             )}
-          </div>
+          </>
+        )}
+      </div>
+
+      {/* DESKTOP VERSION (hidden lg:grid) */}
+      <div className="hidden grid-cols-12 gap-5 lg:grid">
+        <Card className="col-span-5 max-h-[calc(100dvh-8rem)] overflow-hidden p-0 hover:translate-y-0 flex flex-col">
+          {showPersonnelTable ? (
+            /* DESKTOP: Left Side - Personnel list with delivery status indicators */
+            <>
+              <div className="border-b border-black/5 bg-white/80 p-5 shrink-0">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-black/35">Stato Consegne</p>
+                <h2 className="mt-1 text-xl font-extrabold text-paradise-noir">Consegna Cedolini</h2>
+              </div>
+
+              <div className="border-b border-black/5 bg-slate-50/50 p-4 space-y-3 shrink-0">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cerca collaboratore..."
+                    value={workerSearchQuery}
+                    onChange={(e) => setWorkerSearchQuery(e.target.value)}
+                    className="w-full h-10 pl-9 pr-4 rounded-xl border border-black/10 bg-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
+                  {workerSearchQuery && (
+                    <button onClick={() => setWorkerSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-black/30 hover:text-black/60">
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={statusMonth}
+                    onChange={(e) => setStatusMonth(Number(e.target.value))}
+                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                  >
+                    {monthNames.map((name, index) => (
+                      <option key={index} value={index + 1}>{name}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={statusYear}
+                    onChange={(e) => setStatusYear(Number(e.target.value))}
+                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                  >
+                    {[2024, 2025, 2026, 2027, 2028].map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[10px] font-semibold text-black/40 italic">
+                  * Finestra di consegna: dal 1 al 15 del mese successivo.
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2.5 p-4 min-h-0">
+                {filteredWorkers.length === 0 ? (
+                  <div className="border border-black/5 bg-white/70 py-12 text-center text-sm text-black/45 rounded-3xl">
+                    Nessun collaboratore trovato.
+                  </div>
+                ) : (
+                  filteredWorkers.map((worker) => (
+                    <button
+                      key={worker.id}
+                      type="button"
+                      onClick={() => handleSelectWorker(worker.id)}
+                      className="w-full rounded-2xl border border-black/5 bg-white p-3.5 text-left flex items-center justify-between transition hover:border-[#B85B68]/30 hover:bg-slate-50/50"
+                    >
+                      <div className="min-w-0 flex-1 pr-4">
+                        <h3 className="text-sm font-extrabold text-paradise-noir truncate">{worker.name}</h3>
+                        <p className="text-xs text-black/45 mt-0.5 font-semibold truncate">
+                          {worker.mansione || (worker.role === "ADMIN" ? "Amministrazione" : "Collaboratore")}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {worker.hasDoc ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-extrabold text-emerald-700">
+                            <span className="size-2 rounded-full bg-emerald-500" />
+                            Caricato
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-extrabold text-rose-700">
+                            <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
+                            Mancante
+                          </span>
+                        )}
+                        <ChevronRight className="size-4 text-black/20" />
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            /* DESKTOP: Left Side - Selected worker's document archive (original style) */
+            <>
+              <div className="border-b border-black/5 bg-white/80 p-5 shrink-0">
+                {!employeeView && (
+                  <button
+                    onClick={() => setSelectedWorkerId("")}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#B85B68] hover:underline mb-2"
+                  >
+                    <ArrowLeft className="size-3.5" />
+                    Torna al personale
+                  </button>
+                )}
+                
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-black/35">Archivio documenti</p>
+                <h2 className="mt-1 text-xl font-extrabold text-paradise-noir truncate">
+                  {employeeView ? "I tuoi documenti" : `${workers.find((w) => w.id === selectedWorkerId)?.name}`}
+                </h2>
+              </div>
+
+              <div className="border-b border-black/5 bg-slate-50/50 p-4 space-y-3 shrink-0">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cerca per titolo..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-10 pl-9 pr-4 rounded-xl border border-black/10 bg-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-black/30 hover:text-black/60">
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={selectedType}
+                    onChange={(e) => setSelectedType(e.target.value)}
+                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                  >
+                    <option value="ALL">Tutti i tipi</option>
+                    <option value="BUSTA_PAGA">Busta paga</option>
+                    <option value="CONTRATTO">Contratto</option>
+                    <option value="DOCUMENTO">Documento HR</option>
+                  </select>
+
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
+                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                  >
+                    <option value="ALL">Tutti gli anni</option>
+                    {yearsList.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3 p-4 min-h-0">
+                {filteredDocuments.length === 0 ? (
+                  <div className="border border-black/5 bg-white/70 py-12 text-center text-sm text-black/45 rounded-3xl">
+                    Nessun documento trovato.
+                  </div>
+                ) : (
+                  filteredDocuments.map((document) => (
+                    <DesktopDocumentRow
+                      key={document.id}
+                      document={document}
+                      employeeView={employeeView}
+                      selected={selectedDocument?.id === document.id}
+                      onSelect={() => setSelectedId(document.id)}
+                    />
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </Card>
 
-        <div className="col-span-7 min-w-0">{selectedDocument ? <DesktopPreview document={selectedDocument} employeeView={employeeView} onDelete={handleDelete} deletingId={deletingId} /> : null}</div>
+        {/* DESKTOP: Right Side Panel */}
+        <div className="col-span-7 min-w-0">
+          {showPersonnelTable ? (
+            /* DESKTOP: Right Side - Statistics dashboard */
+            <Card className="sticky top-24 h-[calc(100dvh-8rem)] overflow-hidden rounded-[32px] p-0 hover:translate-y-0 flex flex-col bg-white">
+              <div className="border-b border-black/5 bg-gradient-to-r from-slate-50/50 to-white p-6 shrink-0">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-[#B85B68]">Riepilogo Consegne</p>
+                <h2 className="mt-2 text-2xl font-extrabold text-paradise-noir">
+                  {monthNames[statusMonth - 1]} {statusYear}
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-black/40">
+                  Stato di caricamento dei cedolini (Busta Paga) per i collaboratori.
+                </p>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0">
+                {/* Stats grid */}
+                <div className="grid grid-cols-3 gap-4 shrink-0">
+                  <div className="rounded-2xl border border-black/5 bg-slate-50/50 p-4 text-center flex flex-col justify-between">
+                    <p className="text-[10px] font-extrabold text-black/35 uppercase tracking-wider">Completamento</p>
+                    <p className="mt-2 text-3xl font-extrabold text-[#B85B68]">{stats.percentage}%</p>
+                    <div className="mt-3 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                        style={{ width: `${stats.percentage}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-4 text-center flex flex-col justify-between">
+                    <p className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider">Caricati</p>
+                    <p className="mt-2 text-3xl font-extrabold text-emerald-700">{stats.completed}</p>
+                    <p className="mt-1 text-[10px] text-emerald-600/70 font-semibold">su {stats.total} totali</p>
+                  </div>
+
+                  <div className="rounded-2xl border border-rose-100 bg-rose-50/30 p-4 text-center flex flex-col justify-between">
+                    <p className="text-[10px] font-extrabold text-rose-800 uppercase tracking-wider">Mancanti</p>
+                    <p className="mt-2 text-3xl font-extrabold text-rose-700">{stats.missing}</p>
+                    <p className="mt-1 text-[10px] text-rose-600/70 font-semibold">da caricare</p>
+                  </div>
+                </div>
+
+                {/* Columns Grid */}
+                <div className="grid grid-cols-2 gap-5 h-[calc(100%-120px)] min-h-[300px]">
+                  {/* Missing Panel */}
+                  <div className="border border-black/5 rounded-2xl p-4 flex flex-col bg-slate-50/20 min-h-0">
+                    <h3 className="text-xs font-extrabold text-rose-800 uppercase tracking-wider mb-3 flex items-center gap-1.5 shrink-0">
+                      <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
+                      Da consegnare ({stats.missing})
+                    </h3>
+                    <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1">
+                      {stats.missingWorkers.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                          <CheckCircle2 className="size-10 text-emerald-500 mb-2" />
+                          <p className="text-xs font-extrabold text-emerald-700">Tutto caricato!</p>
+                          <p className="text-[10px] text-black/40 mt-1 max-w-[160px]">
+                            Tutti i collaboratori hanno ricevuto il cedolino per questo periodo.
+                          </p>
+                        </div>
+                      ) : (
+                        stats.missingWorkers.map((w) => (
+                          <div
+                            key={w.id}
+                            className="flex items-center justify-between p-3 rounded-xl bg-white border border-black/5 shadow-sm hover:border-[#B85B68]/30 transition"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <p className="text-xs font-extrabold text-paradise-noir truncate">{w.name}</p>
+                              <p className="text-[10px] text-black/45 font-semibold truncate">
+                                {w.mansione || "Collaboratore"}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleSelectWorker(w.id)}
+                              className="px-3 py-1 text-[10px] font-bold bg-[#B85B68] text-white rounded-lg hover:brightness-105 active:scale-95 transition shrink-0"
+                            >
+                              Gestisci
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Completed Panel */}
+                  <div className="border border-black/5 rounded-2xl p-4 flex flex-col bg-slate-50/20 min-h-0">
+                    <h3 className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider mb-3 flex items-center gap-1.5 shrink-0">
+                      <span className="size-2 rounded-full bg-emerald-500" />
+                      Consegnati ({stats.completed})
+                    </h3>
+                    <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-1">
+                      {stats.completedWorkers.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-4 text-black/35">
+                          <p className="text-xs font-bold">Nessun caricamento</p>
+                          <p className="text-[10px] text-black/45 mt-1 max-w-[160px]">
+                            Non ci sono buste paga caricate per questo mese di riferimento.
+                          </p>
+                        </div>
+                      ) : (
+                        stats.completedWorkers.map((w) => (
+                          <div
+                            key={w.id}
+                            className="flex items-center justify-between p-3 rounded-xl bg-white border border-black/5 shadow-sm hover:border-emerald-300 transition"
+                          >
+                            <div className="min-w-0 pr-2">
+                              <p className="text-xs font-extrabold text-paradise-noir truncate">{w.name}</p>
+                              <p className="text-[9px] text-emerald-600 font-extrabold truncate">
+                                Caricato il: {w.dateUploaded ? formatDate(w.dateUploaded) : ""}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                handleSelectWorker(w.id);
+                                if (w.docId) setSelectedId(w.docId);
+                              }}
+                              className="px-3 py-1 text-[10px] font-bold border border-black/5 bg-slate-50 hover:bg-slate-100 rounded-lg active:scale-95 transition shrink-0"
+                            >
+                              Vedi PDF
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ) : selectedDocument ? (
+            /* DESKTOP: Right Side - Original Document Preview */
+            <DesktopPreview
+              document={selectedDocument}
+              employeeView={employeeView}
+              onDelete={handleDelete}
+              deletingId={deletingId}
+            />
+          ) : (
+            <Card className="sticky top-24 h-[calc(100dvh-8rem)] flex items-center justify-center rounded-[32px] border border-black/5 bg-[#faf7f9] p-8 text-center">
+              <div>
+                <FileText className="size-10 mx-auto text-black/20 mb-3" />
+                <p className="text-sm font-extrabold text-paradise-noir">Nessun documento selezionato</p>
+                <p className="text-xs text-black/45 mt-1">Seleziona un documento a sinistra per visualizzarne l'anteprima.</p>
+              </div>
+            </Card>
+          )}
+        </div>
       </div>
 
       {mobilePreview ? <MobilePreviewModal document={mobilePreview} employeeView={employeeView} onClose={() => setMobilePreview(null)} /> : null}
