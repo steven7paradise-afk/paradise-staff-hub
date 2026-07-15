@@ -332,6 +332,10 @@ export function TabletClock({
   const [clientPhotoPreview, setClientPhotoPreview] = useState<string | null>(null);
   const [appointmentSubmitting, setAppointmentSubmitting] = useState(false);
   const [appointmentMessage, setAppointmentMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeCameraSlot, setActiveCameraSlot] = useState<string | null>(null);
+  const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("environment");
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Response details editing
   const [selectedClientResponse, setSelectedClientResponse] = useState<any | null>(null);
@@ -564,6 +568,96 @@ export function TabletClock({
     } finally {
       setClientResponseSaving(false);
     }
+  };
+
+  const startCamera = async (facing: "user" | "environment" = "environment") => {
+    try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      const constraints = {
+        video: {
+          facingMode: facing,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setCameraStream(stream);
+      // Wait a tick for video element to mount/be ready
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 50);
+    } catch (err) {
+      console.error("Failed to start camera:", err);
+      setAppointmentMessage({ type: "error", text: "Impossibile accedere alla fotocamera. Controlla i permessi." });
+      setActiveCameraSlot(null);
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+    setActiveCameraSlot(null);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !activeCameraSlot) return;
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    canvas.toBlob(async (blob) => {
+      if (blob) {
+        const file = new File([blob], `${activeCameraSlot}_captured_${Date.now()}.jpg`, { type: "image/jpeg" });
+        
+        let setFile: any = null;
+        let setPreview: any = null;
+        let label = "";
+        
+        if (activeCameraSlot === "prima_fronte") {
+          setFile = setPhotoPrimaFronteFile;
+          setPreview = setPhotoPrimaFrontePreview;
+          label = "Prima Fronte";
+        } else if (activeCameraSlot === "prima_dietro") {
+          setFile = setPhotoPrimaDietroFile;
+          setPreview = setPhotoPrimaDietroPreview;
+          label = "Prima Dietro";
+        } else if (activeCameraSlot === "dopo_fronte") {
+          setFile = setPhotoDopoFronteFile;
+          setPreview = setPhotoDopoFrontePreview;
+          label = "Dopo Fronte";
+        } else if (activeCameraSlot === "dopo_dietro") {
+          setFile = setPhotoDopoDietroFile;
+          setPreview = setPhotoDopoDietroPreview;
+          label = "Dopo Dietro";
+        }
+        
+        if (setFile && setPreview) {
+          try {
+            setAppointmentMessage({ type: "success", text: `Elaborazione ${label}...` });
+            const compressed = await compressImage(file, 2048, 2048, 0.9);
+            setFile(compressed);
+            setPreview(URL.createObjectURL(compressed));
+            setAppointmentMessage(null);
+          } catch (e) {
+            console.error("Failed to compress captured photo:", e);
+            setAppointmentMessage({ type: "error", text: "Elaborazione foto fallita." });
+          }
+        }
+      }
+      stopCamera();
+    }, "image/jpeg", 0.95);
   };
 
   const submitAppointment = async () => {
@@ -2228,48 +2322,65 @@ export function TabletClock({
                                       </button>
                                     </div>
                                   ) : (
-                                    <label className="flex size-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-black/15 bg-white hover:bg-black/[0.01] hover:border-black/30 transition shrink-0 active:scale-95">
-                                      <Camera className="size-5 text-black/30" />
-                                      <span className="text-[8px] font-black uppercase text-black/40 mt-1.5 text-center px-1">Aggiungi</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*,.heic,.HEIC,.heif,.HEIF"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (file) {
-                                            let targetFile = file;
-                                            const isHEIC = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
-                                            
-                                            try {
-                                              setAppointmentMessage({ type: "success", text: `Elaborazione ${slot.label}...` });
-                                              
-                                              if (isHEIC) {
-                                                const heic2any = (await import("heic2any")).default;
-                                                const convertedBlob = await heic2any({
-                                                  blob: file,
-                                                  toType: "image/jpeg",
-                                                  quality: 0.8,
-                                                });
-                                                const convertedBlobSingle = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-                                                targetFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
-                                                  type: "image/jpeg",
-                                                });
-                                              }
-                                              
-                                              // Compress the image slightly to preserve high resolution and detail while keeping payload size small
-                                              const compressed = await compressImage(targetFile, 2048, 2048, 0.9);
-                                              slot.setFile(compressed);
-                                              slot.setPreview(URL.createObjectURL(compressed));
-                                              setAppointmentMessage(null);
-                                            } catch (err) {
-                                              console.error("Image processing failed:", err);
-                                              setAppointmentMessage({ type: "error", text: "Impossibile elaborare l'immagine. Riprova." });
-                                            }
-                                          }
+                                    <div className="flex flex-col gap-1.5 size-24 shrink-0">
+                                      {/* Option 1: Camera */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveCameraSlot(slot.key);
+                                          startCamera("environment");
                                         }}
-                                        className="hidden"
-                                      />
-                                    </label>
+                                        className="flex-1 flex flex-col items-center justify-center rounded-xl border border-black/10 bg-white hover:bg-black/[0.02] active:scale-95 transition"
+                                      >
+                                        <Camera className="size-4 text-black/45" />
+                                        <span className="text-[8px] font-black uppercase text-black/50 mt-0.5">Scatta</span>
+                                      </button>
+
+                                      {/* Option 2: Upload */}
+                                      <label className="flex-1 flex flex-col items-center justify-center rounded-xl border border-black/10 border-dashed bg-black/[0.01] hover:bg-black/[0.03] active:scale-95 transition cursor-pointer">
+                                        <svg className="size-3.5 text-black/35" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                                        </svg>
+                                        <span className="text-[8px] font-black uppercase text-black/45 mt-0.5">Sfoglia</span>
+                                        <input
+                                          type="file"
+                                          accept="image/*,.heic,.HEIC,.heif,.HEIF"
+                                          onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                              let targetFile = file;
+                                              const isHEIC = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
+                                              
+                                              try {
+                                                setAppointmentMessage({ type: "success", text: `Elaborazione ${slot.label}...` });
+                                                
+                                                if (isHEIC) {
+                                                  const heic2any = (await import("heic2any")).default;
+                                                  const convertedBlob = await heic2any({
+                                                    blob: file,
+                                                    toType: "image/jpeg",
+                                                    quality: 0.8,
+                                                  });
+                                                  const convertedBlobSingle = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                                                  targetFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
+                                                    type: "image/jpeg",
+                                                  });
+                                                }
+                                                
+                                                const compressed = await compressImage(targetFile, 2048, 2048, 0.9);
+                                                slot.setFile(compressed);
+                                                slot.setPreview(URL.createObjectURL(compressed));
+                                                setAppointmentMessage(null);
+                                              } catch (err) {
+                                                console.error("Image processing failed:", err);
+                                                setAppointmentMessage({ type: "error", text: "Impossibile elaborare l'immagine. Riprova." });
+                                              }
+                                            }
+                                          }}
+                                          className="hidden"
+                                        />
+                                      </label>
+                                    </div>
                                   )}
                                   
                                   {slot.file && (
@@ -3189,6 +3300,73 @@ export function TabletClock({
 
         {/* Early shift exit confirm overlay dialog */}
         {earlyExitConfirmDialog}
+
+        {/* Modal fotocamera integrata */}
+        {activeCameraSlot && (
+          <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-black backdrop-blur-md">
+            {/* Anteprima video della fotocamera */}
+            <div className="relative w-full max-w-lg aspect-[3/4] overflow-hidden bg-black md:rounded-3xl border border-white/10 flex items-center justify-center">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              
+              {/* Overlay di centraggio */}
+              <div className="absolute inset-4 border-2 border-dashed border-white/20 rounded-2xl pointer-events-none flex items-center justify-center">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 text-center px-4">
+                  Inquadra ed assicurati che ci sia buona luce
+                </span>
+              </div>
+            </div>
+
+            {/* Controlli fotocamera */}
+            <div className="w-full max-w-lg px-6 py-8 flex flex-col items-center justify-center gap-6">
+              {/* Riferimento dello slot corrente */}
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ff8bb2]">
+                Scatto foto: {activeCameraSlot.replace("_", " ")}
+              </p>
+
+              <div className="flex items-center justify-between w-full max-w-[280px]">
+                {/* Switch fotocamera (frontale/posteriore) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextMode = cameraFacingMode === "environment" ? "user" : "environment";
+                    setCameraFacingMode(nextMode);
+                    void startCamera(nextMode);
+                  }}
+                  className="flex size-12 items-center justify-center rounded-full border border-white/20 bg-white/5 hover:bg-white/10 active:scale-95 text-white transition shadow-md"
+                  title="Cambia fotocamera"
+                >
+                  <RefreshCw className="size-5" />
+                </button>
+
+                {/* Pulsante di scatto centrale */}
+                <button
+                  type="button"
+                  onClick={capturePhoto}
+                  className="flex size-20 items-center justify-center rounded-full border-4 border-white bg-[#E88AC5] hover:bg-[#B83D7F] active:scale-90 transition duration-150 shadow-xl"
+                  title="Scatta foto"
+                >
+                  <div className="size-14 rounded-full border border-black/5 bg-white" />
+                </button>
+
+                {/* Pulsante chiusura / cancella */}
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="flex size-12 items-center justify-center rounded-full border border-white/20 bg-white/5 hover:bg-white/10 active:scale-95 text-white transition shadow-md"
+                  title="Chiudi fotocamera"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
