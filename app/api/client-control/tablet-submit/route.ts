@@ -185,8 +185,9 @@ export async function POST(request: NextRequest) {
   if (body?.photoPrimaFronte && body.photoPrimaFronte.startsWith("data:image/")) {
     try {
       answerPhotoPrimaFronte = await uploadToDriveHelper(body.photoPrimaFronte, "PRIMA-FRONTE");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to upload photoPrimaFronte to Google Drive:", err);
+      return NextResponse.json({ error: `Caricamento Prima Fronte fallito: ${err.message}` }, { status: 500 });
     }
   }
 
@@ -194,8 +195,9 @@ export async function POST(request: NextRequest) {
   if (body?.photoPrimaDietro && body.photoPrimaDietro.startsWith("data:image/")) {
     try {
       answerPhotoPrimaDietro = await uploadToDriveHelper(body.photoPrimaDietro, "PRIMA-DIETRO");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to upload photoPrimaDietro to Google Drive:", err);
+      return NextResponse.json({ error: `Caricamento Prima Dietro fallito: ${err.message}` }, { status: 500 });
     }
   }
 
@@ -203,8 +205,9 @@ export async function POST(request: NextRequest) {
   if (body?.photoDopoFronte && body.photoDopoFronte.startsWith("data:image/")) {
     try {
       answerPhotoDopoFronte = await uploadToDriveHelper(body.photoDopoFronte, "DOPO-FRONTE");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to upload photoDopoFronte to Google Drive:", err);
+      return NextResponse.json({ error: `Caricamento Dopo Fronte fallito: ${err.message}` }, { status: 500 });
     }
   }
 
@@ -212,8 +215,9 @@ export async function POST(request: NextRequest) {
   if (body?.photoDopoDietro && body.photoDopoDietro.startsWith("data:image/")) {
     try {
       answerPhotoDopoDietro = await uploadToDriveHelper(body.photoDopoDietro, "DOPO-DIETRO");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to upload photoDopoDietro to Google Drive:", err);
+      return NextResponse.json({ error: `Caricamento Dopo Dietro fallito: ${err.message}` }, { status: 500 });
     }
   }
 
@@ -221,8 +225,9 @@ export async function POST(request: NextRequest) {
   if (body?.clientPhoto && body.clientPhoto.startsWith("data:image/")) {
     try {
       uploadedPhotoAnswer = await uploadToDriveHelper(body.clientPhoto, "FOTO-VOLTO");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to upload fallback clientPhoto to Google Drive:", err);
+      return NextResponse.json({ error: `Caricamento foto volto fallito: ${err.message}` }, { status: 500 });
     }
   }
 
