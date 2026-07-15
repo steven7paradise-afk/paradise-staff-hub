@@ -320,6 +320,14 @@ export function TabletClock({
     review: false,
     bookingId: null as string | null,
   });
+  const [photoPrimaFronteFile, setPhotoPrimaFronteFile] = useState<File | null>(null);
+  const [photoPrimaFrontePreview, setPhotoPrimaFrontePreview] = useState<string | null>(null);
+  const [photoPrimaDietroFile, setPhotoPrimaDietroFile] = useState<File | null>(null);
+  const [photoPrimaDietroPreview, setPhotoPrimaDietroPreview] = useState<string | null>(null);
+  const [photoDopoFronteFile, setPhotoDopoFronteFile] = useState<File | null>(null);
+  const [photoDopoFrontePreview, setPhotoDopoFrontePreview] = useState<string | null>(null);
+  const [photoDopoDietroFile, setPhotoDopoDietroFile] = useState<File | null>(null);
+  const [photoDopoDietroPreview, setPhotoDopoDietroPreview] = useState<string | null>(null);
   const [clientPhotoFile, setClientPhotoFile] = useState<File | null>(null);
   const [clientPhotoPreview, setClientPhotoPreview] = useState<string | null>(null);
   const [appointmentSubmitting, setAppointmentSubmitting] = useState(false);
@@ -567,6 +575,46 @@ export function TabletClock({
     }
     setAppointmentSubmitting(true);
     try {
+      let photoPrimaFronteBase64: string | null = null;
+      if (photoPrimaFronteFile) {
+        photoPrimaFronteBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(photoPrimaFronteFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+      }
+
+      let photoPrimaDietroBase64: string | null = null;
+      if (photoPrimaDietroFile) {
+        photoPrimaDietroBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(photoPrimaDietroFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+      }
+
+      let photoDopoFronteBase64: string | null = null;
+      if (photoDopoFronteFile) {
+        photoDopoFronteBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(photoDopoFronteFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+      }
+
+      let photoDopoDietroBase64: string | null = null;
+      if (photoDopoDietroFile) {
+        photoDopoDietroBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(photoDopoDietroFile);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (err) => reject(err);
+        });
+      }
+
       let clientPhotoBase64: string | null = null;
       if (clientPhotoFile) {
         clientPhotoBase64 = await new Promise<string>((resolve, reject) => {
@@ -580,6 +628,10 @@ export function TabletClock({
       const payload = {
         ...appointmentForm,
         clientPhoto: clientPhotoBase64,
+        photoPrimaFronte: photoPrimaFronteBase64,
+        photoPrimaDietro: photoPrimaDietroBase64,
+        photoDopoFronte: photoDopoFronteBase64,
+        photoDopoDietro: photoDopoDietroBase64,
       };
 
       const res = await fetch("/api/client-control/tablet-submit", {
@@ -592,6 +644,26 @@ export function TabletClock({
         throw new Error(data.error || "Errore durante il salvataggio.");
       }
       
+      setPhotoPrimaFronteFile(null);
+      if (photoPrimaFrontePreview) {
+        URL.revokeObjectURL(photoPrimaFrontePreview);
+        setPhotoPrimaFrontePreview(null);
+      }
+      setPhotoPrimaDietroFile(null);
+      if (photoPrimaDietroPreview) {
+        URL.revokeObjectURL(photoPrimaDietroPreview);
+        setPhotoPrimaDietroPreview(null);
+      }
+      setPhotoDopoFronteFile(null);
+      if (photoDopoFrontePreview) {
+        URL.revokeObjectURL(photoDopoFrontePreview);
+        setPhotoDopoFrontePreview(null);
+      }
+      setPhotoDopoDietroFile(null);
+      if (photoDopoDietroPreview) {
+        URL.revokeObjectURL(photoDopoDietroPreview);
+        setPhotoDopoDietroPreview(null);
+      }
       setClientPhotoFile(null);
       if (clientPhotoPreview) {
         URL.revokeObjectURL(clientPhotoPreview);
@@ -1873,6 +1945,26 @@ export function TabletClock({
                       setClientControlOpen(false);
                       setAppointmentMessage(null);
                       setCurrentBookingId(null);
+                      setPhotoPrimaFronteFile(null);
+                      if (photoPrimaFrontePreview) {
+                        URL.revokeObjectURL(photoPrimaFrontePreview);
+                        setPhotoPrimaFrontePreview(null);
+                      }
+                      setPhotoPrimaDietroFile(null);
+                      if (photoPrimaDietroPreview) {
+                        URL.revokeObjectURL(photoPrimaDietroPreview);
+                        setPhotoPrimaDietroPreview(null);
+                      }
+                      setPhotoDopoFronteFile(null);
+                      if (photoDopoFrontePreview) {
+                        URL.revokeObjectURL(photoDopoFrontePreview);
+                        setPhotoDopoFrontePreview(null);
+                      }
+                      setPhotoDopoDietroFile(null);
+                      if (photoDopoDietroPreview) {
+                        URL.revokeObjectURL(photoDopoDietroPreview);
+                        setPhotoDopoDietroPreview(null);
+                      }
                       setClientPhotoFile(null);
                       if (clientPhotoPreview) {
                         URL.revokeObjectURL(clientPhotoPreview);
@@ -2102,89 +2194,91 @@ export function TabletClock({
                             ))}
                           </div>
 
-                          {/* Foto Volto Cliente */}
-                          <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h4 className="text-xs font-black uppercase tracking-wider text-black/60 font-bold">Foto volto cliente</h4>
-                                <p className="text-[10px] text-black/40 font-semibold mt-0.5">Scatta o seleziona una foto identificativa per la scheda del cliente.</p>
-                              </div>
-                              {clientPhotoPreview && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setClientPhotoFile(null);
-                                    if (clientPhotoPreview) {
-                                      URL.revokeObjectURL(clientPhotoPreview);
-                                      setClientPhotoPreview(null);
-                                    }
-                                  }}
-                                  className="flex items-center gap-1 text-[10px] font-black uppercase text-red-500 hover:text-red-750 transition"
-                                >
-                                  <Trash2 className="size-3.5" />
-                                  Rimuovi
-                                </button>
-                              )}
+                          {/* Foto Controllo Cliente (4 Foto) */}
+                          <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm space-y-4">
+                            <div>
+                              <h4 className="text-xs font-black uppercase tracking-wider text-black/60 font-bold">Foto Controllo Cliente</h4>
+                              <p className="text-[10px] text-black/40 font-semibold mt-0.5">Carica le foto richieste per documentare il servizio prima e dopo.</p>
                             </div>
 
-                            <div className="flex flex-col sm:flex-row items-center gap-4">
-                              {clientPhotoPreview ? (
-                                <div className="relative size-32 rounded-2xl overflow-hidden border border-black/10 bg-black/5 flex items-center justify-center shrink-0">
-                                  <img src={clientPhotoPreview} alt="Anteprima volto" className="size-full object-cover" />
-                                </div>
-                              ) : (
-                                <label className="flex size-32 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-black/15 bg-black/[0.01] hover:bg-black/[0.02] transition shrink-0 active:scale-95">
-                                  <Camera className="size-6 text-black/30" />
-                                  <span className="text-[9px] font-black uppercase text-black/40 mt-1.5 text-center px-2">Aggiungi Foto</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*,.heic,.HEIC,.heif,.HEIF"
-                                    onChange={async (e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        let targetFile = file;
-                                        const isHEIC = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
-                                        
-                                        try {
-                                          setAppointmentMessage({ type: "success", text: "Elaborazione immagine..." });
-                                          
-                                          if (isHEIC) {
-                                            const heic2any = (await import("heic2any")).default;
-                                            const convertedBlob = await heic2any({
-                                              blob: file,
-                                              toType: "image/jpeg",
-                                              quality: 0.8,
-                                            });
-                                            const convertedBlobSingle = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-                                            targetFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
-                                              type: "image/jpeg",
-                                            });
+                            <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+                              {[
+                                { key: "prima_fronte", label: "Prima Fronte", file: photoPrimaFronteFile, preview: photoPrimaFrontePreview, setFile: setPhotoPrimaFronteFile, setPreview: setPhotoPrimaFrontePreview },
+                                { key: "prima_dietro", label: "Prima Dietro", file: photoPrimaDietroFile, preview: photoPrimaDietroPreview, setFile: setPhotoPrimaDietroFile, setPreview: setPhotoPrimaDietroPreview },
+                                { key: "dopo_fronte", label: "Dopo Fronte", file: photoDopoFronteFile, preview: photoDopoFrontePreview, setFile: setPhotoDopoFronteFile, setPreview: setPhotoDopoFrontePreview },
+                                { key: "dopo_dietro", label: "Dopo Dietro", file: photoDopoDietroFile, preview: photoDopoDietroPreview, setFile: setPhotoDopoDietroFile, setPreview: setPhotoDopoDietroPreview },
+                              ].map((slot) => (
+                                <div key={slot.key} className="flex flex-col items-center p-3 border border-black/5 rounded-2xl bg-black/[0.01] space-y-2 relative">
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-black/45">{slot.label}</span>
+                                  
+                                  {slot.preview ? (
+                                    <div className="relative size-24 rounded-xl overflow-hidden border border-black/10 bg-black/5 flex items-center justify-center group">
+                                      <img src={slot.preview} alt={slot.label} className="size-full object-cover" />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          slot.setFile(null);
+                                          URL.revokeObjectURL(slot.preview!);
+                                          slot.setPreview(null);
+                                        }}
+                                        className="absolute top-1 right-1 size-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm opacity-90 transition active:scale-95"
+                                        title="Rimuovi"
+                                      >
+                                        <X className="size-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <label className="flex size-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-black/15 bg-white hover:bg-black/[0.01] hover:border-black/30 transition shrink-0 active:scale-95">
+                                      <Camera className="size-5 text-black/30" />
+                                      <span className="text-[8px] font-black uppercase text-black/40 mt-1.5 text-center px-1">Aggiungi</span>
+                                      <input
+                                        type="file"
+                                        accept="image/*,.heic,.HEIC,.heif,.HEIF"
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            let targetFile = file;
+                                            const isHEIC = file.name.toLowerCase().endsWith(".heic") || file.name.toLowerCase().endsWith(".heif") || file.type === "image/heic" || file.type === "image/heif";
+                                            
+                                            try {
+                                              setAppointmentMessage({ type: "success", text: `Elaborazione ${slot.label}...` });
+                                              
+                                              if (isHEIC) {
+                                                const heic2any = (await import("heic2any")).default;
+                                                const convertedBlob = await heic2any({
+                                                  blob: file,
+                                                  toType: "image/jpeg",
+                                                  quality: 0.8,
+                                                });
+                                                const convertedBlobSingle = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                                                targetFile = new File([convertedBlobSingle], file.name.replace(/\.(heic|heif)$/i, ".jpg"), {
+                                                  type: "image/jpeg",
+                                                });
+                                              }
+                                              
+                                              // Compress the image slightly to preserve high resolution and detail while keeping payload size small
+                                              const compressed = await compressImage(targetFile, 2048, 2048, 0.9);
+                                              slot.setFile(compressed);
+                                              slot.setPreview(URL.createObjectURL(compressed));
+                                              setAppointmentMessage(null);
+                                            } catch (err) {
+                                              console.error("Image processing failed:", err);
+                                              setAppointmentMessage({ type: "error", text: "Impossibile elaborare l'immagine. Riprova." });
+                                            }
                                           }
-                                          
-                                          // Compress the image to minimize its upload size
-                                          const compressed = await compressImage(targetFile, 800, 800, 0.7);
-                                          setClientPhotoFile(compressed);
-                                          setClientPhotoPreview(URL.createObjectURL(compressed));
-                                          setAppointmentMessage(null);
-                                        } catch (err) {
-                                          console.error("Image processing failed:", err);
-                                          setAppointmentMessage({ type: "error", text: "Impossibile elaborare l'immagine. Riprova." });
-                                        }
-                                      }
-                                    }}
-                                    className="hidden"
-                                  />
-                                </label>
-                              )}
-                              
-                              <div className="text-left space-y-1">
-                                <p className="text-xs font-bold text-black/60">
-                                  {clientPhotoFile ? `File: ${clientPhotoFile.name}` : "Nessuna foto inserita"}
-                                </p>
-                                <p className="text-[10px] text-black/45 leading-relaxed max-w-md">
-                                  Questa foto verrà associata permanentemente alla scheda di controllo qualità del cliente e sarà visibile nella dashboard amministrativa. Supporta anche il formato HEIC dei dispositivi Apple.
-                                </p>
-                              </div>
+                                        }}
+                                        className="hidden"
+                                      />
+                                    </label>
+                                  )}
+                                  
+                                  {slot.file && (
+                                    <span className="text-[8px] font-semibold text-black/45 truncate max-w-full text-center px-1">
+                                      {slot.file.name}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           </div>
 

@@ -63,6 +63,10 @@ export async function POST(request: NextRequest) {
     isFinito?: boolean;
     isNoShow?: boolean;
     clientPhoto?: string | null;
+    photoPrimaFronte?: string | null;
+    photoPrimaDietro?: string | null;
+    photoDopoFronte?: string | null;
+    photoDopoDietro?: string | null;
   } | null;
 
   const isFinito = !!body?.isFinito;
@@ -98,9 +102,11 @@ export async function POST(request: NextRequest) {
 
     staffForSalon = selectedStaff.filter((employee) => sameSalon(employee.location?.name, location.name));
     if (staffForSalon.length === 0) {
-      return NextResponse.json({ error: "Scegli almeno un collaboratore del salone selezionato." }, { status: 400 });
+      return NextResponse.json({ error: "Nessun collaboratore attivo per questa sede." }, { status: 400 });
     }
   }
+
+  const staffNames = staffForSalon.map((s) => s.name);
 
   const submitter = await prisma.user.findFirst({
     where: {
@@ -116,23 +122,22 @@ export async function POST(request: NextRequest) {
   }
 
   const form = await ensureClientControlForm(submitter.id);
-  const staffNames = staffForSalon.map((employee) => employee.name);
   const shopifyOrder = textValue(body?.shopifyOrder);
   let productsListStr = "";
   let shopifyClientName: string | null = null;
   let shopifyTotalPrice: number | null = null;
-  let shopifyOrderNote: string | null = null;
+  let shopifyOrderNote = "";
 
   if (shopifyOrder) {
     const { getShopifyOrderDetails } = await import("@/lib/shopify");
     const details = await getShopifyOrderDetails(shopifyOrder).catch(() => null);
     if (details) {
       if (details.lineItems.length > 0) {
-        productsListStr = details.lineItems.map(item => item.quantity > 1 ? `${item.title} (x${item.quantity})` : item.title).join(", ");
+        productsListStr = details.lineItems.map((item: any) => item.quantity > 1 ? `${item.title} (x${item.quantity})` : item.title).join(", ");
       }
       shopifyClientName = details.clientName;
       shopifyTotalPrice = details.totalPrice;
-      shopifyOrderNote = details.note;
+      shopifyOrderNote = details.note || "";
     }
   }
 
@@ -147,31 +152,82 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Upload helper for Google Drive
+  const uploadToDriveHelper = async (base64String: string, suffix: string) => {
+    const { uploadFileToGoogleDrive } = await import("@/lib/google-drive");
+    const mimeType = base64String.split(";")[0].split(":")[1];
+    const extension = mimeType.split("/")[1] || "png";
+    const base64Data = base64String.split(",")[1];
+    const buffer = Buffer.from(base64Data, "base64");
+    
+    const orderPart = shopifyOrder ? shopifyOrder.replace(/#/g, "").trim() : "SENZA-ORDINE";
+    const namePart = (clientName || shopifyClientName || "CLIENTE").trim().replace(/[\s\t\n\/\\]+/g, "-");
+    const cleanNamePart = namePart.replace(/[^a-zA-Z0-9-]/g, "");
+    const fileName = `1-${orderPart}-${cleanNamePart}-${suffix}.${extension}`;
+    
+    const driveFile = await uploadFileToGoogleDrive(buffer, fileName, mimeType);
+    
+    return {
+      driveFileId: driveFile.id,
+      driveFileUrl: `https://docs.google.com/uc?export=download&id=${driveFile.id}`,
+      name: fileName,
+      type: mimeType,
+    };
+  };
+
   let uploadedPhotoAnswer = null;
-  if (body?.clientPhoto && body.clientPhoto.startsWith("data:image/")) {
+  let answerPhotoPrimaFronte = null;
+  let answerPhotoPrimaDietro = null;
+  let answerPhotoDopoFronte = null;
+  let answerPhotoDopoDietro = null;
+
+  // Upload Photo Prima Fronte
+  if (body?.photoPrimaFronte && body.photoPrimaFronte.startsWith("data:image/")) {
     try {
-      const { uploadPrivateDocumentBytes } = await import("@/lib/supabase-storage");
-      const mimeType = body.clientPhoto.split(";")[0].split(":")[1];
-      const extension = mimeType.split("/")[1] || "png";
-      const base64Data = body.clientPhoto.split(",")[1];
-      const buffer = Buffer.from(base64Data, "base64");
-      
-      const storagePath = await uploadPrivateDocumentBytes(
-        submitter.id, 
-        buffer, 
-        `foto_volto_${Date.now()}.${extension}`, 
-        mimeType
-      );
-      
-      uploadedPhotoAnswer = {
-        storagePath,
-        name: `foto_volto_${Date.now()}.${extension}`,
-        type: mimeType,
-      };
+      answerPhotoPrimaFronte = await uploadToDriveHelper(body.photoPrimaFronte, "PRIMA-FRONTE");
     } catch (err) {
-      console.error("Failed to upload client photo:", err);
+      console.error("Failed to upload photoPrimaFronte to Google Drive:", err);
     }
   }
+
+  // Upload Photo Prima Dietro
+  if (body?.photoPrimaDietro && body.photoPrimaDietro.startsWith("data:image/")) {
+    try {
+      answerPhotoPrimaDietro = await uploadToDriveHelper(body.photoPrimaDietro, "PRIMA-DIETRO");
+    } catch (err) {
+      console.error("Failed to upload photoPrimaDietro to Google Drive:", err);
+    }
+  }
+
+  // Upload Photo Dopo Fronte
+  if (body?.photoDopoFronte && body.photoDopoFronte.startsWith("data:image/")) {
+    try {
+      answerPhotoDopoFronte = await uploadToDriveHelper(body.photoDopoFronte, "DOPO-FRONTE");
+    } catch (err) {
+      console.error("Failed to upload photoDopoFronte to Google Drive:", err);
+    }
+  }
+
+  // Upload Photo Dopo Dietro
+  if (body?.photoDopoDietro && body.photoDopoDietro.startsWith("data:image/")) {
+    try {
+      answerPhotoDopoDietro = await uploadToDriveHelper(body.photoDopoDietro, "DOPO-DIETRO");
+    } catch (err) {
+      console.error("Failed to upload photoDopoDietro to Google Drive:", err);
+    }
+  }
+
+  // Fallback for single photo if sent by older client software
+  if (body?.clientPhoto && body.clientPhoto.startsWith("data:image/")) {
+    try {
+      uploadedPhotoAnswer = await uploadToDriveHelper(body.clientPhoto, "FOTO-VOLTO");
+    } catch (err) {
+      console.error("Failed to upload fallback clientPhoto to Google Drive:", err);
+    }
+  }
+
+  // Use prima fronte as standard clientPhoto fallback if standard wasn't provided
+  const mainPhotoValue = uploadedPhotoAnswer || answerPhotoPrimaFronte || undefined;
 
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
@@ -186,7 +242,11 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: isNoShow ? "NO SHOW" : undefined,
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: isNoShow ? ["NO SHOW"] : undefined,
-    [CLIENT_CONTROL_FIELD_IDS.clientPhoto]: uploadedPhotoAnswer || undefined,
+    [CLIENT_CONTROL_FIELD_IDS.clientPhoto]: mainPhotoValue,
+    photo_prima_fronte: answerPhotoPrimaFronte || undefined,
+    photo_prima_dietro: answerPhotoPrimaDietro || undefined,
+    photo_dopo_fronte: answerPhotoDopoFronte || undefined,
+    photo_dopo_dietro: answerPhotoDopoDietro || undefined,
     booking_id: textValue(body?.bookingId),
     client_control_created_from: isNoShow ? "Tablet Clock No Show" : "Tablet Clock Finito",
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
@@ -212,7 +272,11 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
     [CLIENT_CONTROL_FIELD_IDS.review]: boolValue(body?.review),
     [CLIENT_CONTROL_FIELD_IDS.correctness]: correctnessVal,
-    [CLIENT_CONTROL_FIELD_IDS.clientPhoto]: uploadedPhotoAnswer || undefined,
+    [CLIENT_CONTROL_FIELD_IDS.clientPhoto]: mainPhotoValue,
+    photo_prima_fronte: answerPhotoPrimaFronte || undefined,
+    photo_prima_dietro: answerPhotoPrimaDietro || undefined,
+    photo_dopo_fronte: answerPhotoDopoFronte || undefined,
+    photo_dopo_dietro: answerPhotoDopoDietro || undefined,
     client_control_created_from: "Tablet Clock",
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,

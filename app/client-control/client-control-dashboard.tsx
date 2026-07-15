@@ -1220,19 +1220,59 @@ export function ClientControlDashboard({
                 </div>
               ) : null}
 
-              {/* Client Face Photo Section */}
-              {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.clientPhoto] ? (
+              {/* Sezione Foto (Google Drive o Supabase) */}
+              {viewingResponse.answers?.photo_prima_fronte ||
+              viewingResponse.answers?.photo_prima_dietro ||
+              viewingResponse.answers?.photo_dopo_fronte ||
+              viewingResponse.answers?.photo_dopo_dietro ? (
+                <div className="bg-[#FAF7F9] rounded-2xl p-5 border border-black/5 space-y-3 col-span-full">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#C66170] font-bold">Foto Servizio Cliente (Google Drive)</p>
+                  <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+                    {[
+                      { key: "photo_prima_fronte", label: "Prima Fronte" },
+                      { key: "photo_prima_dietro", label: "Prima Dietro" },
+                      { key: "photo_dopo_fronte", label: "Dopo Fronte" },
+                      { key: "photo_dopo_dietro", label: "Dopo Dietro" },
+                    ].map((slot) => {
+                      const photo = viewingResponse.answers?.[slot.key];
+                      if (!photo) return null;
+                      const srcUrl = photo.driveFileUrl || (photo.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(photo.storagePath)}` : "");
+                      
+                      return (
+                        <div key={slot.key} className="flex flex-col items-center bg-white p-3 rounded-xl border border-black/5 space-y-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-black/40">{slot.label}</span>
+                          <div className="relative rounded-lg overflow-hidden border border-black/10 bg-black/5 w-full aspect-square flex items-center justify-center">
+                            <img
+                              src={srcUrl}
+                              alt={slot.label}
+                              className="object-cover size-full"
+                            />
+                          </div>
+                          <a
+                            href={srcUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-[#FAF7F9] px-2 py-1 text-[10px] font-semibold text-[#C66170] shadow-sm hover:bg-[#C66170]/5 transition w-full justify-center"
+                          >
+                            Apri Originale
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.clientPhoto] ? (
                 <div className="bg-[#FAF7F9] rounded-2xl p-4 border border-black/5 space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#C66170] font-bold">Foto Volto Cliente</p>
                   <div className="relative rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-sm aspect-video flex items-center justify-center">
                     <img
-                      src={`/api/service-forms/responses/file?path=${encodeURIComponent(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].storagePath)}`}
+                      src={viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].driveFileUrl || `/api/service-forms/responses/file?path=${encodeURIComponent(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].storagePath || "")}`}
                       alt="Foto Volto Cliente"
                       className="object-contain max-h-48 w-full"
                     />
                   </div>
                   <a
-                    href={`/api/service-forms/responses/file?path=${encodeURIComponent(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].storagePath)}`}
+                    href={viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].driveFileUrl || `/api/service-forms/responses/file?path=${encodeURIComponent(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.clientPhoto].storagePath || "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-white px-3 py-1.5 text-xs font-semibold text-[#C66170] shadow-sm hover:bg-[#C66170]/5 transition mt-1"
