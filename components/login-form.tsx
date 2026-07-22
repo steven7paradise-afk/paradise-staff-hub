@@ -6,6 +6,27 @@ import { signIn, signOut } from "next-auth/react";
 import { AlertCircle, Loader2, KeyRound, Mail } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 
+const DEFAULT_LOGIN_DESTINATION = "/dashboard";
+
+function normalizeLoginDestination(value?: string | null, fallback = DEFAULT_LOGIN_DESTINATION) {
+  if (!value) return fallback;
+
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    return value;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (typeof window !== "undefined" && parsed.origin === window.location.origin) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+}
+
 export function LoginForm() {
   const [loginMode, setLoginMode] = useState<"email" | "pin">("pin");
   const [email, setEmail] = useState("");
@@ -25,8 +46,9 @@ export function LoginForm() {
     setLoading(true);
 
     try {
-      const callbackUrl =
-        new URLSearchParams(window.location.search).get("callbackUrl") ?? "/dashboard";
+      const callbackUrl = normalizeLoginDestination(
+        new URLSearchParams(window.location.search).get("callbackUrl"),
+      );
 
       await signOut({ redirect: false });
 
@@ -53,7 +75,7 @@ export function LoginForm() {
         return;
       }
 
-      const destination = result?.url ?? callbackUrl;
+      const destination = normalizeLoginDestination(result?.url, callbackUrl);
       router.prefetch(destination);
       window.location.replace(destination);
     } catch {
