@@ -158,8 +158,15 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const sidebarConfigPromise = prisma.setting.findUnique({
     where: { key: "sidebar_configuration" }
   }).catch(() => null);
+  const colleaguesPromise = session?.user?.id
+    ? prisma.user.findMany({
+        where: { active: true, role: { not: "SUPER_ADMIN" } },
+        take: 3,
+        select: { id: true, name: true, photo_url: true }
+      }).catch(() => [])
+    : Promise.resolve([]);
 
-  const [serviceSetting, formsAccessSettings, currentUser, unreadNotifications, tablesAccessSetting, planningAccessSetting, sidebarConfigSetting] = await Promise.all([
+  const [serviceSetting, formsAccessSettings, currentUser, unreadNotifications, tablesAccessSetting, planningAccessSetting, sidebarConfigSetting, colleagues] = await Promise.all([
     serviceSettingPromise,
     formsAccessPromise,
     currentUserPromise,
@@ -167,6 +174,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     tablesAccessPromise,
     planningAccessPromise,
     sidebarConfigPromise,
+    colleaguesPromise,
   ]);
 
   let userAccessList: string[] | undefined = undefined;
@@ -377,11 +385,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userPhoto={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
-            logoutButton={
-              <LogoutButton className="flex w-full items-center gap-3 rounded-2xl border border-current/10 bg-white/20 px-4 py-3 text-sm font-bold text-[color:var(--sidebar-text)] shadow-sm transition hover:bg-white/30 active:scale-95" />
-            }
-          >
-            {filterMenuItems(
+            colleagues={colleagues}
+            items={filterMenuItems(
               (currentRole === "DIPENDENTE"
                 ? [
                     { href: "/dashboard", label: "Home", iconName: "Home" },
@@ -416,18 +421,11 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                       : []),
                   ]
                 : baseItems) as any
-            ).map((item: any) => (
-              <InstantLink
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-3.5 rounded-2xl px-4 py-3 text-sm font-bold text-[color:var(--sidebar-text)] opacity-80 transition-all duration-200 hover:bg-white/20 hover:opacity-100"
-                activeClassName="bg-white/25 opacity-100 font-extrabold border-l-4 border-[color:var(--sidebar-icon)] pl-3"
-              >
-                <DynamicIcon name={item.iconName} className="size-5 shrink-0 text-[color:var(--sidebar-icon)]" />
-                <span>{item.label}</span>
-              </InstantLink>
-            ))}
-          </MobileMenuDrawer>
+            )}
+            logoutButton={
+              <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white px-4 py-3 text-xs font-black uppercase tracking-wider transition-all duration-200" />
+            }
+          />
 
           {/* Logo Center */}
           <Link href="/dashboard" className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">

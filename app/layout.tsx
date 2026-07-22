@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   applicationName: "Paradise Staff Hub",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icons/paradise-icon.svg",
-    shortcut: "/icons/paradise-icon.svg",
+    icon: "/favicon.png",
+    shortcut: "/favicon.png",
     apple: "/favicon.png",
   },
   appleWebApp: {
