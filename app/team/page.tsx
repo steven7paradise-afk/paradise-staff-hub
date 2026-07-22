@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { calculateClockHours } from "@/lib/work-hours";
@@ -20,7 +21,7 @@ type CompletionFile = { name: string; url?: string | null };
 function Avatar({ name, photoUrl, size = "size-24" }: { name: string; photoUrl: string | null; size?: string }) {
   return (
     <div className={`${size} grid shrink-0 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-2xl font-bold`}>
-      {photoUrl ? <img src={photoUrl} alt={name} className="size-full object-cover" /> : name.slice(0, 2).toUpperCase()}
+      {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="size-full object-cover" /> : name.slice(0, 2).toUpperCase()}
     </div>
   );
 }
@@ -446,7 +447,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
               <Card className="overflow-hidden border border-white/70 bg-white/70 p-2 shadow-[0_24px_60px_rgba(31,31,31,0.12)] backdrop-blur-2xl">
                 <div className="relative min-h-[340px] overflow-hidden rounded-[30px] border border-white/70 bg-[#EFF3F1]">
                   {selected.photo_url ? (
-                    <img src={selected.photo_url} alt={selected.name} className="absolute inset-0 size-full object-cover" />
+                    <img src={resolveDrivePhotoUrl(selected.photo_url)} alt={selected.name} className="absolute inset-0 size-full object-cover" />
                   ) : (
                     <div className="absolute inset-0 grid place-items-center bg-paradise-softPink text-7xl font-black text-paradise-noir">
                       {selected.name.slice(0, 2).toUpperCase()}

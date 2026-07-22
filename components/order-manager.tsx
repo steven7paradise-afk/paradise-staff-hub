@@ -258,6 +258,35 @@ function orderPhoto(order: OrderResponse): OrderPhoto | null {
   return photo as OrderPhoto;
 }
 
+function orderPickup(order: OrderResponse) {
+  const pickup = order.answers?.__pickup;
+  if (!pickup || typeof pickup !== "object") return null;
+  return pickup as {
+    pickupName?: string;
+    completedByName?: string;
+    completedAt?: string;
+    payment?: { total?: number | null; paid?: number; missing?: number | null };
+    proof?: { driveFileUrl?: string; webViewLink?: string; name?: string };
+    signature?: { signedByName?: string; signedAt?: string };
+  };
+}
+
+function formatMoney(value: number | null | undefined) {
+  if (value === null || value === undefined) return "Non indicato";
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function statusLabel(status: string) {
   return ORDER_COLUMNS.find((column) => column.id === status)?.label ?? status;
 }
@@ -722,6 +751,7 @@ export function OrderManager({
                   {(selected.form?.fields ?? []).map((field) => {
                     const value = selected.answers?.[field.id];
                     if (!value) return null;
+                    if (field.id.startsWith("__")) return null;
                     const isFile = typeof value === "object" && value.storagePath;
                     return (
                       <div key={field.id} className="rounded-2xl bg-[#FAF7F9] p-4">
@@ -919,6 +949,29 @@ export function OrderManager({
                   <div className="mt-4 grid gap-3 text-sm">
                     <p><span className="text-black/40">Creato da:</span> <b>{selected.user?.name ?? "Staff"}</b></p>
                     <p><span className="text-black/40">Salone:</span> <b>{selected.user_location_name ?? "Non indicato"}</b></p>
+                    {(() => {
+                      const pickup = orderPickup(selected);
+                      if (!pickup) return null;
+                      const proofUrl = pickup.proof?.driveFileUrl || pickup.proof?.webViewLink;
+                      return (
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-emerald-950">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700/70">Consegna registrata</p>
+                          <div className="mt-2 grid gap-2">
+                            <p><span className="text-emerald-900/55">Consegnato da:</span> <b>{pickup.completedByName || pickup.signature?.signedByName || "Staff"}</b></p>
+                            <p><span className="text-emerald-900/55">Ritirato da:</span> <b>{pickup.pickupName || "Non indicato"}</b></p>
+                            <p><span className="text-emerald-900/55">Giorno:</span> <b>{formatDateTime(pickup.completedAt || pickup.signature?.signedAt)}</b></p>
+                            <p><span className="text-emerald-900/55">Pagato:</span> <b>{formatMoney(pickup.payment?.paid)}</b></p>
+                            <p><span className="text-emerald-900/55">Mancante:</span> <b>{formatMoney(pickup.payment?.missing)}</b></p>
+                            {proofUrl ? (
+                              <a href={proofUrl} target="_blank" rel="noreferrer" className="inline-flex w-fit items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-black text-emerald-700 shadow-sm">
+                                <LinkIcon className="size-3.5" />
+                                Prova ritiro
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {(() => {
                       const shopifyOrderField = (selected.form?.fields ?? []).find(f => 
                         f.label?.toLowerCase().includes("ordine shopify") || 

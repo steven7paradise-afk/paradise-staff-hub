@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Send, X, Flag, Calendar, Clock, User, Heart, Coffee, FileText, Sparkles, Plus, AlertCircle, ShieldCheck } from "lucide-react";
+import { Check, Send, X, Flag, Calendar, Clock, Heart, Coffee, FileText, Sparkles, Plus, AlertCircle, ShieldCheck } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -16,8 +16,12 @@ type RequestRecord = {
   endTime: string | null;
   reason: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+  adminNote: string | null;
   medicalCode: string | null;
   sicknessUnjustified: boolean;
+  createdAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
 };
 
 type WorkerOption = { id: string; name: string; location: string | null };
@@ -32,6 +36,17 @@ function needsSicknessJustification(request: RequestRecord) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "Non registrata";
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function displayRange(request: RequestRecord) {
@@ -53,6 +68,79 @@ function getRequestIcon(type: string) {
     default:
       return <FileText className="size-4 text-blue-500" />;
   }
+}
+
+function RequestMetaPanel({ request }: { request: RequestRecord }) {
+  const approved = request.status === "APPROVED";
+  const workerNote = request.reason?.trim() || "Nessuna nota lavoratore";
+  const adminNote = request.adminNote?.trim() || "Nessuna nota admin";
+
+  return (
+    <div className="mt-3 rounded-2xl border border-black/5 bg-white/80 p-3 text-xs shadow-sm">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Inviata da</p>
+          <p className="mt-0.5 font-bold text-paradise-noir">{request.employee}</p>
+        </div>
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Inviata il</p>
+          <p className="mt-0.5 font-bold text-paradise-noir">{formatDateTime(request.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Stato richiesta</p>
+          <p className="mt-0.5 font-bold text-paradise-noir">{statusLabels[request.status]}</p>
+        </div>
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Approvata da</p>
+          <p className="mt-0.5 font-bold text-paradise-noir">{approved ? request.approvedBy ?? "Non registrato" : "Non ancora approvata"}</p>
+        </div>
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Approvata il</p>
+          <p className="mt-0.5 font-bold text-paradise-noir">{approved ? formatDateTime(request.approvedAt) : "—"}</p>
+        </div>
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Periodo richiesto</p>
+          <p className="mt-0.5 font-bold text-paradise-noir">{displayRange(request)}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl bg-paradise-nude/35 px-3 py-2">
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Note lavoratore</p>
+          <p className="mt-0.5 whitespace-pre-wrap font-semibold leading-relaxed text-black/65">{workerNote}</p>
+        </div>
+        <div className={cn(
+          "rounded-xl px-3 py-2",
+          request.adminNote ? "bg-paradise-pink/20 ring-1 ring-paradise-pink/30" : "bg-neutral-50"
+        )}>
+          <p className="text-[9px] font-black uppercase tracking-[0.16em] text-black/35">Nota admin</p>
+          <p className="mt-0.5 whitespace-pre-wrap font-semibold leading-relaxed text-black/65">{adminNote}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DecisionNoteField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
+        Motivo / nota admin
+      </span>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Scrivi il motivo dell'approvazione o del rifiuto..."
+        rows={2}
+        className="w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-paradise-noir outline-none transition focus:border-paradise-pink focus:ring-2 focus:ring-paradise-pink/20"
+      />
+    </label>
+  );
 }
 
 function DatePickerStable({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -96,6 +184,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [medicalDrafts, setMedicalDrafts] = useState<Record<string, string>>({});
+  const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
   const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>("JUSTIFY");
   const employeeView = role === "DIPENDENTE";
   const canApprove = role === "ADMIN" || role === "SUPER_ADMIN";
@@ -152,8 +241,12 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       endTime: savedRequest.end_time,
       reason: savedRequest.reason,
       status: savedRequest.status,
+      adminNote: savedRequest.admin_note,
       medicalCode: savedRequest.medical_code,
       sicknessUnjustified: savedRequest.sickness_unjustified,
+      createdAt: savedRequest.created_at,
+      approvedBy: savedRequest.approver?.name ?? null,
+      approvedAt: savedRequest.approved_at ?? null,
     }, ...current]);
     setForm({ userId: workers[0]?.id ?? "", type: "FERIE", startDate: todayValue, endDate: todayValue, startTime: "", endTime: "", reason: "", approveNow: false, medicalCode: "" });
     setOpenForm(false);
@@ -169,11 +262,16 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   }
 
   async function changeStatus(id: string, status: "APPROVED" | "REJECTED" | "FLAGGED") {
+    const adminNote = decisionDrafts[id]?.trim() ?? "";
+    if (status === "REJECTED" && !adminNote) {
+      setMessage("Scrivi il motivo del rifiuto prima di salvare.");
+      return;
+    }
     setSaving(id);
     const response = await fetch(`/api/requests/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, adminNote: adminNote || null }),
     });
     const data = await response.json();
     setSaving(null);
@@ -181,7 +279,18 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       setMessage(data.error ?? "Operazione non salvata.");
       return;
     }
-    setRequests((current) => current.map((request) => request.id === id ? { ...request, status: data.leaveRequest.status } : request));
+    setRequests((current) => current.map((request) => request.id === id ? {
+      ...request,
+      status: data.leaveRequest.status,
+      adminNote: data.leaveRequest.admin_note,
+      approvedBy: data.leaveRequest.approver?.name ?? null,
+      approvedAt: data.leaveRequest.approved_at ?? null,
+    } : request));
+    setDecisionDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
     if (status === "APPROVED" && data.calendarSync?.skipped) {
       setMessage(`Richiesta approvata e inserita nel planning. Calendar non sincronizzato: ${data.calendarSync.reason}`);
       return;
@@ -425,22 +534,29 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                         Non giustificata
                       </button>
                     </div>
+                    <RequestMetaPanel request={request} />
                     {canApprove && isPending ? (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <button
-                          disabled={saving === request.id}
-                          onClick={() => changeStatus(request.id, "APPROVED")}
-                          className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
-                        >
-                          <Check className="size-3.5" /> Approva
-                        </button>
-                        <button
-                          disabled={saving === request.id}
-                          onClick={() => changeStatus(request.id, "REJECTED")}
-                          className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
-                        >
-                          <X className="size-3.5" /> Rifiuta
-                        </button>
+                      <div className="mt-3 space-y-2">
+                        <DecisionNoteField
+                          value={decisionDrafts[request.id] ?? ""}
+                          onChange={(value) => setDecisionDrafts((current) => ({ ...current, [request.id]: value }))}
+                        />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            disabled={saving === request.id}
+                            onClick={() => changeStatus(request.id, "APPROVED")}
+                            className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                          >
+                            <Check className="size-3.5" /> Approva
+                          </button>
+                          <button
+                            disabled={saving === request.id}
+                            onClick={() => changeStatus(request.id, "REJECTED")}
+                            className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                          >
+                            <X className="size-3.5" /> Rifiuta
+                          </button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -547,24 +663,31 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                 ) : request.reason ? (
                   <p className="mt-2 line-clamp-1 text-xs italic text-black/45">{request.reason}</p>
                 ) : null}
+                <RequestMetaPanel request={request} />
               </div>
 
               {canApprove && isPending && (
-                <div className="flex gap-2">
-                  <button
-                    disabled={saving === request.id}
-                    onClick={() => changeStatus(request.id, "APPROVED")}
-                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white shadow-sm transition-colors hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    <Check className="size-3.5" /> Approva
-                  </button>
-                  <button
-                    disabled={saving === request.id}
-                    onClick={() => changeStatus(request.id, "REJECTED")}
-                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 shadow-sm transition-colors hover:bg-rose-50 disabled:opacity-50"
-                  >
-                    <X className="size-3.5" /> Rifiuta
-                  </button>
+                <div className="min-w-[250px] space-y-2">
+                  <DecisionNoteField
+                    value={decisionDrafts[request.id] ?? ""}
+                    onChange={(value) => setDecisionDrafts((current) => ({ ...current, [request.id]: value }))}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      disabled={saving === request.id}
+                      onClick={() => changeStatus(request.id, "APPROVED")}
+                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white shadow-sm transition-colors hover:bg-emerald-600 disabled:opacity-50"
+                    >
+                      <Check className="size-3.5" /> Approva
+                    </button>
+                    <button
+                      disabled={saving === request.id}
+                      onClick={() => changeStatus(request.id, "REJECTED")}
+                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 shadow-sm transition-colors hover:bg-rose-50 disabled:opacity-50"
+                    >
+                      <X className="size-3.5" /> Rifiuta
+                    </button>
+                  </div>
                 </div>
               )}
 

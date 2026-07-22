@@ -21,6 +21,7 @@ export async function PATCH(
   const { id } = await context.params;
   const payload = await request.json();
   const status = payload.status ? (String(payload.status) as RequestStatus) : undefined;
+  const adminNote = payload.adminNote !== undefined ? (payload.adminNote ? String(payload.adminNote).trim() : null) : undefined;
   const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
   const sicknessUnjustified = payload.sicknessUnjustified !== undefined ? Boolean(payload.sicknessUnjustified) : undefined;
 
@@ -41,9 +42,16 @@ export async function PATCH(
     if (!isAdmin && !(isResponsabile && status === "FLAGGED")) {
       return NextResponse.json({ error: "Operazione non consentita per il ruolo" }, { status: 403 });
     }
+    if (status === "REJECTED" && !adminNote) {
+      return NextResponse.json({ error: "Scrivi il motivo del rifiuto." }, { status: 400 });
+    }
     if (isResponsabile && existing.user.sede_id !== session.user.sedeId) {
       return NextResponse.json({ error: "Richiesta fuori dalla propria sede" }, { status: 403 });
     }
+  }
+
+  if (adminNote !== undefined && !isAdmin && !(isResponsabile && status === "FLAGGED")) {
+    return NextResponse.json({ error: "Non autorizzato a modificare la nota admin." }, { status: 403 });
   }
 
   // Check permissions for sickness justification changes
@@ -66,11 +74,12 @@ export async function PATCH(
         where: { id },
         data: {
           ...(status !== undefined ? { status } : {}),
-          ...(status === "APPROVED" ? { approved_by: session.user.id } : status === "REJECTED" || status === "PENDING" ? { approved_by: null } : {}),
+          ...(status === "APPROVED" ? { approved_by: session.user.id, approved_at: new Date() } : status === "REJECTED" || status === "PENDING" ? { approved_by: null, approved_at: null } : {}),
+          ...(adminNote !== undefined ? { admin_note: adminNote } : {}),
           ...(medicalCode !== undefined ? { medical_code: medicalCode, sickness_unjustified: false } : {}),
           ...(sicknessUnjustified !== undefined ? { sickness_unjustified: sicknessUnjustified, ...(sicknessUnjustified ? { medical_code: null } : {}) } : {}),
         },
-        include: { user: true },
+        include: { user: true, approver: true },
       });
 
       let syncResult = null;
@@ -125,7 +134,7 @@ export async function PATCH(
       await createNotification({
         user_id: leaveRequest.user_id,
         title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
-        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}`,
+        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}${leaveRequest.admin_note ? ` Nota admin: ${leaveRequest.admin_note}` : ""}`,
         type: "RICHIESTA",
         action_url: "/requests",
         read: false,

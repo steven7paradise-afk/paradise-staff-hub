@@ -43,6 +43,9 @@ export type CowlendarBooking = {
     id?: string;
     title?: string | null;
     type?: string | null;
+    image_url?: string | null;
+    image?: string | null;
+    thumbnail?: string | null;
   } | null;
   customer?: {
     name?: string | null;
@@ -313,7 +316,7 @@ export async function getCowlendarBookingsForRange({
   limit?: number;
 }): Promise<CowlendarBooking[]> {
   const safeLimit = Math.min(Math.max(Math.trunc(limit || 800), 1), 5000);
-  const cacheKey = `cowlendar_cache_range_${startDate}_${endDate}_${safeLimit}`;
+  const cacheKey = `cowlendar_cache_range_v4_${startDate}_${endDate}_${safeLimit}`;
   
   const cached = await getCache<CowlendarBooking[]>(cacheKey);
   const now = Date.now();

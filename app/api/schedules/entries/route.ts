@@ -82,7 +82,8 @@ async function syncUserSickness(userId: string, approverId: string) {
           where: { id: overlapping.id },
           data: {
             start_date: block.start,
-            end_date: block.end
+            end_date: block.end,
+            approved_at: overlapping.approved_at ?? new Date()
           }
         });
       }
@@ -96,6 +97,7 @@ async function syncUserSickness(userId: string, approverId: string) {
           end_date: block.end,
           status: "APPROVED",
           approved_by: approverId,
+          approved_at: new Date(),
           reason: "Sincronizzato da planning"
         }
       });

@@ -3,6 +3,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle, Palette, RotateCcw } from "lucide-react";
 import { Button, Card, Field } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 
 const presets = [
@@ -190,7 +191,7 @@ export function ProfileSettings({
             <div className="relative group select-none">
               <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-paradise-pink to-paradise-gold opacity-30 blur group-hover:opacity-60 transition duration-500" />
               <div className="relative grid size-20 place-items-center overflow-hidden rounded-full border-4 border-white dark:border-neutral-800 bg-paradise-nude text-2xl font-extrabold text-paradise-noir shadow-md">
-                {image ? <img src={image} alt={name} className="size-full object-cover rounded-full select-none pointer-events-none" /> : name.slice(0, 1).toUpperCase()}
+                {image ? <img src={resolveDrivePhotoUrl(image)} alt={name} className="size-full object-cover rounded-full select-none pointer-events-none" /> : name.slice(0, 1).toUpperCase()}
               </div>
             </div>
             

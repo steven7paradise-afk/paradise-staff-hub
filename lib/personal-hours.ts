@@ -18,11 +18,15 @@ type StoredHours = { date: Date; hours: number; paid_break: boolean; manual_over
 export type PersonalDayHours = {
   date: Date;
   schedule: ScheduleRow | undefined;
+  plannedGrossHours: number;
   plannedHours: number;
   workedHours: number;
   grossHours: number;
   breakHours: number;
+  paidBreak: boolean;
   firstEntry: string | null;
+  firstPause: string | null;
+  lastReturn: string | null;
   lastExit: string | null;
   note: string;
 };
@@ -51,6 +55,13 @@ export function plannedHours(schedule?: ScheduleRow) {
   return roundedHours(expectedHours);
 }
 
+export function plannedGrossHours(schedule?: ScheduleRow) {
+  const startTime = schedule?.start_time ?? schedule?.category.start_time;
+  const endTime = schedule?.end_time ?? schedule?.category.end_time;
+  if (!startTime || !endTime) return 0;
+  return roundedHours(durationHours(startTime, endTime));
+}
+
 export function monthlyPersonalHours(year: number, month: number, schedules: ScheduleRow[], logs: ClockLog[], records: StoredHours[]) {
   const scheduleByDate = new Map(schedules.map((entry) => [dayKey(entry.date), entry]));
   const recordByDate = new Map(records.map((entry) => [dayKey(entry.date), entry]));
@@ -74,11 +85,15 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
     return {
       date,
       schedule,
+      plannedGrossHours: plannedGrossHours(schedule),
       plannedHours: plannedHours(schedule),
       workedHours: roundedHours(record?.manual_override ? record.hours : automaticHours),
       grossHours: clock.grossHours,
       breakHours: clock.breakHours,
+      paidBreak: Boolean(record?.paid_break),
       firstEntry: clock.firstEntry,
+      firstPause: clock.firstPause,
+      lastReturn: clock.lastReturn,
       lastExit: clock.lastExit,
       note: record?.note ?? "",
     };

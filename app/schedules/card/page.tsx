@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { ScheduleCardViewer } from "@/components/schedule-card-viewer";
+import { coerceEmployeeScheduleMonth } from "@/lib/schedule-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,11 @@ export default async function ScheduleCardPage({
   const today = new Date();
   const requestedMonth = Number(values.month);
   const requestedYear = Number(values.year);
-  const month = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
-  const year = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
+  const parsedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
+  const parsedYear = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
+  const selectedMonth = currentUserRole === "DIPENDENTE" ? coerceEmployeeScheduleMonth(parsedMonth, parsedYear, today) : { month: parsedMonth, year: parsedYear };
+  const month = selectedMonth.month;
+  const year = selectedMonth.year;
 
   // Load shifts (ScheduleEntry) for the target month
   const start = new Date(Date.UTC(year, month, 1));

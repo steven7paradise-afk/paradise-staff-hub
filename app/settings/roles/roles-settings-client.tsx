@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useTransition } from "react";
 import { ShieldAlert, ShieldCheck, UserCheck, Users, Settings, Edit, Loader2, Search, FolderPlus, ArrowUp, ArrowDown, Plus, Trash2, Folder, X, Menu, ChevronRight } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type UserType = {
   id: string;
@@ -40,7 +41,7 @@ type SidebarLayoutSetting =
 
 const DEFAULT_SIDEBAR_LAYOUT: SidebarFolder[] = [
   { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
-  { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
+  { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/foto", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
   { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/cedolini", "/malattie", "/team"] },
   { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
 ];
@@ -147,6 +148,7 @@ const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
   "/service-forms": { name: "Moduli Operativi", description: "Compilazione dei moduli tecnici dei servizi." },
   "/tables": { name: "Tabelle Listini", description: "Visualizzazione tabelle listini e prezzi." },
   "/orders": { name: "Ordini (Kanban)", description: "Pipeline ordini per acquisto extension, conversioni e accessori." },
+  "/foto": { name: "Foto", description: "Caricamento rapido foto ordini su Google Drive con PIN personale." },
   "/appointments": { name: "Gestione Appuntamenti", description: "Planning e prenotazioni dei clienti." },
   "/consulenza-online": { name: "Consulenza Online", description: "Calendario delle prenotazioni di consulenza online." },
   "/cash": { name: "Cassa & Chiusure", description: "Chiusure di cassa e monitoraggio cassaforte." },
@@ -198,6 +200,8 @@ const APP_PAGES_MATRIX = Object.entries(routePermissions).map(([path, viewRoles]
   let exceptions = "Nessuna eccezione";
   if (path === "/orders") {
     exceptions = "Tutti i dipendenti (incluse le sarte) vedono tutti gli ordini.";
+  } else if (path === "/foto") {
+    exceptions = "Accesso gestito da Vedi: serve per caricare foto ordini da mobile.";
   } else if (path === "/schedules") {
     exceptions = "Tutti i dipendenti possono vedere i turni propri e dei colleghi.";
   } else if (path === "/requests") {
@@ -224,6 +228,7 @@ const ROUTE_GROUPS = [
     title: "Area Operativa & Personale",
     routes: [
       "/dashboard",
+      "/foto",
       "/my-shifts",
       "/tasks",
       "/schedules",
@@ -296,7 +301,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   const [previewTarget, setPreviewTarget] = useState<string>("DIPENDENTE");
 
   const getPreviewAccessList = (target: string): string[] => {
-    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(target)) {
+    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"].includes(target)) {
       return APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(target as any)).map(p => p.path);
     }
     const mName = target.toLowerCase();
@@ -304,7 +309,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   };
 
   const getPreviewEditAccessList = (target: string): string[] => {
-    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(target)) {
+    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"].includes(target)) {
       return APP_PAGES_MATRIX.filter(p => p.editRoles.includes(target as any)).map(p => p.path);
     }
     const mName = target.toLowerCase();
@@ -896,7 +901,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               {user.photo_url ? (
-                                <img src={user.photo_url} alt={user.name} className="size-9 rounded-full object-cover border border-slate-100" />
+                                <img src={resolveDrivePhotoUrl(user.photo_url)} alt={user.name} className="size-9 rounded-full object-cover border border-slate-100" />
                               ) : (
                                 <div className="grid size-9 place-items-center rounded-full bg-[#FAF7F9] font-black text-[#C66170] border border-pink-100">
                                   {(user.name || "S").charAt(0).toUpperCase()}
@@ -1010,6 +1015,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                                 <option value="SUPER_ADMIN">Super Admin</option>
                                 <option value="ADMIN">Admin</option>
                                 <option value="RESPONSABILE">Responsabile</option>
+                                <option value="MAGAZZINO">Magazzino</option>
                                 <option value="DIPENDENTE">Dipendente</option>
                               </select>
                             )}
@@ -1322,6 +1328,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                 <option value="default">Menu generale / fallback</option>
                 <optgroup label="Ruoli di Sistema">
                   <option value="DIPENDENTE">Collaboratore (DIPENDENTE)</option>
+                  <option value="MAGAZZINO">Magazzino (MAGAZZINO)</option>
                   <option value="RESPONSABILE">Responsabile (RESPONSABILE)</option>
                   <option value="ADMIN">Amministratore (ADMIN)</option>
                   <option value="SUPER_ADMIN">Super Admin (SUPER_ADMIN)</option>
@@ -1603,6 +1610,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                   >
                     <optgroup label="Ruoli di Sistema">
                       <option value="DIPENDENTE">Collaboratore (DIPENDENTE)</option>
+                      <option value="MAGAZZINO">Magazzino (MAGAZZINO)</option>
                       <option value="RESPONSABILE">Responsabile (RESPONSABILE)</option>
                       <option value="ADMIN">Amministratore (ADMIN)</option>
                       <option value="SUPER_ADMIN">Super Admin (SUPER_ADMIN)</option>

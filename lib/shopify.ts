@@ -737,5 +737,3 @@ export function isFuzzyNameMatch(name1: string, name2: string): boolean {
   const minRequired = Math.min(words1.length, words2.length);
   return matches >= minRequired;
 }
-
-

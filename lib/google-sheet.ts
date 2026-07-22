@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
+import { getWarehouseState } from "@/lib/internal-warehouse";
 
 type AttendanceSheetRow = {
   date: string;
@@ -264,3 +265,145 @@ export async function appendFormResponseToGoogleSheet(input: FormSyncInput) {
   return { success: true };
 }
 
+function sheetTitle(title: string) {
+  return title.replace(/[\[\]\*\?\/\\]/g, "").slice(0, 90);
+}
+
+function sheetRange(title: string, range = "A:E") {
+  return `'${sheetTitle(title).replace(/'/g, "''")}'!${range}`;
+}
+
+function serializeValue(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => {
+    if (typeof item === "bigint") return item.toString();
+    if (item instanceof Date) return item.toISOString();
+    return item;
+  });
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+async function getBackupSheetsClient() {
+  const envSpreadsheetId = process.env.GOOGLE_SHEET_ID;
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  if (!envSpreadsheetId || !clientEmail || !privateKey) {
+    throw new Error("Credenziali Google Sheets non configurate nel server.");
+  }
+
+  const settings = await prisma.googleSheetSetting.findFirst({
+    where: { active: true },
+    orderBy: { id: "desc" },
+  });
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  return {
+    spreadsheetId: settings?.spreadsheet_id ?? envSpreadsheetId,
+    settingsId: settings?.id,
+    sheets: google.sheets({ version: "v4", auth }),
+  };
+}
+
+async function ensureBackupTabs(sheets: ReturnType<typeof google.sheets>, spreadsheetId: string, titles: string[]) {
+  const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+  const existing = new Set(spreadsheet.data.sheets?.map((item) => item.properties?.title).filter(Boolean) as string[]);
+  const requests = titles
+    .map(sheetTitle)
+    .filter((title) => !existing.has(title))
+    .map((title) => ({ addSheet: { properties: { title } } }));
+
+  if (requests.length) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests },
+    });
+  }
+}
+
+function rowsForBackup(records: unknown[], backupAt: string) {
+  return [
+    ["id", "backup_at", "created_at", "updated_at", "data_json"],
+    ...records.map((record) => {
+      const item = asRecord(record);
+      return [
+        String(item.id ?? item.key ?? item.order_id ?? ""),
+        backupAt,
+        item.created_at instanceof Date ? item.created_at.toISOString() : String(item.created_at ?? ""),
+        item.updated_at instanceof Date ? item.updated_at.toISOString() : String(item.updated_at ?? ""),
+        serializeValue(record),
+      ];
+    }),
+  ];
+}
+
+export async function backupDatabaseToGoogleSheet() {
+  const { sheets, spreadsheetId, settingsId } = await getBackupSheetsClient();
+  const backupAt = new Date().toISOString();
+  const warehouseState = await getWarehouseState();
+
+  const tables = [
+    { tab: "Backup Users", rows: await prisma.user.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup Locations", rows: await prisma.location.findMany({ orderBy: { name: "asc" } }) },
+    { tab: "Backup Devices", rows: await prisma.device.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup Attendance", rows: await prisma.attendanceLog.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup LeaveRequests", rows: await prisma.leaveRequest.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup Documents", rows: await prisma.document.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup Notifications", rows: await prisma.notification.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup ScheduleCategories", rows: await prisma.scheduleCategory.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup ScheduleEntries", rows: await prisma.scheduleEntry.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup ScheduleWorkers", rows: await prisma.scheduleWorkerOverride.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup WorkHours", rows: await prisma.workHourRecord.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup ServiceForms", rows: await prisma.serviceForm.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup FormResponses", rows: await prisma.serviceFormResponse.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup CashClosings", rows: await prisma.cashClosing.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup CashWithdrawals", rows: await prisma.cashVaultWithdrawal.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup CashMonths", rows: await prisma.cashMonthClose.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup Settings", rows: await prisma.setting.findMany({ orderBy: { key: "asc" } }) },
+    { tab: "Backup Branding", rows: await prisma.brandingSetting.findMany() },
+    { tab: "Backup EmailSettings", rows: await prisma.emailSetting.findMany() },
+    { tab: "Backup SheetSettings", rows: await prisma.googleSheetSetting.findMany() },
+    { tab: "Backup Candidates", rows: await prisma.candidate.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup SocialPosts", rows: await prisma.socialPost.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup OrderCache", rows: await prisma.shopifyOrderCache.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup OrderComments", rows: await prisma.shopifyOrderComment.findMany({ orderBy: { created_at: "asc" } }) },
+    { tab: "Backup Warehouse", rows: [{ id: "internal_warehouse_state", created_at: backupAt, updated_at: backupAt, state: warehouseState }] },
+  ];
+
+  await ensureBackupTabs(sheets, spreadsheetId, tables.map((table) => table.tab));
+
+  for (const table of tables) {
+    const title = sheetTitle(table.tab);
+    const values = rowsForBackup(table.rows, backupAt);
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: sheetRange(title, "A:E"),
+    });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: sheetRange(title, "A1"),
+      valueInputOption: "RAW",
+      requestBody: { values },
+    });
+  }
+
+  if (settingsId) {
+    await prisma.googleSheetSetting.update({
+      where: { id: settingsId },
+      data: { last_sync_at: new Date() },
+    });
+  }
+
+  return {
+    spreadsheetId,
+    backupAt,
+    tables: tables.map((table) => ({ tab: sheetTitle(table.tab), rows: table.rows.length })),
+  };
+}

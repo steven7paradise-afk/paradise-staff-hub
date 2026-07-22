@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Coffee, Timer, UserRoundCheck } from "lucide-react";
 import { Badge } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type TeamStatus = {
   id: string;
@@ -146,7 +147,7 @@ export function LiveTeamStatus({ initialWorkers }: { initialWorkers: TeamStatus[
                         : ""
                   }`}>
                     {worker.photo_url ? (
-                      <img src={worker.photo_url} alt={worker.name} className="size-full object-cover" />
+                      <img src={resolveDrivePhotoUrl(worker.photo_url)} alt={worker.name} className="size-full object-cover" />
                     ) : (
                       initials
                     )}

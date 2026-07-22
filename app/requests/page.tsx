@@ -19,7 +19,7 @@ export default async function RequestsPage() {
   const [requests, workers] = await Promise.all([
     prisma.leaveRequest.findMany({
       where,
-      include: { user: true },
+      include: { user: true, approver: true },
       orderBy: { created_at: "desc" },
     }),
     prisma.user.findMany({
@@ -47,8 +47,12 @@ export default async function RequestsPage() {
           endTime: request.end_time,
           reason: request.reason,
           status: request.status,
+          adminNote: request.admin_note,
           medicalCode: request.medical_code,
           sicknessUnjustified: request.sickness_unjustified,
+          createdAt: request.created_at.toISOString(),
+          approvedBy: request.approver?.name ?? null,
+          approvedAt: request.approved_at?.toISOString() ?? null,
         }))}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? null }))}
       />

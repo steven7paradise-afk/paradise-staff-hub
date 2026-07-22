@@ -26,6 +26,7 @@
         "npm:eslint-config-next@^16.2.6",
         "npm:eslint@^9.17.0",
         "npm:googleapis@172",
+        "npm:heic2any@^0.0.4",
         "npm:html-to-image@^1.11.13",
         "npm:html5-qrcode@^2.3.8",
         "npm:jspdf@^4.2.1",

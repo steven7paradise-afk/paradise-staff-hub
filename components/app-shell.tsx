@@ -7,6 +7,7 @@ import { normalizeServicePage, servicePages } from "@/lib/service-pages";
 import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
 import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { hasTaskAccess } from "@/lib/task-access";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
 import { InstantLink } from "@/components/instant-link";
@@ -19,7 +20,7 @@ import pkg from "@/package.json";
 
 const nav = [
   // Section: Generale
-  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
@@ -29,6 +30,8 @@ const nav = [
   { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/foto", label: "Foto", iconName: "Camera", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
@@ -371,7 +374,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           <MobileMenuDrawer
             logoUrl={branding.logo_url}
             userName={currentUser?.name ?? session?.user?.name ?? ""}
-            userPhoto={currentUser?.photo_url ?? null}
+            userPhoto={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
             logoutButton={
@@ -398,6 +401,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
                       ? [{ href: "/tables", label: "Tabelle", iconName: "Table2" }]
                       : []),
                     { href: "/orders", label: "Ordini", iconName: "ShoppingCart" },
+                    { href: "/foto", label: "Foto", iconName: "Camera" },
                     ...(servicePageNum === 1
                       ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
                       : []),
@@ -442,7 +446,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             <InstantLink href="/profile" className="relative active:scale-95 transition">
               <div className="size-9 rounded-full overflow-hidden border border-black/5 bg-paradise-nude shadow-sm">
                 {currentUser?.photo_url ? (
-                  <img src={currentUser.photo_url} alt={currentUser.name ?? "User"} className="size-full object-cover rounded-full select-none pointer-events-none" />
+                  <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={currentUser.name ?? "User"} className="size-full object-cover rounded-full select-none pointer-events-none" />
                 ) : (
                   <div className="size-full flex items-center justify-center font-bold text-xs text-paradise-noir">
                     {currentUser?.name?.slice(0, 1).toUpperCase() ?? "P"}
@@ -572,7 +576,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
         <div className="mb-5 hidden justify-end xl:flex">
-          <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ?? null} />
+          <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null} />
         </div>
         {!hideHeader ? <header className={cn("mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", hidePageHeaderOnMobile && "hidden sm:flex")}>
           <div>

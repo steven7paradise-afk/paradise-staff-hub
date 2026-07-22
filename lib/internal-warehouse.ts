@@ -1,0 +1,503 @@
+import { prisma } from "@/lib/prisma";
+
+export type WarehouseKind = "SALONE" | "MAGAZZINO";
+
+export type WarehouseQuantities = {
+  cm40: number;
+  cm55: number;
+  cm65: number;
+  cm75: number;
+};
+
+export type WarehouseProduct = {
+  id: string;
+  name: string;
+  quantities: WarehouseQuantities;
+  total: number;
+  collectionIds: string[];
+  custom?: boolean;
+};
+
+export type WarehouseInventory = {
+  id: string;
+  name: string;
+  kind: WarehouseKind;
+  salon: string;
+  collection: string;
+  products: WarehouseProduct[];
+  totals: WarehouseQuantities & { total: number };
+};
+
+export type WarehouseCollection = {
+  id: string;
+  name: string;
+  description?: string;
+  productIds: string[];
+};
+
+export type WarehouseOrder = {
+  id: string;
+  clientName: string;
+  orderNumber: string;
+  salon: string;
+  products: string[];
+  paid: string;
+  dateKey: string;
+  dateLabel: string;
+  createdAt: string;
+  userName: string;
+};
+
+export type WarehouseState = {
+  collections: WarehouseCollection[];
+  inventories: WarehouseInventory[];
+};
+
+export const INTERNAL_WAREHOUSE_KEY = "internal_warehouse_state";
+
+const rawInventories = [
+  {
+    id: "salone-buenos-aires-50gr",
+    name: "Salone Buenos Aires",
+    kind: "SALONE" as const,
+    salon: "Buenos Aires",
+    collection: "Disponibilita 50gr",
+    rows: `1 - CAMY - NERO - MICROTESSITURA PARADISE|0|17|10|8
+2 - ALY - CASTANO SCURO - MICROTESSITURA PARADISE|0|19|10|5
+3 - GINY - CASTANO FONDENTE - MICROTESSITURA PARADISE|0|16|7|5
+4 - ROXY - CASTANO - MICROTESSITURA PARADISE|0|10|8|1
+4.A - ROXY - CASTANO - MICROTESSITURA PARADISE|0|8|6|2
+5 - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE|0|4|4|1
+5.A - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE|0|7|5|0
+6 - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE|0|0|7|0
+6.A - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE|0|4|5|0
+7 - KARY - CARAMELLO - MICROTESSITURA PARADISE|0|5|5|0
+7.A - KARY - CARAMELLO - MICROTESSITURA PARADISE|0|4|4|0
+8 - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE|0|6|5|0
+8.A - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE|0|6|4|0
+9 - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE|0|7|5|0
+9.A - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE|0|5|5|0
+10 - GABY - BIONDO MIELE SFUMATO - MICROTESSITURA PARADISE|0|0|2|0
+10.A - GABY - BIONDO MIELE SFUMATO - MICROTESSITURA PARADISE|0|0|2|0
+11.A - EMY - BIONDO CENERE - MICROTESSITURA PARADISE|0|0|2|0
+12 - LISY - BIONDO RAMATO - MICROTESSITURA PARADISE|0|5|2|0
+12.A - LISY - BIONDO RAMATO - MICROTESSITURA PARADISE|0|4|4|0
+13 - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE|0|8|5|0
+13.A - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE|0|6|0|0
+14 - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE|0|11|2|0
+14.A - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE|0|9|6|0
+15 - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE|0|7|9|0
+15.A - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE|0|0|4|0
+16 - RUBY - MIELE - MICROTESSITURA PARADISE|0|0|3|0
+16.A - RUBY - MIELE - MICROTESSITURA PARADISE|0|1|2|0
+17 - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE|0|7|1|0
+17.A - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE|0|0|4|0
+18.A - BIONDO CHAMPAGNE - MICROTESSITURA PARADISE|0|3|3|0
+19 - LILY - BIONDO - MICROTESSITURA PARADISE|0|4|0|0
+19.A - LILY - BIONDO - MICROTESSITURA PARADISE|0|7|3|0
+20 - ICY - BIONDO FREDDO - MICROTESSITURA PARADISE|0|7|1|0
+20.A - ICY OMBRE - BIONDO FREDDO - MICROTESSITURA PARADISE|0|2|7|0
+21 - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE|0|6|7|0
+21.A - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE|0|4|8|0
+22 - LAURY - MOGANO - MICROTESSITURA PARADISE|0|5|0|0
+22.A - LAURY - MOGANO - MICROTESSITURA PARADISE|0|4|2|0
+23 - JESSY - ROSSO FUOCO - MICROTESSITURA PARADISE|0|6|3|0
+23.A - JESSY OMBRE - MICROTESSITURA PARADISE|0|7|3|0
+24 - ARANCIONE - RAMATO - MICROTESSITURA PARADISE|0|1|1|0
+A - BIONDO VANIGLIA|0|0|4|0
+AMSTERDAMOMBRE|0|1|0|0
+BABYOMBRE|0|0|2|0
+BALIOMBRE|0|1|0|0
+BARBY OMBREN1B|0|1|0|0
+BIONDO PLATINO DORATO|0|1|0|0
+CHICAGOOMBRE|0|1|0|0
+EMYOMBRE 1B|0|0|1|0
+GIULY OMBRE|0|0|1|0
+JENY|0|2|4|0
+JENY OMBRE|0|1|5|0
+NAIROBI|0|2|0|0
+NAIROBIOMBRE|0|6|0|0
+STOCCOLMO|0|4|0|0
+STOCCOLMOOMBRE|0|6|0|0
+TINYOMBRE|0|0|1|0
+VIKY|0|2|0|0`,
+  },
+  {
+    id: "salone-duomo-50gr",
+    name: "Salone Duomo",
+    kind: "SALONE" as const,
+    salon: "Duomo",
+    collection: "Disponibilita 50gr",
+    rows: `1 - CAMY - NERO - MICROTESSITURA PARADISE|0|21|5|10
+2 - ALY - CASTANO SCURO - MICROTESSITURA PARADISE|0|16|9|8
+3 - GINY - CASTANO FONDENTE - MICROTESSITURA PARADISE|0|14|8|7
+4 - ROXY - CASTANO - MICROTESSITURA PARADISE|0|10|5|8
+4.A - ROXY - CASTANO - MICROTESSITURA PARADISE|0|6|4|3
+5 - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE|0|8|0|0
+5.A - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE|0|5|4|1
+6 - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE|0|0|1|0
+6.A - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE|0|4|4|0
+7 - KARY - CARAMELLO - MICROTESSITURA PARADISE|0|7|5|0
+7.A - KARY - CARAMELLO - MICROTESSITURA PARADISE|0|4|5|0
+8 - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE|0|8|0|0
+8.A - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE|0|3|1|0
+9 - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE|0|5|4|0
+9.A - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE|0|3|2|0
+11 - EMY - BIONDO CENERE - MICROTESSITURA PARADISE|0|6|0|0
+11.A - EMY - BIONDO CENERE - MICROTESSITURA PARADISE|0|0|2|0
+12 - LISY - BIONDO RAMATO - MICROTESSITURA PARADISE|0|3|0|0
+12.A - LISY - BIONDO RAMATO - MICROTESSITURA PARADISE|0|0|1|0
+13 - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE|0|7|0|0
+13.A - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE|0|7|0|0
+14 - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE|0|12|3|0
+14.A - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE|0|7|5|0
+15 - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE|0|5|7|0
+15.A - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE|0|1|5|0
+16 - RUBY - MIELE - MICROTESSITURA PARADISE|0|2|0|0
+16.A - RUBY - MIELE - MICROTESSITURA PARADISE|0|0|2|0
+17 - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE|0|3|1|0
+17.A - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE|0|0|4|0
+18 - BIONDO CHAMPAGNE - MICROTESSITURA PARADISE|0|0|3|0
+18.A - BIONDO CHAMPAGNE - MICROTESSITURA PARADISE|0|6|0|0
+19 - LILY - BIONDO - MICROTESSITURA PARADISE|0|6|0|0
+19.A - LILY - BIONDO - MICROTESSITURA PARADISE|0|6|1|0
+20 - ICY - BIONDO FREDDO - MICROTESSITURA PARADISE|0|5|3|0
+20.A - ICY OMBRE - BIONDO FREDDO - MICROTESSITURA PARADISE|0|2|7|0
+21 - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE|0|3|6|0
+21.A - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE|0|14|5|0
+22 - LAURY - MOGANO - MICROTESSITURA PARADISE|0|1|1|0
+22.A - LAURY - MOGANO - MICROTESSITURA PARADISE|0|5|3|0
+23 - JESSY - ROSSO FUOCO - MICROTESSITURA PARADISE|0|6|3|0
+23.A - JESSY OMBRE - MICROTESSITURA PARADISE|0|6|5|0
+24 - ARANCIONE - RAMATO - MICROTESSITURA PARADISE|0|2|0|0
+A - BIONDO VANIGLIA|0|4|5|0
+AMSTERDAMOMBRE|0|1|0|0
+BABYOMBRE|0|0|2|0
+BIONDO PLATINO DORATO|0|1|0|0
+CHICAGOOMBRE2|0|2|0|0
+DUBAI|0|2|0|0
+GIULY OMBRE|0|1|2|0
+JENY|0|2|4|0
+JENY OMBRE|0|0|3|0
+NAIROBI|0|1|0|0
+NAIROBIOMBRE|0|4|0|0
+PARIS|0|2|0|0
+STOCCOLMO|0|3|0|0
+STOCCOLMOOMBRE|0|6|0|0
+TEDYOMBRE|0|0|1|0
+TRIXYOMBRE|0|1|0|0
+TRIXYOMBRE2|0|0|1|0
+VIKY|0|3|0|0
+ZELLYOMBRE|0|0|2|0`,
+  },
+  {
+    id: "magazzino-buenos-aires",
+    name: "Magazzino Buenos Aires",
+    kind: "MAGAZZINO" as const,
+    salon: "Buenos Aires",
+    collection: "Stock principale",
+    rows: `1 - CAMY - NERO - MICROTESSITURA PARADISE|0|153|0|16
+2 - ALY - CASTANO SCURO - MICROTESSITURA PARADISE|39|128|18|20
+3 - GINY - CASTANO FONDENTE - MICROTESSITURA PARADISE|0|77|16|20
+4 - ROXY - CASTANO - MICROTESSITURA PARADISE|0|121|11|0
+4.A - ROXY - CASTANO - MICROTESSITURA PARADISE|0|141|3|9
+5 - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE|0|23|10|0
+5.A - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE|0|2|4|0
+6.A - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE|0|6|2|0
+7 - KARY - CARAMELLO - MICROTESSITURA PARADISE|0|3|3|0
+7.A - KARY - CARAMELLO - MICROTESSITURA PARADISE|0|0|4|0
+8.A - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE|0|14|0|0
+9 - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE|0|26|6|0
+9.A - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE|0|6|5|0
+11 - EMY - BIONDO CENERE - MICROTESSITURA PARADISE|0|0|1|0
+13 - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE|0|1|0|0
+13.A - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE|0|6|0|0
+14 - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE|0|18|0|0
+14.A - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE|0|14|0|0
+15.A - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE|0|0|2|0
+17 - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE|0|6|0|0
+19 - LILY - BIONDO - MICROTESSITURA PARADISE|0|7|4|0
+20 - ICY - BIONDO FREDDO - MICROTESSITURA PARADISE|0|4|0|0
+20.A - ICY OMBRE - BIONDO FREDDO - MICROTESSITURA PARADISE|0|20|4|0
+21 - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE|0|4|0|0
+22.A - LAURY - MOGANO - MICROTESSITURA PARADISE|0|1|5|0
+23 - JESSY - ROSSO FUOCO - MICROTESSITURA PARADISE|0|1|0|0
+23.A - JESSY OMBRE - MICROTESSITURA PARADISE|0|2|5|0
+JENY|0|0|10|0
+JENY OMBRE|0|0|8|0
+VIKY|0|3|0|0`,
+  },
+  {
+    id: "magazzino-duomo",
+    name: "Magazzino Duomo",
+    kind: "MAGAZZINO" as const,
+    salon: "Duomo",
+    collection: "Stock principale",
+    rows: "",
+  },
+];
+
+const catalogNames = `1 - CAMY - NERO - MICROTESSITURA PARADISE
+2 - ALY - CASTANO SCURO - MICROTESSITURA PARADISE
+3 - GINY - CASTANO FONDENTE - MICROTESSITURA PARADISE
+4 - ROXY - CASTANO - MICROTESSITURA PARADISE
+4.A - ROXY - CASTANO - MICROTESSITURA PARADISE
+4.B - ROXY - CASTANO - MICROTESSITURA PARADISE
+5 - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE
+5.A - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE
+5.B - NOEMY - NOCCIOLA - MICROTESSITURA PARADISE
+6 - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE
+6.A - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE
+6.B - FRANCY - CASTANO CHIARO - MICROTESSITURA PARADISE
+7 - KARY - CARAMELLO - MICROTESSITURA PARADISE
+7.A - KARY - CARAMELLO - MICROTESSITURA PARADISE
+7.B - KARY - CARAMELLO - MICROTESSITURA PARADISE
+8 - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE
+8.A - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE
+8.B - MICHY - TOFFE MESCIATO - MICROTESSITURA PARADISE
+9 - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE
+9.A - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE
+9.B - VERONICA - CASTANO & MIELE - MICROTESSITURA PARADISE
+10 - GABY - BIONDO MIELE SFUMATO - MICROTESSITURA PARADISE
+10.A - GABY - BIONDO MIELE SFUMATO - MICROTESSITURA PARADISE
+10.B - GABY - BIONDO MIELE SFUMATO - MICROTESSITURA PARADISE
+11 - EMY - BIONDO CENERE - MICROTESSITURA PARADISE
+11.A - EMY - BIONDO CENERE - MICROTESSITURA PARADISE
+11.B - EMY - BIONDO CENERE - MICROTESSITURA PARADISE
+12 - LISY - BIONDO RAMATO - MICROTESSITURA PARADISE
+12.A - LISY - BIONDO RAMATO - MICROTESSITURA PARADISE
+13 - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE
+13.A - LOLY - BIONDO & MIELE - MICROTESSITURA PARADISE
+14 - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE
+14.A - PAMY - BIONDO MESCIATO - MICROTESSITURA PARADISE
+15 - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE
+15.A - LEIDY - BIONDO NOCCIOLA - MICROTESSITURA PARADISE
+16 - RUBY - MIELE - MICROTESSITURA PARADISE
+16.A - RUBY - MIELE - MICROTESSITURA PARADISE
+17 - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE
+17.A - LUCY - BIONDO SABBIA - MICROTESSITURA PARADISE
+18 - BIONDO CHAMPAGNE - MICROTESSITURA PARADISE
+18.A - BIONDO CHAMPAGNE - MICROTESSITURA PARADISE
+19 - LILY - BIONDO - MICROTESSITURA PARADISE
+19.A - LILY - BIONDO - MICROTESSITURA PARADISE
+20 - ICY - BIONDO FREDDO - MICROTESSITURA PARADISE
+20.A - ICY OMBRE - BIONDO FREDDO - MICROTESSITURA PARADISE
+21 - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE
+21.A - GRIS - BIONDO ULTRA FREDDO - MICROTESSITURA PARADISE
+22 - LAURY - MOGANO - MICROTESSITURA PARADISE
+22.A - LAURY - MOGANO - MICROTESSITURA PARADISE
+23 - JESSY - ROSSO FUOCO - MICROTESSITURA PARADISE
+23.A - JESSY OMBRE - MICROTESSITURA PARADISE
+24 - ARANCIONE - RAMATO - MICROTESSITURA PARADISE
+A - BIONDO VANIGLIA
+ALY R
+AMSTERDAMOMBRE
+ARELY OMBRE
+ARY - MICROTESSITURA PARADISE
+ARY OMBRE - MICROTESSITURA PARADISE
+ARYOMBRE
+BABY
+BABYOMBRE
+BABYOMBRE2
+BALIOMBRE
+BARBY
+BARBY OMBRE
+BARBY OMBRE 2
+BARBY OMBREN1B
+BELLAMY OMBRE
+BENDY
+BENDY OMBRE
+BERLINOMBRE
+BIONDO PLATINO DORATO
+BIONDO SCURO DORATO
+BIONDO VANIGLIA
+BRITTANY OMBRE
+BROOKLYN
+CARACASOMBRE
+CASABLANCA
+CELY OMBRE
+CHICAGOOMBRE
+CHICAGOOMBRE2
+DESY
+DESY OMBRE1B
+DUBAI
+ELY - MICROTESSITURA PARADISE
+ELY OMBRE - MICROTESSITURA PARADISE
+EMYOMBRE 1B
+GABY OMBRE1B
+GIADY OMBRE
+GIULY
+GIULY OMBRE
+GIULY OMBRE 2
+GIUSY OMBRE
+GRIS OMBRE 2
+ICY OMBRE 2 - MICROTESSITURA PARADISE
+ICY OMBRE1B
+JENY
+JENY OMBRE
+LEIDYOMBRE
+LILY OMBRE 2 - MICROTESSITURA PARADISE
+LILYOMBRE
+MARRAKESH
+MELODY OMBRE
+MINDY OMBRE
+MOLLY
+NAIROBI
+NAIROBIOMBRE
+NIKY
+PAMY OMBRE2
+PARIS
+PEPPY
+PEPPYOMBRE
+PUERTORICO
+REBY
+SAMY
+SAMY OMBRE 1B
+SHATUSH LILY
+SHATUSH_SILVY2
+SILVY - MICROTESSITURA PARADISE
+SILVY OMBRE - MICROTESSITURA PARADISE
+SILVY OMBRE 2
+STOCCOLMO
+STOCCOLMOOMBRE
+TEDYOMBRE
+TIFFANY OMBRE
+TINYOMBRE
+TRINITY OMBRE
+TRIXYOMBRE
+TRIXYOMBRE2
+VIKY
+VIKY OMBRE2
+WINNY OMBRE
+WISSYOMBRE2
+YOLY
+ZELLY
+ZELLYOMBRE`;
+
+function slug(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
+function parseRows(rows: string, inventoryId: string): WarehouseProduct[] {
+  const productMap = new Map(
+    rows
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, cm40, cm55, cm65, cm75] = line.split("|");
+      const quantities = {
+        cm40: Number(cm40) || 0,
+        cm55: Number(cm55) || 0,
+        cm65: Number(cm65) || 0,
+        cm75: Number(cm75) || 0,
+      };
+      return {
+        id: `${inventoryId}:${slug(name)}`,
+        name,
+        quantities,
+        total: quantities.cm40 + quantities.cm55 + quantities.cm65 + quantities.cm75,
+        collectionIds: [],
+      };
+    })
+    .map((product) => [product.name, product] as const),
+  );
+
+  return catalogNames
+    .split("\n")
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .map((name) => productMap.get(name) ?? {
+      id: `${inventoryId}:${slug(name)}`,
+      name,
+      quantities: { cm40: 0, cm55: 0, cm65: 0, cm75: 0 },
+      total: 0,
+      collectionIds: [],
+    });
+}
+
+function totals(products: WarehouseProduct[]): WarehouseInventory["totals"] {
+  return products.reduce(
+    (sum, product) => {
+      sum.cm40 += product.quantities.cm40;
+      sum.cm55 += product.quantities.cm55;
+      sum.cm65 += product.quantities.cm65;
+      sum.cm75 += product.quantities.cm75;
+      sum.total += product.total;
+      return sum;
+    },
+    { cm40: 0, cm55: 0, cm65: 0, cm75: 0, total: 0 },
+  );
+}
+
+export function defaultWarehouseState(): WarehouseState {
+  const inventories = rawInventories.map((inventory) => {
+    const products = parseRows(inventory.rows, inventory.id);
+    return {
+      id: inventory.id,
+      name: inventory.name,
+      kind: inventory.kind,
+      salon: inventory.salon,
+      collection: inventory.collection,
+      products,
+      totals: totals(products),
+    };
+  });
+
+  return {
+    collections: [
+      {
+        id: "collection-50gr",
+        name: "Extension 50gr",
+        description: "Disponibilita saloni e magazzini 50gr.",
+        productIds: inventories.flatMap((inventory) => inventory.products.map((product) => product.id)),
+      },
+    ],
+    inventories,
+  };
+}
+
+function normalizeState(value: unknown): WarehouseState {
+  const fallback = defaultWarehouseState();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const partial = value as Partial<WarehouseState>;
+  const collections = Array.isArray(partial.collections) ? partial.collections : fallback.collections;
+  const savedInventories = Array.isArray(partial.inventories) ? partial.inventories : [];
+
+  const inventories = fallback.inventories.map((baseInventory) => {
+    const saved = savedInventories.find((item) => item.id === baseInventory.id);
+    if (!saved) return baseInventory;
+    const savedProducts = Array.isArray(saved.products) ? saved.products : [];
+    const mergedProducts = [
+      ...baseInventory.products.map((baseProduct) => {
+        const savedProduct = savedProducts.find((product) => product.id === baseProduct.id);
+        return savedProduct ? { ...baseProduct, ...savedProduct } : baseProduct;
+      }),
+      ...savedProducts.filter((product) => product.custom && !baseInventory.products.some((baseProduct) => baseProduct.id === product.id)),
+    ];
+    return { ...baseInventory, products: mergedProducts, totals: totals(mergedProducts) };
+  });
+
+  return { collections, inventories };
+}
+
+export async function getWarehouseState(): Promise<WarehouseState> {
+  const setting = await prisma.setting.findUnique({ where: { key: INTERNAL_WAREHOUSE_KEY } }).catch(() => null);
+  return normalizeState(setting?.value);
+}
+
+export async function saveWarehouseState(state: WarehouseState): Promise<WarehouseState> {
+  const normalized = normalizeState(state);
+  await prisma.setting.upsert({
+    where: { key: INTERNAL_WAREHOUSE_KEY },
+    update: { value: normalized },
+    create: { key: INTERNAL_WAREHOUSE_KEY, value: normalized },
+  });
+  return normalized;
+}

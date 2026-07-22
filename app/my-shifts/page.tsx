@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { monthlyPersonalHours, plannedHours } from "@/lib/personal-hours";
 import { prisma } from "@/lib/prisma";
+import { coerceEmployeeScheduleMonth, isEmployeeScheduleMonthVisible, visibleScheduleMonthsForEmployee } from "@/lib/schedule-visibility";
 import { cn } from "@/lib/utils";
 import { calculateClockHours } from "@/lib/work-hours";
 import { MonthSelector, CurrentlyAtWork, TodayShiftCountdown, MonthlyWorkCalendar } from "./client-components";
@@ -36,9 +37,13 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const today = new Date();
   const requestedMonth = Number(values.month);
   const requestedYear = Number(values.year);
-  
-  const month = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
-  const year = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
+  const parsedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
+  const parsedYear = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
+  const isEmployee = session.user.role === "DIPENDENTE";
+  const employeeAllowedMonths = isEmployee ? visibleScheduleMonthsForEmployee(today) : undefined;
+  const selectedMonth = isEmployee ? coerceEmployeeScheduleMonth(parsedMonth, parsedYear, today) : { month: parsedMonth, year: parsedYear };
+  const month = selectedMonth.month;
+  const year = selectedMonth.year;
   
   const start = new Date(Date.UTC(year, month, 1));
   const end = new Date(Date.UTC(year, month + 1, 1));
@@ -72,6 +77,8 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   
   const previous = new Date(Date.UTC(year, month - 1, 1));
   const next = new Date(Date.UTC(year, month + 1, 1));
+  const canOpenPreviousMonth = !isEmployee || isEmployeeScheduleMonthVisible(previous.getUTCMonth(), previous.getUTCFullYear(), today);
+  const canOpenNextMonth = !isEmployee || isEmployeeScheduleMonthVisible(next.getUTCMonth(), next.getUTCFullYear(), today);
 
   const percentage = planned > 0 ? Math.round((worked / planned) * 100) : 0;
 
@@ -96,10 +103,15 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       shiftName: cat?.name ?? "Non programmato",
       shiftTime: timeRange(row.schedule),
       firstEntry: row.firstEntry,
+      firstPause: row.firstPause,
+      lastReturn: row.lastReturn,
       lastExit: row.lastExit,
       workedHours: row.workedHours,
+      grossHours: row.grossHours,
+      plannedGrossHours: row.plannedGrossHours,
       plannedHours: row.plannedHours,
       breakHours: row.breakHours,
+      paidBreak: row.paidBreak,
       note: row.note ?? undefined,
       categoryColor: cat?.color ?? null,
       categoryTextColor: cat?.text_color ?? null,
@@ -448,19 +460,28 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
           </p>
         </div>
         <div className="shrink-0">
-          <MonthSelector currentMonth={month} currentYear={year} />
+          <MonthSelector currentMonth={month} currentYear={year} allowedMonths={employeeAllowedMonths} />
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex items-center justify-between rounded-[26px] border border-white/70 bg-gradient-to-r from-paradise-softPink/20 via-white/90 to-paradise-nude/30 p-3 backdrop-blur-xl shadow-soft">
-          <Link
-            className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
-            href={`/my-shifts?month=${previous.getUTCMonth() + 1}&year=${previous.getUTCFullYear()}`}
-            aria-label="Mese precedente"
-          >
-            <ChevronLeft className="size-5 text-paradise-noir/70" />
-          </Link>
+          {canOpenPreviousMonth ? (
+            <Link
+              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
+              href={`/my-shifts?month=${previous.getUTCMonth() + 1}&year=${previous.getUTCFullYear()}`}
+              aria-label="Mese precedente"
+            >
+              <ChevronLeft className="size-5 text-paradise-noir/70" />
+            </Link>
+          ) : (
+            <span
+              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white/50 opacity-35 shadow-sm"
+              aria-label="Mese precedente non disponibile"
+            >
+              <ChevronLeft className="size-5 text-paradise-noir/70" />
+            </span>
+          )}
 
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-extrabold tracking-[0.18em] text-[#B85B68] uppercase">Calendario turni</span>
@@ -469,13 +490,22 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
             </p>
           </div>
 
-          <Link
-            className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
-            href={`/my-shifts?month=${next.getUTCMonth() + 1}&year=${next.getUTCFullYear()}`}
-            aria-label="Mese successivo"
-          >
-            <ChevronRight className="size-5 text-paradise-noir/70" />
-          </Link>
+          {canOpenNextMonth ? (
+            <Link
+              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
+              href={`/my-shifts?month=${next.getUTCMonth() + 1}&year=${next.getUTCFullYear()}`}
+              aria-label="Mese successivo"
+            >
+              <ChevronRight className="size-5 text-paradise-noir/70" />
+            </Link>
+          ) : (
+            <span
+              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white/50 opacity-35 shadow-sm"
+              aria-label="Mese successivo non disponibile"
+            >
+              <ChevronRight className="size-5 text-paradise-noir/70" />
+            </span>
+          )}
         </div>
         {currentlyAtWorkWidget}
       </div>

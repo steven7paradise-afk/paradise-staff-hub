@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
 import { prisma } from "@/lib/prisma";
+import { unlockWorkHourRecord } from "@/lib/work-hour-sync";
 
 const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
   const log = await prisma.attendanceLog.create({
     data: { user_id: user.id, location_id: user.sede_id, device_id: device.id, type, timestamp, date, time, note: storedNote },
   });
+  await unlockWorkHourRecord(user.id, timestamp);
 
   if (type !== "PAUSA") {
     let finalNote = storedNote;
@@ -68,5 +70,5 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json(log, { status: 201 });
+  return NextResponse.json({ ...log, recalculated: true }, { status: 201 });
 }

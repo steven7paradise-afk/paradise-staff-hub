@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -200,7 +201,7 @@ function toDateTimeLocal(value: string | null) {
 function Avatar({ name, photoUrl, className = "size-8" }: { name: string; photoUrl: string | null; className?: string }) {
   return (
     <div className={`${className} grid shrink-0 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-xs font-bold text-paradise-noir`}>
-      {photoUrl ? <img src={photoUrl} alt={name} className="size-full object-cover" /> : name.slice(0, 2).toUpperCase()}
+      {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="size-full object-cover" /> : name.slice(0, 2).toUpperCase()}
     </div>
   );
 }

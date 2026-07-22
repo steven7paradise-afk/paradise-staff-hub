@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Save, UserCog, X, MapPin, Mail, Phone, Calendar, User, Award, Fingerprint, Lock, Shield } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ type Location = { id: string; name: string };
 
 const roles: { value: Role; label: string }[] = [
   { value: "DIPENDENTE", label: "Dipendente" },
+  { value: "MAGAZZINO", label: "Magazzino" },
   { value: "RESPONSABILE", label: "Responsabile" },
   { value: "ADMIN", label: "Admin" },
   { value: "SUPER_ADMIN", label: "Super Admin" },
@@ -180,7 +182,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                   <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-white bg-white shadow-md">
                     {editing.photoUrl ? (
-                      <img src={editing.photoUrl} alt={editing.name} className="size-full object-cover" />
+                      <img src={resolveDrivePhotoUrl(editing.photoUrl)} alt={editing.name} className="size-full object-cover" />
                     ) : (
                       <User className="size-8 text-black/30" />
                     )}
@@ -354,7 +356,7 @@ function EmployeeSection({ title, employees, openEdit, empty, muted = false }: {
             <div className="flex items-center gap-3">
               <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/10 bg-paradise-nude text-sm font-bold shadow-sm">
                 {employee.photoUrl ? (
-                  <img src={employee.photoUrl} alt={employee.name} className="size-full object-cover" />
+                  <img src={resolveDrivePhotoUrl(employee.photoUrl)} alt={employee.name} className="size-full object-cover" />
                 ) : (
                   employee.name.charAt(0).toUpperCase()
                 )}

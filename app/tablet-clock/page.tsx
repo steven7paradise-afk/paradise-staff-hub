@@ -5,7 +5,6 @@ import { getBrandingTheme } from "@/lib/branding";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import { ensureClientControlForm, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { getShopifyOrderNamesBulk, isFuzzyNameMatch } from "@/lib/shopify";
@@ -42,6 +41,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Tablet Clock | Paradise",
     description: "Tablet clock-in and appointment manager interface.",
+    manifest: "/tablet-clock-manifest.webmanifest",
+    appleWebApp: {
+      capable: true,
+      title: "Paradise Clock",
+      statusBarStyle: "black-translucent",
+    },
   };
 }
 
@@ -278,17 +283,6 @@ export default async function TabletClockPage({
     console.error("Error loading tablet page data:", error);
     // Safe fallbacks
     branding = await getBrandingTheme();
-  }
-
-  // Controllo permessi del dispositivo e dell'utente
-  if (!device) {
-    if (session?.user) {
-      // Fuori da un tablet autorizzato non dobbiamo mai lasciare l'utente nel flusso PIN.
-      redirect("/dashboard");
-    } else {
-      // Da mobile/app normale il login deve riportare alla dashboard, non al tablet clock.
-      redirect(`/login?callbackUrl=${encodeURIComponent("/dashboard")}`);
-    }
   }
 
   return (

@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   const isOffice = device.location.name.toLowerCase().includes("ufficio");
   const worker = await identifyWorkerByPin(pin, device.location_id, isOffice);
   if (!worker) {
-    return NextResponse.json({ error: isOffice ? "Codice personale non riconosciuto." : "Codice personale non riconosciuto in questo salone." }, { status: 401 });
+    return NextResponse.json({ error: "Codice personale non riconosciuto. Controlla PIN e account attivo." }, { status: 401 });
   }
   const latestLog = await prisma.attendanceLog.findFirst({
     where: { user_id: worker.id },

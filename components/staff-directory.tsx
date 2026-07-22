@@ -6,9 +6,10 @@ import {
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, UserCog, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, UserPlus, Printer
+  Archive, Plus, UserPlus, Printer, UploadCloud, RefreshCw
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 
 type Employee = {
@@ -78,6 +79,7 @@ class SafetyErrorBoundary extends React.Component<{ children: React.ReactNode },
 const STATUS_OPTIONS = ["Attivo", "In prova", "Sospeso", "Ex dipendente"];
 const ROLE_OPTIONS = [
   { value: "DIPENDENTE", label: "Dipendente" },
+  { value: "MAGAZZINO", label: "Magazzino" },
   { value: "RESPONSABILE", label: "Responsabile" },
   { value: "ADMIN", label: "Admin" }
 ];
@@ -130,6 +132,8 @@ export function StaffDirectory({
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
+  const [syncingDrivePhotos, setSyncingDrivePhotos] = useState(false);
 
   const [mansioniList, setMansioniList] = useState<string[]>(DEFAULT_MANSIONI);
   const [customMansioneEdit, setCustomMansioneEdit] = useState(false);
@@ -509,6 +513,73 @@ export function StaffDirectory({
     });
   };
 
+  async function handleStaffPhotoUpload(employeeId: string, file?: File) {
+    if (!file) return;
+
+    setErrorMsg("");
+    setSuccessMsg("");
+    setPhotoUploadingId(employeeId);
+
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      const response = await fetch(`/api/staff/${employeeId}/photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Caricamento foto non riuscito.");
+      }
+
+      const photoUrl = data.photoUrl || "";
+      setStaff((prev) => prev.map((emp) => emp.id === employeeId ? { ...emp, photoUrl } : emp));
+      setSelectedEmployee((prev) => prev?.id === employeeId ? { ...prev, photoUrl } : prev);
+      setEditForm((prev) => prev?.id === employeeId ? { ...prev, photoUrl } : prev);
+      setSuccessMsg("Foto lavoratore caricata su Google Drive e collegata al profilo.");
+      setTimeout(() => setSuccessMsg(""), 3500);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Caricamento foto non riuscito.");
+    } finally {
+      setPhotoUploadingId(null);
+    }
+  }
+
+  async function handleSyncDrivePhotos() {
+    setErrorMsg("");
+    setSuccessMsg("");
+    setSyncingDrivePhotos(true);
+
+    try {
+      const response = await fetch("/api/staff/photos/sync-drive", { method: "POST" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Import foto da Drive non riuscito.");
+      }
+
+      const updated = Array.isArray(data.updated) ? data.updated : [];
+      if (updated.length) {
+        const photoById = new Map(updated.map((item: { id: string; photoUrl: string }) => [item.id, item.photoUrl]));
+        setStaff((prev) => prev.map((emp) => photoById.has(emp.id) ? { ...emp, photoUrl: String(photoById.get(emp.id)) } : emp));
+        setSelectedEmployee((prev) => prev && photoById.has(prev.id) ? { ...prev, photoUrl: String(photoById.get(prev.id)) } : prev);
+        setEditForm((prev) => prev && photoById.has(prev.id) ? { ...prev, photoUrl: String(photoById.get(prev.id)) } : prev);
+      }
+
+      setSuccessMsg(
+        updated.length
+          ? `Importate ${updated.length} foto già presenti nella cartella Drive.`
+          : "Nessuna nuova foto trovata nella cartella Drive."
+      );
+      setTimeout(() => setSuccessMsg(""), 4500);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Import foto da Drive non riuscito.");
+    } finally {
+      setSyncingDrivePhotos(false);
+    }
+  }
+
   return (
     <div className="w-full space-y-6">
       {/* Top Filter Bar */}
@@ -538,6 +609,18 @@ export function StaffDirectory({
             >
               <Printer className="size-4" /> Stampa lista
             </Button>
+            {isAuthorizedToEdit && (
+              <Button
+                type="button"
+                variant="soft"
+                onClick={handleSyncDrivePhotos}
+                disabled={syncingDrivePhotos}
+                className="min-h-11 shrink-0 rounded-2xl bg-white text-paradise-noir"
+              >
+                <RefreshCw className={cn("size-4", syncingDrivePhotos && "animate-spin")} />
+                {syncingDrivePhotos ? "Importo..." : "Importa foto Drive"}
+              </Button>
+            )}
             <Button
               type="button"
               variant={archiveMode ? "dark" : "soft"}
@@ -640,6 +723,12 @@ export function StaffDirectory({
         </div>
       )}
 
+      {errorMsg && !selectedEmployee && (
+        <div className="p-3.5 text-xs font-semibold text-rose-700 bg-rose-50 dark:bg-rose-950/20 rounded-2xl border border-rose-200 dark:border-rose-900">
+          {errorMsg}
+        </div>
+      )}
+
       {archiveMode ? (
         <div className="rounded-3xl border border-violet-200 bg-violet-50 p-5 text-sm text-violet-800 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-100">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -678,11 +767,30 @@ export function StaffDirectory({
               <div className="space-y-4">
                 {/* Photo & Basic header */}
                 <div className="flex items-center gap-4">
-                  <div className="size-14 rounded-2xl overflow-hidden border border-black/5 bg-paradise-softPink/20 shrink-0 shadow-sm flex items-center justify-center font-bold text-lg text-paradise-noir">
+                  <div className="relative size-14 rounded-2xl overflow-hidden border border-black/5 bg-paradise-softPink/20 shrink-0 shadow-sm flex items-center justify-center font-bold text-lg text-paradise-noir">
                     {emp.photoUrl ? (
-                      <img src={emp.photoUrl} alt={emp.name} className="size-full object-cover" />
+                      <img src={resolveDrivePhotoUrl(emp.photoUrl)} alt={emp.name} className="size-full object-cover" />
                     ) : (
                       emp.name.slice(0, 2).toUpperCase()
+                    )}
+                    {isAuthorizedToEdit && (
+                      <label
+                        className="absolute inset-x-1 bottom-1 flex cursor-pointer items-center justify-center rounded-lg bg-black/65 px-1 py-0.5 text-[8px] font-black uppercase tracking-[0.08em] text-white opacity-0 transition group-hover:opacity-100"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {photoUploadingId === emp.id ? "..." : "Foto"}
+                        <input
+                          type="file"
+                          accept="image/*,.heic,.heif"
+                          className="hidden"
+                          disabled={photoUploadingId === emp.id}
+                          onChange={(event) => {
+                            const file = event.currentTarget.files?.[0];
+                            event.currentTarget.value = "";
+                            void handleStaffPhotoUpload(emp.id, file);
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                   <div className="space-y-0.5">
@@ -763,11 +871,28 @@ export function StaffDirectory({
             <div className="px-6 relative shrink-0">
               <div className="absolute -top-12 left-6 size-24 rounded-3xl overflow-hidden border-4 border-white bg-paradise-softPink/30 shadow-md flex items-center justify-center font-bold text-3xl text-paradise-noir">
                 {selectedEmployee.photoUrl ? (
-                  <img src={selectedEmployee.photoUrl} alt={selectedEmployee.name} className="size-full object-cover" />
+                  <img src={resolveDrivePhotoUrl(selectedEmployee.photoUrl)} alt={selectedEmployee.name} className="size-full object-cover" />
                 ) : (
                   selectedEmployee.name.slice(0, 2).toUpperCase()
                 )}
               </div>
+              {isAuthorizedToEdit && (
+                <label className="absolute left-7 top-16 inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-[10px] font-black uppercase tracking-[0.08em] text-paradise-noir shadow-sm transition hover:bg-paradise-nude dark:border-white/10 dark:bg-neutral-900 dark:text-white">
+                  <UploadCloud className="size-3.5" />
+                  {photoUploadingId === selectedEmployee.id ? "Carico..." : "Carica foto"}
+                  <input
+                    type="file"
+                    accept="image/*,.heic,.heif"
+                    className="hidden"
+                    disabled={photoUploadingId === selectedEmployee.id}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      event.currentTarget.value = "";
+                      void handleStaffPhotoUpload(selectedEmployee.id, file);
+                    }}
+                  />
+                </label>
+              )}
               
               <div className="pl-28 pt-3 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>

@@ -3,9 +3,11 @@ import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 const PIN_CACHE_TTL_MS = 60_000;
+type PinWorker = { id: string; name: string; photo_url: string | null; role: string; mansione: string | null };
+
 const workerPinCache = new Map<string, {
   expiresAt: number;
-  worker: { id: string; name: string; photo_url: string | null; role: string; mansione: string | null } | null;
+  worker: PinWorker;
 }>();
 
 export function pinLookup(pin: string) {
@@ -34,10 +36,14 @@ export async function isPinAlreadyAssigned(pin: string, excludeUserId?: string) 
   return checks.some(Boolean);
 }
 
-export async function identifyWorkerByPin(pin: string, locationId: string, isOffice = false) {
+function cacheWorker(lookup: string, worker: PinWorker) {
+  workerPinCache.set(lookup, { worker, expiresAt: Date.now() + PIN_CACHE_TTL_MS });
+  return worker;
+}
+
+export async function identifyWorkerByPin(pin: string, _locationId: string, _isOffice = false) {
   const lookup = pinLookup(pin);
-  const cacheKey = lookup;
-  const cached = workerPinCache.get(cacheKey);
+  const cached = workerPinCache.get(lookup);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.worker;
   }
@@ -50,15 +56,41 @@ export async function identifyWorkerByPin(pin: string, locationId: string, isOff
     },
     select: { id: true, name: true, photo_url: true, role: true, mansione: true },
   });
-  const worker = quickMatch ? {
-    id: quickMatch.id,
-    name: quickMatch.name,
-    photo_url: quickMatch.photo_url,
-    role: quickMatch.role,
-    mansione: quickMatch.mansione,
-  } : null;
-  workerPinCache.set(cacheKey, { worker, expiresAt: Date.now() + PIN_CACHE_TTL_MS });
-  return worker;
+  if (quickMatch) {
+    return cacheWorker(lookup, {
+      id: quickMatch.id,
+      name: quickMatch.name,
+      photo_url: quickMatch.photo_url,
+      role: quickMatch.role,
+      mansione: quickMatch.mansione,
+    });
+  }
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      active: true,
+      role: { not: "SUPER_ADMIN" },
+      pin_hash: { not: null },
+    },
+    select: { id: true, name: true, photo_url: true, role: true, mansione: true, pin_hash: true },
+  });
+
+  for (const candidate of candidates) {
+    if (!candidate.pin_hash) continue;
+    const valid = await bcrypt.compare(pin, candidate.pin_hash);
+    if (!valid) continue;
+
+    await prisma.user.update({ where: { id: candidate.id }, data: { pin_lookup: lookup } }).catch(() => null);
+    return cacheWorker(lookup, {
+      id: candidate.id,
+      name: candidate.name,
+      photo_url: candidate.photo_url,
+      role: candidate.role,
+      mansione: candidate.mansione,
+    });
+  }
+
+  return null;
 }
 
 export async function isPinValidForUser(userId: string, pin: string, pinHash: string | null, storedLookup?: string | null) {

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { canEditPlanning, canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, canEditForUser, type Role } from "@/lib/roles";
+import { employeeScheduleWindow } from "@/lib/schedule-visibility";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ export default async function SchedulesPage() {
   if (!canViewByPagePermission && !canViewPlanning(role, session.user.id, planningAccess)) redirect("/dashboard");
 
   const userCanEditPlanning = canEditPlanning(role) || (accessUser ? await canEditForUser(prisma, "/schedules", accessUser) : false);
+  const isEmployee = role === "DIPENDENTE";
+  const employeeWindow = isEmployee ? employeeScheduleWindow(new Date()) : null;
   const [employees, locations, categories, entries, workerOverrides, workersOrderSetting] = await Promise.all([
     prisma.user.findMany({
       where: {
@@ -56,10 +59,12 @@ export default async function SchedulesPage() {
     }),
     prisma.scheduleEntry.findMany({
       where: {
-        date: {
-          gte: new Date("2026-01-01T00:00:00.000Z"),
-          lt: new Date("2027-01-01T00:00:00.000Z"),
-        },
+        date: employeeWindow
+          ? { gte: employeeWindow.start, lt: employeeWindow.end }
+          : {
+              gte: new Date("2026-01-01T00:00:00.000Z"),
+              lt: new Date("2027-01-01T00:00:00.000Z"),
+            },
       },
     }),
     prisma.scheduleWorkerOverride.findMany(),
@@ -110,6 +115,9 @@ export default async function SchedulesPage() {
         }))}
         canManageCategories={userCanEditPlanning}
         canEditPlanning={userCanEditPlanning}
+        initialMonth={employeeWindow?.months[0]?.month}
+        initialYear={employeeWindow?.months[0]?.year}
+        allowedMonths={employeeWindow?.months}
       />
     </AppShell>
   );

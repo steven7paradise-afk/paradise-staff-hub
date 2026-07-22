@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { CalendarDays, Download, RefreshCw, Save, Search, UserRound, Clock, CalendarCheck, ShieldAlert, Award, Check } from "lucide-react";
 import { Badge, Button, Card, Field } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Worker = {
   id: string;
@@ -608,7 +609,7 @@ export function WorkHoursManager({
                     <div className={`relative size-14 rounded-full p-0.5 border-2 transition ${isSelected ? "border-paradise-pink scale-105" : "border-transparent group-hover:border-black/10 dark:group-hover:border-white/10"}`}>
                       {worker.photoUrl ? (
                         <img
-                          src={worker.photoUrl}
+                          src={resolveDrivePhotoUrl(worker.photoUrl)}
                           alt={worker.name}
                           className="size-full rounded-full object-cover shadow-sm bg-neutral-100"
                         />

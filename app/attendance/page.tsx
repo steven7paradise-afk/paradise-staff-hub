@@ -16,10 +16,31 @@ export default async function AttendancePage() {
   dateLimit.setMonth(dateLimit.getMonth() - 6);
   dateLimit.setHours(0, 0, 0, 0);
 
+  const exEmployeeLabels = ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"];
+  const currentEmployeeWhere: Prisma.UserWhereInput = {
+    active: true,
+    role: { not: "SUPER_ADMIN" },
+    NOT: [
+      {
+        mansione: {
+          in: exEmployeeLabels,
+          mode: "insensitive",
+        },
+      },
+      {
+        employee_status: {
+          in: exEmployeeLabels,
+          mode: "insensitive",
+        },
+      },
+    ],
+  };
+
   const where: Prisma.AttendanceLogWhereInput = {
     date: {
       gte: dateLimit,
     },
+    user: currentEmployeeWhere,
     ...(session.user.role === "RESPONSABILE" ? { location_id: session.user.sedeId } : {}),
   };
 
@@ -30,7 +51,7 @@ export default async function AttendancePage() {
       orderBy: { timestamp: "desc" },
     }),
     session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
-      ? prisma.user.findMany({ where: { active: true, role: { not: "SUPER_ADMIN" }, sede_id: { not: null } }, include: { location: true }, orderBy: { name: "asc" } })
+      ? prisma.user.findMany({ where: { ...currentEmployeeWhere, sede_id: { not: null } }, include: { location: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
   ]);
 

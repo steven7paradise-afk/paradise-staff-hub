@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { 
   CalendarDays, CheckSquare, Download, Mail, Palette, PanelsTopLeft, 
-  ShieldCheck, Smartphone, Table2, ClipboardList 
+  ShieldCheck, Smartphone, Table2, ClipboardList, Sparkles 
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 
 const allSettings = [
+  { href: "/settings/dashboard", title: "Obiettivi & Promo", text: "Obiettivi mensili (punti/schede), slider promozioni scadenziabili e prodotto del mese.", icon: Sparkles, superAdminOnly: true },
   { href: "/settings/branding", title: "Branding", text: "Colori, logo, dark mode e look premium.", icon: Palette, superAdminOnly: true },
   { href: "/settings/devices", title: "Dispositivi", text: "Tablet autorizzati e blocco timbrature.", icon: Smartphone, superAdminOnly: true },
   { href: "/settings/google-sheet", title: "Google Sheet", text: "Export e sync delle timbrature.", icon: Table2, superAdminOnly: true },

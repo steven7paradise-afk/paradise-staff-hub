@@ -1,14 +1,15 @@
-export type Role = "SUPER_ADMIN" | "ADMIN" | "RESPONSABILE" | "DIPENDENTE";
+export type Role = "SUPER_ADMIN" | "ADMIN" | "RESPONSABILE" | "MAGAZZINO" | "DIPENDENTE";
 
 export const roleLabels: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN: "Admin",
   RESPONSABILE: "Responsabile",
+  MAGAZZINO: "Magazzino",
   DIPENDENTE: "Dipendente",
 };
 
 export const routePermissions: Record<string, Role[]> = {
-  "/dashboard": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/dashboard": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/my-shifts": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tasks": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/employees": ["SUPER_ADMIN", "ADMIN"],
@@ -17,7 +18,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/schedules": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/social-calendar": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/locations": ["SUPER_ADMIN", "ADMIN"],
-  "/tablet-clock": ["SUPER_ADMIN", "ADMIN"],
+  "/tablet-clock": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/requests": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/documents": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/cedolini": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
@@ -26,6 +27,8 @@ export const routePermissions: Record<string, Role[]> = {
   "/service-forms": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/magazzino": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/foto": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/consulenza-online": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/cash": ["SUPER_ADMIN", "ADMIN"],
@@ -36,8 +39,9 @@ export const routePermissions: Record<string, Role[]> = {
   "/staff": ["SUPER_ADMIN", "ADMIN"],
   "/team": ["SUPER_ADMIN", "ADMIN"],
   "/notifications": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/profile": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/profile": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/settings": ["SUPER_ADMIN", "ADMIN"],
+  "/settings/dashboard": ["SUPER_ADMIN", "ADMIN"],
   "/settings/branding": ["SUPER_ADMIN"],
   "/settings/devices": ["SUPER_ADMIN"],
   "/settings/google-sheet": ["SUPER_ADMIN"],

@@ -26,6 +26,7 @@ type ScheduleWorker = {
 
 type ScheduleLocation = { id: string; name: string; active: boolean };
 type SavedExtraWorker = { locationId: string; userId: string };
+type AllowedScheduleMonth = { month: number; year: number };
 type ScheduleEntry = {
   userId: string;
   locationId?: string | null;
@@ -161,6 +162,9 @@ export function MonthlySchedulePlanner({
   canManageCategories,
   canEditPlanning,
   initialWorkersOrder = [],
+  initialMonth,
+  initialYear,
+  allowedMonths,
 }: {
   employees: ScheduleWorker[];
   locations: ScheduleLocation[];
@@ -170,11 +174,16 @@ export function MonthlySchedulePlanner({
   canManageCategories: boolean;
   canEditPlanning: boolean;
   initialWorkersOrder?: string[];
+  initialMonth?: number;
+  initialYear?: number;
+  allowedMonths?: AllowedScheduleMonth[];
 }) {
   const today = new Date();
   const initialLocationId = locations[0]?.id ?? "";
-  const [year, setYear] = useState(2026);
-  const [month, setMonth] = useState(today.getMonth());
+  const initialPlannerMonth = initialMonth ?? today.getMonth();
+  const initialPlannerYear = initialYear ?? today.getFullYear();
+  const [year, setYear] = useState(initialPlannerYear);
+  const [month, setMonth] = useState(initialPlannerMonth);
   const [selectedLocationId, setSelectedLocationId] = useState(initialLocationId);
   const [secondPrintLocationId, setSecondPrintLocationId] = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
@@ -193,8 +202,8 @@ export function MonthlySchedulePlanner({
   const [assignments, setAssignments] = useState<AssignmentMap>(() =>
     createAssignmentsFromEntries(
       entries,
-      2026,
-      today.getMonth(),
+      initialPlannerYear,
+      initialPlannerMonth,
       employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((employee) => employee.id),
       initialLocationId,
       savedExtraWorkers.filter((item) => item.locationId === initialLocationId).map((item) => item.userId),
@@ -295,10 +304,21 @@ export function MonthlySchedulePlanner({
     [activeWorkers, employees, selectedLocationId],
   );
 
-  function setScheduleMonth(nextMonth: number) {
+  const hasMonthRestriction = Boolean(allowedMonths?.length);
+
+  function isAllowedMonth(nextMonth: number, nextYear: number) {
+    return !hasMonthRestriction || allowedMonths?.some((item) => item.month === nextMonth && item.year === nextYear);
+  }
+
+  function setScheduleMonth(nextMonth: number, nextYear = year) {
+    if (!isAllowedMonth(nextMonth, nextYear)) {
+      setPlannerMessage("Questo mese non e ancora visibile per i collaboratori.");
+      return;
+    }
     setMonth(nextMonth);
+    setYear(nextYear);
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(entries, year, nextMonth, workerIds, selectedLocationId, selectedExtraWorkerIds));
+    setAssignments(createAssignmentsFromEntries(entries, nextYear, nextMonth, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
   function setScheduleLocation(locationId: string) {
@@ -604,6 +624,10 @@ export function MonthlySchedulePlanner({
   }
 
   function setScheduleYear(nextYear: number) {
+    if (!isAllowedMonth(month, nextYear)) {
+      setPlannerMessage("Questo anno non e ancora visibile per i collaboratori.");
+      return;
+    }
     setYear(nextYear);
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(entries, nextYear, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
@@ -981,19 +1005,32 @@ export function MonthlySchedulePlanner({
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Mese</span>
               <select
                 className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/90 px-4 text-sm font-semibold outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                value={month}
-                onChange={(event) => setScheduleMonth(Number(event.target.value))}
+                value={hasMonthRestriction ? `${month}-${year}` : String(month)}
+                onChange={(event) => {
+                  if (hasMonthRestriction) {
+                    const [nextMonth, nextYear] = event.target.value.split("-").map(Number);
+                    setScheduleMonth(nextMonth, nextYear);
+                    return;
+                  }
+                  setScheduleMonth(Number(event.target.value));
+                }}
               >
-                {monthNames.map((name, index) => (
-                  <option key={name} value={index}>
-                    {name}
-                  </option>
-                ))}
+                {hasMonthRestriction
+                  ? allowedMonths?.map((item) => (
+                      <option key={`${item.year}-${item.month}`} value={`${item.month}-${item.year}`}>
+                        {monthNames[item.month]} {item.year}
+                      </option>
+                    ))
+                  : monthNames.map((name, index) => (
+                      <option key={name} value={index}>
+                        {name}
+                      </option>
+                    ))}
               </select>
             </label>
             <label className="space-y-2">
               <span className="text-xs font-bold uppercase tracking-[0.14em] text-black/45">Anno</span>
-              <Field value={year} onChange={(event) => setScheduleYear(Number(event.target.value))} type="number" />
+              <Field value={year} onChange={(event) => setScheduleYear(Number(event.target.value))} type="number" disabled={hasMonthRestriction} />
             </label>
             <div className="flex flex-wrap gap-2">
               <Button onClick={downloadPdf} disabled={exporting || !selectedLocationId}>

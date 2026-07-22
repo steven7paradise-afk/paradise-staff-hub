@@ -1653,6 +1653,7 @@ export function RecruitmentManager({
                                       onChange={(e) => setOnboardingForm(prev => ({ ...prev, role: e.target.value }))}
                                     >
                                       <option value="DIPENDENTE">Dipendente</option>
+                                      <option value="MAGAZZINO">Magazzino</option>
                                       <option value="RESPONSABILE">Responsabile</option>
                                       <option value="ADMIN">Admin</option>
                                     </Select>

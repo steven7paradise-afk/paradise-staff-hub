@@ -24,7 +24,17 @@ type TodayCountdownProps = {
 };
 
 // 1. Month Selector Dropdown
-export function MonthSelector({ currentMonth, currentYear }: { currentMonth: number; currentYear: number }) {
+type AllowedMonth = { month: number; year: number };
+
+export function MonthSelector({
+  currentMonth,
+  currentYear,
+  allowedMonths,
+}: {
+  currentMonth: number;
+  currentYear: number;
+  allowedMonths?: AllowedMonth[];
+}) {
   const router = useRouter();
   
   const months = [
@@ -41,13 +51,22 @@ export function MonthSelector({ currentMonth, currentYear }: { currentMonth: num
   const now = new Date();
   const startYear = now.getFullYear() - 1;
   const endYear = now.getFullYear() + 2;
-  
-  for (let y = startYear; y <= endYear; y++) {
-    for (let m = 1; m <= 12; m++) {
+
+  if (allowedMonths?.length) {
+    allowedMonths.forEach((item) => {
       options.push({
-        value: `${m}-${y}`,
-        label: `${months[m - 1]} ${y}`
+        value: `${item.month + 1}-${item.year}`,
+        label: `${months[item.month]} ${item.year}`
       });
+    });
+  } else {
+    for (let y = startYear; y <= endYear; y++) {
+      for (let m = 1; m <= 12; m++) {
+        options.push({
+          value: `${m}-${y}`,
+          label: `${months[m - 1]} ${y}`
+        });
+      }
     }
   }
 
@@ -479,10 +498,15 @@ type DailyDetailModalProps = {
   shiftName: string;
   shiftTime: string;
   firstEntry: string | null;
+  firstPause?: string | null;
+  lastReturn?: string | null;
   lastExit: string | null;
   workedHours: number;
+  grossHours?: number;
+  plannedGrossHours?: number;
   plannedHours: number;
   breakHours?: number;
+  paidBreak?: boolean;
   note?: string;
   categoryColor?: string | null;
 };
@@ -496,6 +520,10 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
   if (!props.isOpen || !mounted) return null;
 
   const difference = props.workedHours - props.plannedHours;
+  const plannedGrossHours = props.plannedGrossHours ?? props.plannedHours;
+  const plannedBreakHours = Math.max(0, plannedGrossHours - props.plannedHours);
+  const grossHours = props.grossHours ?? props.workedHours + (props.breakHours ?? 0);
+  const countedBreakHours = props.paidBreak ? 0 : (props.breakHours ?? 0);
   const hasDifference = props.plannedHours > 0 || props.workedHours > 0;
   const formattedDifference = `${difference > 0 ? "+" : ""}${difference.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h`;
   const differenceLabel = Math.abs(difference) < 0.01 ? "In linea" : difference > 0 ? "Ore in più" : "Ore mancanti";
@@ -545,6 +573,20 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
               <span className="font-extrabold text-paradise-noir">{props.shiftName}</span>
             </div>
             <p className="text-xs text-black/50 mt-1">Orario programmato: <strong className="text-black/80">{props.shiftTime}</strong></p>
+            <div className="mt-3 rounded-xl border border-black/5 bg-white p-3 text-xs font-semibold text-black/55">
+              <div className="flex items-center justify-between gap-3">
+                <span>Totale turno</span>
+                <strong className="text-black/80">{plannedGrossHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</strong>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <span>Pausa standard non pagata</span>
+                <strong className="text-black/80">-{plannedBreakHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</strong>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3 border-t border-black/5 pt-2">
+                <span className="font-black text-black/65">Ore previste pagate</span>
+                <strong className="text-paradise-noir">{props.plannedHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</strong>
+              </div>
+            </div>
           </div>
 
           {/* Timbratura */}
@@ -569,6 +611,30 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
             ) : (
               <p className="text-xs text-black/35 font-medium mt-1">Nessuna timbratura registrata in questa data.</p>
             )}
+            <div className="mt-3 rounded-xl border border-black/5 bg-white p-3 text-xs font-semibold text-black/55">
+              <div className="flex items-center justify-between gap-3">
+                <span>Tempo tra entrata e uscita</span>
+                <strong className="text-black/80">{grossHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</strong>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <span>Inizio pausa</span>
+                <strong className="text-amber-700">{props.firstPause ?? "--"}</strong>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <span>Fine pausa / rientro</span>
+                <strong className="text-sky-700">{props.lastReturn ?? "--"}</strong>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-3">
+                <span>{props.paidBreak ? "Pausa pagata" : "Pausa non pagata"}</span>
+                <strong className={props.paidBreak ? "text-emerald-700" : "text-rose-700"}>
+                  {props.paidBreak ? "non toglie ore" : `-${countedBreakHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h`}
+                </strong>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3 border-t border-black/5 pt-2">
+                <span className="font-black text-black/65">Ore conteggiate</span>
+                <strong className="text-paradise-noir">{props.workedHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h</strong>
+              </div>
+            </div>
           </div>
 
           {/* Ore lavorate e calcolo */}
@@ -592,7 +658,7 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
               </p>
             </div>
             <div className="rounded-xl border border-black/5 bg-[#FCF8F9] p-3 text-center">
-              <p className="text-[9px] font-bold text-black/40 uppercase">Pausa</p>
+              <p className="text-[9px] font-bold text-black/40 uppercase">{props.paidBreak ? "Pausa pagata" : "Pausa tolta"}</p>
               <p className="text-sm font-extrabold text-paradise-noir mt-0.5">
                 {props.breakHours && props.breakHours > 0 ? `${props.breakHours.toLocaleString("it-IT", { maximumFractionDigits: 2 })} h` : "0 h"}
               </p>
@@ -635,10 +701,15 @@ export type MonthlyCalendarDay = {
   shiftName: string;
   shiftTime: string;
   firstEntry: string | null;
+  firstPause: string | null;
+  lastReturn: string | null;
   lastExit: string | null;
   workedHours: number;
+  grossHours: number;
+  plannedGrossHours: number;
   plannedHours: number;
   breakHours: number;
+  paidBreak: boolean;
   note?: string;
   categoryColor?: string | null;
   categoryTextColor?: string | null;
@@ -817,6 +888,11 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
                         <p className="truncate text-sm font-black text-paradise-noir">{day.shiftName}</p>
                       </div>
                       <p className="mt-0.5 text-xs font-semibold text-black/45">{day.shiftTime}</p>
+                      {(day.workedHours > 0 || day.plannedHours > 0) ? (
+                        <p className="mt-1 text-[11px] font-bold text-black/35">
+                          Prev. {compactHours(day.plannedHours)}h · Lav. {compactHours(day.workedHours)}h
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black", diffClass)}>
@@ -839,10 +915,15 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
           shiftName={selectedDay.shiftName}
           shiftTime={selectedDay.shiftTime}
           firstEntry={selectedDay.firstEntry}
+          firstPause={selectedDay.firstPause}
+          lastReturn={selectedDay.lastReturn}
           lastExit={selectedDay.lastExit}
           workedHours={selectedDay.workedHours}
+          grossHours={selectedDay.grossHours}
+          plannedGrossHours={selectedDay.plannedGrossHours}
           plannedHours={selectedDay.plannedHours}
           breakHours={selectedDay.breakHours}
+          paidBreak={selectedDay.paidBreak}
           note={selectedDay.note}
           categoryColor={selectedDay.categoryColor}
         />

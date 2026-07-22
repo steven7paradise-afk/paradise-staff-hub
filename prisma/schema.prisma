@@ -12,6 +12,7 @@ enum UserRole {
   SUPER_ADMIN
   ADMIN
   RESPONSABILE
+  MAGAZZINO
   DIPENDENTE
 }
 
@@ -300,6 +301,8 @@ model LeaveRequest {
   reason      String?
   status      RequestStatus @default(PENDING)
   approved_by String?
+  approved_at DateTime?
+  admin_note  String?
   google_calendar_event_id String?
   created_at  DateTime      @default(now())
   medical_code String?

@@ -24,6 +24,7 @@ import {
   Send
 } from "lucide-react";
 import { Button, Card, Field } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 
 type SocialPost = {
@@ -856,7 +857,7 @@ export function SocialCalendar({
                     <div className="flex items-center gap-2">
                       <div className="size-6 rounded-full overflow-hidden bg-neutral-200 border border-black/5">
                         {post.created_by.photo_url ? (
-                          <img src={post.created_by.photo_url} alt="" className="size-full object-cover" />
+                          <img src={resolveDrivePhotoUrl(post.created_by.photo_url)} alt="" className="size-full object-cover" />
                         ) : (
                           <div className="size-full flex items-center justify-center text-[9px] font-bold text-neutral-600 uppercase">
                             {post.created_by.name.slice(0, 1)}
@@ -1039,7 +1040,7 @@ export function SocialCalendar({
                               {/* Avatar */}
                               <div className="size-7 rounded-full overflow-hidden bg-neutral-200 border border-black/5 shrink-0">
                                 {comment.user.photo_url ? (
-                                  <img src={comment.user.photo_url} alt="" className="size-full object-cover" />
+                                  <img src={resolveDrivePhotoUrl(comment.user.photo_url)} alt="" className="size-full object-cover" />
                                 ) : (
                                   <div className="size-full flex items-center justify-center text-[9px] font-bold text-neutral-600 uppercase">
                                     {comment.user.name.slice(0, 1)}
@@ -1114,7 +1115,7 @@ export function SocialCalendar({
                     <div className="flex items-center gap-2">
                       <div className="size-6 rounded-full overflow-hidden bg-neutral-200 border border-black/5">
                         {editingPost.created_by.photo_url ? (
-                          <img src={editingPost.created_by.photo_url} alt="" className="size-full object-cover" />
+                          <img src={resolveDrivePhotoUrl(editingPost.created_by.photo_url)} alt="" className="size-full object-cover" />
                         ) : (
                           <div className="size-full flex items-center justify-center text-[9px] font-bold text-neutral-600 uppercase">
                             {editingPost.created_by.name.slice(0, 1)}

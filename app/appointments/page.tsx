@@ -78,6 +78,41 @@ function flattenBookingEntries(value: unknown, prefix = ""): Array<{ key: string
   return [];
 }
 
+function findImageUrl(value: unknown): string | null {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return /^https?:\/\/.+\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(trimmed) ? trimmed : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findImageUrl(item);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferredKeys = ["image_url", "imageUrl", "thumbnail", "photo", "photo_url", "url", "src"];
+
+    for (const key of preferredKeys) {
+      const found = findImageUrl(record[key]);
+      if (found) return found;
+    }
+
+    for (const [key, nested] of Object.entries(record)) {
+      if (!/image|photo|thumb|picture|media/i.test(key)) continue;
+      const found = findImageUrl(nested);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
 function prettifyBookingLabel(value: string) {
   return value
     .replace(/^form data /i, "")
@@ -134,24 +169,29 @@ export default async function AppointmentsPage() {
     try {
       const now = new Date();
       const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+      const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 4, 0);
 
       bookings = await getCowlendarBookingsForRange({
         startDate: toIsoBoundary(rangeStart),
         endDate: toIsoBoundary(rangeEnd, true),
-        limit: 3500,
+        limit: 5000,
       });
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Errore nel caricamento appuntamenti.";
     }
   }
 
-  const orderIds = bookings.map((b: any) => b.order_id).filter(Boolean);
-  const shopifyOrderNames = await getShopifyOrderNamesBulk(orderIds);
+  const [shopifyOrderNames, statusSetting] = await Promise.all([
+    getShopifyOrderNamesBulk(bookings.map((b: any) => b.order_id).filter(Boolean)),
+    prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }),
+  ]);
 
+  const statusOverrides =
+    statusSetting?.value && typeof statusSetting.value === "object" && !Array.isArray(statusSetting.value)
+      ? (statusSetting.value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>)
+      : {};
 
   const serializedBookings = bookings
-    .filter((booking) => !booking.is_canceled)
     .map((booking) => {
       const bookingDate = new Date(booking.start_date);
 
@@ -241,6 +281,7 @@ export default async function AppointmentsPage() {
         customerEmail: booking.customer?.email || null,
         customerPhone: booking.customer?.phone || null,
         serviceTitle: booking.service?.title || "Servizio",
+        serviceImageUrl: findImageUrl(booking.service) || findImageUrl(booking),
         bookingType: booking.booking_type || null,
         bookingStr: booking.order_id 
           ? (shopifyOrderNames.get(String(booking.order_id)) || `#${booking.order_id}`) 
@@ -255,6 +296,10 @@ export default async function AppointmentsPage() {
         confirmationStatus: booking.confirmation_status || null,
         financialStatus: booking.financial_status || null,
         attendance: booking.attendance || null,
+        isCanceled: Boolean(booking.is_canceled),
+        localStatus: statusOverrides[String(booking.id)]?.status ?? null,
+        statusUpdatedAt: statusOverrides[String(booking.id)]?.updatedAt ?? null,
+        statusUpdatedBy: statusOverrides[String(booking.id)]?.updatedBy ?? null,
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
         notesText: notesText || null,

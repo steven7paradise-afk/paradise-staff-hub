@@ -19,6 +19,12 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function isInternalFotoOrderForm(form?: { name?: string | null; category?: string | null } | null) {
+  const name = (form?.name ?? "").toUpperCase().trim();
+  const category = (form?.category ?? "").toUpperCase().trim();
+  return name === "FOTO ORDINI" || (category === "FOTO" && name.includes("FOTO"));
+}
+
 export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string }> }) {
   const searchParams = await props.searchParams;
   const fillId = searchParams.fillId;
@@ -70,6 +76,8 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
 
   // Filter forms matching the user's role and location
   const allowedForms = allActiveForms.filter((form) => {
+    if (isInternalFotoOrderForm(form)) return false;
+
     const allowedRoles = form.allowed_roles as string[] | null;
     const allowedLocations = form.allowed_location_ids as string[] | null;
     const isCandidacy = form.name.toUpperCase().includes("CANDIDATURA");
@@ -113,6 +121,8 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   });
 
   const allowedResponses = responses.filter((r) => {
+    if (isInternalFotoOrderForm(r.form)) return false;
+
     const notifyUserIds = r.form?.notify_user_ids as string[] | null;
     const notifyRoles = r.form?.notify_roles as string[] | null;
 

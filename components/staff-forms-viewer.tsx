@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -44,6 +44,125 @@ type FormTemplate = {
   fields: FormField[];
 };
 
+type PickupReadyOrder = {
+  id: string;
+  orderNumber: string;
+  clientName: string;
+  phone?: string;
+  salon?: string;
+  createdBy?: string;
+  createdAt?: string;
+  summary?: string;
+  notes?: string;
+  updatedAt?: string;
+  status?: string;
+  statusLabel?: string;
+  statusAudit?: {
+    changedAt?: string;
+    changedBy?: string;
+    text?: string;
+  };
+  pickup?: {
+    pickupName?: string;
+    completedByName?: string;
+    completedAt?: string;
+    proof?: { driveFileUrl?: string; webViewLink?: string; webContentLink?: string; name?: string };
+  } | null;
+  payment?: {
+    total: number | null;
+    paid: number;
+    deposit: number;
+    missing: number | null;
+  };
+  attachments?: Array<{
+    label: string;
+    name: string;
+    url: string;
+    type?: string;
+    isImage?: boolean;
+    previewable?: boolean;
+  }>;
+  answers?: Record<string, any>;
+  fields?: Array<{ id: string; label: string; type?: string }>;
+};
+
+type PickupStatusNotice = {
+  found: boolean;
+  ready?: boolean;
+  status?: string;
+  statusLabel?: string;
+  order?: PickupReadyOrder | null;
+};
+
+function formatEuro(value: number | null | undefined) {
+  if (value === null || value === undefined) return "Non indicato";
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function formatPickupDate(value?: string) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatPickupAnswer(value: any) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "boolean") return value ? "Si" : "No";
+  if (Array.isArray(value)) return value.filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    if (value.name) return String(value.name);
+    if (value.url || value.driveFileUrl || value.webViewLink) return String(value.name || value.url || value.driveFileUrl || value.webViewLink);
+    return "";
+  }
+  return String(value);
+}
+
+function pickupOrderDetails(order: PickupReadyOrder) {
+  const answers = order.answers ?? {};
+  const fields = order.fields ?? [];
+  const seen = new Set<string>();
+  const details: Array<{ label: string; value: string }> = [];
+  if (order.notes) {
+    details.push({ label: "Note ordine", value: order.notes });
+  }
+  if (order.summary) {
+    details.push({ label: "Dettaglio lavoro", value: order.summary });
+  }
+
+  details.push(
+    ...fields
+    .map((field) => {
+      const value = formatPickupAnswer(answers[field.id]);
+      if (!value || field.id.startsWith("__")) return null;
+      seen.add(field.id);
+      return { label: field.label, value };
+    })
+    .filter(Boolean) as Array<{ label: string; value: string }>
+  );
+
+  Object.entries(answers).forEach(([key, rawValue]) => {
+    if (seen.has(key) || key.startsWith("__")) return;
+    const value = formatPickupAnswer(rawValue);
+    if (!value) return;
+    const label = key
+      .replace(/^client_control_/, "")
+      .replace(/^order_/, "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+    details.push({ label, value });
+  });
+
+  return details;
+}
+
+function pickupProofUrl(order: PickupReadyOrder) {
+  return order.pickup?.proof?.driveFileUrl || order.pickup?.proof?.webViewLink || order.pickup?.proof?.webContentLink || "";
+}
+
 export function StaffFormsViewer({
   forms,
   employees = [],
@@ -82,6 +201,18 @@ export function StaffFormsViewer({
   const [customSelectValue, setCustomSelectValue] = useState<string>("");
   const [showPastCustomers, setShowPastCustomers] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [showPickupModal, setShowPickupModal] = useState(false);
+  const [pickupQuery, setPickupQuery] = useState("");
+  const [pickupName, setPickupName] = useState("");
+  const [pickupPin, setPickupPin] = useState("");
+  const [pickupPaidConfirmed, setPickupPaidConfirmed] = useState(false);
+  const [pickupProof, setPickupProof] = useState<File | null>(null);
+  const [pickupSubmitting, setPickupSubmitting] = useState(false);
+  const [pickupMessage, setPickupMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [pickupReadyOrders, setPickupReadyOrders] = useState<PickupReadyOrder[]>([]);
+  const [pickupLoadingOrders, setPickupLoadingOrders] = useState(false);
+  const [pickupSelectedOrder, setPickupSelectedOrder] = useState<PickupReadyOrder | null>(null);
+  const [pickupStatusNotice, setPickupStatusNotice] = useState<PickupStatusNotice | null>(null);
 
   const handleSelectCustomer = (cust: any) => {
     setAnswers((prev) => ({
@@ -127,6 +258,29 @@ export function StaffFormsViewer({
   };
   const [expandedFormId, setExpandedFormId] = useState<string | null>(forms[0]?.id ?? null);
 
+  const loadPickupReadyOrders = React.useCallback(async () => {
+    setPickupLoadingOrders(true);
+    try {
+      const response = await fetch("/api/orders/pickup", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Errore caricamento ordini pronti.");
+      setPickupReadyOrders(Array.isArray(result.items) ? result.items : []);
+    } catch (error) {
+      setPickupMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Errore caricamento ordini pronti.",
+      });
+    } finally {
+      setPickupLoadingOrders(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (showPickupModal) {
+      void loadPickupReadyOrders();
+    }
+  }, [showPickupModal, loadPickupReadyOrders]);
+
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleCardClick = (form: FormTemplate) => {
@@ -146,6 +300,48 @@ export function StaffFormsViewer({
     if (!selectedFormForHistory) return [];
     return responses.filter((r) => r.form_id === selectedFormForHistory.id);
   }, [responses, selectedFormForHistory]);
+
+  const filteredPickupReadyOrders = useMemo(() => {
+    const query = pickupQuery.trim().toLowerCase();
+    if (!query) return pickupReadyOrders;
+    return pickupReadyOrders.filter((order) =>
+      [
+        order.orderNumber,
+        order.clientName,
+        order.phone,
+        order.salon,
+        order.summary,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [pickupQuery, pickupReadyOrders]);
+
+  React.useEffect(() => {
+    if (!showPickupModal) return;
+    const query = pickupQuery.trim();
+    setPickupStatusNotice(null);
+    if (query.length < 3) return;
+    if (pickupReadyOrders.some((order) => (order.orderNumber || order.clientName).toLowerCase() === query.toLowerCase())) return;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/orders/pickup?query=${encodeURIComponent(query)}`, { cache: "no-store" });
+        const result = await response.json();
+        if (!response.ok) return;
+        setPickupStatusNotice(result);
+        if (result.order) {
+          setPickupSelectedOrder(result.order);
+        }
+      } catch {
+        setPickupStatusNotice(null);
+      }
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [pickupQuery, pickupReadyOrders, showPickupModal]);
   
   // Input answer states (mapped by field ID)
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -244,14 +440,23 @@ export function StaffFormsViewer({
   };
 
   // Derived helper variables for dynamic group participants form
-  const candidaturaForm = forms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
-  const orderForm = forms.find(f => f.category.toUpperCase().includes("ORDIN") || f.name.toUpperCase().includes("ORDIN"));
-  const cashClosingForm = forms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
-  const italianInvoiceForm = forms.find(f => f.name.toUpperCase().includes("FATTURA") || f.category.toUpperCase().includes("FATTUR"));
-  const clientControlForm = forms.find(f => f.name.toUpperCase().includes("CONTROLLO CLIENTE") || f.category.toUpperCase().includes("QUALITA"));
-  const refundForm = forms.find(f => f.name.toUpperCase().includes("RIMBORSO") || f.category.toUpperCase().includes("AMMINIST"));
+  const visibleForms = forms.filter((form) => {
+    const name = form.name.toUpperCase().trim();
+    const category = form.category.toUpperCase().trim();
+    return name !== "FOTO ORDINI" && !(category === "FOTO" && name.includes("FOTO"));
+  });
+  const candidaturaForm = visibleForms.find(f => f.name.toUpperCase().includes("CANDIDATURA"));
+  const orderForm = visibleForms.find(f => {
+    const name = f.name.toUpperCase();
+    const category = f.category.toUpperCase();
+    return (category.includes("ORDIN") || name.includes("ORDINE")) && !name.includes("FOTO");
+  });
+  const cashClosingForm = visibleForms.find(f => f.name.toUpperCase().includes("CHIUSURA CASSA") || f.category.toUpperCase().includes("CASSA"));
+  const italianInvoiceForm = visibleForms.find(f => f.name.toUpperCase().includes("FATTURA") || f.category.toUpperCase().includes("FATTUR"));
+  const clientControlForm = visibleForms.find(f => f.name.toUpperCase().includes("CONTROLLO CLIENTE") || f.category.toUpperCase().includes("QUALITA"));
+  const refundForm = visibleForms.find(f => f.name.toUpperCase().includes("RIMBORSO") || f.category.toUpperCase().includes("AMMINIST"));
   const primaryFormIds = new Set([orderForm?.id, candidaturaForm?.id, cashClosingForm?.id, italianInvoiceForm?.id, clientControlForm?.id, refundForm?.id].filter(Boolean));
-  const regularForms = forms.filter((form) => !primaryFormIds.has(form.id));
+  const regularForms = visibleForms.filter((form) => !primaryFormIds.has(form.id));
   const participaField = selectedForm?.fields.find(f => f.label.toUpperCase().includes("PARTICIPA"));
   const participaValue = participaField ? answers[participaField.id] : "";
   const isGroupCourse = String(participaValue || "").toUpperCase().includes("GRUP");
@@ -478,6 +683,71 @@ export function StaffFormsViewer({
     } catch (err) {
       console.error("Failed to archive response:", err);
       alert("Si è verificato un errore, riprova.");
+    }
+  };
+
+  const handlePickupSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pickupSubmitting) return;
+
+    if (pickupSelectedOrder && pickupSelectedOrder.status !== "READY") {
+      setPickupMessage({
+        type: "error",
+        text: `Questo ordine e in stato ${pickupSelectedOrder.statusLabel || pickupSelectedOrder.status}. Puoi consultarlo, ma non completare il ritiro.`,
+      });
+      return;
+    }
+
+    if (!pickupQuery.trim() || !pickupName.trim() || !pickupPin.trim() || !pickupPaidConfirmed) {
+      setPickupMessage({
+        type: "error",
+        text: "Compila ordine, nome ritiro, PIN firma e conferma saldo.",
+      });
+      return;
+    }
+
+    setPickupSubmitting(true);
+    setPickupMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("query", pickupQuery.trim());
+      formData.append("pickupName", pickupName.trim());
+      formData.append("pickupPin", pickupPin.trim());
+      formData.append("paidConfirmed", pickupPaidConfirmed ? "true" : "false");
+      if (pickupProof) {
+        formData.append("proof", pickupProof);
+      }
+
+      const response = await fetch("/api/orders/pickup", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Impossibile completare il ritiro.");
+      }
+
+      if (result.order) {
+        setResponses((prev) => prev.map((item) => (item.id === result.order.id ? result.order : item)));
+        setPickupReadyOrders((prev) => prev.filter((item) => item.id !== result.order.id));
+      }
+
+      setPickupMessage({ type: "success", text: result.message || "Ritiro completato. Ordine spostato in Completato." });
+      setPickupQuery("");
+      setPickupName("");
+      setPickupPin("");
+      setPickupPaidConfirmed(false);
+      setPickupProof(null);
+      setPickupSelectedOrder(null);
+    } catch (error) {
+      setPickupMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Impossibile completare il ritiro.",
+      });
+    } finally {
+      setPickupSubmitting(false);
     }
   };
 
@@ -708,6 +978,27 @@ export function StaffFormsViewer({
             </button>
           )}
 
+          {/* Card: Ritiro Ordine */}
+          <button
+            type="button"
+            onClick={() => {
+              setPickupMessage(null);
+              setPickupSelectedOrder(null);
+              setPickupQuery("");
+              setShowPickupModal(true);
+            }}
+            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#C7F9CC] to-[#F0FFF4] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#C7F9CC]/40"
+            style={{ boxShadow: "0 10px 30px rgba(199,249,204,0.15)" }}
+          >
+            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
+              <PackageCheck className="size-6 text-white" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534] opacity-80">ORDINI</p>
+              <h2 className="mt-1 text-xl font-black text-[#14532d] leading-tight">Ritiro</h2>
+            </div>
+          </button>
+
           {/* Card: Pagamento Link */}
           <a
             href="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
@@ -840,6 +1131,399 @@ export function StaffFormsViewer({
           })}
         </div>
       </div>
+
+      {/* PICKUP MODAL */}
+      {showPickupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5">
+          <form
+            onSubmit={handlePickupSubmit}
+            className="max-h-[92dvh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0b0b0c] text-white shadow-[0_35px_120px_rgba(0,0,0,0.35)]"
+          >
+            <div className="border-b border-white/10 bg-white/[0.03] px-5 py-5 sm:px-7">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex gap-3">
+                  <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                    <PackageCheck className="size-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Ritiro ordine</p>
+                    <h3 className="mt-1 text-2xl font-black">Consegna al cliente</h3>
+                    <p className="mt-1 text-sm font-semibold text-white/45">Completa solo ordini in stato Arrivato / pronto.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !pickupSubmitting && setShowPickupModal(false)}
+                  className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 hover:text-white"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[calc(92dvh-170px)] space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
+              {pickupMessage && (
+                <div
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-sm font-bold",
+                    pickupMessage.type === "success"
+                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                      : "border-red-400/25 bg-red-400/10 text-red-200"
+                  )}
+                >
+                  {pickupMessage.text}
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Cerca ordine</span>
+                  <input
+                    value={pickupQuery}
+                    onChange={(event) => setPickupQuery(event.target.value)}
+                    placeholder="Numero ordine, nome o telefono"
+                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                  />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Chi ritira</span>
+                  <input
+                    value={pickupName}
+                    onChange={(event) => setPickupName(event.target.value)}
+                    placeholder="Nome di chi ritira"
+                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                  />
+                </label>
+              </div>
+
+              {pickupStatusNotice?.found && pickupStatusNotice.ready === false ? (
+                <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      Ordine trovato. Stato attuale: <span className="text-amber-200">{pickupStatusNotice.statusLabel}</span>.
+                    </span>
+                    {pickupStatusNotice.order?.statusAudit?.changedAt ? (
+                      <span className="rounded-full bg-black/20 px-3 py-1 text-xs text-amber-50/80">
+                        Ultima modifica: {formatPickupDate(pickupStatusNotice.order.statusAudit.changedAt)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {pickupStatusNotice.order?.pickup?.completedAt ? (
+                    <p className="mt-2 text-xs font-semibold text-amber-50/75">
+                      Consegnato da {pickupStatusNotice.order.pickup.completedByName || "Staff"} a{" "}
+                      {pickupStatusNotice.order.pickup.pickupName || "cliente"} il {formatPickupDate(pickupStatusNotice.order.pickup.completedAt)}.
+                    </p>
+                  ) : pickupStatusNotice.order?.statusAudit?.changedBy ? (
+                    <p className="mt-2 text-xs font-semibold text-amber-50/75">
+                      Stato modificato da {pickupStatusNotice.order.statusAudit.changedBy}.
+                    </p>
+                  ) : null}
+                </div>
+              ) : pickupStatusNotice?.found === false ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-white/45">
+                  Nessun ordine trovato con questa ricerca.
+                </div>
+              ) : null}
+
+              <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Ordini pronti</p>
+                    <p className="text-xs font-semibold text-white/40">Clicca un ordine per vedere pagato, saldo mancante e dettagli.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadPickupReadyOrders()}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/10"
+                  >
+                    {pickupLoadingOrders ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+                    Aggiorna
+                  </button>
+                </div>
+
+                <div className="grid max-h-72 gap-3 overflow-y-auto pr-1">
+                  {pickupLoadingOrders ? (
+                    <div className="flex min-h-24 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 text-sm font-bold text-white/50">
+                      <Loader2 className="size-4 animate-spin" />
+                      Carico ordini pronti...
+                    </div>
+                  ) : filteredPickupReadyOrders.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm font-bold text-white/45">
+                      Nessun ordine in Arrivato / pronto.
+                    </div>
+                  ) : (
+                    filteredPickupReadyOrders.map((order) => {
+                      const selected = pickupSelectedOrder?.id === order.id;
+                      const missing = order.payment?.missing;
+                      return (
+                        <button
+                          key={order.id}
+                          type="button"
+                          onClick={() => {
+                            setPickupSelectedOrder(order);
+                            setPickupQuery(order.orderNumber || order.clientName);
+                            setPickupStatusNotice(null);
+                          }}
+                          className={cn(
+                            "rounded-2xl border p-4 text-left transition active:scale-[0.99]",
+                            selected
+                              ? "border-emerald-300/60 bg-emerald-300/12"
+                              : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.07]"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-base font-black text-white">{order.clientName}</p>
+                              <p className="mt-0.5 text-xs font-bold text-white/45">
+                                {order.orderNumber} {order.phone ? `· ${order.phone}` : ""} {order.salon ? `· ${order.salon}` : ""}
+                              </p>
+                            </div>
+                            <span
+                              className={cn(
+                                "shrink-0 rounded-full px-3 py-1 text-[11px] font-black",
+                                missing && missing > 0 ? "bg-rose-400/15 text-rose-200" : "bg-emerald-300/15 text-emerald-200"
+                              )}
+                            >
+                              {missing !== null && missing !== undefined ? `Manca ${formatEuro(missing)}` : "Saldo da verificare"}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-xs font-bold text-white/55 sm:grid-cols-3">
+                            <span className="rounded-xl bg-black/25 px-3 py-2">Pagato: {formatEuro(order.payment?.paid ?? 0)}</span>
+                            <span className="rounded-xl bg-black/25 px-3 py-2">Totale: {formatEuro(order.payment?.total)}</span>
+                            <span className="rounded-xl bg-black/25 px-3 py-2">Creato: {formatPickupDate(order.createdAt) || "-"}</span>
+                          </div>
+                          {selected && order.summary ? (
+                            <p className="mt-3 rounded-xl bg-black/25 px-3 py-2 text-xs font-semibold leading-5 text-white/50">{order.summary}</p>
+                          ) : null}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {pickupSelectedOrder ? (
+                <div className="space-y-3 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/70">Ordine selezionato</p>
+                      <p className="mt-1 text-xl font-black text-white">{pickupSelectedOrder.clientName}</p>
+                      <p className="text-xs font-bold text-white/45">
+                        {pickupSelectedOrder.phone || "Telefono non indicato"} {pickupSelectedOrder.createdBy ? `· Creato da ${pickupSelectedOrder.createdBy}` : ""}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-xs font-black",
+                        pickupSelectedOrder.status === "READY"
+                          ? "bg-blue-300/15 text-blue-100"
+                          : pickupSelectedOrder.status === "COMPLETED"
+                            ? "bg-emerald-300/15 text-emerald-100"
+                            : "bg-amber-300/15 text-amber-100"
+                      )}
+                    >
+                      {pickupSelectedOrder.statusLabel || pickupSelectedOrder.status || "Stato non indicato"}
+                    </span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Ordine</p>
+                      <p className="mt-1 font-black">{pickupSelectedOrder.orderNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Pagato</p>
+                      <p className="mt-1 font-black">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Manca</p>
+                      <p className="mt-1 font-black">{formatEuro(pickupSelectedOrder.payment?.missing)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Salone</p>
+                      <p className="mt-1 font-black">{pickupSelectedOrder.salon || "-"}</p>
+                    </div>
+                  </div>
+                  {pickupSelectedOrder.statusAudit || pickupSelectedOrder.pickup ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Ultimo stato</p>
+                        <p className="mt-2 text-sm font-black text-white">{pickupSelectedOrder.statusLabel || pickupSelectedOrder.status || "-"}</p>
+                        <p className="mt-1 text-xs font-semibold text-white/45">
+                          {pickupSelectedOrder.statusAudit?.changedBy ? `Da ${pickupSelectedOrder.statusAudit.changedBy}` : "Operatore non indicato"}
+                          {pickupSelectedOrder.statusAudit?.changedAt ? ` · ${formatPickupDate(pickupSelectedOrder.statusAudit.changedAt)}` : ""}
+                        </p>
+                        {pickupSelectedOrder.statusAudit?.text ? (
+                          <p className="mt-2 text-xs font-semibold leading-5 text-white/50">{pickupSelectedOrder.statusAudit.text}</p>
+                        ) : null}
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Consegna</p>
+                        {pickupSelectedOrder.pickup?.completedAt ? (
+                          <>
+                            <p className="mt-2 text-sm font-black text-white">
+                              {pickupSelectedOrder.pickup.pickupName || "Cliente"} · {formatPickupDate(pickupSelectedOrder.pickup.completedAt)}
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-white/45">
+                              Consegnato da {pickupSelectedOrder.pickup.completedByName || "Staff"}
+                            </p>
+                            {pickupProofUrl(pickupSelectedOrder) ? (
+                              <a
+                                href={pickupProofUrl(pickupSelectedOrder)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white transition hover:bg-white/15"
+                              >
+                                <Eye className="size-3.5" />
+                                Vedi prova consegna
+                              </a>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="mt-2 text-sm font-bold text-white/45">Non ancora consegnato.</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                  {pickupSelectedOrder.notes ? (
+                    <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/70">Tutte le note ordine</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-bold leading-6 text-amber-50">{pickupSelectedOrder.notes}</p>
+                    </div>
+                  ) : null}
+                  {pickupSelectedOrder.attachments?.length ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200/70">Foto e allegati ordine</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {pickupSelectedOrder.attachments.map((attachment, index) => (
+                          <a
+                            key={`${attachment.url}-${index}`}
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] transition hover:border-emerald-300/40 hover:bg-white/[0.09]"
+                          >
+                            {attachment.previewable ? (
+                              <img src={attachment.url} alt={attachment.name} className="h-36 w-full object-cover" />
+                            ) : (
+                              <div className="grid h-24 place-items-center bg-black/20">
+                                <FileText className="size-8 text-white/35" />
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between gap-3 p-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-black uppercase tracking-[0.14em] text-white/35">{attachment.label}</p>
+                                <p className="mt-1 truncate text-sm font-black text-white">{attachment.name}</p>
+                              </div>
+                              <ArrowUpRight className="size-4 shrink-0 text-white/35 transition group-hover:text-emerald-200" />
+                            </div>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200/70">Info ordine completa</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {pickupOrderDetails(pickupSelectedOrder).map((detail, index) => (
+                        <div key={`${detail.label}-${index}`} className="rounded-2xl bg-white/[0.06] p-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/35">{detail.label}</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm font-bold leading-5 text-white/80">{detail.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <label className="space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">PIN firma consegna</span>
+                <input
+                  value={pickupPin}
+                  onChange={(event) => setPickupPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  type="password"
+                  placeholder="PIN personale"
+                  className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                />
+                <span className="block text-xs font-semibold text-white/35">Il PIN firma chi ha consegnato l'ordine al cliente.</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setPickupPaidConfirmed((current) => !current)}
+                className={cn(
+                  "flex min-h-16 w-full items-center justify-between rounded-2xl border px-4 text-left transition active:scale-[0.99]",
+                  pickupPaidConfirmed
+                    ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
+                    : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
+                )}
+              >
+                <span>
+                  <span className="block text-sm font-black">Ha saldato tutto?</span>
+                  <span className="block text-xs font-semibold text-white/40">Conferma obbligatoria prima di completare.</span>
+                </span>
+                <span
+                  className={cn(
+                    "grid size-8 place-items-center rounded-full border",
+                    pickupPaidConfirmed ? "border-emerald-300 bg-emerald-300 text-black" : "border-white/20"
+                  )}
+                >
+                  {pickupPaidConfirmed && <Check className="size-4" />}
+                </span>
+              </button>
+
+              <label className="group relative flex min-h-36 w-full items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.04] transition hover:border-emerald-300/50 hover:bg-white/[0.07]">
+                <input
+                  type="file"
+                  accept="image/*,.heic,.heif,application/pdf"
+                  onChange={(event) => setPickupProof(event.target.files?.[0] ?? null)}
+                  className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                />
+                <div className="pointer-events-none flex flex-col items-center p-5 text-center">
+                  <Upload className="size-9 text-white/35 transition group-hover:text-emerald-300" />
+                  <span className="mt-3 text-sm font-black text-white">
+                    {pickupProof ? pickupProof.name : "Carica foto scontrino o ordine Shopify"}
+                  </span>
+                  <span className="mt-1 text-[11px] font-semibold text-white/35">Facoltativo se il saldo e gia stato verificato. Foto o PDF, massimo 12 MB.</span>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
+              {pickupMessage ? (
+                <div
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-sm font-black",
+                    pickupMessage.type === "success"
+                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                      : "border-red-400/25 bg-red-400/10 text-red-200"
+                  )}
+                >
+                  {pickupMessage.text}
+                </div>
+              ) : null}
+              <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={pickupSubmitting}
+                onClick={() => setShowPickupModal(false)}
+                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/70 transition hover:bg-white/10 disabled:opacity-50"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={pickupSubmitting || (!!pickupSelectedOrder && pickupSelectedOrder.status !== "READY")}
+                className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-emerald-300 px-5 py-3 text-sm font-black text-black transition hover:scale-[1.02] disabled:opacity-50"
+              >
+                {pickupSubmitting ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />}
+                Completa ritiro
+              </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* FILL OUT MODAL */}
       {selectedForm && (

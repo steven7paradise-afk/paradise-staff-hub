@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, Save, Copy, CheckCircle2, AlertCircle, HelpCircle, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, Save, Copy, CheckCircle2, AlertCircle, HelpCircle, FileSpreadsheet, DatabaseBackup } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button, Card, Field } from "@/components/ui";
 
@@ -14,6 +14,7 @@ export default function GoogleSheetSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -95,6 +96,38 @@ export default function GoogleSheetSettingsPage() {
     }
   }
 
+  async function handleBackup() {
+    setBackingUp(true);
+    setStatus(null);
+    try {
+      const saveResponse = await fetch("/api/settings/google-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spreadsheet_id: spreadsheetId, sheet_name: sheetName, active }),
+      });
+
+      if (!saveResponse.ok) {
+        const saveResult = await saveResponse.json();
+        setStatus({ type: "error", message: saveResult.error ?? "Salvataggio fallito prima del backup." });
+        setBackingUp(false);
+        return;
+      }
+
+      const response = await fetch("/api/settings/google-sheet/backup", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        setStatus({ type: "error", message: data.error ?? "Backup database non riuscito." });
+      } else {
+        const totalRows = Array.isArray(data.tables) ? data.tables.reduce((sum: number, table: { rows?: number }) => sum + (table.rows ?? 0), 0) : 0;
+        setStatus({ type: "success", message: `Backup database completato: ${data.tables?.length ?? 0} fogli, ${totalRows} righe salvate.` });
+      }
+    } catch (err) {
+      setStatus({ type: "error", message: "Errore durante il backup database." });
+    } finally {
+      setBackingUp(false);
+    }
+  }
+
   function handleCopy() {
     navigator.clipboard.writeText(serviceAccountEmail);
     setCopied(true);
@@ -170,6 +203,9 @@ export default function GoogleSheetSettingsPage() {
               </Button>
               <Button variant="soft" onClick={handleTest} disabled={testing || loading || !spreadsheetId} className="flex-1 sm:flex-initial">
                 <RefreshCw className={`size-4 ${testing ? "animate-spin" : ""}`} /> {testing ? "Test in corso..." : "Esegui Test"}
+              </Button>
+              <Button variant="soft" onClick={handleBackup} disabled={backingUp || loading || !spreadsheetId} className="flex-1 sm:flex-initial">
+                <DatabaseBackup className={`size-4 ${backingUp ? "animate-pulse" : ""}`} /> {backingUp ? "Backup..." : "Backup Database"}
               </Button>
             </div>
           </div>

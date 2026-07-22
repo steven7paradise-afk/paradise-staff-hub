@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
 import { prisma } from "@/lib/prisma";
+import { unlockWorkHourRecord } from "@/lib/work-hour-sync";
 
 const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
 
@@ -44,6 +45,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     where: { id },
     data: { user_id: user.id, location_id: user.sede_id, device_id: device.id, type, timestamp, date, time, note: storedNote },
   });
+  await Promise.all([
+    unlockWorkHourRecord(existing.user_id, existing.timestamp),
+    unlockWorkHourRecord(user.id, timestamp),
+  ]);
 
   if (type !== "PAUSA") {
     let finalNote = `[CORREZIONE ${id}] ${storedNote}`;
@@ -74,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       note: finalNote,
     });
   }
-  return NextResponse.json(log);
+  return NextResponse.json({ ...log, recalculated: true });
 }
 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -88,6 +93,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   if (!existing) return NextResponse.json({ error: "Timbratura non trovata." }, { status: 404 });
 
   await prisma.attendanceLog.delete({ where: { id } });
+  await unlockWorkHourRecord(existing.user_id, existing.timestamp);
 
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({ ok: true, id, recalculated: true });
 }

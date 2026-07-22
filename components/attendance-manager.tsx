@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Pencil, Plus, Save, X, Clock, Coffee, UserCheck, FileEdit, Search, CalendarDays, LogOut, MapPin, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Field, Select } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Worker = { id: string; name: string; location: string; photoUrl?: string | null };
 type AttendanceLog = {
@@ -17,6 +18,20 @@ type AttendanceLog = {
   time: string;
   note: string;
   photoUrl?: string | null;
+};
+
+type AttendanceGroup = {
+  id: string;
+  userId: string;
+  employee: string;
+  location: string;
+  dateStr: string;
+  entrata?: AttendanceLog;
+  pausa?: AttendanceLog;
+  rientro?: AttendanceLog;
+  uscita?: AttendanceLog;
+  lastLog?: AttendanceLog;
+  allLogs: AttendanceLog[];
 };
 
 const typeLabels: Record<string, string> = {
@@ -164,19 +179,7 @@ export function AttendanceManager({
 
   // Group all logs by employee (userId) and date (YYYY-MM-DD)
   const groupedLogs = useMemo(() => {
-    const groups: Record<string, {
-      id: string; // userId-date
-      userId: string;
-      employee: string;
-      location: string;
-      dateStr: string; // YYYY-MM-DD
-      entrata?: AttendanceLog;
-      pausa?: AttendanceLog;
-      rientro?: AttendanceLog;
-      uscita?: AttendanceLog;
-      lastLog?: AttendanceLog;
-      allLogs: AttendanceLog[];
-    }> = {};
+    const groups: Record<string, AttendanceGroup> = {};
 
     const sortedLogs = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
@@ -219,21 +222,55 @@ export function AttendanceManager({
 
   const todayKey = useMemo(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date()), []);
 
+  const todayRosterGroups = useMemo(() => {
+    const byWorker = new Map<string, AttendanceGroup>();
+
+    groupedLogs
+      .filter((group) => group.dateStr === todayKey)
+      .forEach((group) => byWorker.set(group.userId, group));
+
+    workers.forEach((worker) => {
+      if (!byWorker.has(worker.id)) {
+        byWorker.set(worker.id, {
+          id: `${worker.id}-${todayKey}`,
+          userId: worker.id,
+          employee: worker.name,
+          location: worker.location,
+          dateStr: todayKey,
+          allLogs: [],
+        });
+      }
+    });
+
+    const statusWeight = (group: AttendanceGroup) => {
+      if (group.lastLog?.type === "ENTRATA" || group.lastLog?.type === "RIENTRO") return 0;
+      if (group.lastLog?.type === "PAUSA") return 1;
+      if (group.lastLog?.type === "USCITA") return 2;
+      return 3;
+    };
+
+    return Array.from(byWorker.values()).sort((a, b) => {
+      const statusDiff = statusWeight(a) - statusWeight(b);
+      if (statusDiff !== 0) return statusDiff;
+      const locationDiff = a.location.localeCompare(b.location);
+      if (locationDiff !== 0) return locationDiff;
+      return a.employee.localeCompare(b.employee);
+    });
+  }, [groupedLogs, todayKey, workers]);
+
   const locations = useMemo(() => {
     return Array.from(new Set(
-      groupedLogs
-        .filter((group) => group.dateStr === todayKey && group.lastLog?.type !== "USCITA")
+      todayRosterGroups
         .map((group) => group.location)
         .filter(Boolean)
     )).sort((a, b) => a.localeCompare(b));
-  }, [groupedLogs, todayKey]);
+  }, [todayRosterGroups]);
 
   // Filter grouped logs based on search, location and type
   const filteredGroups = useMemo(() => {
-    const matchingGroups = groupedLogs.filter(group => {
+    return todayRosterGroups.filter(group => {
       const matchesSearch = group.employee.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesLocation = filterLocation === "ALL" || group.location === filterLocation;
-      const isActiveToday = group.dateStr === todayKey && group.lastLog?.type !== "USCITA";
       const matchesType = (() => {
         if (filterType === "ALL") return true;
         if (filterType === "ENTRATA") return !!group.entrata;
@@ -242,17 +279,9 @@ export function AttendanceManager({
         if (filterType === "USCITA") return !!group.uscita;
         return true;
       })();
-      return isActiveToday && matchesSearch && matchesLocation && matchesType;
+      return matchesSearch && matchesLocation && matchesType;
     });
-
-    const latestByWorker = new Map<string, (typeof matchingGroups)[number]>();
-    matchingGroups.forEach((group) => {
-      if (!latestByWorker.has(group.userId)) {
-        latestByWorker.set(group.userId, group);
-      }
-    });
-    return Array.from(latestByWorker.values());
-  }, [groupedLogs, searchQuery, filterLocation, filterType, todayKey]);
+  }, [todayRosterGroups, searchQuery, filterLocation, filterType]);
 
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const selectedWorker = selectedWorkerId ? peopleById.get(selectedWorkerId) : null;
@@ -315,7 +344,7 @@ export function AttendanceManager({
     if (worker?.photoUrl) {
       return (
         <div className={`${sizeClass} overflow-hidden rounded-2xl border-2 border-white/80 bg-paradise-softPink shadow-sm`}>
-          <img src={worker.photoUrl} alt={name} className="h-full w-full object-cover" />
+          <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={name} className="h-full w-full object-cover" />
         </div>
       );
     }
@@ -529,21 +558,40 @@ export function AttendanceManager({
               {filteredGroups.map((group) => {
                 const breakDuration = getBreakDurationForGroup(group);
                 const worker = peopleById.get(group.userId);
+                const isInShift = group.lastLog?.type === "ENTRATA" || group.lastLog?.type === "RIENTRO";
+                const isOnBreak = group.lastLog?.type === "PAUSA";
+                const isPresent = isInShift || isOnBreak;
+                const statusLabel = isOnBreak ? "In pausa" : isInShift ? "In turno" : group.lastLog?.type === "USCITA" ? "Turno chiuso" : "Non di turno";
                 
                 return (
-                  <div key={group.id} className="relative rounded-[22px] border border-black/10 bg-white p-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/10 dark:bg-white/5">
+                  <div key={group.id} className={`relative rounded-[22px] border bg-white p-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white/5 ${
+                    isPresent
+                      ? "border-paradise-pink/25"
+                      : "border-black/10 opacity-85 dark:border-white/10"
+                  }`}>
                     <button type="button" onClick={() => openWorkerMonthly(group.userId)} className="group w-full text-left">
-                      <div className="aspect-square overflow-hidden rounded-[18px] bg-paradise-softPink">
+                      <div className={`aspect-square overflow-hidden rounded-[18px] bg-paradise-softPink ${!isPresent ? "grayscale" : ""}`}>
                         {worker?.photoUrl ? (
-                          <img src={worker.photoUrl} alt={group.employee} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" />
+                          <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={group.employee} className={`h-full w-full object-cover transition duration-300 group-hover:scale-105 ${!isPresent ? "opacity-55" : ""}`} />
                         ) : (
-                          <div className="grid h-full place-items-center bg-gradient-to-br from-paradise-softPink to-paradise-pink/70 text-4xl font-black text-black">
+                          <div className={`grid h-full place-items-center bg-gradient-to-br from-paradise-softPink to-paradise-pink/70 text-4xl font-black text-black ${!isPresent ? "opacity-55" : ""}`}>
                             {initials(group.employee)}
                           </div>
                         )}
                       </div>
                       <div className="mt-2">
-                        <p className="text-[11px] font-black text-paradise-pink">{visibleClockTime(group.entrata)}</p>
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-black text-paradise-pink">{visibleClockTime(group.entrata)}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] ${
+                            isOnBreak
+                              ? "bg-amber-50 text-amber-700"
+                              : isInShift
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-neutral-100 text-neutral-500"
+                          }`}>
+                            {statusLabel}
+                          </span>
+                        </div>
                         <h3 className="line-clamp-2 text-sm font-black uppercase leading-tight text-black dark:text-white">{group.employee}</h3>
                         <p className="mt-1 text-xs font-bold text-black/45 dark:text-white/50">{new Intl.DateTimeFormat("it-IT").format(new Date(group.dateStr))}</p>
                       </div>

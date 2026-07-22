@@ -36,6 +36,7 @@ import {
   Trash2
 } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -1151,10 +1152,10 @@ export function TabletClock({
     }
   }
 
-  async function handleKioskLogout(bypassEarlyExitCheck = false) {
-    setLoading(bypassEarlyExitCheck ? "FINAL_SHIFT" : "LOGOUT");
+  async function handleKioskLogout(registerFinalClock = false) {
+    setLoading(registerFinalClock ? "FINAL_SHIFT" : "LOGOUT");
     try {
-      if (bypassEarlyExitCheck && worker && worker.status !== "OUT" && /^\d{4,6}$/.test(pin) && device) {
+      if (registerFinalClock && worker && worker.status !== "OUT" && /^\d{4,6}$/.test(pin) && device) {
         const response = await fetch("/api/attendance/clock", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-device-id": device.id },
@@ -1449,8 +1450,6 @@ export function TabletClock({
                 setShowEarlyExitConfirm(false);
                 if (pendingExitMode === "clock") {
                   void clock("USCITA", true);
-                } else {
-                  void handleKioskLogout(true);
                 }
               }}
               className="rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-600/20 active:scale-95 transition"
@@ -1472,7 +1471,7 @@ export function TabletClock({
             <div className="flex items-center gap-3">
               {worker?.photoUrl ? (
                 <div className="relative size-10 overflow-hidden rounded-full border-2 border-[color:var(--tablet-accent)] shadow-sm">
-                  <img src={worker.photoUrl} alt="" className="size-full object-cover" />
+                  <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt="" className="size-full object-cover" />
                 </div>
               ) : (
                 <div className="flex size-10 items-center justify-center rounded-full border-2 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)] text-sm font-black uppercase tracking-wider text-[color:var(--tablet-accent)] shadow-sm">
@@ -1488,12 +1487,7 @@ export function TabletClock({
             <button
               className="flex h-11 items-center gap-2 rounded-xl bg-red-600 px-5 text-xs font-bold uppercase tracking-[0.15em] text-white shadow-md shadow-red-600/10 hover:bg-red-700 active:scale-[0.98] transition-all duration-200"
               onClick={() => {
-                if (worker && worker.status !== "OUT" && isShiftDurationPending) {
-                  setPendingExitMode("dashboard");
-                  setShowEarlyExitConfirm(true);
-                } else {
-                  void handleKioskLogout(true);
-                }
+                void handleKioskLogout(false);
               }}
               disabled={loading === "LOGOUT" || loading === "FINAL_SHIFT"}
               children={
@@ -1637,7 +1631,7 @@ export function TabletClock({
               <div className="mt-3 flex flex-col items-center">
                 {worker.photoUrl ? (
                   <div className="relative size-16 overflow-hidden rounded-full border-4 border-[color:var(--tablet-accent)] shadow-md lg:size-20">
-                    <img src={worker.photoUrl} alt={worker.name} className="size-full object-cover" />
+                    <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={worker.name} className="size-full object-cover" />
                   </div>
                 ) : (
                   <div className="flex size-16 items-center justify-center rounded-full border-4 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)] text-xl font-black uppercase tracking-wider text-[color:var(--tablet-accent)] shadow-md lg:size-20">
@@ -2874,7 +2868,7 @@ export function TabletClock({
                                   className="flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full pl-1 pr-2.5 py-0.5"
                                 >
                                   {mate.photoUrl ? (
-                                    <img src={mate.photoUrl} className="size-5 rounded-full object-cover" alt="" />
+                                    <img src={resolveDrivePhotoUrl(mate.photoUrl)} className="size-5 rounded-full object-cover" alt="" />
                                   ) : (
                                     <div className="grid size-5 place-items-center rounded-full bg-[#ff8bb2]/10 text-[#a74758] text-[9px] font-black">
                                       {mate.name.charAt(0)}
@@ -3189,7 +3183,7 @@ export function TabletClock({
                                           className="flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full pl-1 pr-2.5 py-0.5"
                                         >
                                           {mate.photoUrl ? (
-                                            <img src={mate.photoUrl} className="size-5 rounded-full object-cover" alt="" />
+                                            <img src={resolveDrivePhotoUrl(mate.photoUrl)} className="size-5 rounded-full object-cover" alt="" />
                                           ) : (
                                             <div className="grid size-5 place-items-center rounded-full bg-[#ff8bb2]/10 text-[#a74758] text-[9px] font-black">
                                               {mate.name.charAt(0)}

@@ -7,6 +7,8 @@ export type ClockHours = {
   breakHours: number;
   netHours: number;
   firstEntry: string | null;
+  firstPause: string | null;
+  lastReturn: string | null;
   lastExit: string | null;
 };
 
@@ -39,8 +41,30 @@ function roundToNearest30Minutes(date: Date): Date {
   return rounded;
 }
 
+function canonicalWorkdayLogs(logs: AttendancePoint[]) {
+  const ordered = [...logs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  const entry = ordered.find((log) => log.type === "ENTRATA") ?? null;
+  const pause = entry
+    ? ordered.find((log) => log.type === "PAUSA" && log.timestamp.getTime() > entry.timestamp.getTime()) ?? null
+    : null;
+  const returnFromBreak = pause
+    ? ordered.find((log) => log.type === "RIENTRO" && log.timestamp.getTime() > pause.timestamp.getTime()) ?? null
+    : null;
+  const exitAfter = returnFromBreak ?? pause ?? entry;
+  const exit = exitAfter
+    ? ordered.find((log) => log.type === "USCITA" && log.timestamp.getTime() > exitAfter.timestamp.getTime()) ?? null
+    : null;
+
+  return [entry, pause, returnFromBreak, exit].filter(Boolean) as AttendancePoint[];
+}
+
 export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
-  const roundedLogs = logs.map((log) => ({
+  const orderedActual = canonicalWorkdayLogs(logs);
+  const firstEntryLabel = orderedActual.find((log) => log.type === "ENTRATA")?.timestamp ?? null;
+  const firstPauseLabel = orderedActual.find((log) => log.type === "PAUSA")?.timestamp ?? null;
+  const lastReturnLabel = [...orderedActual].reverse().find((log) => log.type === "RIENTRO")?.timestamp ?? null;
+  const lastExitLabel = [...orderedActual].reverse().find((log) => log.type === "USCITA")?.timestamp ?? null;
+  const roundedLogs = orderedActual.map((log) => ({
     ...log,
     timestamp: roundToNearest30Minutes(log.timestamp),
   }));
@@ -49,14 +73,11 @@ export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
   let breakAt: Date | null = null;
   let grossMilliseconds = 0;
   let breakMilliseconds = 0;
-  let firstEntry: Date | null = null;
-  let lastExit: Date | null = null;
 
   ordered.forEach((log) => {
     if (log.type === "ENTRATA") {
       enteredAt = log.timestamp;
       breakAt = null;
-      firstEntry ??= log.timestamp;
     }
     if (log.type === "PAUSA" && enteredAt) {
       breakAt = log.timestamp;
@@ -71,7 +92,6 @@ export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
         breakAt = null;
       }
       grossMilliseconds += log.timestamp.getTime() - enteredAt.getTime();
-      lastExit = log.timestamp;
       enteredAt = null;
     }
   });
@@ -80,7 +100,9 @@ export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
     grossHours: roundedHours(grossMilliseconds),
     breakHours: roundedHours(breakMilliseconds),
     netHours: roundedHours(Math.max(0, grossMilliseconds - breakMilliseconds)),
-    firstEntry: firstEntry ? timeLabel(firstEntry) : null,
-    lastExit: lastExit ? timeLabel(lastExit) : null,
+    firstEntry: firstEntryLabel ? timeLabel(firstEntryLabel) : null,
+    firstPause: firstPauseLabel ? timeLabel(firstPauseLabel) : null,
+    lastReturn: lastReturnLabel ? timeLabel(lastReturnLabel) : null,
+    lastExit: lastExitLabel ? timeLabel(lastExitLabel) : null,
   };
 }

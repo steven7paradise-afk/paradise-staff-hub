@@ -60,7 +60,7 @@ function getDocIcon(type: string) {
 }
 
 function getDocumentUrl(document: DocumentRecord) {
-  return document.storage_path ? `/api/documents/${document.id}/download` : document.file_url;
+  return `/api/documents/${document.id}/download`;
 }
 
 function getFileExtension(document: DocumentRecord) {

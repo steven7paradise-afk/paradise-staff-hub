@@ -25,6 +25,7 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [migrating, setMigrating] = useState(false);
   const [uploadMode, setUploadMode] = useState<"single" | "bulk">("single");
   const [bulkFiles, setBulkFiles] = useState<BulkFileItem[]>([]);
 
@@ -186,10 +187,49 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
     setBulkFiles(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p));
   };
 
+  const migrateExistingToDrive = async () => {
+    setMigrating(true);
+    setStatus("Migrazione documenti verso Google Drive in corso...");
+    let totalMigrated = 0;
+    const allErrors: string[] = [];
+
+    try {
+      for (let step = 0; step < 40; step += 1) {
+        const response = await fetch("/api/documents/migrate-drive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batchSize: 5 }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || "Migrazione non riuscita.");
+
+        totalMigrated += Number(result.migrated ?? 0);
+        if (Array.isArray(result.errors)) allErrors.push(...result.errors);
+        setStatus(`Migrati ${totalMigrated} documenti. Restano ${Number(result.remaining ?? 0)} da spostare...`);
+
+        if (result.done || Number(result.remaining ?? 0) === 0) break;
+      }
+
+      setStatus(
+        allErrors.length
+          ? `Migrazione completata con ${allErrors.length} errori. Migrati ${totalMigrated} documenti.`
+          : `Migrazione completata. Migrati ${totalMigrated} documenti su Google Drive.`
+      );
+      router.refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Migrazione non riuscita.");
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <>
       <div className="mb-5 flex flex-wrap items-center gap-3">
         <Button onClick={() => setOpen(true)}><Upload className="size-4" /> Carica documento</Button>
+        <Button onClick={migrateExistingToDrive} disabled={migrating || loading} variant="soft">
+          {migrating ? "Migrazione..." : "Migra vecchi documenti su Drive"}
+        </Button>
         {status ? <p className="rounded-full bg-paradise-nude px-4 py-2 text-sm">{status}</p> : null}
       </div>
       {open ? (

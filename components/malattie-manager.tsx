@@ -19,6 +19,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 
@@ -296,7 +297,7 @@ export function MalattieManager({
                 >
                   {stat.photoUrl ? (
                     <img
-                      src={stat.photoUrl}
+                      src={resolveDrivePhotoUrl(stat.photoUrl)}
                       alt={stat.name}
                       className={cn(
                         "size-12 rounded-full object-cover shadow-sm shrink-0 border-2",

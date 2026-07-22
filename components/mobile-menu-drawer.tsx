@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Menu, X } from "lucide-react";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 
 type MobileMenuDrawerProps = {
@@ -76,7 +77,7 @@ export function MobileMenuDrawer({
             <div className="flex items-center gap-3.5">
               <div className="size-12 shrink-0 overflow-hidden rounded-full border border-current/15 bg-white/20 shadow-sm">
                 {userPhoto ? (
-                  <img src={userPhoto} alt={userName} className="size-full select-none object-cover pointer-events-none" />
+                  <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full select-none object-cover pointer-events-none" />
                 ) : (
                   <div className="flex size-full items-center justify-center text-base font-extrabold">
                     {userName.slice(0, 1).toUpperCase()}

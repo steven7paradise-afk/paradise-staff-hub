@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
 
   let leaveRequest;
   let scheduleSync: { syncedDays: number; categoryCode: string } | null = null;
+  const approveImmediately = managementRoles.has(session.user.role) && payload.approveNow === true;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -60,12 +61,14 @@ export async function POST(request: NextRequest) {
           start_time: startTime,
           end_time: endTime,
           reason: payload.reason ? String(payload.reason) : null,
+          admin_note: approveImmediately && payload.adminNote ? String(payload.adminNote).trim() : null,
           medical_code: payload.medicalCode ? String(payload.medicalCode).trim() : null,
           sickness_unjustified: false,
-          status: managementRoles.has(session.user.role) && payload.approveNow === true ? "APPROVED" : "PENDING",
-          approved_by: managementRoles.has(session.user.role) && payload.approveNow === true ? session.user.id : null,
+          status: approveImmediately ? "APPROVED" : "PENDING",
+          approved_by: approveImmediately ? session.user.id : null,
+          approved_at: approveImmediately ? new Date() : null,
         },
-        include: { user: true },
+        include: { user: true, approver: true },
       });
 
       let syncResult = null;
