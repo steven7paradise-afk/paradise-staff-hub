@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   const branding = await getBrandingTheme();
   const themeStyles = brandingCss(branding);
+  const logoSrc = branding.logo_url ?? "/logo.png";
 
   return (
     <main
@@ -13,12 +14,49 @@ export default async function LoginPage() {
       style={themeStyles}
     >
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-6xl items-center justify-center">
+        <section className="relative flex min-h-[calc(100vh-2rem)] w-full overflow-hidden rounded-[32px] border border-black/5 shadow-luxury lg:hidden">
+          <img
+            src="/login-banner.jpg"
+            alt="Paradise Extensions"
+            className="absolute inset-0 size-full object-cover object-center"
+          />
+          <div className="absolute inset-0 bg-black/65" />
+
+          <div className="relative z-10 flex min-h-[calc(100vh-2rem)] w-full flex-col px-5 py-8 text-white sm:px-7">
+            <div className="flex flex-1 flex-col items-center justify-center">
+              <div className="w-full max-w-sm text-center">
+                <img
+                  src={logoSrc}
+                  alt="Paradise Logo"
+                  className="mx-auto mb-8 h-16 w-auto object-contain brightness-0 invert sm:h-20"
+                />
+
+                <div className="mb-6 space-y-3">
+                  <p className="text-[11px] font-black uppercase tracking-[0.38em] text-[#FFB7C9]">
+                    Staff Hub
+                  </p>
+                  <h1 className="text-4xl font-extrabold leading-none tracking-tight sm:text-5xl">
+                    Accedi al tuo spazio
+                  </h1>
+                  <p className="mx-auto max-w-xs text-sm leading-relaxed text-white/78 sm:text-base">
+                    Scegli se entrare con PIN oppure con email e password.
+                  </p>
+                </div>
+
+                <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-5">
+                  <LoginForm variant="mobile-overlay" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div
-          className="w-full overflow-hidden rounded-[32px] border border-black/5 bg-[color:var(--card)] shadow-luxury dark:border-white/5 animate-fade-in-up opacity-0"
+          className="hidden w-full overflow-hidden rounded-[32px] border border-black/5 bg-[color:var(--card)] shadow-luxury dark:border-white/5 lg:block animate-fade-in-up opacity-0"
           style={{ animationFillMode: "forwards" }}
         >
-          <div className="grid min-h-[720px] grid-cols-1 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="relative flex min-h-[320px] flex-col justify-between overflow-hidden px-5 pb-8 pt-7 text-white sm:min-h-[420px] sm:px-8 sm:pb-10 sm:pt-8 lg:min-h-[720px] lg:px-12 lg:pb-12 lg:pt-10">
+          <div className="grid min-h-[720px] grid-cols-[1.05fr_0.95fr]">
+            <div className="relative flex min-h-[720px] flex-col justify-between overflow-hidden px-12 pb-12 pt-10 text-white">
               <img
                 src="/login-banner.jpg"
                 alt="Paradise Extensions"
@@ -35,27 +73,27 @@ export default async function LoginPage() {
                 </div>
               </div>
 
-              <div className="relative z-10 mt-auto max-w-md space-y-4 sm:space-y-5">
+              <div className="relative z-10 mt-auto max-w-md space-y-5">
                 <img
-                  src={branding.logo_url ?? "/logo.png"}
+                  src={logoSrc}
                   alt="Paradise Logo"
-                  className="h-14 w-auto object-contain drop-shadow-md dark:invert sm:h-16"
+                  className="h-16 w-auto object-contain drop-shadow-md dark:invert"
                 />
                 <div className="space-y-3">
-                  <p className="text-[11px] font-black uppercase tracking-[0.42em] text-[#FFB7C9] sm:text-xs">
+                  <p className="text-xs font-black uppercase tracking-[0.42em] text-[#FFB7C9]">
                     Staff Hub
                   </p>
-                  <h1 className="text-4xl font-extrabold leading-[0.95] tracking-tight text-white sm:text-5xl lg:text-6xl">
+                  <h1 className="text-6xl font-extrabold leading-[0.95] tracking-tight text-white">
                     Accedi al tuo spazio Paradise
                   </h1>
-                  <p className="max-w-sm text-sm leading-relaxed text-white/80 sm:text-base">
+                  <p className="max-w-sm text-base leading-relaxed text-white/80">
                     Entra con il tuo PIN personale oppure con email e password.
                     La schermata si adatta bene anche da telefono, cosi l&apos;accesso
                     resta semplice e veloce.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 pt-2 text-white/90 sm:grid-cols-3">
+                <div className="grid grid-cols-3 gap-3 pt-2 text-white/90">
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur-md">
                     <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/60">
                       Accesso rapido
@@ -78,18 +116,18 @@ export default async function LoginPage() {
               </div>
             </div>
 
-            <div className="flex min-h-[400px] items-center bg-[color:var(--card)] px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+            <div className="flex min-h-[400px] items-center bg-[color:var(--card)] px-10 py-10">
               <div className="mx-auto w-full max-w-xl">
-                <div className="rounded-[28px] border border-black/5 bg-white/92 p-5 shadow-[0_24px_80px_rgba(17,17,17,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-neutral-950/80 sm:p-7 lg:p-9">
+                <div className="rounded-[28px] border border-black/5 bg-white/92 p-9 shadow-[0_24px_80px_rgba(17,17,17,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-neutral-950/80">
                   <div className="mb-6 space-y-3">
                     <div className="inline-flex items-center rounded-full bg-[#FFE7EF] px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-[#E684A0]">
                       Login staff
                     </div>
                     <div className="space-y-2">
-                      <h2 className="text-3xl font-extrabold tracking-tight text-[color:var(--text)] sm:text-4xl">
+                      <h2 className="text-4xl font-extrabold tracking-tight text-[color:var(--text)]">
                         Bentornata
                       </h2>
-                      <p className="max-w-md text-sm leading-relaxed text-black/55 dark:text-white/55 sm:text-[15px]">
+                      <p className="max-w-md text-[15px] leading-relaxed text-black/55 dark:text-white/55">
                         Scegli come vuoi entrare. Con PIN vai veloce, con email
                         e password hai l&apos;accesso classico completo.
                       </p>
@@ -99,7 +137,7 @@ export default async function LoginPage() {
                   <LoginForm />
 
                   <div className="mt-6 border-t border-black/5 pt-4 dark:border-white/10">
-                    <p className="text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-black/35 dark:text-white/35 sm:text-left">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/35 dark:text-white/35">
                       Copyright © 2026 Paradise Beauty. Tutti i diritti riservati.
                     </p>
                   </div>
