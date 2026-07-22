@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { buildPublicAppUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 import { hashTabletToken, newTabletToken } from "@/lib/tablet-auth";
 
@@ -25,6 +26,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     },
   });
   return NextResponse.json({
-    activationUrl: `${request.nextUrl.origin}/tablet-clock/activate?token=${token}`,
+    activationUrl: buildPublicAppUrl(`/tablet-clock/activate?token=${token}`),
   });
 }
