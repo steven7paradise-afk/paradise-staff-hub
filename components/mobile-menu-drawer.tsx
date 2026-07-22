@@ -161,56 +161,7 @@ export function MobileMenuDrawer({
             })}
           </div>
 
-          {/* Team Online Section (mockup styled) */}
-          {colleagues && colleagues.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-zinc-800/80 space-y-2">
-              <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-zinc-500 px-1">
-                <span>Team online</span>
-                <span className="text-pink-500 text-[8px] tracking-wider cursor-pointer">vedi tutti</span>
-              </div>
-
-              <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                {colleagues.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between p-1.5 rounded-xl hover:bg-zinc-800/20 transition duration-200">
-                    <div className="flex items-center gap-2.5">
-                      <div className="relative shrink-0">
-                        <div className="size-7 overflow-hidden rounded-full border border-zinc-700 bg-zinc-800">
-                          {member.photo_url ? (
-                            <img src={resolveDrivePhotoUrl(member.photo_url)} alt={member.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-[10px] font-extrabold text-zinc-400">
-                              {member.name.slice(0, 1).toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-                        <span className="absolute bottom-0 right-0 size-2 rounded-full bg-emerald-500 ring-1 ring-[#0B121F]" />
-                      </div>
-
-                      <span className="text-[10px] font-black uppercase tracking-wide text-zinc-300 truncate max-w-[130px]">{member.name}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button className="p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800/50 transition">
-                        <Video size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Theme switcher pill at bottom */}
-          <div className="mt-4 flex items-center justify-between bg-zinc-900/90 border border-zinc-800 p-1 rounded-xl">
-            <button className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest rounded-lg bg-zinc-800 text-white shadow-sm border border-zinc-700/55">
-              <Sparkles size={10} className="text-pink-400" />
-              <span>Light</span>
-            </button>
-            <button className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[8px] font-black uppercase tracking-widest rounded-lg text-zinc-500">
-              <span>Dark</span>
-            </button>
-          </div>
-
+          {/* Navigation lists directly end here */}
         </div>
 
         <div className="mt-4 shrink-0 border-t border-zinc-800/80 pt-4">{logoutButton}</div>
