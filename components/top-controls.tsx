@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import { Bell, CalendarDays, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 function applyThemeVariables(isDark: boolean) {
   const root = document.querySelector<HTMLElement>(".paradise-theme-root");
@@ -61,6 +62,11 @@ export function TopControls({
     applyThemeVariables(next);
   }
 
+  async function handleLogout() {
+    await signOut({ redirect: false });
+    window.location.replace("/login");
+  }
+
   return (
     <div className="flex items-center justify-end gap-3">
       <Link href="/notifications" className="relative grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15">
@@ -77,7 +83,7 @@ export function TopControls({
       <div className="group relative">
         <Link href="/profile" className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
           <span className="grid size-12 place-items-center overflow-hidden rounded-full bg-[#C66170]">
-            {photoUrl ? <img src={photoUrl} alt={name} className="size-full object-cover" /> : name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+            {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="size-full object-cover" /> : name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
           </span>
           <span className="absolute -right-0.5 top-0 size-3 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse-green" />
         </Link>
@@ -97,7 +103,7 @@ export function TopControls({
             </Link>
             <button
               type="button"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={handleLogout}
               className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10"
             >
               <LogOut className="size-4" />

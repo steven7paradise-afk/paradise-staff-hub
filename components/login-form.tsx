@@ -17,8 +17,12 @@ function normalizeLoginDestination(value?: string | null, fallback = DEFAULT_LOG
 
   try {
     const parsed = new URL(value);
-    if (typeof window !== "undefined" && parsed.origin === window.location.origin) {
-      return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
+    const isCurrentOrigin = typeof window !== "undefined" && parsed.origin === window.location.origin;
+    const isLocalhostRedirect = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+
+    if (isCurrentOrigin || isLocalhostRedirect) {
+      const destination = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      return destination.startsWith("/") ? destination : fallback;
     }
   } catch {
     return fallback;

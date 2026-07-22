@@ -33,7 +33,8 @@ export function SidebarFrame({
       window.clearTimeout(timeoutId);
       timeoutId = window.setTimeout(async () => {
         const { signOut } = await import("next-auth/react");
-        void signOut({ callbackUrl: "/tablet-clock" });
+        await signOut({ redirect: false });
+        window.location.replace("/tablet-clock");
       }, 90000); // 90 secondi di inattività
     };
 

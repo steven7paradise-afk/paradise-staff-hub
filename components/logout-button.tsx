@@ -7,9 +7,10 @@ import { usePathname } from "next/navigation";
 export function LogoutButton({ className }: { className?: string }) {
   const pathname = usePathname();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     const isTablet = pathname?.startsWith("/tablet-clock");
-    void signOut({ callbackUrl: isTablet ? "/tablet-clock" : "/login" });
+    await signOut({ redirect: false });
+    window.location.replace(isTablet ? "/tablet-clock" : "/login");
   };
 
   return (
