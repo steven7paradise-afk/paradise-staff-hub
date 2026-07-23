@@ -120,7 +120,7 @@ export function DesktopSidebarNav({
         </div>
 
         <div className="sidebar-label text-left min-w-0 flex-1">
-          <p className="truncate text-xs font-black uppercase tracking-wide text-[color:var(--sidebar-text)] leading-tight">
+          <p className="truncate text-xs font-black uppercase tracking-wide text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] leading-tight">
             {userName}
           </p>
           <p className="text-[9px] font-black text-[#B85B68] dark:text-paradise-pink uppercase tracking-wider mt-0.5">
@@ -139,7 +139,7 @@ export function DesktopSidebarNav({
           placeholder="Cerca..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 text-xs font-bold text-[color:var(--sidebar-text)] rounded-xl py-1.5 pl-9 pr-4 focus:outline-none focus:border-black/15 placeholder-zinc-400 dark:placeholder-zinc-500"
+          className="w-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 text-xs font-bold text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] rounded-xl py-1.5 pl-9 pr-4 focus:outline-none focus:border-black/15 placeholder-zinc-400 dark:placeholder-zinc-500"
         />
       </div>
 
@@ -163,13 +163,13 @@ export function DesktopSidebarNav({
                   className={cn(
                     "sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-2.5 text-[13px] font-semibold tracking-tight transition-all duration-200",
                     isActive
-                      ? "active bg-black/5 dark:bg-white/10 border-l-pink-500 text-[color:var(--sidebar-text)] shadow-xs"
-                      : "text-[color:var(--sidebar-text)]/75 hover:bg-black/5 dark:hover:bg-white/5 hover:text-[color:var(--sidebar-text)]"
+                      ? "active bg-black/5 dark:bg-white/10 border-l-pink-500 text-[color:var(--sidebar-text)] dark:text-[color:var(--dark-sidebar-text)] shadow-xs"
+                      : "text-[color:var(--sidebar-text)]/75 dark:text-[color:var(--dark-sidebar-text)]/75 hover:bg-black/5 dark:hover:bg-white/5 hover:text-[color:var(--sidebar-text)] dark:hover:text-[color:var(--dark-sidebar-text)]"
                   )}
                 >
                   <DynamicIcon
                     name={item.iconName}
-                    className="size-4 shrink-0 text-[color:var(--sidebar-icon)] transition-colors duration-250"
+                    className="size-4 shrink-0 text-[color:var(--sidebar-icon)] dark:text-[color:var(--dark-sidebar-icon)] transition-colors duration-250"
                   />
                   <span className="sidebar-label transition-transform duration-200 hover:translate-x-0.5">
                     {displayLabel}
