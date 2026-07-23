@@ -15,8 +15,19 @@ import { SidebarFrame } from "@/components/sidebar-frame";
 import { TopControls } from "@/components/top-controls";
 import { NotificationWatcher } from "@/components/notification-watcher";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
+import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import pkg from "@/package.json";
+
+function getContrastYIQ(hexcolor: string) {
+  const hex = hexcolor.replace("#", "");
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return "dark";
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? "dark" : "light";
+}
 
 const nav = [
   // Section: Generale
@@ -457,112 +468,26 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         </div>
       )}
 
-        {/* Desktop Header (hidden xl:block) */}
-        <div className="shrink-0 xl:block hidden">
-          <div className="flex xl:flex-col xl:items-start xl:gap-2 items-center justify-between">
-            <Link href="/dashboard" className="sidebar-brand group flex items-center gap-3" title="Paradise Staff Hub">
-              <div className="grid size-11 place-items-center overflow-hidden rounded-full text-lg font-bold text-white shadow-soft transition-all duration-300 group-hover:scale-105 group-hover:shadow-luxury bg-transparent">
-                <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="size-full object-contain dark:invert" />
-              </div>
-              <div className="sidebar-label">
-                <p className="text-sm font-bold uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] transition-colors duration-300 group-hover:text-[#B85B68] dark:text-[color:var(--dark-sidebar-text)] dark:group-hover:text-paradise-pink">Paradise</p>
-                <p className="sidebar-subtitle text-xs text-[color:var(--sidebar-text)] opacity-55 dark:text-[color:var(--dark-sidebar-text)]">Staff Hub</p>
-              </div>
-            </Link>
-            {currentRole !== "DIPENDENTE" && (
-              <div className="flex items-center gap-3 xl:block">
-                <div className="sidebar-role rounded-full bg-paradise-softPink px-3 py-1 text-xs font-semibold xl:mt-1 hidden xl:inline-block">
-                  {roleLabels[currentRole]}
-                </div>
-              </div>
-            )}
-          </div>
+        {/* Desktop Header & Nav Menu */}
+        <div className="flex-1 min-h-0 flex flex-col hidden xl:flex">
+          <DesktopSidebarNav
+            logoUrl={branding.logo_url}
+            userName={currentUser?.name ?? session?.user?.name ?? ""}
+            userPhoto={currentUser?.photo_url}
+            roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            unreadNotifications={unreadNotifications}
+            items={items.map((item: any) => ({
+              href: item.href,
+              label: item.label,
+              iconName: item.iconName,
+              section: item.section,
+            }))}
+            sidebarConfig={sidebarConfig}
+          />
         </div>
-        <nav className="luxury-scroll mt-5 xl:min-h-0 xl:flex-1 xl:space-y-1 xl:overflow-x-hidden xl:overflow-y-auto hidden xl:block">
-          {(() => {
-            if (sidebarConfig && Array.isArray(sidebarConfig) && sidebarConfig.length > 0) {
-              const renderedHrefs = new Set<string>();
-              const sectionsToRender = sidebarConfig.map(sec => {
-                const matchedItems = items.filter(item => {
-                  const match = sec.routes.includes(item.href);
-                  if (match) renderedHrefs.add(item.href);
-                  return match;
-                }).sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
 
-                return {
-                  ...sec,
-                  items: matchedItems
-                };
-              });
-
-              const unassignedItems = items.filter(item => !renderedHrefs.has(item.href));
-
-              const allSections = [
-                ...sectionsToRender.filter(s => s.items.length > 0),
-                ...(unassignedItems.length > 0 ? [{ id: "fallback-unassigned", title: "Altre Pagine", items: unassignedItems }] : [])
-              ];
-
-              return allSections.map(sec => (
-                <div key={sec.id} className="space-y-0.5">
-                  <div className="sidebar-section-header mt-5 mb-2 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]/40 dark:text-[color:var(--dark-sidebar-text)]/40 sidebar-label select-none">
-                    {sec.title}
-                  </div>
-                  {sec.items.map(item => (
-                    <InstantLink
-                      key={item.href}
-                      href={item.href}
-                      title={getSidebarLabel(item.href, item.label)}
-                      className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
-                      activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
-                    >
-                      <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
-                      <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{getSidebarLabel(item.href, item.label)}</span>
-                      {item.href === "/notifications" && unreadNotifications > 0 ? (
-                        <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
-                          {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                        </span>
-                      ) : null}
-                    </InstantLink>
-                  ))}
-                </div>
-              ));
-            }
-
-            let lastSection = "";
-            return items.map((item) => {
-              const showSectionHeader = currentRole !== "DIPENDENTE" && item.section && item.section !== lastSection;
-              if (showSectionHeader) {
-                lastSection = item.section;
-              }
-
-              return (
-                <div key={item.href}>
-                  {showSectionHeader && (
-                    <div className="sidebar-section-header mt-5 mb-2 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]/40 dark:text-[color:var(--dark-sidebar-text)]/40 sidebar-label select-none">
-                      {item.section}
-                    </div>
-                  )}
-                  <InstantLink
-                    href={item.href}
-                    title={getSidebarLabel(item.href, item.label)}
-                    className="sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-3 text-sm font-medium text-[color:var(--sidebar-text)] transition-all duration-300 hover:bg-paradise-nude dark:text-[color:var(--dark-sidebar-text)] dark:hover:bg-white/10 hover:border-l-paradise-pink/40"
-                    activeClassName="active bg-gradient-to-r from-paradise-pink/15 to-paradise-softPink/5 border-l-paradise-pink text-paradise-noir shadow-sm dark:from-paradise-pink/10 dark:to-transparent dark:border-paradise-pink dark:text-white"
-                  >
-                    <DynamicIcon name={item.iconName} className="size-4 text-[color:var(--sidebar-icon)] transition-colors duration-300 dark:text-[color:var(--dark-sidebar-icon)]" />
-                    <span className="sidebar-label transition-transform duration-300 hover:translate-x-0.5">{getSidebarLabel(item.href, item.label)}</span>
-                    {item.href === "/notifications" && unreadNotifications > 0 ? (
-                      <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[11px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
-                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                      </span>
-                    ) : null}
-                  </InstantLink>
-                </div>
-              );
-            });
-          })()}
-        </nav>
-        <div className="shrink-0 hidden xl:block">
-          <LogoutButton />
+        <div className="shrink-0 hidden xl:block mt-auto pt-4 border-t border-black/5 dark:border-white/5">
+          <LogoutButton className="sidebar-logout flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/5 hover:bg-red-600 hover:text-white px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200" />
         </div>
       </aside>
   );
@@ -617,6 +542,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         ...(currentUser?.sidebar_color ? {
           "--user-sidebar-color": currentUser.sidebar_color,
           "--user-background-color": `color-mix(in srgb, ${currentUser.sidebar_color} 6%, var(--background))`,
+          "--sidebar-text": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
+          "--sidebar-icon": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
+          "--dark-sidebar-text": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
+          "--dark-sidebar-icon": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
         } : {}),
       } as React.CSSProperties}
       transparentMain={transparentMain}
