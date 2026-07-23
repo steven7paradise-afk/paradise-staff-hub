@@ -58,6 +58,7 @@ export default async function ProfilePage() {
     dashboardSettingRaw,
     clientControlForms,
     allEmployees,
+    fotoForm,
   ] = await Promise.all([
     prisma.scheduleEntry.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, include: { category: true } }),
     prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } }),
