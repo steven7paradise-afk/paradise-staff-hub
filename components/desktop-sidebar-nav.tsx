@@ -144,7 +144,7 @@ export function DesktopSidebarNav({
       </div>
 
       {/* 🗺️ SCROLLABLE NAVIGATION LINKS */}
-      <nav className="luxury-scroll mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+      <nav className="no-scrollbar mt-4 flex-1 space-y-4 overflow-y-auto">
         {sections.map((sec) => (
           <div key={sec.id} className="space-y-0.5">
             <div className="sidebar-section-header mb-1.5 px-3.5 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] text-[color:var(--sidebar-text)]/40 dark:text-[color:var(--dark-sidebar-text)]/40 sidebar-label select-none">
@@ -161,7 +161,7 @@ export function DesktopSidebarNav({
                   href={item.href}
                   title={displayLabel}
                   className={cn(
-                    "sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200",
+                    "sidebar-nav-link flex shrink-0 items-center gap-3 rounded-l-none rounded-r-2xl border-l-4 border-transparent pl-3 pr-4 py-2.5 text-[13px] font-semibold tracking-tight transition-all duration-200",
                     isActive
                       ? "active bg-black/5 dark:bg-white/10 border-l-pink-500 text-[color:var(--sidebar-text)] shadow-xs"
                       : "text-[color:var(--sidebar-text)]/75 hover:bg-black/5 dark:hover:bg-white/5 hover:text-[color:var(--sidebar-text)]"

@@ -131,7 +131,7 @@ export function MobileMenuDrawer({
           </div>
 
           {/* Main Navigation links */}
-          <div className="luxury-scroll mt-5 flex-1 overflow-y-auto pr-1 space-y-1">
+          <div className="no-scrollbar mt-5 flex-1 overflow-y-auto space-y-1">
             {filteredItems.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -140,7 +140,7 @@ export function MobileMenuDrawer({
                   href={item.href}
                   onClick={() => setIsOpen(false)}
                   className={cn(
-                    "flex items-center justify-between gap-3.5 rounded-xl px-3.5 py-2.5 text-[11px] font-black uppercase tracking-wider transition-all duration-250",
+                    "flex items-center justify-between gap-3.5 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold tracking-tight transition-all duration-250",
                     isActive
                       ? "bg-[#2563eb] text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]"
                       : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white"
