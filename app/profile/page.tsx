@@ -81,6 +81,15 @@ export default async function ProfilePage() {
     prisma.setting.findUnique({ where: { key: DASHBOARD_SETTINGS_KEY } }).catch(() => null),
     prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }).catch(() => []),
     prisma.user.findMany({ where: { active: true, role: { not: "SUPER_ADMIN" } }, select: { id: true, name: true } }).catch(() => []),
+    prisma.serviceForm.findFirst({
+      where: {
+        OR: [
+          { name: "Foto Ordini" },
+          { category: "Foto" },
+        ],
+      },
+      orderBy: { created_at: "asc" },
+    }).catch(() => null),
   ]);
   
   const hours = monthlyPersonalHours(year, month, schedules, logs, records);
@@ -152,8 +161,50 @@ export default async function ProfilePage() {
   const totalEarnedPoints = monthGoalPoints + manualBonusPoints;
   const availablePoints = Math.max(0, totalEarnedPoints - redeemedPoints);
 
+  // Fetch client photos uploaded by this worker
+  let clientPhotos: Array<{ id: string; orderNumber: string; url: string; date: string }> = [];
+  if (fotoForm) {
+    const photoResponses = await prisma.serviceFormResponse.findMany({
+      where: {
+        form_id: fotoForm.id,
+        user_id: user.id,
+      },
+      orderBy: { created_at: "desc" },
+    }).catch(() => []);
+
+    const ordersMap = new Map<string, { id: string; orderNumber: string; url: string; date: string; isFront: boolean }>();
+    for (const row of photoResponses) {
+      const answers = (row.answers as Record<string, any>) || {};
+      const orderNumber = answers.orderNumber ?? "";
+      const slot = Number(answers.slot ?? answers.photo?.slot ?? 0);
+      const url = answers.photo?.driveFileUrl ?? answers.photo?.webViewLink ?? "";
+
+      if (!orderNumber || !url) continue;
+
+      const isFrontPhoto = slot === 1 || slot === 3;
+      const existing = ordersMap.get(orderNumber);
+
+      if (!existing || (isFrontPhoto && !existing.isFront)) {
+        ordersMap.set(orderNumber, {
+          id: row.id,
+          orderNumber,
+          url,
+          date: row.created_at.toISOString(),
+          isFront: isFrontPhoto,
+        });
+      }
+    }
+
+    clientPhotos = Array.from(ordersMap.values()).map(({ id, orderNumber, url, date }) => ({
+      id,
+      orderNumber,
+      url,
+      date,
+    }));
+  }
+
   return (
-    <AppShell title="Profilo" role={session.user.role as Role}>
+    <AppShell title="Profilo" role={session.user.role as Role} hideHeader={true}>
       <ClientProfile
         user={{
           id: user.id,
@@ -188,6 +239,7 @@ export default async function ProfilePage() {
           totalEarnedPoints,
         }}
         unreadNotifications={unreadNotifications}
+        clientPhotos={clientPhotos}
         settingsNode={
           <ProfileSettings
             photoUrl={user.photo_url}
