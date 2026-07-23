@@ -131,7 +131,7 @@ function uniqueMenuItemsForAccess(role: Role) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
@@ -384,7 +384,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   const aside = (
       <aside className={cn(
-        "z-30 w-full max-w-full border-b-0 border-transparent bg-[color:var(--user-header-color,var(--sidebar))] xl:bg-[color:var(--user-sidebar-color,var(--sidebar))] px-4 py-3 text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden",
+        "z-30 w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
+        transparentMobileHeader 
+          ? "absolute top-0 left-0 right-0 bg-transparent shadow-none px-4 py-3" 
+          : "bg-[color:var(--user-header-color,var(--sidebar))] px-4 py-3",
         hideMobileHeader && "hidden xl:flex"
       )}>
         {/* Mobile Header (xl:hidden) */}

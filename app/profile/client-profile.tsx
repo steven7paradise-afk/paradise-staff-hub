@@ -138,7 +138,7 @@ export function ClientProfile({
     <div className="w-full max-w-6xl mx-auto space-y-6 pb-16">
       
       {/* 🌸 LUXURY PARADISE HERO BANNER (REFINED ELEGANT DESIGN) */}
-      <div className="relative overflow-hidden bg-[color:var(--sidebar)] border border-black/5 dark:border-white/10 p-6 md:p-8 text-[color:var(--sidebar-text)] shadow-soft rounded-3xl">
+      <div className="relative overflow-hidden bg-[color:var(--sidebar)] border-b border-black/5 dark:border-white/10 md:border md:border-black/5 md:dark:border-white/10 pt-20 pb-6 px-6 md:p-8 text-[color:var(--sidebar-text)] shadow-soft rounded-none md:rounded-3xl -mx-4 -mt-5 sm:-mx-6 sm:-mt-5 md:mx-0 md:mt-0">
         <div className="absolute -right-20 -top-20 w-80 h-80 bg-black/5 dark:bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-20 -bottom-20 w-80 h-80 bg-black/5 dark:bg-white/5 rounded-full blur-3xl pointer-events-none" />
 

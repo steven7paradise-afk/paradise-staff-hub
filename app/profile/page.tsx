@@ -205,7 +205,7 @@ export default async function ProfilePage() {
   }
 
   return (
-    <AppShell title="Profilo" role={session.user.role as Role} hideHeader={true}>
+    <AppShell title="Profilo" role={session.user.role as Role} hideHeader={true} transparentMobileHeader={true}>
       <ClientProfile
         user={{
           id: user.id,
