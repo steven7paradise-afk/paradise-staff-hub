@@ -102,30 +102,14 @@ export function DesktopSidebarNav({
 
   return (
     <div className="flex flex-col h-full">
-      {/* 👤 LUXURY USER PROFILE CARD (TOP OF SIDEBAR) */}
-      <div className="sidebar-profile-card flex items-center gap-3 px-3 py-3.5 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 shrink-0 mx-1">
-        <div className="relative shrink-0 select-none">
-          <div className="size-10 overflow-hidden rounded-full border border-black/5 dark:border-white/10 bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800 shadow-xs">
-            {userPhoto ? (
-              <img
-                src={resolveDrivePhotoUrl(userPhoto)}
-                alt={userName}
-                className="size-full object-cover rounded-full select-none pointer-events-none"
-              />
-            ) : (
-              userName.slice(0, 2).toUpperCase()
-            )}
-          </div>
-          <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-neutral-900" />
+      {/* 🌸 BRAND LOGO */}
+      <div className="flex items-center gap-3 px-3 py-3 shrink-0 mx-1">
+        <div className="size-10 shrink-0 overflow-hidden rounded-full bg-transparent flex items-center justify-center">
+          <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
         </div>
-
-        <div className="sidebar-label text-left min-w-0 flex-1">
-          <p className="truncate text-xs font-black uppercase tracking-wide text-[color:var(--sidebar-text)] leading-tight">
-            {userName}
-          </p>
-          <p className="text-[9px] font-black text-[#B85B68] dark:text-paradise-pink uppercase tracking-wider mt-0.5">
-            {roleLabel}
-          </p>
+        <div className="sidebar-label text-left min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)]">Paradise</p>
+          <p className="text-[10px] text-[color:var(--sidebar-text)] opacity-55">Staff Hub</p>
         </div>
       </div>
 
