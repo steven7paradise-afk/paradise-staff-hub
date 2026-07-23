@@ -74,6 +74,15 @@ textarea {
     display: none !important;
   }
 
+  .sidebar-collapsed .sidebar-profile-card {
+    background: transparent !important;
+    border-color: transparent !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    justify-content: center !important;
+    margin: 0 auto !important;
+  }
+
   .sidebar-collapsed .sidebar-brand {
     justify-content: center;
   }

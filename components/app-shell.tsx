@@ -134,15 +134,27 @@ function uniqueMenuItemsForAccess(role: Role) {
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
-  const serviceSettingPromise = currentRole === "DIPENDENTE" && session?.user?.sedeId
-    ? prisma.setting.findUnique({ where: { key: `service_page:${session.user.sedeId}` } }).catch(() => null)
-    : Promise.resolve(null);
+
+  const settingsKeys = [
+    ASSISTANCE_TABLES_ACCESS_KEY,
+    PLANNING_ACCESS_KEY,
+    "sidebar_configuration",
+  ];
+  if (currentRole === "DIPENDENTE" && session?.user?.sedeId) {
+    settingsKeys.push(`service_page:${session.user.sedeId}`);
+  }
+
+  const settingsPromise = prisma.setting.findMany({
+    where: { key: { in: settingsKeys } }
+  }).catch(() => []);
+
   const formsAccessPromise = currentRole === "DIPENDENTE" && session?.user?.id
     ? prisma.serviceForm.findMany({
         where: { active: true },
         select: { notify_user_ids: true, notify_roles: true }
       }).catch(() => [])
     : Promise.resolve([]);
+
   const currentUserPromise = session?.user?.id
     ? prisma.user.findUnique({
         where: { id: session.user.id },
@@ -157,36 +169,25 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         },
       }).catch(() => null)
     : Promise.resolve(null);
+
   const unreadNotificationsPromise = session?.user?.id
     ? prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
     : Promise.resolve(0);
-  const tablesAccessPromise = session?.user?.id
-    ? prisma.setting.findUnique({ where: { key: ASSISTANCE_TABLES_ACCESS_KEY } }).catch(() => null)
-    : Promise.resolve(null);
-  const planningAccessPromise = session?.user?.id
-    ? prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }).catch(() => null)
-    : Promise.resolve(null);
-  const sidebarConfigPromise = prisma.setting.findUnique({
-    where: { key: "sidebar_configuration" }
-  }).catch(() => null);
-  const colleaguesPromise = session?.user?.id
-    ? prisma.user.findMany({
-        where: { active: true, role: { not: "SUPER_ADMIN" } },
-        take: 3,
-        select: { id: true, name: true, photo_url: true }
-      }).catch(() => [])
-    : Promise.resolve([]);
 
-  const [serviceSetting, formsAccessSettings, currentUser, unreadNotifications, tablesAccessSetting, planningAccessSetting, sidebarConfigSetting, colleagues] = await Promise.all([
-    serviceSettingPromise,
+  const [settingsList, formsAccessSettings, currentUser, unreadNotifications] = await Promise.all([
+    settingsPromise,
     formsAccessPromise,
     currentUserPromise,
     unreadNotificationsPromise,
-    tablesAccessPromise,
-    planningAccessPromise,
-    sidebarConfigPromise,
-    colleaguesPromise,
   ]);
+
+  const settingsMap = new Map(settingsList.map((s) => [s.key, s]));
+  const sidebarConfigSetting = settingsMap.get("sidebar_configuration") || null;
+  const planningAccessSetting = settingsMap.get(PLANNING_ACCESS_KEY) || null;
+  const tablesAccessSetting = settingsMap.get(ASSISTANCE_TABLES_ACCESS_KEY) || null;
+  const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
+    ? settingsMap.get(`service_page:${session.user.sedeId}`) || null
+    : null;
 
   let userAccessList: string[] | undefined = undefined;
   if (currentUser && currentRole !== "SUPER_ADMIN") {
@@ -396,7 +397,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userPhoto={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
-            colleagues={colleagues}
             items={filterMenuItems(
               (currentRole === "DIPENDENTE"
                 ? [

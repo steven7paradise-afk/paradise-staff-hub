@@ -103,7 +103,7 @@ export function DesktopSidebarNav({
   return (
     <div className="flex flex-col h-full">
       {/* 👤 LUXURY USER PROFILE CARD (TOP OF SIDEBAR) */}
-      <div className="flex items-center gap-3 px-3 py-3.5 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 shrink-0 mx-1">
+      <div className="sidebar-profile-card flex items-center gap-3 px-3 py-3.5 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 shrink-0 mx-1">
         <div className="relative shrink-0 select-none">
           <div className="size-10 overflow-hidden rounded-full border border-black/5 dark:border-white/10 bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800 shadow-xs">
             {userPhoto ? (
