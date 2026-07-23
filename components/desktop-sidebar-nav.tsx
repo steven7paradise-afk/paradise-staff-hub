@@ -23,6 +23,7 @@ type SidebarFolder = {
 };
 
 type DesktopSidebarNavProps = {
+  logoUrl: string | null;
   userName: string;
   userPhoto: string | null;
   roleLabel: string;
@@ -33,6 +34,7 @@ type DesktopSidebarNavProps = {
 };
 
 export function DesktopSidebarNav({
+  logoUrl,
   userName,
   userPhoto,
   roleLabel,
