@@ -24,6 +24,8 @@
   --card: var(--dark-card);
   --text: var(--dark-text);
   --button: var(--dark-button);
+  --sidebar-text: var(--dark-sidebar-text);
+  --sidebar-icon: var(--dark-sidebar-icon);
 }
 
 .dark .paradise-theme-root {
@@ -32,6 +34,8 @@
   --card: var(--dark-card);
   --text: var(--dark-text);
   --button: var(--dark-button);
+  --sidebar-text: var(--dark-sidebar-text);
+  --sidebar-icon: var(--dark-sidebar-icon);
 }
 
 * {

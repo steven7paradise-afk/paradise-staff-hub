@@ -538,15 +538,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),
-        ...(currentUser?.header_color ? { "--user-header-color": currentUser.header_color } : {}),
-        ...(currentUser?.sidebar_color ? {
-          "--user-sidebar-color": currentUser.sidebar_color,
-          "--user-background-color": `color-mix(in srgb, ${currentUser.sidebar_color} 6%, var(--background))`,
-          "--sidebar-text": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
-          "--sidebar-icon": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
-          "--dark-sidebar-text": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
-          "--dark-sidebar-icon": getContrastYIQ(currentUser.sidebar_color) === "dark" ? "#1F1F1F" : "#FFFFFF",
-        } : {}),
+        "--sidebar-text": getContrastYIQ(branding.sidebar_color || "#FFFFFF") === "dark" ? "#1F1F1F" : "#FFFFFF",
+        "--sidebar-icon": getContrastYIQ(branding.sidebar_color || "#FFFFFF") === "dark" ? "#1F1F1F" : "#FFFFFF",
+        "--dark-sidebar-text": getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF",
+        "--dark-sidebar-icon": getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF",
       } as React.CSSProperties}
       transparentMain={transparentMain}
     />
