@@ -247,7 +247,9 @@ export async function uploadOrderPhotoToGoogleDrive(
   clientName: string,
   orderNumber: string
 ) {
-  const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || "0AA2QnOb-NY5lUk9PVA";
+  const rootFolderId =
+    process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID ||
+    "0ABwI50LPNFjKUk9PVA";
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -331,7 +333,9 @@ export async function uploadFotoOrdineToGoogleDrive(
   mimeType: string,
   orderNumber: string
 ) {
-  const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || "0AA2QnOb-NY5lUk9PVA";
+  const rootFolderId =
+    process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID ||
+    "0ABwI50LPNFjKUk9PVA";
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
