@@ -758,35 +758,6 @@ export function OrderManager({
       );
     }
 
-    if (Array.isArray(order.activity_log) && order.activity_log.length > 0) {
-      sectionTitle("Cronologia stati");
-      const events = order.activity_log.slice(-2);
-      doc.setFillColor(255, 248, 251);
-      doc.setDrawColor(248, 211, 228);
-      const boxHeight = Math.min(24, events.length * 10 + 4);
-      doc.roundedRect(margin + 8, y - 2, contentWidth - 8, boxHeight, 2, 2, "FD");
-      events.forEach((log: any, index: number) => {
-        const when = log.at || log.date ? formatDateTime(log.at || log.date) : "";
-        const from = ORDER_COLUMNS.find((column) => column.id === log.from)?.label ?? log.from;
-        const to = ORDER_COLUMNS.find((column) => column.id === log.to)?.label ?? log.to;
-        const title = log.action || (log.from !== undefined || log.to !== undefined ? `Da ${from || "sconosciuto"} a ${to || "sconosciuto"}` : "Attivita registrata");
-        const eventY = y + index * 10;
-        doc.setFillColor(pink[0], pink[1], pink[2]);
-        doc.circle(margin + 3, eventY + 2, 1.2, "F");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(6.5);
-        doc.setTextColor(pink[0], pink[1], pink[2]);
-        doc.text((when || "Evento").toUpperCase(), margin + 11, eventY + 1.5);
-        doc.setFontSize(6.8);
-        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-        doc.text(doc.splitTextToSize(title, contentWidth - 22), margin + 11, eventY + 5.2);
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-        doc.text(String(log.by || log.user || "Staff"), margin + 11, eventY + 8.4);
-      });
-      y += boxHeight + 3;
-    }
-
     doc.setDrawColor(pink[0], pink[1], pink[2]);
     doc.setLineDashPattern([1.5, 1.2], 0);
     line(5, barcodeTop - 5, 97, barcodeTop - 5, pink);
