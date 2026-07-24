@@ -35,8 +35,33 @@ type Employee = {
   hrNotes: string;
   accessList: string[];
   iban?: string;
+  contractHistory?: ContractHistoryItem[] | null;
+  sicknessStats?: {
+    totalDays: number;
+    justifiedDays: number;
+    unjustifiedDays: number;
+  };
   lastEditedByName?: string | null;
   lastEditedAt?: string | null;
+};
+
+type ContractHistoryItem = {
+  tipo?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  renewedAt?: string;
+  note?: string;
+};
+
+type ContractRow = {
+  tipo: string;
+  inizio: string;
+  fine: string;
+  stato: string;
+  rinnovatoIl: string;
+  scadenza: string;
+  note: string;
 };
 
 type Location = { id: string; name: string };
@@ -125,6 +150,7 @@ export function StaffDirectory({
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Employee | null>(null);
   const [pinInput, setPinInput] = useState("");
+  const [pinConfirmInput, setPinConfirmInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [stats, setStats] = useState<{
     jobs: { count: number; growth: number };
@@ -338,6 +364,12 @@ export function StaffDirectory({
       return;
     }
 
+    if (pinInput && pinInput !== pinConfirmInput) {
+      setErrorMsg("La conferma PIN non corrisponde.");
+      setSubmitting(false);
+      return;
+    }
+
     if (passwordInput && passwordInput.length < 8) {
       setErrorMsg("La password deve contenere almeno 8 caratteri.");
       setSubmitting(false);
@@ -366,6 +398,7 @@ export function StaffDirectory({
           accessList: editForm.accessList,
           hrNotes: editForm.hrNotes || undefined,
           iban: editForm.iban || undefined,
+          contractHistory: getContractHistory(editForm),
           pin: pinInput || undefined,
           password: passwordInput || undefined
         })
@@ -402,12 +435,15 @@ export function StaffDirectory({
         hrNotes: data.hr_notes ?? "",
         accessList: (data.access_list as string[]) ?? [],
         iban: data.iban ?? "",
+        contractHistory: Array.isArray(data.contract_history) ? data.contract_history : [],
+        sicknessStats: editForm.sicknessStats,
       };
 
       setStaff((prev) => prev.map((emp) => emp.id === updated.id ? updated : emp));
       setSelectedEmployee(updated);
       setIsEditing(false);
       setPinInput("");
+      setPinConfirmInput("");
       setPasswordInput("");
       setSuccessMsg("Profilo dipendente aggiornato con successo!");
       setTimeout(() => setSuccessMsg(""), 3000);
@@ -448,6 +484,12 @@ export function StaffDirectory({
 
     if (pinInput && !/^\d{4,6}$/.test(pinInput)) {
       setErrorMsg("Il PIN deve essere composto da 4 a 6 numeri.");
+      setSubmitting(false);
+      return;
+    }
+
+    if (pinInput && pinInput !== pinConfirmInput) {
+      setErrorMsg("La conferma PIN non corrisponde.");
       setSubmitting(false);
       return;
     }
@@ -515,6 +557,7 @@ export function StaffDirectory({
         hrNotes: data.hr_notes ?? "",
         accessList: (data.access_list as string[]) ?? [],
         iban: data.iban ?? "",
+        sicknessStats: { totalDays: 0, justifiedDays: 0, unjustifiedDays: 0 },
       };
 
       setStaff((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
@@ -526,6 +569,7 @@ export function StaffDirectory({
       setCreationMessage(`Dipendente creato con successo! PIN: ${pinInput || "generato automaticamente"} e password provvisoria generata. ${emailText}`);
       setNewEmployeeForm(null);
       setPinInput("");
+      setPinConfirmInput("");
       setPasswordInput("");
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -631,103 +675,109 @@ export function StaffDirectory({
     </button>
   );
 
-  const buildContractsList = (startStr?: string, endStr?: string) => {
+  const formatContractDate = (date: Date | string) => {
+    const parsed = date instanceof Date ? date : new Date(date);
+    return isNaN(parsed.getTime()) ? "—" : parsed.toLocaleDateString("it-IT");
+  };
+
+  const formatDateInput = (date: Date) => date.toISOString().slice(0, 10);
+
+  const getDaysLabel = (date: Date) => {
+    const days = Math.ceil((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    if (days < 0) return "—";
+    if (days === 0) return "Oggi";
+    return `Tra ${days} giorni`;
+  };
+
+  const getContractHistory = (employee: Employee | null) => {
+    return Array.isArray(employee?.contractHistory) ? employee.contractHistory : [];
+  };
+
+  const buildContractsList = (startStr?: string, endStr?: string, history: ContractHistoryItem[] = []): ContractRow[] => {
     if (!startStr) return [];
     const start = new Date(startStr);
     const end = endStr ? new Date(endStr) : null;
     if (isNaN(start.getTime())) return [];
 
-    const list = [];
-    const formatDate = (d: Date) => d.toLocaleDateString("it-IT");
+    const list: ContractRow[] = [];
+    const daysLeft = end ? Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
 
-    const startYear = start.getFullYear();
-    const currentYear = new Date().getFullYear();
+    list.push({
+      tipo: "Assunzione iniziale",
+      inizio: formatContractDate(start),
+      fine: end ? formatContractDate(end) : "Indeterminato",
+      stato: daysLeft === null || daysLeft >= 0 ? "Attivo" : "Completato",
+      rinnovatoIl: "—",
+      scadenza: daysLeft === null ? "—" : daysLeft < 0 ? "—" : daysLeft === 0 ? "Scade oggi" : `Tra ${daysLeft} giorni`,
+      note: "Contratto corrente"
+    });
 
-    if (startYear < currentYear) {
-      const initialEnd = new Date(start);
-      initialEnd.setFullYear(startYear + 1);
-      initialEnd.setDate(initialEnd.getDate() - 1);
+    history.forEach((item) => {
+      const renewalEnd = item.endDate ? new Date(item.endDate) : null;
       list.push({
-        tipo: "Assunzione iniziale",
-        inizio: formatDate(start),
-        fine: formatDate(initialEnd),
-        stato: "Completato",
-        rinnovatoIl: "—",
-        scadenza: "—",
-        note: "Primo contratto"
+        tipo: item.tipo || "Rinnovo",
+        inizio: item.startDate ? formatContractDate(item.startDate) : "—",
+        fine: item.endDate ? formatContractDate(item.endDate) : "—",
+        stato: item.status || "Pianificato",
+        rinnovatoIl: item.renewedAt ? formatContractDate(item.renewedAt) : "—",
+        scadenza: renewalEnd && !isNaN(renewalEnd.getTime()) ? getDaysLabel(renewalEnd) : "—",
+        note: item.note || "Da confermare"
       });
-
-      const renewalStart = new Date(start);
-      renewalStart.setFullYear(startYear + 1);
-      const renewalEnd = end ? end : new Date(renewalStart);
-      if (!end) {
-        renewalEnd.setFullYear(renewalStart.getFullYear() + 1);
-        renewalEnd.setDate(renewalEnd.getDate() - 1);
-      }
-      const daysLeft = Math.ceil((renewalEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      list.push({
-        tipo: "Rinnovo",
-        inizio: formatDate(renewalStart),
-        fine: formatDate(renewalEnd),
-        stato: daysLeft < 0 ? "Completato" : "Attivo",
-        rinnovatoIl: "10/07/2025",
-        scadenza: daysLeft < 0 ? "—" : daysLeft === 0 ? "Scade oggi" : `Tra ${daysLeft} giorni`,
-        note: "Rinnovo annuale"
-      });
-
-      const nextStart = new Date(renewalEnd);
-      nextStart.setDate(nextStart.getDate() + 1);
-      const nextEnd = new Date(nextStart);
-      nextEnd.setFullYear(nextStart.getFullYear() + 1);
-      nextEnd.setDate(nextEnd.getDate() - 1);
-      const nextDaysLeft = Math.ceil((nextStart.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      list.push({
-        tipo: "Prossimo rinnovo previsto",
-        inizio: formatDate(nextStart),
-        fine: formatDate(nextEnd),
-        stato: "Pianificato",
-        rinnovatoIl: "—",
-        scadenza: nextDaysLeft < 0 ? "—" : `Tra ${nextDaysLeft} giorni`,
-        note: "Da confermare"
-      });
-    } else {
-      const daysLeft = end ? Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
-      list.push({
-        tipo: "Assunzione iniziale",
-        inizio: formatDate(start),
-        fine: end ? formatDate(end) : "Indeterminato",
-        stato: daysLeft === null || daysLeft >= 0 ? "Attivo" : "Completato",
-        rinnovatoIl: "—",
-        scadenza: daysLeft === null ? "—" : daysLeft < 0 ? "—" : `Tra ${daysLeft} giorni`,
-        note: "Contratto corrente"
-      });
-      
-      if (end) {
-        const nextStart = new Date(end);
-        nextStart.setDate(nextStart.getDate() + 1);
-        const nextEnd = new Date(nextStart);
-        nextEnd.setFullYear(nextStart.getFullYear() + 1);
-        nextEnd.setDate(nextEnd.getDate() - 1);
-        const nextDaysLeft = Math.ceil((nextStart.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-        list.push({
-          tipo: "Prossimo rinnovo previsto",
-          inizio: formatDate(nextStart),
-          fine: formatDate(nextEnd),
-          stato: "Pianificato",
-          rinnovatoIl: "—",
-          scadenza: `Tra ${nextDaysLeft} giorni`,
-          note: "Da confermare"
-        });
-      }
-    }
+    });
 
     return list;
+  };
+
+  const planContractRenewal = () => {
+    if (!editForm) return;
+    const history = getContractHistory(editForm);
+    const lastEnd = history.length > 0 ? history[history.length - 1].endDate : editForm.contractEnd;
+
+    if (!lastEnd) {
+      setErrorMsg("Inserisci prima una data di fine contratto.");
+      return;
+    }
+
+    const nextStart = new Date(lastEnd);
+    if (isNaN(nextStart.getTime())) {
+      setErrorMsg("La data di fine contratto non è valida.");
+      return;
+    }
+
+    nextStart.setDate(nextStart.getDate() + 1);
+    const nextEnd = new Date(nextStart);
+    nextEnd.setFullYear(nextStart.getFullYear() + 1);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+
+    const confirmed = window.confirm(
+      `Vuoi pianificare il rinnovo dal ${formatContractDate(nextStart)} al ${formatContractDate(nextEnd)}?`
+    );
+    if (!confirmed) return;
+
+    setEditForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        contractHistory: [
+          ...getContractHistory(prev),
+          {
+            tipo: "Rinnovo",
+            startDate: formatDateInput(nextStart),
+            endDate: formatDateInput(nextEnd),
+            status: "Pianificato",
+            renewedAt: "",
+            note: "Da confermare"
+          }
+        ]
+      };
+    });
+    setErrorMsg("");
   };
 
   const renderFullscreenEditor = () => {
     if (!editForm) return null;
 
-    const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd);
+    const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm));
 
     const PLATFORMS = [
       { key: "shopify", label: "Shopify", val: "Shopify" },
@@ -1078,6 +1128,29 @@ export function StaffDirectory({
                     </Select>
                   </label>
 
+                  <div className="rounded-[22px] border border-black/5 bg-[#fcfaf8] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Malattie anno corrente</span>
+                      <Badge tone={(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "pink" : "green"}>
+                        {(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "Da controllare" : "Ok"}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="rounded-2xl border border-black/5 bg-white p-3">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Totale</p>
+                        <p className="mt-1 text-lg font-black text-neutral-900">{editForm.sicknessStats?.totalDays ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700/70">Giust.</p>
+                        <p className="mt-1 text-lg font-black text-emerald-800">{editForm.sicknessStats?.justifiedDays ?? 0}</p>
+                      </div>
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-3">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-rose-700/70">Manca</p>
+                        <p className="mt-1 text-lg font-black text-rose-800">{editForm.sicknessStats?.unjustifiedDays ?? 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <label className="block space-y-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Cambia PIN (4-6 cifre)</span>
                     <Field
@@ -1093,6 +1166,8 @@ export function StaffDirectory({
                   <label className="block space-y-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Conferma PIN</span>
                     <Field
+                      value={pinConfirmInput}
+                      onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
                       placeholder="Conferma PIN"
                       maxLength={6}
                       type="password"
@@ -1100,29 +1175,8 @@ export function StaffDirectory({
                     />
                   </label>
 
-                  <div className="pt-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block mb-1">Cambia password</span>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setErrorMsg("");
-                        try {
-                          const res = await fetch(`/api/profile/password`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ email: editForm.email })
-                          });
-                          if (!res.ok) throw new Error("Errore invio email reset password.");
-                          setSuccessMsg("Email per il reset della password inviata con successo!");
-                          setTimeout(() => setSuccessMsg(""), 3500);
-                        } catch (err: any) {
-                          setErrorMsg(err.message);
-                        }
-                      }}
-                      className="w-full flex items-center justify-center gap-2 rounded-2xl border border-[#B85B68]/20 bg-[#B85B68]/5 px-4 py-3 text-xs font-bold text-[#B85B68] hover:bg-[#B85B68]/10 active:scale-98 transition duration-200"
-                    >
-                      <Mail className="size-4" /> Invia link di reimpostazione
-                    </button>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+                    Il PIN viene aggiornato quando premi Salva modifiche. Il reset password via email resta nascosto finche configuriamo il servizio email.
                   </div>
                 </div>
               </div>
@@ -1153,9 +1207,19 @@ export function StaffDirectory({
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm lg:col-span-2">
-                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                  <ClipboardList className="size-4 text-[#C66170]" />
-                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Storico contratti e rinnovi</h2>
+                <div className="flex flex-col gap-3 border-b border-black/5 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="size-4 text-[#C66170]" />
+                    <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Storico contratti e rinnovi</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={planContractRenewal}
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-2xl border border-[#C66170]/20 bg-[#C66170]/5 px-3 text-xs font-black uppercase tracking-wider text-[#B85B68] transition hover:bg-[#C66170]/10 active:scale-[0.98]"
+                  >
+                    <Plus className="size-4" />
+                    Pianifica rinnovo
+                  </button>
                 </div>
 
                 <div className="overflow-x-auto mt-4">
@@ -1340,6 +1404,7 @@ export function StaffDirectory({
                   setCreationMessage("");
                   setErrorMsg("");
                   setPinInput("");
+                  setPinConfirmInput("");
                   setPasswordInput("");
                 }}
                 className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300 rounded-2xl min-h-11 shrink-0"
@@ -1439,6 +1504,7 @@ export function StaffDirectory({
                 setIsEditing(true);
                 setEditForm({ ...emp });
                 setPinInput("");
+                setPinConfirmInput("");
                 setPasswordInput("");
                 setErrorMsg("");
                 const isCustom = emp.mansione && 
@@ -1739,13 +1805,22 @@ export function StaffDirectory({
                 </label>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-black/5 dark:border-white/5 pt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-black/5 dark:border-white/5 pt-3">
                 <label className="space-y-1">
                   <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">PIN Personalizzato (4-6 cifre)</span>
                   <Field 
                     value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="Lascia vuoto per generare casuale"
+                    maxLength={6}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">Conferma PIN</span>
+                  <Field 
+                    value={pinConfirmInput}
+                    onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="Ripeti PIN"
                     maxLength={6}
                   />
                 </label>
