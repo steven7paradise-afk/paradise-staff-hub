@@ -2,13 +2,15 @@
 
 import Papa from "papaparse";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, CalendarDays, Camera, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
+const ORDER_LABEL_BASE_URL = "https://www.paradisebeauty.it";
 const COMPANY_INFO = {
   name: "PARADISE BEAUTY",
   subtitle: "Paradise Hair & Beauty",
@@ -313,6 +315,52 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+function orderPublicUrl(orderId: string) {
+  return `${ORDER_LABEL_BASE_URL}/ordine/${encodeURIComponent(orderId)}`;
+}
+
+const CODE128_PATTERNS = [
+  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+  "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
+];
+
+function code128Values(value: string) {
+  const safe = value
+    .split("")
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 32 && code <= 127 ? char : "-";
+    })
+    .join("");
+  const values = [104, ...safe.split("").map((char) => char.charCodeAt(0) - 32)];
+  const checksum = values.reduce((sum, code, index) => sum + code * (index === 0 ? 1 : index), 0) % 103;
+  return [...values, checksum, 106];
+}
+
+function drawCode128(doc: any, value: string, x: number, y: number, width: number, height: number) {
+  const patterns = code128Values(value).map((code) => CODE128_PATTERNS[code]).join("");
+  const totalModules = patterns.split("").reduce((sum, item) => sum + Number(item), 0);
+  const moduleWidth = width / totalModules;
+  let cursor = x;
+  doc.setFillColor(0, 0, 0);
+  patterns.split("").forEach((item, index) => {
+    const segmentWidth = Number(item) * moduleWidth;
+    if (index % 2 === 0) {
+      doc.rect(cursor, y, segmentWidth, height, "F");
+    }
+    cursor += segmentWidth;
+  });
+}
+
 function orderPickup(order: OrderResponse) {
   const pickup = order.answers?.__pickup;
   if (!pickup || typeof pickup !== "object") return null;
@@ -357,6 +405,7 @@ export function OrderManager({
   currentUserName: string;
   currentUserRole: string;
 }) {
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState(initialOrders);
   const [query, setQuery] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
@@ -373,6 +422,17 @@ export function OrderManager({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
+
+  useEffect(() => {
+    const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
+    if (!target || selected?.id === target) return;
+    const cleanTarget = target.replace(/^#/, "").trim().toLowerCase();
+    const match = orders.find((order) => {
+      const cleanNumber = orderNumber(order).replace(/^#/, "").trim().toLowerCase();
+      return order.id === target || cleanNumber === cleanTarget;
+    });
+    if (match) setSelected(match);
+  }, [orders, searchParams, selected?.id]);
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -464,10 +524,11 @@ export function OrderManager({
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 203] });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 10;
+    const margin = 7;
     const contentWidth = pageWidth - margin * 2;
     const orderNo = orderNumber(order);
     const client = orderClientName(order);
+    const publicUrl = orderPublicUrl(orderNo.replace(/^#/, "").trim() || order.id);
     const fields = (order.form?.fields ?? [])
       .map((field) => ({ label: field.label, value: order.answers?.[field.id], id: field.id }))
       .filter((field) => field.value && !field.id.startsWith("__"));
@@ -475,114 +536,174 @@ export function OrderManager({
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => (blob ? blobToDataUrl(blob) : ""))
       .catch(() => "");
-    const companyLines = [
-      COMPANY_INFO.subtitle,
-      COMPANY_INFO.address,
-      COMPANY_INFO.phone ? `Tel. ${COMPANY_INFO.phone}` : "",
-      COMPANY_INFO.email ? `Email: ${COMPANY_INFO.email}` : "",
-      COMPANY_INFO.website ? `Web: ${COMPANY_INFO.website}` : "",
-      COMPANY_INFO.vat ? `P.IVA: ${COMPANY_INFO.vat}` : "",
-    ].filter(Boolean);
 
-    let y = margin;
-    const ensureSpace = (needed: number) => {
-      if (y + needed <= pageHeight - margin) return;
-      doc.addPage();
-      y = margin;
-    };
-    const line = (x1: number, y1: number, x2: number, y2: number, color = 230) => {
-      doc.setDrawColor(color, color, color);
+    let y = 8;
+    const pink = [236, 83, 145] as const;
+    const softPink = [255, 243, 248] as const;
+    const borderPink = [247, 181, 211] as const;
+    const textDark = [18, 18, 22] as const;
+    const textMuted = [92, 92, 105] as const;
+    const barcodeTop = 175;
+    const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = borderPink) => {
+      doc.setDrawColor(color[0], color[1], color[2]);
       doc.line(x1, y1, x2, y2);
     };
     const sectionTitle = (title: string) => {
-      ensureSpace(9);
+      if (y > barcodeTop - 12) return;
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(198, 97, 112);
+      doc.setFontSize(8.2);
+      doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(title.toUpperCase(), margin, y);
-      y += 4;
-      line(margin, y, pageWidth - margin, y, 235);
-      y += 5;
+      y += 4.5;
     };
-    const fieldRow = (label: string, value: string) => {
-      const cleanValue = value || "Non indicato";
-      const valueLines = doc.splitTextToSize(cleanValue, contentWidth - 44);
-      const rowHeight = Math.max(10, valueLines.length * 4 + 5);
-      ensureSpace(rowHeight);
-      doc.setFillColor(252, 248, 250);
-      doc.roundedRect(margin, y - 3, contentWidth, rowHeight, 2.5, 2.5, "F");
+    const tinyLabel = (label: string, x: number, yPos: number, width: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
-      doc.setTextColor(130, 130, 140);
-      doc.text(label.toUpperCase(), margin + 4, y + 2);
+      doc.setFontSize(6.1);
+      doc.setTextColor(pink[0], pink[1], pink[2]);
+      doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
+    };
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 7.2) => {
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(25, 25, 25);
-      doc.text(valueLines, margin + 44, y + 2);
-      y += rowHeight + 2;
+      doc.setFontSize(size);
+      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+      doc.text(doc.splitTextToSize(value || "Non indicato", width), x, yPos);
+    };
+    const fullRow = (label: string, value: string) => {
+      if (y > barcodeTop - 9) return;
+      line(margin, y, pageWidth - margin, y, [248, 211, 228]);
+      y += 3.2;
+      tinyLabel(label, margin + 6, y, 34);
+      valueText(value, margin + 42, y, contentWidth - 46, 7.1);
+      y += 7.4;
+    };
+    const gridRow = (left?: { label: string; value: string }, right?: { label: string; value: string }) => {
+      if (y > barcodeTop - 13) return;
+      line(margin, y, pageWidth - margin, y, [248, 211, 228]);
+      const colW = (contentWidth - 4) / 2;
+      y += 3.1;
+      if (left) {
+        tinyLabel(left.label, margin + 6, y, colW - 8);
+        valueText(left.value, margin + 6, y + 4, colW - 8, 7.1);
+      }
+      if (right) {
+        line(margin + colW + 2, y - 2.8, margin + colW + 2, y + 10.2, [248, 211, 228]);
+        tinyLabel(right.label, margin + colW + 8, y, colW - 8);
+        valueText(right.value, margin + colW + 8, y + 4, colW - 8, 7.1);
+      }
+      y += 13.2;
     };
 
-    doc.setFillColor(255, 246, 250);
-    doc.roundedRect(margin, y, contentWidth, 42, 4, 4, "F");
+    doc.setDrawColor(pink[0], pink[1], pink[2]);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(5, 5, 92, 193, 3, 3);
+
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, "PNG", margin + 5, y + 5, 18, 18);
+        doc.addImage(logoDataUrl, "PNG", 12, 10, 30, 18);
       } catch {
         // If the browser cannot decode the logo, the text header still prints.
       }
     }
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(20, 20, 24);
-    doc.text(COMPANY_INFO.name, margin + 27, y + 10);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.8);
-    doc.setTextColor(70, 70, 78);
-    doc.text(doc.splitTextToSize(companyLines.join("  -  "), contentWidth - 32), margin + 27, y + 16);
-    line(margin + 5, y + 25, pageWidth - margin - 5, y + 25, 235);
-    doc.setFont("helvetica", "bold");
+    doc.setFillColor(pink[0], pink[1], pink[2]);
+    doc.roundedRect(67, 10, 19, 8, 1.5, 1.5, "F");
     doc.setFontSize(8);
-    doc.setTextColor(140, 140, 150);
-    doc.text(`ORDINE #${orderNo}`, margin + 5, y + 32);
-    doc.setFontSize(15);
-    doc.setTextColor(20, 20, 24);
-    doc.text(doc.splitTextToSize(client, contentWidth - 10), margin + 5, y + 39);
-    y += 50;
-
+    doc.setTextColor(255, 255, 255);
+    doc.text("ORDINE", 76.5, 15.4, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`#${orderNo.replace(/^#/, "")}`, 76.5, 27, { align: "center" });
+    line(margin, 32, pageWidth - margin, 32);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text(COMPANY_INFO.email, 16, 41);
+    doc.text(COMPANY_INFO.website, 61, 41);
+    line(51, 36, 51, 43, [248, 211, 228]);
+    y = 48;
+
+    doc.setFillColor(255, 248, 251);
+    doc.setDrawColor(248, 211, 228);
+    doc.roundedRect(margin, y, contentWidth, 18, 2, 2, "FD");
+    doc.setFillColor(pink[0], pink[1], pink[2]);
+    doc.circle(margin + 10, y + 9, 6, "F");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.setTextColor(70, 70, 78);
-    doc.text(doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth), margin, y);
-    y += Math.max(10, doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth).length * 4 + 5);
+    doc.setTextColor(255, 255, 255);
+    doc.text(client.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(), margin + 10, y + 11, { align: "center" });
+    doc.setFontSize(11);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text(doc.splitTextToSize(client, contentWidth - 28), margin + 20, y + 7);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+    doc.text(doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth - 28), margin + 20, y + 12);
+    y += 26;
 
     sectionTitle("Riepilogo");
-    fieldRow("Stato", statusLabel(order.status || "NEW"));
-    fieldRow("Tipo", getOrderTaskType(order).toUpperCase());
-    fieldRow("Salone", order.user_location_name ?? "Non indicato");
-    fieldRow("Creato da", order.user?.name ?? "Staff");
-    fieldRow("Data creazione", orderDate(order));
-    fieldRow("Ultima modifica", formatDateTime(order.updated_at));
+    gridRow({ label: "Stato", value: statusLabel(order.status || "NEW") }, { label: "Creato da", value: order.user?.name ?? "Staff" });
+    gridRow({ label: "Tipo", value: getOrderTaskType(order).toUpperCase() }, { label: "Data creazione", value: orderDate(order) });
+    gridRow({ label: "Salone", value: order.user_location_name ?? "Non indicato" }, { label: "Ultima modifica", value: formatDateTime(order.updated_at) });
 
     sectionTitle("Informazioni ordine");
-    fields.forEach((field) => {
-      fieldRow(field.label, displayOrderFieldValue(field.value));
+    const primaryFields = fields.filter((field) => {
+      const label = field.label.toLowerCase();
+      return label.includes("nome") || label.includes("email") || label.includes("telefono");
     });
+    const secondaryFields = fields.filter((field) => !primaryFields.includes(field));
+    primaryFields.forEach((field) => fullRow(field.label, displayOrderFieldValue(field.value)));
+    for (let index = 0; index < secondaryFields.length; index += 2) {
+      gridRow(
+        { label: secondaryFields[index].label, value: displayOrderFieldValue(secondaryFields[index].value) },
+        secondaryFields[index + 1]
+          ? { label: secondaryFields[index + 1].label, value: displayOrderFieldValue(secondaryFields[index + 1].value) }
+          : undefined
+      );
+    }
 
     if (Array.isArray(order.activity_log) && order.activity_log.length > 0) {
       sectionTitle("Cronologia stati");
-      order.activity_log.slice(-6).forEach((log: any) => {
+      const events = order.activity_log.slice(-2);
+      doc.setFillColor(255, 248, 251);
+      doc.setDrawColor(248, 211, 228);
+      const boxHeight = Math.min(24, events.length * 10 + 4);
+      doc.roundedRect(margin + 8, y - 2, contentWidth - 8, boxHeight, 2, 2, "FD");
+      events.forEach((log: any, index: number) => {
         const when = log.at || log.date ? formatDateTime(log.at || log.date) : "";
         const from = ORDER_COLUMNS.find((column) => column.id === log.from)?.label ?? log.from;
         const to = ORDER_COLUMNS.find((column) => column.id === log.to)?.label ?? log.to;
         const title = log.action || (log.from !== undefined || log.to !== undefined ? `Da ${from || "sconosciuto"} a ${to || "sconosciuto"}` : "Attivita registrata");
-        fieldRow(when || "Evento", `${title}${log.by || log.user ? ` - ${log.by || log.user}` : ""}${log.note ? `\nNota: ${log.note}` : ""}`);
+        const eventY = y + index * 10;
+        doc.setFillColor(pink[0], pink[1], pink[2]);
+        doc.circle(margin + 3, eventY + 2, 1.2, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6.5);
+        doc.setTextColor(pink[0], pink[1], pink[2]);
+        doc.text((when || "Evento").toUpperCase(), margin + 11, eventY + 1.5);
+        doc.setFontSize(6.8);
+        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+        doc.text(doc.splitTextToSize(title, contentWidth - 22), margin + 11, eventY + 5.2);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+        doc.text(String(log.by || log.user || "Staff"), margin + 11, eventY + 8.4);
       });
+      y += boxHeight + 3;
     }
 
+    doc.setDrawColor(pink[0], pink[1], pink[2]);
+    doc.setLineDashPattern([1.5, 1.2], 0);
+    line(5, barcodeTop - 5, 97, barcodeTop - 5, pink);
+    doc.setLineDashPattern([], 0);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.8);
+    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+    doc.text(publicUrl.replace(/^https:\/\//, ""), pageWidth / 2, barcodeTop - 1.5, { align: "center" });
+    drawCode128(doc, publicUrl, 16, barcodeTop + 2, 70, 16);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.setTextColor(165, 165, 170);
-    doc.text("Paradise Beauty - Etichetta ordine", margin, pageHeight - 6);
+    doc.setFontSize(6.2);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, pageHeight - 7, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 
