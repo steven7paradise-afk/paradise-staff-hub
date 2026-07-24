@@ -617,6 +617,7 @@ export function OrderManager({
     const textDark = [18, 18, 22] as const;
     const textMuted = [92, 92, 105] as const;
     const barcodeTop = 175;
+    const maxContentY = barcodeTop - 8;
     const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = borderPink) => {
       doc.setDrawColor(color[0], color[1], color[2]);
       doc.setLineWidth(0.22);
@@ -636,35 +637,58 @@ export function OrderManager({
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
     };
+    const textLines = (value: string, width: number, maxLines = 2) => {
+      const lines = doc.splitTextToSize(value || "Non indicato", width).map((line: string) => line.trim());
+      if (lines.length <= maxLines) return lines;
+      const visible = lines.slice(0, maxLines);
+      visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 54)}...`;
+      return visible;
+    };
     const valueText = (value: string, x: number, yPos: number, width: number, size = 6.8) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-      doc.text(doc.splitTextToSize(value || "Non indicato", width), x, yPos);
+      doc.text(textLines(value, width), x, yPos);
     };
     const fullRow = (label: string, value: string) => {
-      if (y > barcodeTop - 9) return;
+      if (y > maxContentY - 6) return;
+      const lines = textLines(value, contentWidth - 46);
+      const rowHeight = Math.max(7, lines.length * 3.4 + 3.2);
+      if (y + rowHeight > maxContentY) return;
       line(margin, y, pageWidth - margin, y, [248, 211, 228]);
       y += 2.8;
       tinyLabel(label, margin + 6, y, 34);
-      valueText(value, margin + 42, y, contentWidth - 46, 6.8);
-      y += 6.3;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.8);
+      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+      doc.text(lines, margin + 42, y);
+      y += rowHeight;
     };
     const gridRow = (left?: { label: string; value: string }, right?: { label: string; value: string }) => {
-      if (y > barcodeTop - 13) return;
+      if (y > maxContentY - 9) return;
       line(margin, y, pageWidth - margin, y, [248, 211, 228]);
       const colW = (contentWidth - 4) / 2;
+      const leftLines = left ? textLines(left.value, colW - 8) : [];
+      const rightLines = right ? textLines(right.value, colW - 8) : [];
+      const rowHeight = Math.max(10.5, Math.max(leftLines.length, rightLines.length) * 3.4 + 7.2);
+      if (y + rowHeight > maxContentY) return;
       y += 2.8;
       if (left) {
         tinyLabel(left.label, margin + 6, y, colW - 8);
-        valueText(left.value, margin + 6, y + 3.7, colW - 8, 6.8);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.8);
+        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+        doc.text(leftLines, margin + 6, y + 3.7);
       }
       if (right) {
-        line(margin + colW + 2, y - 2.4, margin + colW + 2, y + 8.8, [248, 211, 228]);
+        line(margin + colW + 2, y - 2.4, margin + colW + 2, y + rowHeight - 2.5, [248, 211, 228]);
         tinyLabel(right.label, margin + colW + 8, y, colW - 8);
-        valueText(right.value, margin + colW + 8, y + 3.7, colW - 8, 6.8);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.8);
+        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+        doc.text(rightLines, margin + colW + 8, y + 3.7);
       }
-      y += 11.3;
+      y += rowHeight;
     };
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
