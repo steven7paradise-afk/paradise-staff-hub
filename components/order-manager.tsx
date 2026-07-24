@@ -12,6 +12,7 @@ const ORDER_PHOTO_KEY = "__orderPhoto";
 
 type OrderPhoto = {
   url: string;
+  previewUrl?: string;
   name?: string;
   originalName?: string;
   driveFileId?: string;
@@ -259,6 +260,10 @@ function orderPhoto(order: OrderResponse): OrderPhoto | null {
   const photo = order.answers?.[ORDER_PHOTO_KEY];
   if (!photo || typeof photo !== "object" || typeof photo.url !== "string") return null;
   return photo as OrderPhoto;
+}
+
+function orderPhotoPreviewUrl(photo: OrderPhoto) {
+  return photo.previewUrl || (photo.driveFileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(photo.driveFileId)}&sz=w1200` : photo.url);
 }
 
 function displayOrderFieldValue(value: any) {
@@ -904,12 +909,18 @@ export function OrderManager({
                     ) : null}
                   </div>
                   {orderPhoto(selected) ? (
+                    (() => {
+                      const photo = orderPhoto(selected)!;
+                      const previewUrl = orderPhotoPreviewUrl(photo);
+                      return (
                     <div className="mt-4">
-                      <a href={orderPhoto(selected)!.url} target="_blank" rel="noreferrer" className="grid h-80 place-items-center overflow-hidden rounded-2xl border border-black/5 bg-[#F8F3F6]">
-                        <img src={orderPhoto(selected)!.url} alt={`Foto di ${orderTitle(selected)}`} className="max-h-80 w-full object-contain" />
+                      <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="grid h-80 place-items-center overflow-hidden rounded-2xl border border-black/5 bg-[#F8F3F6]">
+                        <img src={previewUrl} alt={`Foto di ${orderTitle(selected)}`} className="max-h-80 w-full object-contain" />
                       </a>
-                      <p className="mt-2 truncate text-center text-xs font-semibold text-black/45">{orderPhoto(selected)!.name ?? "Foto ordine"}</p>
+                      <p className="mt-2 truncate text-center text-xs font-semibold text-black/45">{photo.name ?? "Foto ordine"}</p>
                     </div>
+                      );
+                    })()
                   ) : (
                     <div className="mt-4 grid h-48 place-items-center rounded-2xl border-2 border-dashed border-black/10 bg-black/[0.02] text-center text-sm text-black/40">
                       <div>

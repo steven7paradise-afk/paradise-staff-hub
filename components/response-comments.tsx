@@ -9,8 +9,16 @@ type Comment = {
   userRole: string;
   message: string;
   imageUrl?: string;
+  imagePreviewUrl?: string;
+  imageDriveUrl?: string;
+  imageDriveFileId?: string;
+  imageName?: string;
   createdAt: string;
 };
+
+function driveThumbnailUrl(fileId?: string) {
+  return fileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w900` : "";
+}
 
 function renderTextWithLinks(text: string) {
   if (!text) return null;
@@ -93,23 +101,32 @@ export function ResponseComments({
 
     setSubmitting(true);
     let uploadedImageUrl = "";
+    let uploadedImagePreviewUrl = "";
+    let uploadedImageDriveUrl = "";
+    let uploadedImageDriveFileId = "";
+    let uploadedImageName = "";
 
     try {
       if (selectedFile) {
         const formData = new FormData();
         formData.append("file", selectedFile);
 
-        const uploadRes = await fetch("/api/upload", {
+        const uploadRes = await fetch(`/api/service-forms/responses/${responseId}/comment-image`, {
           method: "POST",
           body: formData,
         });
 
         if (!uploadRes.ok) {
-          throw new Error("Errore durante il caricamento dell'immagine.");
+          const uploadData = await uploadRes.json().catch(() => null);
+          throw new Error(uploadData?.error || "Errore durante il caricamento dell'immagine.");
         }
 
         const uploadData = await uploadRes.json();
         uploadedImageUrl = uploadData.url;
+        uploadedImagePreviewUrl = uploadData.previewUrl || driveThumbnailUrl(uploadData.driveFileId) || uploadData.url;
+        uploadedImageDriveUrl = uploadData.driveFileUrl || uploadData.url;
+        uploadedImageDriveFileId = uploadData.driveFileId || "";
+        uploadedImageName = uploadData.name || "";
       }
 
       const commentObj: Comment = {
@@ -118,6 +135,10 @@ export function ResponseComments({
         userRole: currentUserRole,
         message: newComment.trim(),
         imageUrl: uploadedImageUrl || undefined,
+        imagePreviewUrl: uploadedImagePreviewUrl || undefined,
+        imageDriveUrl: uploadedImageDriveUrl || undefined,
+        imageDriveFileId: uploadedImageDriveFileId || undefined,
+        imageName: uploadedImageName || undefined,
         createdAt: new Date().toISOString(),
       };
 
@@ -184,10 +205,10 @@ export function ResponseComments({
               )}
               {c.imageUrl && (
                 <div className="mt-2 rounded-xl overflow-hidden border border-black/5 dark:border-white/10 max-h-48 max-w-full">
-                  <a href={c.imageUrl} target="_blank" rel="noopener noreferrer">
+                  <a href={c.imageDriveUrl || c.imageUrl} target="_blank" rel="noopener noreferrer">
                     <img
-                      src={c.imageUrl}
-                      alt="Allegato"
+                      src={c.imagePreviewUrl || driveThumbnailUrl(c.imageDriveFileId) || c.imageUrl}
+                      alt={c.imageName || "Allegato"}
                       className="max-h-48 object-contain cursor-zoom-in hover:opacity-90 transition mx-auto"
                     />
                   </a>

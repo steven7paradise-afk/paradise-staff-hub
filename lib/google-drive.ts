@@ -125,7 +125,7 @@ export async function uploadFileToGoogleDrive(
   const response = await drive.files.create({
     requestBody: fileMetadata,
     media: media,
-    fields: "id, name, webViewLink, webContentLink",
+    fields: "id, name, webViewLink, webContentLink, thumbnailLink",
     supportsAllDrives: true,
   });
 
@@ -150,6 +150,7 @@ export async function uploadFileToGoogleDrive(
     name: response.data.name,
     webViewLink: response.data.webViewLink,
     webContentLink: response.data.webContentLink,
+    thumbnailLink: response.data.thumbnailLink,
   };
 }
 
