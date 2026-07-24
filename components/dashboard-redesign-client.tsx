@@ -263,11 +263,11 @@ export function DashboardRedesignClient({
       ];
 
   return (
-    <div className="bg-white min-h-screen text-[#111111] font-sans antialiased pb-12 -m-6 p-6">
+    <div className="bg-transparent min-h-screen text-[#111111] font-sans antialiased pb-12">
       <div className="max-w-[1280px] mx-auto space-y-7">
 
         {/* TOP HEADER BAR (EXACT MOCKUP STYLE) */}
-        <div className="bg-white border border-zinc-200/80 rounded-none px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        <div className="bg-transparent px-0 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Avatar Initials Box */}
             <div className="w-10 h-10 bg-black text-white font-extrabold text-xs tracking-wider flex items-center justify-center shrink-0">

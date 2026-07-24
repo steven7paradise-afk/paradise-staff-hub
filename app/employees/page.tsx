@@ -8,7 +8,12 @@ export default async function EmployeesPage() {
   const [employees, locations] = await Promise.all([
     prisma.user.findMany({
       where: { role: { not: "SUPER_ADMIN" } },
-      include: { location: true },
+      include: { 
+        location: true,
+        last_edited_by: {
+          select: { name: true }
+        }
+      },
       orderBy: { name: "asc" },
     }),
     prisma.location.findMany({
@@ -38,6 +43,12 @@ export default async function EmployeesPage() {
           mansione: employee.mansione ?? "",
           googleCalendarId: employee.google_calendar_id ?? "",
           googleCalendarSync: employee.google_calendar_sync,
+          iban: employee.iban ?? "",
+          hrNotes: employee.hr_notes ?? "",
+          managerId: employee.manager_id ?? "",
+          accessList: employee.access_list,
+          lastEditedByName: employee.last_edited_by?.name ?? null,
+          lastEditedAt: employee.last_edited_at?.toISOString() ?? null,
         }))}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
       />

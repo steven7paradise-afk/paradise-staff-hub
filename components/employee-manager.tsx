@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Save, UserCog, X, MapPin, Mail, Phone, Calendar, User, Award, Fingerprint, Lock, Shield } from "lucide-react";
+import { useState, useEffect } from "react";
+import { 
+  Plus, Save, UserCog, X, MapPin, Mail, Phone, Calendar, User, Award, 
+  Fingerprint, Lock, Shield, ChevronLeft, Copy, Check, Briefcase, ListCheck, SlidersHorizontal, ClipboardList
+} from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import type { Role } from "@/lib/roles";
@@ -25,6 +28,12 @@ type Employee = {
   mansione?: string | null;
   googleCalendarId: string;
   googleCalendarSync: boolean;
+  iban?: string;
+  hrNotes?: string;
+  managerId?: string | null;
+  accessList?: string[];
+  lastEditedByName?: string | null;
+  lastEditedAt?: string | null;
 };
 
 type Location = { id: string; name: string };
@@ -46,6 +55,30 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  
+  const [stats, setStats] = useState<{
+    jobs: { count: number; growth: number };
+    hours: { count: number; growth: number };
+    shifts: { count: number; growth: number };
+  } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [copiedPhotoUrl, setCopiedPhotoUrl] = useState(false);
+  const [customMansioneEdit, setCustomMansioneEdit] = useState(false);
+
+  useEffect(() => {
+    if (editing?.id) {
+      setLoadingStats(true);
+      fetch(`/api/employees/${editing.id}/stats`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data) setStats(data);
+        })
+        .catch(err => console.error("Error loading stats:", err))
+        .finally(() => setLoadingStats(false));
+    }
+  }, [editing?.id]);
 
   const draft = editing ?? {
     id: "",
@@ -69,12 +102,42 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
   const activeEmployees = employees.filter((employee) => employee.active);
   const inactiveEmployees = employees.filter((employee) => !employee.active);
 
+  async function handlePhotoUpload(employeeId: string, file: File) {
+    if (!file) return;
+    setErrorMsg("");
+    setPhotoUploadingId(employeeId);
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      const res = await fetch(`/api/staff/${employeeId}/photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Caricamento foto fallito.");
+      
+      const photoUrl = data.photoUrl || "";
+      setEmployees(prev => prev.map(emp => emp.id === employeeId ? { ...emp, photoUrl } : emp));
+      setEditing(prev => prev && prev.id === employeeId ? { ...prev, photoUrl } : prev);
+      setMessage("Foto caricata con successo.");
+      setTimeout(() => setMessage(""), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Errore durante il caricamento.");
+    } finally {
+      setPhotoUploadingId(null);
+    }
+  }
+
   function openEdit(employee: Employee) {
     setCreating(false);
     setEditing(employee);
     setPin("");
     setPassword("");
     setMessage("");
+
+    const mansioniPresets = ["hairstyle", "videomaker", "sito web", "magazzino", "grafico", "parrucchiera", "estetista", "receptionist"];
+    const isCustom = employee.mansione && !mansioniPresets.includes(employee.mansione.toLowerCase());
+    setCustomMansioneEdit(Boolean(isCustom));
   }
 
   function openCreate() {
@@ -83,6 +146,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     setPin("");
     setPassword("");
     setMessage("");
+    setCustomMansioneEdit(false);
   }
 
   function updateDraft<K extends keyof Employee>(key: K, value: Employee[K]) {
@@ -130,6 +194,12 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       mansione: data.mansione ?? "",
       googleCalendarId: data.google_calendar_id ?? "",
       googleCalendarSync: data.google_calendar_sync ?? false,
+      iban: data.iban ?? "",
+      hrNotes: data.hr_notes ?? "",
+      managerId: data.manager_id,
+      accessList: (data.access_list as string[]) ?? [],
+      lastEditedByName: data.last_edited_by?.name ?? null,
+      lastEditedAt: data.last_edited_at ?? null,
     };
     setEmployees((current) =>
       creating ? [...current, updated].sort((a, b) => a.name.localeCompare(b.name)) : current.map((item) => (item.id === updated.id ? updated : item)),
@@ -142,6 +212,663 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     setCreating(false);
     setPin("");
     setPassword("");
+  }
+
+  const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
+    <button
+      type="button"
+      onClick={onChange}
+      className={cn(
+        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+        checked ? "bg-[#d946ef]" : "bg-zinc-200"
+      )}
+    >
+      <span
+        className={cn(
+          "pointer-events-none inline-block size-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+          checked ? "translate-x-5" : "translate-x-0"
+        )}
+      />
+    </button>
+  );
+
+  const buildContractsList = (startStr?: string, endStr?: string) => {
+    if (!startStr) return [];
+    const start = new Date(startStr);
+    const end = endStr ? new Date(endStr) : null;
+    if (isNaN(start.getTime())) return [];
+
+    const list = [];
+    const formatDate = (d: Date) => d.toLocaleDateString("it-IT");
+
+    const startYear = start.getFullYear();
+    const currentYear = new Date().getFullYear();
+
+    if (startYear < currentYear) {
+      const initialEnd = new Date(start);
+      initialEnd.setFullYear(startYear + 1);
+      initialEnd.setDate(initialEnd.getDate() - 1);
+      list.push({
+        tipo: "Assunzione iniziale",
+        inizio: formatDate(start),
+        fine: formatDate(initialEnd),
+        stato: "Completato",
+        rinnovatoIl: "—",
+        scadenza: "—",
+        note: "Primo contratto"
+      });
+
+      const renewalStart = new Date(start);
+      renewalStart.setFullYear(startYear + 1);
+      const renewalEnd = end ? end : new Date(renewalStart);
+      if (!end) {
+        renewalEnd.setFullYear(renewalStart.getFullYear() + 1);
+        renewalEnd.setDate(renewalEnd.getDate() - 1);
+      }
+      const daysLeft = Math.ceil((renewalEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      list.push({
+        tipo: "Rinnovo",
+        inizio: formatDate(renewalStart),
+        fine: formatDate(renewalEnd),
+        stato: daysLeft < 0 ? "Completato" : "Attivo",
+        rinnovatoIl: "10/07/2025",
+        scadenza: daysLeft < 0 ? "—" : daysLeft === 0 ? "Scade oggi" : `Tra ${daysLeft} giorni`,
+        note: "Rinnovo annuale"
+      });
+
+      const nextStart = new Date(renewalEnd);
+      nextStart.setDate(nextStart.getDate() + 1);
+      const nextEnd = new Date(nextStart);
+      nextEnd.setFullYear(nextStart.getFullYear() + 1);
+      nextEnd.setDate(nextEnd.getDate() - 1);
+      const nextDaysLeft = Math.ceil((nextStart.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      list.push({
+        tipo: "Prossimo rinnovo previsto",
+        inizio: formatDate(nextStart),
+        fine: formatDate(nextEnd),
+        stato: "Pianificato",
+        rinnovatoIl: "—",
+        scadenza: nextDaysLeft < 0 ? "—" : `Tra ${nextDaysLeft} giorni`,
+        note: "Da confermare"
+      });
+    } else {
+      const daysLeft = end ? Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+      list.push({
+        tipo: "Assunzione iniziale",
+        inizio: formatDate(start),
+        fine: end ? formatDate(end) : "Indeterminato",
+        stato: daysLeft === null || daysLeft >= 0 ? "Attivo" : "Completato",
+        rinnovatoIl: "—",
+        scadenza: daysLeft === null ? "—" : daysLeft < 0 ? "—" : `Tra ${daysLeft} giorni`,
+        note: "Contratto corrente"
+      });
+      
+      if (end) {
+        const nextStart = new Date(end);
+        nextStart.setDate(nextStart.getDate() + 1);
+        const nextEnd = new Date(nextStart);
+        nextEnd.setFullYear(nextStart.getFullYear() + 1);
+        nextEnd.setDate(nextEnd.getDate() - 1);
+        const nextDaysLeft = Math.ceil((nextStart.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        list.push({
+          tipo: "Prossimo rinnovo previsto",
+          inizio: formatDate(nextStart),
+          fine: formatDate(nextEnd),
+          stato: "Pianificato",
+          rinnovatoIl: "—",
+          scadenza: `Tra ${nextDaysLeft} giorni`,
+          note: "Da confermare"
+        });
+      }
+    }
+
+    return list;
+  };
+
+  const renderFullscreenEditor = () => {
+    if (!editing) return null;
+
+    const contracts = buildContractsList(editing.contractStart, editing.contractEnd);
+    const managersList = employees.filter(emp => emp.role === "ADMIN" || emp.role === "RESPONSABILE" || emp.role === "SUPER_ADMIN");
+
+    const PLATFORMS = [
+      { key: "shopify", label: "Shopify", val: "Shopify" },
+      { key: "phorest", label: "Phorest", val: "Phorest" },
+      { key: "dashboard", label: "Dashboard", val: "/dashboard" },
+      { key: "appointments", label: "Appuntamenti", val: "/appointments" },
+      { key: "report", label: "Report", val: "/cedolini" },
+      { key: "whatsapp", label: "WhatsApp", val: "WhatsApp" },
+      { key: "treatwell", label: "Treatwell", val: "Treatwell" },
+      { key: "schedules", label: "Turni", val: "/schedules" },
+      { key: "documents", label: "Documenti", val: "/documents" },
+      { key: "comunicazioni", label: "Comunicazioni", val: "/social-calendar" },
+      { key: "google-calendar", label: "Google Calendar", val: "Google Calendar" },
+      { key: "drive", label: "Drive Condiviso", val: "Drive Condiviso" },
+      { key: "presenze", label: "Presenze", val: "/attendance" },
+      { key: "ordini", label: "Ordini", val: "/orders" },
+      { key: "notifications", label: "Notifiche", val: "/notifications" },
+    ];
+
+    const copyPhotoUrl = () => {
+      if (editing.photoUrl) {
+        navigator.clipboard.writeText(editing.photoUrl);
+        setCopiedPhotoUrl(true);
+        setTimeout(() => setCopiedPhotoUrl(false), 2000);
+      }
+    };
+
+    const toggleAccessInEdit = (access: string) => {
+      const current = Array.isArray(editing.accessList) ? editing.accessList : [];
+      const next = current.includes(access)
+        ? current.filter(a => a !== access)
+        : [...current, access];
+      updateDraft("accessList", next);
+    };
+
+    const mansioniPresets = ["Hairstyle", "Videomaker", "Sito Web", "Magazzino", "Grafico", "Parrucchiera", "Estetista", "Receptionist"];
+
+    return (
+      <div className="w-full bg-[#fcf9f5] min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(null);
+              setCreating(false);
+            }}
+            className="group inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neutral-400 hover:text-black transition duration-200"
+          >
+            <ChevronLeft className="size-4 shrink-0 transition-transform group-hover:-translate-x-1" />
+            Torna all'elenco
+          </button>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+          <div className="bg-white rounded-[32px] border border-black/5 p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="relative size-24 md:size-28 rounded-[24px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-3xl font-black text-neutral-800 shadow-md group shrink-0">
+                {editing.photoUrl ? (
+                  <img src={resolveDrivePhotoUrl(editing.photoUrl)} alt={editing.name} className="size-full object-cover" />
+                ) : (
+                  editing.name.slice(0, 2).toUpperCase()
+                )}
+                {!creating && (
+                  <label className="absolute inset-0 bg-black/45 flex items-center justify-center text-white text-[9px] font-black uppercase tracking-wider opacity-0 group-hover:opacity-100 transition duration-200 cursor-pointer text-center px-1">
+                    <span>{photoUploadingId === editing.id ? "Carico..." : "Carica foto"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={photoUploadingId === editing.id}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void handlePhotoUpload(editing.id, file);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-neutral-900">{editing.name || "Nuovo Dipendente"}</h1>
+                <p className="text-sm font-semibold text-neutral-400 mt-1 capitalize">{editing.mansione || "Nessun ruolo"}</p>
+                <div className="flex flex-wrap gap-2 items-center mt-3">
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm",
+                    editing.active ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
+                  )}>
+                    <span className={cn("size-2 rounded-full", editing.active ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                    {editing.active ? "Attivo" : "Disattivato"}
+                  </span>
+                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                    Codice: {editing.fiscalCode || "0"}
+                  </span>
+                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                    <MapPin className="size-3 text-red-500" />
+                    {editing.location}
+                  </span>
+                </div>
+                {editing.lastEditedByName && (
+                  <p className="text-[11px] text-neutral-400 font-semibold mt-2.5 italic">
+                    Ultima modifica eseguita da: <span className="font-extrabold">{editing.lastEditedByName}</span> il {new Date(editing.lastEditedAt!).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {!creating && (
+              <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:min-w-[420px]">
+                {[
+                  { title: "Lavori completati", count: stats?.jobs.count ?? 0, growth: stats?.jobs.growth ?? 0, unit: "" },
+                  { title: "Ore lavorate", count: stats?.hours.count ?? 0, growth: stats?.hours.growth ?? 0, unit: "h" },
+                  { title: "Turni effettuati", count: stats?.shifts.count ?? 0, growth: stats?.shifts.growth ?? 0, unit: "" },
+                ].map((card, idx) => (
+                  <div key={idx} className="bg-[#fcfaf7] border border-black/5 p-3 rounded-[20px] shadow-sm flex flex-col justify-between min-h-[90px]">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400 leading-normal">{card.title}</p>
+                    {loadingStats ? (
+                      <div className="h-6 w-16 bg-neutral-200 animate-pulse rounded-md mt-2" />
+                    ) : (
+                      <div className="flex items-baseline justify-between gap-1 mt-2">
+                        <span className="text-xl font-black tracking-tight">{card.count}{card.unit}</span>
+                        <span className={cn(
+                          "text-[9px] font-extrabold rounded-full px-1.5 py-0.5",
+                          card.growth >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                        )}>
+                          {card.growth >= 0 ? `+${card.growth}%` : `${card.growth}%`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+          <form onSubmit={(e) => { e.preventDefault(); void saveEmployee(); }} className="space-y-6">
+            {message && (
+              <div className="p-4 text-sm font-semibold text-rose-800 bg-[#fcf5f6] rounded-2xl border border-rose-200 animate-in fade-in">
+                {message}
+              </div>
+            )}
+            {errorMsg && (
+              <div className="p-4 text-sm font-semibold text-rose-800 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in">
+                {errorMsg}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                  <User className="size-4 text-[#C66170]" />
+                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Profilo Personale</h2>
+                </div>
+
+                <div className="space-y-3.5 mt-4">
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Nome e cognome</span>
+                    <Field
+                      required
+                      value={editing.name}
+                      onChange={(e) => updateDraft("name", e.target.value)}
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Email di accesso</span>
+                    <Field
+                      required
+                      type="email"
+                      value={editing.email}
+                      onChange={(e) => updateDraft("email", e.target.value)}
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">URL foto profilo</span>
+                    <div className="relative">
+                      <Field
+                        value={editing.photoUrl || ""}
+                        onChange={(e) => updateDraft("photoUrl", e.target.value)}
+                        placeholder="https://..."
+                        className="pr-12"
+                      />
+                      {editing.photoUrl && (
+                        <button
+                          type="button"
+                          onClick={copyPhotoUrl}
+                          className="absolute right-2.5 top-2.5 grid size-7 place-items-center bg-black/5 hover:bg-black/10 active:scale-95 rounded-lg text-neutral-500 transition-all"
+                          title="Copia link"
+                        >
+                          {copiedPhotoUrl ? <Check className="size-3.5 text-emerald-600 animate-in zoom-in" /> : <Copy className="size-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Numero WhatsApp</span>
+                    <Field
+                      value={editing.whatsappPhone || ""}
+                      onChange={(e) => updateDraft("whatsappPhone", e.target.value)}
+                      placeholder="+39..."
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data di nascita</span>
+                    <Field
+                      type="date"
+                      value={editing.birthDate || ""}
+                      onChange={(e) => updateDraft("birthDate", e.target.value)}
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">IBAN</span>
+                    <Field
+                      value={editing.iban || ""}
+                      onChange={(e) => updateDraft("iban", e.target.value.toUpperCase())}
+                      placeholder="IT..."
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                  <Briefcase className="size-4 text-[#C66170]" />
+                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Posizione Lavorativa</h2>
+                </div>
+
+                <div className="space-y-3.5 mt-4">
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Mansione / Ruolo</span>
+                    <Select
+                      value={customMansioneEdit ? "custom" : (editing.mansione || "").toLowerCase()}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setCustomMansioneEdit(true);
+                          updateDraft("mansione", "");
+                        } else {
+                          setCustomMansioneEdit(false);
+                          updateDraft("mansione", val);
+                        }
+                      }}
+                    >
+                      <option value="">Seleziona mansione...</option>
+                      {mansioniPresets.map((m) => (
+                        <option key={m} value={m.toLowerCase()}>{m}</option>
+                      ))}
+                      <option value="custom">+ Aggiungi altra mansione...</option>
+                    </Select>
+                    {customMansioneEdit && (
+                      <Field
+                        required
+                        value={editing.mansione || ""}
+                        onChange={(e) => updateDraft("mansione", e.target.value)}
+                        placeholder="Inserisci nuova mansione..."
+                        className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                      />
+                    )}
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato Dipendente</span>
+                    <Select
+                      value={editing.employeeStatus || "Attivo"}
+                      onChange={(e) => updateDraft("employeeStatus", e.target.value)}
+                    >
+                      {["Attivo", "In prova", "Sospeso", "Ex dipendente"].map((status) => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </Select>
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Livello sistema</span>
+                    <Select
+                      value={editing.role}
+                      onChange={(e) => updateDraft("role", e.target.value as Role)}
+                    >
+                      {roles.map((role) => (
+                        <option key={role.value} value={role.value}>{role.label}</option>
+                      ))}
+                    </Select>
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Salone sede</span>
+                    <Select
+                      value={editing.sedeId || ""}
+                      onChange={(e) => {
+                        const sId = e.target.value || null;
+                        const sLoc = availableLocations.find(l => l.id === sId)?.name ?? "Nessun salone";
+                        updateDraft("sedeId", sId);
+                        updateDraft("location", sLoc);
+                      }}
+                    >
+                      <option value="">Nessuna sede</option>
+                      {availableLocations.map((loc) => (
+                        <option key={loc.id} value={loc.id}>{loc.name}</option>
+                      ))}
+                    </Select>
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Responsabile diretto</span>
+                    <Select
+                      value={editing.managerId || ""}
+                      onChange={(e) => updateDraft("managerId", e.target.value || null)}
+                    >
+                      <option value="">Nessun manager</option>
+                      {managersList.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </Select>
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Inizio contratto</span>
+                      <Field
+                        type="date"
+                        value={editing.contractStart || ""}
+                        onChange={(e) => updateDraft("contractStart", e.target.value)}
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Fine contratto</span>
+                      <Field
+                        type="date"
+                        value={editing.contractEnd || ""}
+                        onChange={(e) => updateDraft("contractEnd", e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                  <Shield className="size-4 text-[#C66170]" />
+                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Account e Sicurezza</h2>
+                </div>
+
+                <div className="space-y-4 mt-4">
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato account</span>
+                    <Select
+                      value={editing.active ? "true" : "false"}
+                      onChange={(e) => updateDraft("active", e.target.value === "true")}
+                    >
+                      <option value="true">Attivo / Abilitato</option>
+                      <option value="false">Disattivato / Bloccato</option>
+                    </Select>
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Cambia PIN (4-6 cifre)</span>
+                    <Field
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Nuovo PIN"
+                      maxLength={6}
+                      type="password"
+                      autoComplete="new-password"
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Conferma PIN</span>
+                    <Field
+                      placeholder="Conferma PIN"
+                      maxLength={6}
+                      type="password"
+                      autoComplete="new-password"
+                    />
+                  </label>
+
+                  <div className="pt-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 block mb-1">Cambia password</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setErrorMsg("");
+                        try {
+                          const res = await fetch(`/api/profile/password`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: editing.email })
+                          });
+                          if (!res.ok) throw new Error("Errore invio email reset password.");
+                          setMessage("Email per il reset della password inviata con successo!");
+                          setTimeout(() => setMessage(""), 3500);
+                        } catch (err: any) {
+                          setErrorMsg(err.message);
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl border border-[#B85B68]/20 bg-[#B85B68]/5 px-4 py-3 text-xs font-bold text-[#B85B68] hover:bg-[#B85B68]/10 active:scale-98 transition duration-200"
+                    >
+                      <Mail className="size-4" /> Invia link di reimpostazione
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm">
+              <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                <ListCheck className="size-4 text-[#C66170]" />
+                <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Accessi Abilitati</h2>
+              </div>
+              <p className="text-[10px] text-neutral-400 font-semibold mt-1">Seleziona a quali piattaforme e funzionalità può accedere il dipendente</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
+                {PLATFORMS.map((item) => {
+                  const isChecked = Array.isArray(editing.accessList) ? editing.accessList.includes(item.val) : false;
+                  return (
+                    <div key={item.key} className="flex items-center justify-between p-3.5 rounded-2xl bg-[#fcfaf8] border border-black/[0.03] hover:shadow-sm transition-all duration-200">
+                      <span className="text-xs font-extrabold text-neutral-700">{item.label}</span>
+                      <Toggle
+                        checked={isChecked}
+                        onChange={() => toggleAccessInEdit(item.val)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm lg:col-span-2">
+                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                  <ClipboardList className="size-4 text-[#C66170]" />
+                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Storico contratti e rinnovi</h2>
+                </div>
+
+                <div className="overflow-x-auto mt-4">
+                  <table className="min-w-full divide-y divide-black/5 text-left text-xs">
+                    <thead>
+                      <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                        <th className="py-2.5">Tipo</th>
+                        <th className="py-2.5">Data Inizio</th>
+                        <th className="py-2.5">Data Fine</th>
+                        <th className="py-2.5">Stato</th>
+                        <th className="py-2.5">Rinnovato il</th>
+                        <th className="py-2.5">Scadenza tra</th>
+                        <th className="py-2.5">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
+                      {contracts.length > 0 ? (
+                        contracts.map((c, idx) => (
+                          <tr key={idx} className="hover:bg-neutral-50/50 transition">
+                            <td className="py-3 font-extrabold text-neutral-900">{c.tipo}</td>
+                            <td className="py-3">{c.inizio}</td>
+                            <td className="py-3">{c.fine}</td>
+                            <td className="py-3">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide",
+                                c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
+                                c.stato === "Completato" && "bg-neutral-100 text-neutral-600",
+                                c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100"
+                              )}>
+                                {c.stato}
+                              </span>
+                            </td>
+                            <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
+                            <td className="py-3 text-[#B85B68] font-bold">{c.scadenza}</td>
+                            <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="py-6 text-center text-neutral-400 italic">
+                            Nessuna data di contratto configurata per questo dipendente.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm flex flex-col">
+                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                  <SlidersHorizontal className="size-4 text-[#C66170]" />
+                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Note amministrazione HR (interne)</h2>
+                </div>
+                <p className="text-[10px] text-neutral-400 font-semibold mt-1">Visibile solo ad amministratori e responsabili HR</p>
+
+                <div className="flex-1 flex flex-col justify-between mt-4">
+                  <textarea
+                    value={editing.hrNotes || ""}
+                    onChange={(e) => {
+                      const text = e.target.value.slice(0, 1000);
+                      updateDraft("hrNotes", text);
+                    }}
+                    placeholder="Scrivi una nota interna..."
+                    rows={6}
+                    className="w-full flex-1 rounded-2xl border border-black/10 bg-white/80 p-3.5 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 resize-none font-medium"
+                  />
+                  <div className="text-[10px] text-neutral-400 font-bold text-right mt-2">
+                    {(editing.hrNotes || "").length}/1000 caratteri
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-4 pt-4 border-t border-black/5">
+              <Button
+                type="button"
+                variant="soft"
+                onClick={() => {
+                  setEditing(null);
+                  setCreating(false);
+                }}
+                className="min-w-[150px] border border-black/10 bg-white text-neutral-600"
+              >
+                Annulla
+              </Button>
+              <Button
+                type="submit"
+                disabled={saving}
+                className="min-w-[180px] bg-gradient-to-r from-paradise-pink to-[#ffa8dd] text-paradise-noir font-black shadow-md hover:shadow-lg transition active:scale-[0.98]"
+              >
+                {saving ? "Salvataggio..." : "Salva modifiche"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  if (editing) {
+    return renderFullscreenEditor();
   }
 
   return (

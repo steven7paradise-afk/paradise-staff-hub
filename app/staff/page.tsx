@@ -15,6 +15,9 @@ export default async function StaffPage() {
       include: {
         location: true,
         manager: true,
+        last_edited_by: {
+          select: { name: true }
+        }
       },
       orderBy: { name: "asc" },
     }),
@@ -54,8 +57,10 @@ export default async function StaffPage() {
           managerId: user.manager_id,
           managerName: user.manager?.name ?? "",
           hrNotes: user.hr_notes ?? "",
-          accessList: Array.isArray(user.access_list) ? (user.access_list as string[]) : [],
+          accessList: user.access_list,
           iban: user.iban ?? "",
+          lastEditedByName: user.last_edited_by?.name ?? null,
+          lastEditedAt: user.last_edited_at?.toISOString() ?? null,
         }))}
         locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
         managers={managers.map((m) => ({ id: m.id, name: m.name, role: m.role }))}

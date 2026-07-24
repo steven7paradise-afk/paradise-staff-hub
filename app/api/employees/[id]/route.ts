@@ -66,6 +66,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
       google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
       google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : undefined,
+      last_edited_by_id: session.user.id,
+      last_edited_at: new Date(),
       ...(pin ? { pin_hash: await bcrypt.hash(pin, 12), pin_lookup: pinLookup(pin) } : {}),
       ...(password ? { password_hash: await bcrypt.hash(password, 12) } : {}),
   };
@@ -74,6 +76,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const updatedUser = await tx.user.update({
       where: { id },
       data: baseUpdate,
+      include: {
+        last_edited_by: {
+          select: { id: true, name: true }
+        }
+      }
     });
 
     if (nextSedeId && nextSedeId !== current.sede_id) {
