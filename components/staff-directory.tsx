@@ -825,7 +825,7 @@ export function StaffDirectory({
                     <div className="h-6 w-16 bg-neutral-200 animate-pulse rounded-md mt-2" />
                   ) : (
                     <div className="flex items-baseline justify-between gap-1 mt-2">
-                      <span className="text-xl font-black tracking-tight">{card.count}{card.unit}</span>
+                      <span className="text-xl font-black tracking-tight">{card.count.toLocaleString("it-IT")}{card.unit}</span>
                       <span className={cn(
                         "text-[9px] font-extrabold rounded-full px-1.5 py-0.5",
                         card.growth >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
