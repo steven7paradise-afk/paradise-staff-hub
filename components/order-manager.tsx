@@ -14,8 +14,8 @@ const ORDER_LABEL_BASE_URL = "https://www.paradisebeauty.it";
 const COMPANY_INFO = {
   name: "PARADISE BEAUTY",
   subtitle: "Paradise Hair & Beauty",
-  website: "www.staff-paradise.tech",
-  email: "info@staff-paradise.tech",
+  website: "www.paradisebeauty.it",
+  email: "assistenza@paradisebeauty.it",
   phone: "",
   vat: "",
   address: "",
@@ -319,6 +319,77 @@ function orderPublicUrl(orderId: string) {
   return `${ORDER_LABEL_BASE_URL}/ordine/${encodeURIComponent(orderId)}`;
 }
 
+function labelIncludes(label: string, terms: string[]) {
+  const clean = label.toLowerCase();
+  return terms.some((term) => clean.includes(term));
+}
+
+function findOrderField(fields: Array<{ label: string; value: any; id: string }>, terms: string[]) {
+  return fields.find((field) => labelIncludes(field.label, terms));
+}
+
+function orderLabelFieldValue(fields: Array<{ label: string; value: any; id: string }>, label: string, terms: string[]) {
+  const field = findOrderField(fields, terms);
+  return {
+    label,
+    value: field ? displayOrderFieldValue(field.value) : "Non indicato",
+  };
+}
+
+function orderLabelFieldsByType(order: OrderResponse, fields: Array<{ label: string; value: any; id: string }>) {
+  const taskType = getOrderTaskType(order);
+  const common = [orderLabelFieldValue(fields, "Cosa dobbiamo fare?", ["cosa dobbiamo fare", "cosa", "fare"])];
+
+  if (taskType === "conversione") {
+    return [
+      ...common,
+      orderLabelFieldValue(fields, "Peso sulla bilancia", ["peso sulla bilancia", "peso"]),
+      orderLabelFieldValue(fields, "Extension Paradise a", ["extension paradise"]),
+      orderLabelFieldValue(fields, "Quante fasce?", ["quante fasce", "fasce"]),
+      orderLabelFieldValue(fields, "Pagamento", ["pagamento"]),
+      orderLabelFieldValue(fields, "Quanto manca pagare?", ["manca pagare", "quanto manca"]),
+    ];
+  }
+
+  return [
+    ...common,
+    orderLabelFieldValue(fields, "Grammi", ["grammi", "grammo"]),
+    orderLabelFieldValue(fields, "Lunghezza in cm", ["lunghezza"]),
+    orderLabelFieldValue(fields, "Colore", ["colore"]),
+    orderLabelFieldValue(fields, "Texture", ["texture"]),
+    orderLabelFieldValue(fields, "Extension Paradise a", ["extension paradise"]),
+    orderLabelFieldValue(fields, "Quante fasce?", ["quante fasce", "fasce"]),
+    orderLabelFieldValue(fields, "Quanto ha pagato?", ["quanto ha pagato", "ha pagato"]),
+    orderLabelFieldValue(fields, "Quanto manca pagare?", ["manca pagare", "quanto manca"]),
+  ];
+}
+
+function shopifyBarcodeValue(order: OrderResponse, fields: Array<{ label: string; value: any; id: string }>, orderNo: string) {
+  const haystack = [
+    orderNo,
+    JSON.stringify(order.answers ?? {}),
+    ...fields.map((field) => displayOrderFieldValue(field.value)),
+  ].join(" ");
+  const adminMatch = haystack.match(/admin\.shopify\.com\/store\/[^/\s]+\/orders\/(\d+)/i);
+  if (adminMatch?.[1]) return adminMatch[1];
+  const orderUrlMatch = haystack.match(/\/orders\/(\d{8,})/i);
+  if (orderUrlMatch?.[1]) return orderUrlMatch[1];
+  const numericOrder = orderNo.replace(/\D/g, "");
+  return numericOrder || order.id;
+}
+
+async function resolveShopifyBarcodeValue(order: OrderResponse, fields: Array<{ label: string; value: any; id: string }>, orderNo: string) {
+  const fallback = shopifyBarcodeValue(order, fields, orderNo);
+  try {
+    const response = await fetch(`/api/orders/${encodeURIComponent(order.id)}/shopify-barcode`, { cache: "no-store" });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.barcodeValue) return fallback;
+    return String(data.barcodeValue);
+  } catch {
+    return fallback;
+  }
+}
+
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
   "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
@@ -532,20 +603,23 @@ export function OrderManager({
     const fields = (order.form?.fields ?? [])
       .map((field) => ({ label: field.label, value: order.answers?.[field.id], id: field.id }))
       .filter((field) => field.value && !field.id.startsWith("__"));
-    const logoDataUrl = await fetch("/logo.png")
+    const taskType = getOrderTaskType(order);
+    const selectedLabelFields = orderLabelFieldsByType(order, fields);
+    const barcodeValue = await resolveShopifyBarcodeValue(order, fields, orderNo);
+    const logoDataUrl = await fetch("/logo-label-paradise.png")
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => (blob ? blobToDataUrl(blob) : ""))
       .catch(() => "");
 
     let y = 8;
     const pink = [236, 83, 145] as const;
-    const softPink = [255, 243, 248] as const;
     const borderPink = [247, 181, 211] as const;
     const textDark = [18, 18, 22] as const;
     const textMuted = [92, 92, 105] as const;
     const barcodeTop = 175;
     const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = borderPink) => {
       doc.setDrawColor(color[0], color[1], color[2]);
+      doc.setLineWidth(0.22);
       doc.line(x1, y1, x2, y2);
     };
     const sectionTitle = (title: string) => {
@@ -554,15 +628,15 @@ export function OrderManager({
       doc.setFontSize(8.2);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(title.toUpperCase(), margin, y);
-      y += 4.5;
+      y += 4;
     };
     const tinyLabel = (label: string, x: number, yPos: number, width: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.1);
+      doc.setFontSize(5.8);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
     };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 7.2) => {
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 6.8) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
@@ -571,26 +645,26 @@ export function OrderManager({
     const fullRow = (label: string, value: string) => {
       if (y > barcodeTop - 9) return;
       line(margin, y, pageWidth - margin, y, [248, 211, 228]);
-      y += 3.2;
+      y += 2.8;
       tinyLabel(label, margin + 6, y, 34);
-      valueText(value, margin + 42, y, contentWidth - 46, 7.1);
-      y += 7.4;
+      valueText(value, margin + 42, y, contentWidth - 46, 6.8);
+      y += 6.3;
     };
     const gridRow = (left?: { label: string; value: string }, right?: { label: string; value: string }) => {
       if (y > barcodeTop - 13) return;
       line(margin, y, pageWidth - margin, y, [248, 211, 228]);
       const colW = (contentWidth - 4) / 2;
-      y += 3.1;
+      y += 2.8;
       if (left) {
         tinyLabel(left.label, margin + 6, y, colW - 8);
-        valueText(left.value, margin + 6, y + 4, colW - 8, 7.1);
+        valueText(left.value, margin + 6, y + 3.7, colW - 8, 6.8);
       }
       if (right) {
-        line(margin + colW + 2, y - 2.8, margin + colW + 2, y + 10.2, [248, 211, 228]);
+        line(margin + colW + 2, y - 2.4, margin + colW + 2, y + 8.8, [248, 211, 228]);
         tinyLabel(right.label, margin + colW + 8, y, colW - 8);
-        valueText(right.value, margin + colW + 8, y + 4, colW - 8, 7.1);
+        valueText(right.value, margin + colW + 8, y + 3.7, colW - 8, 6.8);
       }
-      y += 13.2;
+      y += 11.3;
     };
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
@@ -599,7 +673,7 @@ export function OrderManager({
 
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, "PNG", 12, 10, 30, 18);
+        doc.addImage(logoDataUrl, "PNG", 12, 9, 30, 11);
       } catch {
         // If the browser cannot decode the logo, the text header still prints.
       }
@@ -618,10 +692,10 @@ export function OrderManager({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.2);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(COMPANY_INFO.email, 16, 41);
-    doc.text(COMPANY_INFO.website, 61, 41);
-    line(51, 36, 51, 43, [248, 211, 228]);
-    y = 48;
+    doc.text(COMPANY_INFO.email, 16, 35.5);
+    doc.text(COMPANY_INFO.website, 61, 35.5);
+    line(51, 31.5, 51, 38, [248, 211, 228]);
+    y = 42;
 
     doc.setFillColor(255, 248, 251);
     doc.setDrawColor(248, 211, 228);
@@ -639,25 +713,23 @@ export function OrderManager({
     doc.setFontSize(7);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
     doc.text(doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth - 28), margin + 20, y + 12);
-    y += 26;
+    y += 22;
 
     sectionTitle("Riepilogo");
-    gridRow({ label: "Stato", value: statusLabel(order.status || "NEW") }, { label: "Creato da", value: order.user?.name ?? "Staff" });
-    gridRow({ label: "Tipo", value: getOrderTaskType(order).toUpperCase() }, { label: "Data creazione", value: orderDate(order) });
+    gridRow({ label: "Tipo", value: taskType === "conversione" ? "CONVERSIONE CAPELLI" : "ACQUISTO EXTENSION" }, { label: "Data creazione", value: orderDate(order) });
     gridRow({ label: "Salone", value: order.user_location_name ?? "Non indicato" }, { label: "Ultima modifica", value: formatDateTime(order.updated_at) });
 
     sectionTitle("Informazioni ordine");
-    const primaryFields = fields.filter((field) => {
-      const label = field.label.toLowerCase();
-      return label.includes("nome") || label.includes("email") || label.includes("telefono");
-    });
-    const secondaryFields = fields.filter((field) => !primaryFields.includes(field));
-    primaryFields.forEach((field) => fullRow(field.label, displayOrderFieldValue(field.value)));
-    for (let index = 0; index < secondaryFields.length; index += 2) {
+    fullRow("Nome cognome", client);
+    const emailField = findOrderField(fields, ["email"]);
+    if (emailField) fullRow("Email", displayOrderFieldValue(emailField.value));
+    const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
+    if (phoneField) fullRow("Telefono", displayOrderFieldValue(phoneField.value));
+    for (let index = 0; index < selectedLabelFields.length; index += 2) {
       gridRow(
-        { label: secondaryFields[index].label, value: displayOrderFieldValue(secondaryFields[index].value) },
-        secondaryFields[index + 1]
-          ? { label: secondaryFields[index + 1].label, value: displayOrderFieldValue(secondaryFields[index + 1].value) }
+        selectedLabelFields[index],
+        selectedLabelFields[index + 1]
+          ? selectedLabelFields[index + 1]
           : undefined
       );
     }
@@ -698,8 +770,12 @@ export function OrderManager({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(5.8);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(publicUrl.replace(/^https:\/\//, ""), pageWidth / 2, barcodeTop - 1.5, { align: "center" });
-    drawCode128(doc, publicUrl, 16, barcodeTop + 2, 70, 16);
+    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, barcodeTop - 1.5, { align: "center" });
+    drawCode128(doc, barcodeValue, 16, barcodeTop + 2, 70, 16);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.3);
+    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+    doc.text(publicUrl.replace(/^https:\/\//, ""), pageWidth / 2, barcodeTop + 21, { align: "center" });
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.2);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);

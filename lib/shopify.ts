@@ -169,6 +169,81 @@ export async function getShopifyOrderNamesBulk(orderIds: (string | number | null
 }
 
 /**
+ * Resolves the real Shopify admin order ID from either the visible order name
+ * (e.g. #24492) or a direct Shopify order ID.
+ */
+export async function getShopifyOrderIdentity(orderNameOrId: string): Promise<{
+  id: string;
+  name: string | null;
+  adminUrl: string;
+} | null> {
+  try {
+    const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+    const token = process.env.SHOPIFY_ACCESS_TOKEN;
+
+    if (!shop || !token) {
+      console.warn("Shopify shop domain or access token not configured.");
+      return null;
+    }
+
+    const cleanName = orderNameOrId.trim();
+    if (!cleanName) return null;
+
+    const headers = {
+      "X-Shopify-Access-Token": token,
+      "Content-Type": "application/json",
+    };
+
+    let orderData: any = null;
+    const numeric = cleanName.replace("#", "");
+
+    if (/^\d{12,}$/.test(numeric)) {
+      const directRes = await fetchWithTimeout(`https://${shop}/admin/api/2024-04/orders/${numeric}.json?fields=id,name`, { headers }, 1500);
+      if (directRes.ok) {
+        const directData = await directRes.json();
+        orderData = directData?.order;
+      }
+    }
+
+    if (!orderData) {
+      const searchName = cleanName.startsWith("#") || !/^\d+$/.test(cleanName) ? cleanName : `#${cleanName}`;
+      const searchRes = await fetchWithTimeout(
+        `https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(searchName)}&status=any&fields=id,name&limit=1`,
+        { headers },
+        1500
+      );
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        orderData = searchData?.orders?.[0] ?? null;
+      }
+    }
+
+    if (!orderData) {
+      const fallbackRes = await fetchWithTimeout(
+        `https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(numeric)}&status=any&fields=id,name&limit=1`,
+        { headers },
+        1500
+      );
+      if (fallbackRes.ok) {
+        const fallbackData = await fallbackRes.json();
+        orderData = fallbackData?.orders?.[0] ?? null;
+      }
+    }
+
+    if (!orderData?.id) return null;
+
+    return {
+      id: String(orderData.id),
+      name: orderData.name ? String(orderData.name) : null,
+      adminUrl: `https://admin.shopify.com/store/c1uzax-u0/orders/${orderData.id}`,
+    };
+  } catch (error) {
+    console.error(`Error resolving Shopify order identity for ${orderNameOrId}:`, error);
+    return null;
+  }
+}
+
+/**
  * Appends a staff comment/note to a Shopify order's note field.
  * Handles inputs representing either order name (e.g. #22910) or direct order ID.
  */
