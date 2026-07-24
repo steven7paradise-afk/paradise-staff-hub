@@ -9,6 +9,15 @@ import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
+const COMPANY_INFO = {
+  name: "PARADISE BEAUTY",
+  subtitle: "Paradise Hair & Beauty",
+  website: "www.staff-paradise.tech",
+  email: "info@staff-paradise.tech",
+  phone: "",
+  vat: "",
+  address: "",
+};
 
 type OrderPhoto = {
   url: string;
@@ -285,6 +294,25 @@ function orderFieldIcon(label: string) {
   return null;
 }
 
+function cleanPdfFileName(value: string) {
+  return value
+    .trim()
+    .replace(/^#/, "")
+    .replace(/[\/\\:*?"<>|]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 function orderPickup(order: OrderResponse) {
   const pickup = order.answers?.__pickup;
   if (!pickup || typeof pickup !== "object") return null;
@@ -429,6 +457,133 @@ export function OrderManager({
     } finally {
       setUploadingPhoto(false);
     }
+  }
+
+  async function downloadOrderLabelPdf(order: OrderResponse) {
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 10;
+    const contentWidth = pageWidth - margin * 2;
+    const orderNo = orderNumber(order);
+    const client = orderClientName(order);
+    const fields = (order.form?.fields ?? [])
+      .map((field) => ({ label: field.label, value: order.answers?.[field.id], id: field.id }))
+      .filter((field) => field.value && !field.id.startsWith("__"));
+    const logoDataUrl = await fetch("/logo.png")
+      .then((response) => (response.ok ? response.blob() : null))
+      .then((blob) => (blob ? blobToDataUrl(blob) : ""))
+      .catch(() => "");
+    const companyLines = [
+      COMPANY_INFO.subtitle,
+      COMPANY_INFO.address,
+      COMPANY_INFO.phone ? `Tel. ${COMPANY_INFO.phone}` : "",
+      COMPANY_INFO.email ? `Email: ${COMPANY_INFO.email}` : "",
+      COMPANY_INFO.website ? `Web: ${COMPANY_INFO.website}` : "",
+      COMPANY_INFO.vat ? `P.IVA: ${COMPANY_INFO.vat}` : "",
+    ].filter(Boolean);
+
+    let y = margin;
+    const ensureSpace = (needed: number) => {
+      if (y + needed <= pageHeight - margin) return;
+      doc.addPage();
+      y = margin;
+    };
+    const line = (x1: number, y1: number, x2: number, y2: number, color = 230) => {
+      doc.setDrawColor(color, color, color);
+      doc.line(x1, y1, x2, y2);
+    };
+    const sectionTitle = (title: string) => {
+      ensureSpace(9);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(198, 97, 112);
+      doc.text(title.toUpperCase(), margin, y);
+      y += 4;
+      line(margin, y, pageWidth - margin, y, 235);
+      y += 5;
+    };
+    const fieldRow = (label: string, value: string) => {
+      const cleanValue = value || "Non indicato";
+      const valueLines = doc.splitTextToSize(cleanValue, contentWidth - 44);
+      const rowHeight = Math.max(10, valueLines.length * 4 + 5);
+      ensureSpace(rowHeight);
+      doc.setFillColor(252, 248, 250);
+      doc.roundedRect(margin, y - 3, contentWidth, rowHeight, 2.5, 2.5, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(130, 130, 140);
+      doc.text(label.toUpperCase(), margin + 4, y + 2);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(25, 25, 25);
+      doc.text(valueLines, margin + 44, y + 2);
+      y += rowHeight + 2;
+    };
+
+    doc.setFillColor(255, 246, 250);
+    doc.roundedRect(margin, y, contentWidth, 42, 4, 4, "F");
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, "PNG", margin + 5, y + 5, 18, 18);
+      } catch {
+        // If the browser cannot decode the logo, the text header still prints.
+      }
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(20, 20, 24);
+    doc.text(COMPANY_INFO.name, margin + 27, y + 10);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    doc.setTextColor(70, 70, 78);
+    doc.text(doc.splitTextToSize(companyLines.join("  -  "), contentWidth - 32), margin + 27, y + 16);
+    line(margin + 5, y + 25, pageWidth - margin - 5, y + 25, 235);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(140, 140, 150);
+    doc.text(`ORDINE #${orderNo}`, margin + 5, y + 32);
+    doc.setFontSize(15);
+    doc.setTextColor(20, 20, 24);
+    doc.text(doc.splitTextToSize(client, contentWidth - 10), margin + 5, y + 39);
+    y += 50;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(70, 70, 78);
+    doc.text(doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth), margin, y);
+    y += Math.max(10, doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth).length * 4 + 5);
+
+    sectionTitle("Riepilogo");
+    fieldRow("Stato", statusLabel(order.status || "NEW"));
+    fieldRow("Tipo", getOrderTaskType(order).toUpperCase());
+    fieldRow("Salone", order.user_location_name ?? "Non indicato");
+    fieldRow("Creato da", order.user?.name ?? "Staff");
+    fieldRow("Data creazione", orderDate(order));
+    fieldRow("Ultima modifica", formatDateTime(order.updated_at));
+
+    sectionTitle("Informazioni ordine");
+    fields.forEach((field) => {
+      fieldRow(field.label, displayOrderFieldValue(field.value));
+    });
+
+    if (Array.isArray(order.activity_log) && order.activity_log.length > 0) {
+      sectionTitle("Cronologia stati");
+      order.activity_log.slice(-6).forEach((log: any) => {
+        const when = log.at || log.date ? formatDateTime(log.at || log.date) : "";
+        const from = ORDER_COLUMNS.find((column) => column.id === log.from)?.label ?? log.from;
+        const to = ORDER_COLUMNS.find((column) => column.id === log.to)?.label ?? log.to;
+        const title = log.action || (log.from !== undefined || log.to !== undefined ? `Da ${from || "sconosciuto"} a ${to || "sconosciuto"}` : "Attivita registrata");
+        fieldRow(when || "Evento", `${title}${log.by || log.user ? ` - ${log.by || log.user}` : ""}${log.note ? `\nNota: ${log.note}` : ""}`);
+      });
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(165, 165, 170);
+    doc.text("Paradise Beauty - Etichetta ordine", margin, pageHeight - 6);
+    doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 
   function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -791,7 +946,7 @@ export function OrderManager({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Button variant="soft" onClick={() => window.print()}><Printer className="size-4" /> Stampa</Button>
+                <Button variant="soft" onClick={() => void downloadOrderLabelPdf(selected)}><Printer className="size-4" /> Stampa</Button>
                 <Button variant="soft" onClick={() => setSelected(null)}><X className="size-4" /> Chiudi</Button>
               </div>
             </div>
