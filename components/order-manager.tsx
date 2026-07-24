@@ -3,7 +3,7 @@
 import Papa from "papaparse";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, Camera, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, PackageCheck, Search, ShoppingCart, Truck, Upload, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
@@ -275,6 +275,14 @@ function displayOrderFieldValue(value: any) {
     return JSON.stringify(value);
   }
   return String(value);
+}
+
+function orderFieldIcon(label: string) {
+  const clean = label.toLowerCase();
+  if (clean.includes("email")) return Mail;
+  if (clean.includes("telefono") || clean.includes("whatsapp")) return Phone;
+  if (clean.includes("data")) return CalendarDays;
+  return null;
 }
 
 function orderPickup(order: OrderResponse) {
@@ -768,46 +776,59 @@ export function OrderManager({
 
       {selected ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4">
-          <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-[30px] bg-[#F7F3F6] p-3 shadow-2xl lg:max-w-6xl lg:rounded-[30px] lg:p-5">
-            <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 rounded-[24px] border border-white/70 bg-white/95 p-3 shadow-sm backdrop-blur">
+          <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-[30px] bg-white p-3 shadow-2xl lg:max-w-7xl lg:rounded-[28px] lg:p-5">
+            <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-black/5 bg-white/95 pb-4 backdrop-blur">
               <div className="flex min-w-0 items-center gap-3">
                 <button onClick={() => setSelected(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition hover:bg-black/[0.03]"><ArrowLeft className="size-5" /></button>
                 <div className="min-w-0">
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-black/35">Ordine {orderNumber(selected)}</p>
-                  <h2 className="truncate text-xl font-black tracking-tight text-slate-950">{orderClientName(selected)}</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate text-xl font-black tracking-tight text-slate-950">{orderClientName(selected)}</h2>
+                    <Badge tone="pink">{statusLabel(selected.status || "NEW")}</Badge>
+                    {renderTaskBadge(getOrderTaskType(selected))}
+                  </div>
+                  <p className="mt-1 line-clamp-1 text-sm font-semibold text-black/55">{orderItems(selected) || "Nessuna descrizione inserita"}</p>
                 </div>
               </div>
-              <Button variant="soft" onClick={() => setSelected(null)}><X className="size-4" /> Chiudi</Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button variant="soft" onClick={() => window.print()}><Printer className="size-4" /> Stampa</Button>
+                <Button variant="soft" onClick={() => setSelected(null)}><X className="size-4" /> Chiudi</Button>
+              </div>
+            </div>
+            <div className="mb-4 grid gap-3 rounded-[22px] border border-black/5 bg-[#FBF8FA] p-3 md:grid-cols-4">
+              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><MapPin className="size-4" /></span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Salone</p>
+                  <p className="mt-1 text-sm font-black text-black/80">{selected.user_location_name ?? "Non indicato"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><UserRound className="size-4" /></span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Creato da</p>
+                  <p className="mt-1 text-sm font-black text-black/80">{selected.user?.name ?? "Staff"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><CalendarDays className="size-4" /></span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Data creazione</p>
+                  <p className="mt-1 text-sm font-black text-black/80">{orderDate(selected)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
+                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><Clock3 className="size-4" /></span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Ultima modifica</p>
+                  <p className="mt-1 text-sm font-black text-black/80">{formatDateTime(selected.updated_at)}</p>
+                </div>
+              </div>
             </div>
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
               <Card className="bg-white">
-                <div className="rounded-[24px] border border-black/5 bg-gradient-to-br from-white to-[#FBF7FA] p-4 shadow-sm lg:p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone="dark">{statusLabel(selected.status || "NEW")}</Badge>
-                        {renderTaskBadge(getOrderTaskType(selected))}
-                        {selected.user_location_name ? <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-black/50">{selected.user_location_name}</span> : null}
-                      </div>
-                      <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-900">{orderClientName(selected)}</h2>
-                      <p className="mt-1 text-sm font-semibold text-slate-500">Numero ordine: {orderNumber(selected)}</p>
-                      <p className="mt-4 max-w-2xl whitespace-pre-wrap text-sm leading-7 text-black/60">{orderItems(selected) || "Nessuna descrizione inserita"}</p>
-                    </div>
-                    <div className="grid min-w-[220px] grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-2xl border border-black/5 bg-white p-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Creato da</p>
-                        <p className="mt-2 font-bold text-black/75">{selected.user?.name ?? "Staff"}</p>
-                      </div>
-                      <div className="rounded-2xl border border-black/5 bg-white p-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Data</p>
-                        <p className="mt-2 font-bold text-black/75">{orderDate(selected)}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-black uppercase tracking-[0.14em] text-black/55">Formulario ordine</h3>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-black uppercase tracking-[0.14em] text-black/55">Informazioni ordine</h3>
                   <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[11px] font-bold text-black/40">
                     {(selected.form?.fields ?? []).filter((field) => selected.answers?.[field.id] && !field.id.startsWith("__")).length} campi
                   </span>
@@ -819,15 +840,19 @@ export function OrderManager({
                     if (field.id.startsWith("__")) return null;
                     const isFile = typeof value === "object" && value.storagePath;
                     const displayValue = displayOrderFieldValue(value);
+                    const FieldIcon = orderFieldIcon(field.label);
                     return (
-                      <div key={field.id} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-black/35">{field.label}</p>
+                      <div key={field.id} className="rounded-2xl border border-black/5 bg-[#FBF8FA] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.12em] text-black/35">{field.label}</p>
+                          {FieldIcon ? <FieldIcon className="size-4 shrink-0 text-[#C66170]" /> : null}
+                        </div>
                         {isFile ? (
                           <a href={`/api/service-forms/responses/file?path=${encodeURIComponent(value.storagePath)}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]">
                             <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
                           </a>
                         ) : (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-black/70">{displayValue}</p>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-black/75">{displayValue}</p>
                         )}
                       </div>
                     );
