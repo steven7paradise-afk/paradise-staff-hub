@@ -6,7 +6,7 @@ import {
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, UserPlus, Printer, RefreshCw,
+  Archive, Plus, Trash2, UserPlus, Printer, RefreshCw,
   ChevronLeft, Copy, Check
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -62,6 +62,7 @@ type ContractRow = {
   rinnovatoIl: string;
   scadenza: string;
   note: string;
+  historyIndex?: number;
 };
 
 type Location = { id: string; name: string };
@@ -152,6 +153,8 @@ export function StaffDirectory({
   const [pinInput, setPinInput] = useState("");
   const [pinConfirmInput, setPinConfirmInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
+  const [showRenewalForm, setShowRenewalForm] = useState(false);
+  const [renewalDraft, setRenewalDraft] = useState({ startDate: "", endDate: "", note: "" });
   const [stats, setStats] = useState<{
     jobs: { count: number; growth: number };
     hours: { count: number; growth: number };
@@ -442,6 +445,7 @@ export function StaffDirectory({
       setStaff((prev) => prev.map((emp) => emp.id === updated.id ? updated : emp));
       setSelectedEmployee(updated);
       setIsEditing(false);
+      resetRenewalForm();
       setPinInput("");
       setPinConfirmInput("");
       setPasswordInput("");
@@ -464,6 +468,11 @@ export function StaffDirectory({
         : [...current, access];
       return { ...prev, accessList: updated };
     });
+  };
+
+  const resetRenewalForm = () => {
+    setShowRenewalForm(false);
+    setRenewalDraft({ startDate: "", endDate: "", note: "" });
   };
 
   const getStatusTone = (status: string) => {
@@ -712,7 +721,7 @@ export function StaffDirectory({
       note: "Contratto corrente"
     });
 
-    history.forEach((item) => {
+    history.forEach((item, historyIndex) => {
       const renewalEnd = item.endDate ? new Date(item.endDate) : null;
       list.push({
         tipo: item.tipo || "Rinnovo",
@@ -721,38 +730,64 @@ export function StaffDirectory({
         stato: item.status || "Pianificato",
         rinnovatoIl: item.renewedAt ? formatContractDate(item.renewedAt) : "—",
         scadenza: renewalEnd && !isNaN(renewalEnd.getTime()) ? getDaysLabel(renewalEnd) : "—",
-        note: item.note || "Da confermare"
+        note: item.note || "Da confermare",
+        historyIndex
       });
     });
 
     return list;
   };
 
-  const planContractRenewal = () => {
-    if (!editForm) return;
-    const history = getContractHistory(editForm);
-    const lastEnd = history.length > 0 ? history[history.length - 1].endDate : editForm.contractEnd;
+  const getSuggestedRenewalDates = (employee: Employee) => {
+    const history = getContractHistory(employee);
+    const lastEnd = history.length > 0 ? history[history.length - 1].endDate : employee.contractEnd;
 
-    if (!lastEnd) {
-      setErrorMsg("Inserisci prima una data di fine contratto.");
-      return;
-    }
+    if (!lastEnd) return { startDate: "", endDate: "" };
 
     const nextStart = new Date(lastEnd);
-    if (isNaN(nextStart.getTime())) {
-      setErrorMsg("La data di fine contratto non è valida.");
-      return;
-    }
+    if (isNaN(nextStart.getTime())) return { startDate: "", endDate: "" };
 
     nextStart.setDate(nextStart.getDate() + 1);
     const nextEnd = new Date(nextStart);
     nextEnd.setFullYear(nextStart.getFullYear() + 1);
     nextEnd.setDate(nextEnd.getDate() - 1);
 
-    const confirmed = window.confirm(
-      `Vuoi pianificare il rinnovo dal ${formatContractDate(nextStart)} al ${formatContractDate(nextEnd)}?`
-    );
-    if (!confirmed) return;
+    return {
+      startDate: formatDateInput(nextStart),
+      endDate: formatDateInput(nextEnd)
+    };
+  };
+
+  const openRenewalForm = () => {
+    if (!editForm) return;
+    const suggested = getSuggestedRenewalDates(editForm);
+    setRenewalDraft({
+      startDate: suggested.startDate,
+      endDate: suggested.endDate,
+      note: "Da confermare"
+    });
+    setShowRenewalForm(true);
+    setErrorMsg("");
+  };
+
+  const planContractRenewal = () => {
+    if (!editForm) return;
+    if (!renewalDraft.startDate || !renewalDraft.endDate) {
+      setErrorMsg("Inserisci data inizio e data fine del rinnovo.");
+      return;
+    }
+
+    const nextStart = new Date(renewalDraft.startDate);
+    const nextEnd = new Date(renewalDraft.endDate);
+    if (isNaN(nextStart.getTime()) || isNaN(nextEnd.getTime())) {
+      setErrorMsg("Le date del rinnovo non sono valide.");
+      return;
+    }
+
+    if (nextEnd < nextStart) {
+      setErrorMsg("La data fine rinnovo deve essere successiva alla data inizio.");
+      return;
+    }
 
     setEditForm((prev) => {
       if (!prev) return prev;
@@ -762,16 +797,31 @@ export function StaffDirectory({
           ...getContractHistory(prev),
           {
             tipo: "Rinnovo",
-            startDate: formatDateInput(nextStart),
-            endDate: formatDateInput(nextEnd),
+            startDate: renewalDraft.startDate,
+            endDate: renewalDraft.endDate,
             status: "Pianificato",
             renewedAt: "",
-            note: "Da confermare"
+            note: renewalDraft.note.trim() || "Da confermare"
           }
         ]
       };
     });
+    setShowRenewalForm(false);
+    setRenewalDraft({ startDate: "", endDate: "", note: "" });
     setErrorMsg("");
+  };
+
+  const deleteContractRenewal = (historyIndex: number) => {
+    const confirmed = window.confirm("Vuoi eliminare questo rinnovo pianificato?");
+    if (!confirmed) return;
+
+    setEditForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        contractHistory: getContractHistory(prev).filter((_, index) => index !== historyIndex)
+      };
+    });
   };
 
   const renderFullscreenEditor = () => {
@@ -828,6 +878,7 @@ export function StaffDirectory({
             onClick={() => {
               setIsEditing(false);
               setSelectedEmployee(null);
+              resetRenewalForm();
             }}
             className="group inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neutral-400 hover:text-black transition duration-200"
           >
@@ -1214,13 +1265,63 @@ export function StaffDirectory({
                   </div>
                   <button
                     type="button"
-                    onClick={planContractRenewal}
+                    onClick={openRenewalForm}
                     className="inline-flex min-h-9 items-center justify-center gap-2 rounded-2xl border border-[#C66170]/20 bg-[#C66170]/5 px-3 text-xs font-black uppercase tracking-wider text-[#B85B68] transition hover:bg-[#C66170]/10 active:scale-[0.98]"
                   >
                     <Plus className="size-4" />
                     Pianifica rinnovo
                   </button>
                 </div>
+
+                {showRenewalForm && (
+                  <div className="mt-4 rounded-[22px] border border-[#C66170]/15 bg-[#fff7fb] p-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data inizio rinnovo</span>
+                        <Field
+                          type="date"
+                          value={renewalDraft.startDate}
+                          onChange={(e) => setRenewalDraft((prev) => ({ ...prev, startDate: e.target.value }))}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data fine rinnovo</span>
+                        <Field
+                          type="date"
+                          value={renewalDraft.endDate}
+                          onChange={(e) => setRenewalDraft((prev) => ({ ...prev, endDate: e.target.value }))}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Note</span>
+                        <Field
+                          value={renewalDraft.note}
+                          onChange={(e) => setRenewalDraft((prev) => ({ ...prev, note: e.target.value }))}
+                          placeholder="Da confermare"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetRenewalForm();
+                          setErrorMsg("");
+                        }}
+                        className="inline-flex min-h-9 items-center justify-center rounded-2xl border border-black/10 bg-white px-4 text-xs font-bold text-neutral-600 transition hover:bg-black/[0.03]"
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        type="button"
+                        onClick={planContractRenewal}
+                        className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#C66170] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#B85B68] active:scale-[0.98]"
+                      >
+                        Aggiungi rinnovo
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="overflow-x-auto mt-4">
                   <table className="min-w-full divide-y divide-black/5 text-left text-xs">
@@ -1233,6 +1334,7 @@ export function StaffDirectory({
                         <th className="py-2.5">Rinnovato il</th>
                         <th className="py-2.5">Scadenza tra</th>
                         <th className="py-2.5">Note</th>
+                        <th className="py-2.5 text-right">Azioni</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
@@ -1255,11 +1357,25 @@ export function StaffDirectory({
                             <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
                             <td className="py-3 text-[#B85B68] font-bold">{c.scadenza}</td>
                             <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
+                            <td className="py-3 text-right">
+                              {c.historyIndex !== undefined ? (
+                                <button
+                                  type="button"
+                                  onClick={() => deleteContractRenewal(c.historyIndex!)}
+                                  className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
+                                  title="Elimina rinnovo"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              ) : (
+                                <span className="text-neutral-300">—</span>
+                              )}
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={7} className="py-6 text-center text-neutral-400 italic">
+                          <td colSpan={8} className="py-6 text-center text-neutral-400 italic">
                             Nessuna data di contratto configurata per questo dipendente.
                           </td>
                         </tr>
@@ -1301,6 +1417,7 @@ export function StaffDirectory({
                 onClick={() => {
                   setIsEditing(false);
                   setSelectedEmployee(null);
+                  resetRenewalForm();
                 }}
                 className="min-w-[150px] border border-black/10 bg-white text-neutral-600"
               >
@@ -1503,6 +1620,7 @@ export function StaffDirectory({
                 setSelectedEmployee(emp);
                 setIsEditing(true);
                 setEditForm({ ...emp });
+                resetRenewalForm();
                 setPinInput("");
                 setPinConfirmInput("");
                 setPasswordInput("");
