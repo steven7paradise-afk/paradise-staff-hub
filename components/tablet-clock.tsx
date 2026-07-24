@@ -291,6 +291,13 @@ export function TabletClock({
   const [now, setNow] = useState(new Date());
   const [pin, setPin] = useState("");
   const [worker, setWorker] = useState<IdentifiedWorker | null>(null);
+  const [imageError, setImageError] = useState(false);
+  const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setImageError(false);
+  }, [worker?.id]);
+
   const [todayLogs, setTodayLogs] = useState<any[]>([]);
   const [showDashboard, setShowDashboard] = useState(false);
   const [clientControlOpen, setClientControlOpen] = useState(false);
@@ -1469,9 +1476,14 @@ export function TabletClock({
           {/* Dashboard Private Area Header */}
           <div className="flex items-center justify-between border-b border-black/10 px-6 py-4 bg-[color:var(--tablet-card)] shadow-sm">
             <div className="flex items-center gap-3">
-              {worker?.photoUrl ? (
+              {worker?.photoUrl && !imageError ? (
                 <div className="relative size-10 overflow-hidden rounded-full border-2 border-[color:var(--tablet-accent)] shadow-sm">
-                  <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt="" className="size-full object-cover" />
+                  <img 
+                    src={resolveDrivePhotoUrl(worker.photoUrl)} 
+                    alt="" 
+                    className="size-full object-cover" 
+                    onError={() => setImageError(true)}
+                  />
                 </div>
               ) : (
                 <div className="flex size-10 items-center justify-center rounded-full border-2 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)] text-sm font-black uppercase tracking-wider text-[color:var(--tablet-accent)] shadow-sm">
@@ -1629,9 +1641,14 @@ export function TabletClock({
               )}
 
               <div className="mt-3 flex flex-col items-center">
-                {worker.photoUrl ? (
+                {worker.photoUrl && !imageError ? (
                   <div className="relative size-16 overflow-hidden rounded-full border-4 border-[color:var(--tablet-accent)] shadow-md lg:size-20">
-                    <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={worker.name} className="size-full object-cover" />
+                    <img 
+                      src={resolveDrivePhotoUrl(worker.photoUrl)} 
+                      alt={worker.name} 
+                      className="size-full object-cover" 
+                      onError={() => setImageError(true)}
+                    />
                   </div>
                 ) : (
                   <div className="flex size-16 items-center justify-center rounded-full border-4 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)] text-xl font-black uppercase tracking-wider text-[color:var(--tablet-accent)] shadow-md lg:size-20">
@@ -2867,8 +2884,19 @@ export function TabletClock({
                                   key={idx}
                                   className="flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full pl-1 pr-2.5 py-0.5"
                                 >
-                                  {mate.photoUrl ? (
-                                    <img src={resolveDrivePhotoUrl(mate.photoUrl)} className="size-5 rounded-full object-cover" alt="" />
+                                  {mate.photoUrl && !teammateErrors.has(mate.name) ? (
+                                    <img 
+                                      src={resolveDrivePhotoUrl(mate.photoUrl)} 
+                                      className="size-5 rounded-full object-cover" 
+                                      alt="" 
+                                      onError={() => {
+                                        setTeammateErrors(prev => {
+                                          const next = new Set(prev);
+                                          next.add(mate.name);
+                                          return next;
+                                        });
+                                      }}
+                                    />
                                   ) : (
                                     <div className="grid size-5 place-items-center rounded-full bg-[#ff8bb2]/10 text-[#a74758] text-[9px] font-black">
                                       {mate.name.charAt(0)}
@@ -3182,8 +3210,19 @@ export function TabletClock({
                                           key={idx}
                                           className="flex items-center gap-1 bg-black/[0.03] border border-black/5 rounded-full pl-1 pr-2.5 py-0.5"
                                         >
-                                          {mate.photoUrl ? (
-                                            <img src={resolveDrivePhotoUrl(mate.photoUrl)} className="size-5 rounded-full object-cover" alt="" />
+                                          {mate.photoUrl && !teammateErrors.has(mate.name) ? (
+                                            <img 
+                                              src={resolveDrivePhotoUrl(mate.photoUrl)} 
+                                              className="size-5 rounded-full object-cover" 
+                                              alt="" 
+                                              onError={() => {
+                                                setTeammateErrors(prev => {
+                                                  const next = new Set(prev);
+                                                  next.add(mate.name);
+                                                  return next;
+                                                });
+                                              }}
+                                            />
                                           ) : (
                                             <div className="grid size-5 place-items-center rounded-full bg-[#ff8bb2]/10 text-[#a74758] text-[9px] font-black">
                                               {mate.name.charAt(0)}
