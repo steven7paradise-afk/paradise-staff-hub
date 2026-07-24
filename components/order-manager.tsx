@@ -660,7 +660,14 @@ export function OrderManager({
                 )}
               >
                 {photo ? (
-                  <img src={photo.url} alt={`Foto di ${orderTitle(order)}`} className="mb-3 h-36 w-full rounded-2xl object-cover" />
+                  <img
+                    src={orderPhotoPreviewUrl(photo)}
+                    alt={`Foto di ${orderTitle(order)}`}
+                    className="mb-3 h-36 w-full rounded-2xl object-cover"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
                 ) : null}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex flex-wrap gap-2 items-center">
@@ -724,7 +731,16 @@ export function OrderManager({
                         borderStyle
                       )}
                     >
-                      {photo ? <img src={photo.url} alt={`Foto di ${orderTitle(order)}`} className="h-28 w-full object-cover" /> : null}
+                      {photo ? (
+                        <img
+                          src={orderPhotoPreviewUrl(photo)}
+                          alt={`Foto di ${orderTitle(order)}`}
+                          className="h-28 w-full object-cover"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : null}
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-2">
                           <div>

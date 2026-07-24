@@ -340,11 +340,12 @@ export function AttendanceManager({
   }
 
   function WorkerAvatar({ worker, name, size = "md" }: { worker?: Worker; name: string; size?: "md" | "lg" }) {
+    const [imageFailed, setImageFailed] = useState(false);
     const sizeClass = size === "lg" ? "size-16" : "size-12";
-    if (worker?.photoUrl) {
+    if (worker?.photoUrl && !imageFailed) {
       return (
         <div className={`${sizeClass} overflow-hidden rounded-2xl border-2 border-white/80 bg-paradise-softPink shadow-sm`}>
-          <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={name} className="h-full w-full object-cover" />
+          <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={name} className="h-full w-full object-cover" onError={() => setImageFailed(true)} />
         </div>
       );
     }
@@ -572,7 +573,14 @@ export function AttendanceManager({
                     <button type="button" onClick={() => openWorkerMonthly(group.userId)} className="group w-full text-left">
                       <div className={`aspect-square overflow-hidden rounded-[18px] bg-paradise-softPink ${!isPresent ? "grayscale" : ""}`}>
                         {worker?.photoUrl ? (
-                          <img src={resolveDrivePhotoUrl(worker.photoUrl)} alt={group.employee} className={`h-full w-full object-cover transition duration-300 group-hover:scale-105 ${!isPresent ? "opacity-55" : ""}`} />
+                          <img
+                            src={resolveDrivePhotoUrl(worker.photoUrl)}
+                            alt={group.employee}
+                            className={`h-full w-full object-cover transition duration-300 group-hover:scale-105 ${!isPresent ? "opacity-55" : ""}`}
+                            onError={(event) => {
+                              event.currentTarget.style.display = "none";
+                            }}
+                          />
                         ) : (
                           <div className={`grid h-full place-items-center bg-gradient-to-br from-paradise-softPink to-paradise-pink/70 text-4xl font-black text-black ${!isPresent ? "opacity-55" : ""}`}>
                             {initials(group.employee)}
