@@ -47,6 +47,7 @@ export default async function EmployeesPage() {
           hrNotes: employee.hr_notes ?? "",
           managerId: employee.manager_id ?? "",
           accessList: employee.access_list,
+          contractHistory: employee.contract_history,
           lastEditedByName: employee.last_edited_by?.name ?? null,
           lastEditedAt: employee.last_edited_at?.toISOString() ?? null,
         }))}

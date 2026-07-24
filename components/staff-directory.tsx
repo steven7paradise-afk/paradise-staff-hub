@@ -5,8 +5,8 @@ import Link from "next/link";
 import { 
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
-  Sparkles, Key, Shield, UserCog, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, UserPlus, Printer, UploadCloud, RefreshCw,
+  Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
+  Archive, Plus, UserPlus, Printer, RefreshCw,
   ChevronLeft, Copy, Check
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -183,6 +183,15 @@ export function StaffDirectory({
       setCustomMansioneEdit(false);
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    const editorOpen = Boolean(selectedEmployee && isEditing && editForm);
+    document.documentElement.classList.toggle("staff-directory-editor-open", editorOpen);
+
+    return () => {
+      document.documentElement.classList.remove("staff-directory-editor-open");
+    };
+  }, [selectedEmployee, isEditing, editForm]);
 
   useEffect(() => {
     if (!showCreateModal) {
@@ -736,6 +745,7 @@ export function StaffDirectory({
       { key: "presenze", label: "Presenze", val: "/attendance" },
       { key: "ordini", label: "Ordini", val: "/orders" },
       { key: "notifications", label: "Notifiche", val: "/notifications" },
+      { key: "malattie", label: "Malattie", val: "/malattie" },
     ];
 
     const copyPhotoUrl = () => {
@@ -747,8 +757,22 @@ export function StaffDirectory({
     };
 
     return (
-      <div className="w-full bg-[#fcf9f5] min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+      <div className="staff-profile-editor w-full bg-transparent min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
+        <style dangerouslySetInnerHTML={{__html: `
+          .staff-directory-editor-open main > header {
+            display: none !important;
+          }
+          .staff-directory-editor-open main > div:first-child {
+            margin-bottom: 0.25rem !important;
+          }
+          .staff-directory-editor-open main {
+            padding-top: 0 !important;
+          }
+          .staff-directory-editor-open .staff-profile-editor {
+            background: transparent !important;
+          }
+        `}} />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-1">
           <button
             type="button"
             onClick={() => {
@@ -762,7 +786,7 @@ export function StaffDirectory({
           </button>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-3">
           <div className="bg-white rounded-[32px] border border-black/5 p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
               <div className="relative size-24 md:size-28 rounded-[24px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-3xl font-black text-neutral-800 shadow-md group shrink-0">
@@ -1412,11 +1436,14 @@ export function StaffDirectory({
               key={emp.id}
               onClick={() => {
                 setSelectedEmployee(emp);
-                setIsEditing(false);
-                setEditForm(null);
+                setIsEditing(true);
+                setEditForm({ ...emp });
                 setPinInput("");
                 setPasswordInput("");
                 setErrorMsg("");
+                const isCustom = emp.mansione && 
+                  !mansioniList.map(m => m.toLowerCase()).includes(emp.mansione.toLowerCase());
+                setCustomMansioneEdit(Boolean(isCustom));
               }}
               className="group p-5 cursor-pointer flex flex-col justify-between border-black/5 bg-white dark:bg-neutral-900 shadow-sm hover:shadow-luxury hover:-translate-y-1 transition-all duration-300"
             >
@@ -1505,466 +1532,6 @@ export function StaffDirectory({
               </div>
             </Card>
           ))}
-        </div>
-      )}
-
-      {/* DETAIL & EDIT MODAL */}
-      {selectedEmployee && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-md animate-in fade-in duration-200">
-          <Card className="w-full max-w-2xl p-0 border border-white/50 bg-white/95 dark:bg-neutral-900/95 shadow-luxury overflow-hidden rounded-[30px] flex flex-col max-h-[90vh]">
-            
-            {/* Cover Banner (Luxury Gradient) */}
-            <div className="h-28 bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] relative shrink-0">
-              <button 
-                className="absolute top-4 right-4 grid size-10 place-items-center rounded-xl bg-white/80 dark:bg-neutral-900/80 shadow-md transition hover:bg-white active:scale-95 z-10" 
-                onClick={() => setSelectedEmployee(null)}
-              >
-                <X className="size-5 text-black/70 dark:text-white/70" />
-              </button>
-            </div>
-
-            {/* Profile Avatar overlaying cover */}
-            <div className="px-6 relative shrink-0">
-              <div className="absolute -top-12 left-6 size-24 rounded-3xl overflow-hidden border-4 border-white bg-paradise-softPink/30 shadow-md flex items-center justify-center font-bold text-3xl text-paradise-noir">
-                {selectedEmployee.photoUrl ? (
-                  <img src={resolveDrivePhotoUrl(selectedEmployee.photoUrl)} alt={selectedEmployee.name} className="size-full object-cover" />
-                ) : (
-                  selectedEmployee.name.slice(0, 2).toUpperCase()
-                )}
-              </div>
-              {isAuthorizedToEdit && (
-                <label className="absolute left-7 top-16 inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-[10px] font-black uppercase tracking-[0.08em] text-paradise-noir shadow-sm transition hover:bg-paradise-nude dark:border-white/10 dark:bg-neutral-900 dark:text-white">
-                  <UploadCloud className="size-3.5" />
-                  {photoUploadingId === selectedEmployee.id ? "Carico..." : "Carica foto"}
-                  <input
-                    type="file"
-                    accept="image/*,.heic,.heif"
-                    className="hidden"
-                    disabled={photoUploadingId === selectedEmployee.id}
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0];
-                      event.currentTarget.value = "";
-                      void handleStaffPhotoUpload(selectedEmployee.id, file);
-                    }}
-                  />
-                </label>
-              )}
-              
-              <div className="pl-28 pt-3 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <h3 className="text-xl font-bold text-paradise-noir dark:text-white">{selectedEmployee.name}</h3>
-                  <p className="text-xs text-neutral-400 font-semibold">{selectedEmployee.mansione || "Collaboratore"}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Badge tone={getStatusTone(selectedEmployee.employeeStatus)}>{selectedEmployee.employeeStatus}</Badge>
-                  {isAuthorizedToEdit && !isEditing && (
-                    <Button 
-                      variant="soft" 
-                      onClick={() => {
-                      setIsEditing(true);
-                      setEditForm({ ...selectedEmployee });
-                      setPinInput("");
-                      setPasswordInput("");
-                      setErrorMsg("");
-                      
-                      // Check if mansione is custom
-                      const isCustom = selectedEmployee.mansione && 
-                        !mansioniList.map(m => m.toLowerCase()).includes(selectedEmployee.mansione.toLowerCase());
-                      setCustomMansioneEdit(Boolean(isCustom));
-                      }}
-                      className="min-h-8 rounded-xl text-xs py-1 px-3 border border-black/10 hover:bg-paradise-nude"
-                    >
-                      <UserCog className="size-3.5" /> Modifica
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 border-t border-black/5 dark:border-white/5 space-y-6 luxury-scroll">
-              {errorMsg && (
-                <div className="p-3.5 text-xs font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/20 rounded-xl border border-rose-200 dark:border-rose-900">
-                  {errorMsg}
-                </div>
-              )}
-
-              {isEditing && editForm ? (
-                <SafetyErrorBoundary>
-                  <form onSubmit={handleSaveEmployee} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Nome e Cognome</span>
-                      <Field 
-                        required
-                        value={editForm.name}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, name: e.target.value } : null)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Email di Accesso</span>
-                      <Field 
-                        required
-                        type="email"
-                        value={editForm.email}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, email: e.target.value } : null)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">URL Foto Profilo</span>
-                      <Field 
-                        value={editForm.photoUrl || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)}
-                        placeholder="https://..."
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Numero WhatsApp</span>
-                      <Field 
-                        value={editForm.whatsappPhone || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)}
-                        placeholder="+39..."
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Mansione / Ruolo</span>
-                      <Select 
-                        value={customMansioneEdit ? "custom" : (editForm.mansione || "").toLowerCase()}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "custom") {
-                            setCustomMansioneEdit(true);
-                            setEditForm(prev => prev ? { ...prev, mansione: "" } : null);
-                          } else {
-                            setCustomMansioneEdit(false);
-                            setEditForm(prev => prev ? { ...prev, mansione: val } : null);
-                          }
-                        }}
-                      >
-                        <option value="">Seleziona mansione...</option>
-                        {mansioniList.map((m) => (
-                          <option key={m} value={m.toLowerCase()}>{m}</option>
-                        ))}
-                        <option value="custom">+ Aggiungi altra mansione...</option>
-                      </Select>
-                      {customMansioneEdit && (
-                        <Field 
-                          required
-                          value={editForm.mansione || ""}
-                          onChange={(e) => setEditForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
-                          placeholder="Inserisci nuova mansione..."
-                          className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
-                        />
-                      )}
-                    </label>
-
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Stato Dipendente</span>
-                      <Select 
-                        value={editForm.employeeStatus}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}
-                      >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>{status}</option>
-                        ))}
-                      </Select>
-                    </label>
-
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Livello Sistema</span>
-                      <Select 
-                        value={editForm.role}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, role: e.target.value } : null)}
-                      >
-                        {ROLE_OPTIONS.map((role) => (
-                          <option key={role.value} value={role.value}>{role.label}</option>
-                        ))}
-                      </Select>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Salone Sede</span>
-                      <Select 
-                        value={editForm.sedeId || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, sedeId: e.target.value || null } : null)}
-                      >
-                        <option value="">Nessuna sede</option>
-                        {locations.map((loc) => (
-                          <option key={loc.id} value={loc.id}>{loc.name}</option>
-                        ))}
-                      </Select>
-                    </label>
-
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Responsabile Diretto</span>
-                      <Select 
-                        value={editForm.managerId || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, managerId: e.target.value || null } : null)}
-                      >
-                        <option value="">Nessuno</option>
-                        {managers.map((m) => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
-                      </Select>
-                    </label>
-
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Stato Account</span>
-                      <Select 
-                        value={editForm.active ? "true" : "false"}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, active: e.target.value === "true" } : null)}
-                      >
-                        <option value="true">Attivo / Abilitato</option>
-                        <option value="false">Disattivato / Bloccato</option>
-                      </Select>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
-                      <Field 
-                        value={editForm.fiscalCode || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, fiscalCode: e.target.value } : null)}
-                        placeholder="Codice..."
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
-                      <Field 
-                        type="date"
-                        value={editForm.birthDate || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">IBAN</span>
-                      <Field 
-                        value={editForm.iban || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
-                        placeholder="IT..."
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data Inizio Contratto</span>
-                      <Field 
-                        type="date"
-                        value={editForm.contractStart || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)}
-                      />
-                    </label>
-
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data Fine Contratto</span>
-                      <Field 
-                        type="date"
-                        value={editForm.contractEnd || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-black/5 pt-3">
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-rose-500">Cambia PIN (4-6 cifre)</span>
-                      <Field 
-                        value={pinInput}
-                        onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
-                        placeholder="Lascia vuoto per non modificare"
-                        maxLength={6}
-                      />
-                    </label>
-                    <label className="space-y-1">
-                      <span className="text-[11px] font-bold tracking-wide uppercase text-rose-500">Cambia Password</span>
-                      <Field 
-                        type="password"
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        placeholder="Lascia vuoto per non modificare"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
-                    <div className="flex flex-wrap gap-2">
-                      {ACCESS_PRESETS.map((access) => {
-                        const active = Array.isArray(editForm.accessList) ? editForm.accessList.includes(access) : false;
-                        return (
-                          <button
-                            key={access}
-                            type="button"
-                            onClick={() => toggleAccessInEdit(access)}
-                            className={cn(
-                              "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95",
-                              active 
-                                ? "bg-paradise-pink/20 border-paradise-pink text-paradise-noir dark:text-white" 
-                                : "bg-white dark:bg-neutral-800 border-black/10 dark:border-white/10 text-neutral-500"
-                            )}
-                          >
-                            {access}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <label className="block space-y-1">
-                    <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Note Amministrazione HR (Interne)</span>
-                    <textarea 
-                      value={editForm.hrNotes || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, hrNotes: e.target.value } : null)}
-                      placeholder="Note interne dell'amministrazione..."
-                      rows={3}
-                      className="w-full rounded-2xl border border-black/10 bg-white/80 dark:bg-white/10 dark:text-white p-3 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                    />
-                  </label>
-
-                  <div className="pt-3 flex justify-end gap-3 border-t border-black/5 dark:border-white/5">
-                    <Button type="button" variant="soft" onClick={() => setIsEditing(false)}>
-                      Annulla
-                    </Button>
-                    <Button 
-                      type="submit" 
-                      disabled={submitting}
-                      className="bg-gradient-to-r from-paradise-pink to-[#ffa8dd] text-paradise-noir font-bold"
-                    >
-                      {submitting ? "Salvataggio..." : "Salva Modifiche"}
-                    </Button>
-                  </div>
-                 </form>
-                </SafetyErrorBoundary>
-              ) : (
-                /* READ-ONLY INFO VIEW (ADMIN/RESPONSABILE) */
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Email Aziendale</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5 break-all">
-                        <Mail className="size-3.5 text-neutral-400" />
-                        {selectedEmployee.email}
-                      </span>
-                    </div>
-
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Numero WhatsApp</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5">
-                        <Phone className="size-3.5 text-neutral-400" />
-                        {selectedEmployee.whatsappPhone || "Non fornito"}
-                      </span>
-                    </div>
-
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Sede Assegnata</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5">
-                        <MapPin className="size-3.5 text-neutral-400" />
-                        {selectedEmployee.location}
-                      </span>
-                    </div>
-
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Responsabile Diretto</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5">
-                        <User className="size-3.5 text-neutral-400" />
-                        {selectedEmployee.managerName || "Nessun manager"}
-                      </span>
-                    </div>
-
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Inizio Rapporto</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5">
-                        <Calendar className="size-3.5 text-neutral-400" />
-                        {selectedEmployee.contractStart ? new Date(selectedEmployee.contractStart).toLocaleDateString("it-IT") : "Non impostata"}
-                      </span>
-                    </div>
-
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Fine Contratto</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5">
-                        <Calendar className="size-3.5 text-neutral-400" />
-                        {selectedEmployee.contractEnd ? new Date(selectedEmployee.contractEnd).toLocaleDateString("it-IT") : "Indeterminato"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Codice</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200">{selectedEmployee.fiscalCode || "Non inserito"}</span>
-                    </div>
-
-                    <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Data di Nascita</span>
-                      <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200">
-                        {selectedEmployee.birthDate ? new Date(selectedEmployee.birthDate).toLocaleDateString("it-IT") : "Non inserita"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-neutral-50 dark:bg-neutral-950/40 p-4 rounded-2xl border border-black/5 dark:border-white/5 space-y-1">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">IBAN</span>
-                    <span className="font-bold text-sm text-neutral-700 dark:text-neutral-200 font-mono tracking-wide">
-                      {selectedEmployee.iban || "Non inserito"}
-                    </span>
-                  </div>
-
-                  {/* Access details */}
-                  <div className="bg-neutral-50 dark:bg-neutral-950/40 p-5 rounded-2xl border border-black/5 dark:border-white/5 space-y-3">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Configurazioni & Accessi Applicazioni</span>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      <Badge tone={selectedEmployee.hasPin ? "green" : "pink"}>
-                        {selectedEmployee.hasPin ? "PIN Tablet Attivo" : "PIN Tablet Non configurato"}
-                      </Badge>
-                      <Badge tone={selectedEmployee.active ? "green" : "pink"}>
-                        {selectedEmployee.active ? "Account Attivo" : "Account Disattivato"}
-                      </Badge>
-                    </div>
-
-                    {selectedEmployee.accessList && selectedEmployee.accessList.length > 0 ? (
-                      <div className="space-y-1 pt-2">
-                        <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block">Servizi/Piattaforme autorizzate</span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedEmployee.accessList.map((access) => (
-                            <span 
-                              key={access} 
-                              className="text-xs font-semibold bg-white dark:bg-neutral-800 border border-black/5 dark:border-white/10 text-neutral-600 dark:text-neutral-300 px-2.5 py-1 rounded-xl"
-                            >
-                              {access}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-neutral-400">Nessuna piattaforma esterna abilitata.</p>
-                    )}
-                  </div>
-
-                  {/* HR Private Notes */}
-                  <div className="bg-neutral-50 dark:bg-neutral-950/40 p-5 rounded-2xl border border-black/5 dark:border-white/5 space-y-2">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Note Interne HR & Note Amministrative</span>
-                    {selectedEmployee.hrNotes ? (
-                      <p className="text-sm text-neutral-600 dark:text-neutral-300 whitespace-pre-wrap">{selectedEmployee.hrNotes}</p>
-                    ) : (
-                      <p className="text-xs text-neutral-400 italic">Nessuna nota presente.</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-          </Card>
         </div>
       )}
 

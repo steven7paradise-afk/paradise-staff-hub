@@ -35,7 +35,11 @@ export default async function StaffPage() {
   ]);
 
   return (
-    <AppShell title="Staff Paradise" subtitle="Elenco anagrafiche dipendenti, ruoli, accessi attivi e note amministrative.">
+    <AppShell
+      title="Staff Paradise"
+      subtitle="Elenco anagrafiche dipendenti, ruoli, accessi attivi e note amministrative."
+      transparentMain
+    >
       <StaffDirectory
         initialStaff={staff.map((user) => ({
           id: user.id,
@@ -59,6 +63,7 @@ export default async function StaffPage() {
           hrNotes: user.hr_notes ?? "",
           accessList: user.access_list,
           iban: user.iban ?? "",
+          contractHistory: user.contract_history,
           lastEditedByName: user.last_edited_by?.name ?? null,
           lastEditedAt: user.last_edited_at?.toISOString() ?? null,
         }))}

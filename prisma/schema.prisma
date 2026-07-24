@@ -72,6 +72,7 @@ model User {
   header_color      String?
   sidebar_color     String?
   iban              String?
+  contract_history  Json?
   last_edited_by_id String?
   last_edited_at    DateTime?
   

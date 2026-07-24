@@ -347,6 +347,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       { key: "presenze", label: "Presenze", val: "/attendance" },
       { key: "ordini", label: "Ordini", val: "/orders" },
       { key: "notifications", label: "Notifiche", val: "/notifications" },
+      { key: "malattie", label: "Malattie", val: "/malattie" },
     ];
 
     const copyPhotoUrl = () => {
@@ -368,7 +369,15 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     const mansioniPresets = ["Hairstyle", "Videomaker", "Sito Web", "Magazzino", "Grafico", "Parrucchiera", "Estetista", "Receptionist"];
 
     return (
-      <div className="w-full bg-[#fcf9f5] min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
+      <div className="w-full bg-transparent min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
+        <style dangerouslySetInnerHTML={{__html: `
+          header, main > header {
+            display: none !important;
+          }
+          main {
+            padding-top: 1rem !important;
+          }
+        `}} />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
           <button
             type="button"
