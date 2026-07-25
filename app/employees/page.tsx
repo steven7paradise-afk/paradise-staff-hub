@@ -46,8 +46,9 @@ export default async function EmployeesPage() {
           iban: employee.iban ?? "",
           hrNotes: employee.hr_notes ?? "",
           managerId: employee.manager_id ?? "",
-          accessList: employee.access_list,
+          accessList: Array.isArray(employee.access_list) ? employee.access_list : [],
           contractHistory: employee.contract_history,
+          workforceData: employee.workforce_data && typeof employee.workforce_data === "object" && !Array.isArray(employee.workforce_data) ? employee.workforce_data : {},
           lastEditedByName: employee.last_edited_by?.name ?? null,
           lastEditedAt: employee.last_edited_at?.toISOString() ?? null,
         }))}

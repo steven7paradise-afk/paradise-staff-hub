@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { 
   Plus, Save, UserCog, X, MapPin, Mail, Phone, Calendar, User, Award, 
   Fingerprint, Lock, Shield, ChevronLeft, Copy, Check, Briefcase, ListCheck, SlidersHorizontal, ClipboardList
+  , Download
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -32,11 +33,75 @@ type Employee = {
   hrNotes?: string;
   managerId?: string | null;
   accessList?: string[];
+  workforceData?: WorkforceData;
   lastEditedByName?: string | null;
   lastEditedAt?: string | null;
 };
 
 type Location = { id: string; name: string };
+type WorkforceData = {
+  firstName?: string;
+  lastName?: string;
+  birthCity?: string;
+  birthProvince?: string;
+  residenceAddress?: string;
+  residenceCap?: string;
+  residenceCity?: string;
+  residenceProvince?: string;
+  bic?: string;
+  personalEmail?: string;
+  employmentType?: string;
+  contractLevel?: string;
+  jobTitle?: string;
+  workforceNotes?: string;
+  workLocation?: string;
+};
+
+const WORKFORCE_COLUMNS: Array<{ key: keyof WorkforceData | "fiscalCode" | "birthDate" | "iban" | "contractStart" | "contractEnd" | "fallbackJobTitle" | "fallbackWorkLocation"; label: string }> = [
+  { key: "firstName", label: "Nome" },
+  { key: "lastName", label: "Cognome" },
+  { key: "fiscalCode", label: "Codice fiscale" },
+  { key: "birthCity", label: "Comune nascita" },
+  { key: "birthProvince", label: "Provincia nascita" },
+  { key: "birthDate", label: "Data di nascita" },
+  { key: "residenceAddress", label: "Indirizzo residenza" },
+  { key: "residenceCap", label: "CAP residenza" },
+  { key: "residenceCity", label: "Comune residenza" },
+  { key: "residenceProvince", label: "Provincia residenza" },
+  { key: "iban", label: "IBAN" },
+  { key: "bic", label: "BIC" },
+  { key: "personalEmail", label: "Email personale" },
+  { key: "contractStart", label: "Data inizio rapporto di lavoro" },
+  { key: "contractEnd", label: "Scadenza contratto" },
+  { key: "employmentType", label: "Tipo rapporto di lavoro" },
+  { key: "contractLevel", label: "Livello contrattuale" },
+  { key: "fallbackJobTitle", label: "Job title / Mansione" },
+  { key: "workforceNotes", label: "Note" },
+  { key: "fallbackWorkLocation", label: "Sede di lavoro" },
+];
+
+const WORKFORCE_HELP = [
+  'Completo anche di "secondo nome" se presente',
+  'Completo anche di "secondo cognome" se presente',
+  "",
+  "Se ESTERO, indicare lo Stato Estero",
+  "Sigla (es. MI). Se ESTERO, indica EE",
+  "Formato (es. 20/05/1980)",
+  "Via e numero civico",
+  "",
+  "",
+  "Sigla (es. MI)",
+  "IBAN su cui il dipendente riceverà lo stipendio.",
+  "Obbligatorio per banca estera",
+  "Mail personale per Jet HR. Non mettere email aziendale",
+  "Data assunzione",
+  "Se tempo determinato, apprendistato o tirocinio",
+  "Es. indeterminato, determinato, tirocinio, apprendistato, collaborazione",
+  "Es. primo livello commercio: 1",
+  "Es. Product Manager",
+  "Accordi su netti, premi fissi, detrazioni o aggiornamenti cedolino",
+  "Nome sede come indicato in onboarding",
+];
 
 const roles: { value: Role; label: string }[] = [
   { value: "DIPENDENTE", label: "Dipendente" },
@@ -98,9 +163,79 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     mansione: "",
     googleCalendarId: "",
     googleCalendarSync: false,
+    workforceData: {},
   };
   const activeEmployees = employees.filter((employee) => employee.active);
   const inactiveEmployees = employees.filter((employee) => !employee.active);
+
+  function splitEmployeeName(name: string) {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length <= 1) return { firstName: parts[0] || "", lastName: "" };
+    return { firstName: parts.slice(0, -1).join(" "), lastName: parts.at(-1) || "" };
+  }
+
+  function formatExcelDate(value?: string) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString("it-IT");
+  }
+
+  function workforceValue(employee: Employee, key: (typeof WORKFORCE_COLUMNS)[number]["key"]) {
+    const workforce = employee.workforceData || {};
+    const splitName = splitEmployeeName(employee.name);
+    const valueMap: Record<string, string> = {
+      firstName: workforce.firstName || splitName.firstName,
+      lastName: workforce.lastName || splitName.lastName,
+      fiscalCode: employee.fiscalCode || "",
+      birthCity: workforce.birthCity || "",
+      birthProvince: (workforce.birthProvince || "").toUpperCase(),
+      birthDate: formatExcelDate(employee.birthDate),
+      residenceAddress: workforce.residenceAddress || "",
+      residenceCap: workforce.residenceCap || "",
+      residenceCity: workforce.residenceCity || "",
+      residenceProvince: (workforce.residenceProvince || "").toUpperCase(),
+      iban: employee.iban || "",
+      bic: (workforce.bic || "").toUpperCase(),
+      personalEmail: workforce.personalEmail || "",
+      contractStart: formatExcelDate(employee.contractStart),
+      contractEnd: formatExcelDate(employee.contractEnd),
+      employmentType: workforce.employmentType || "",
+      contractLevel: workforce.contractLevel || "",
+      fallbackJobTitle: workforce.jobTitle || employee.mansione || "",
+      workforceNotes: workforce.workforceNotes || "",
+      fallbackWorkLocation: workforce.workLocation || employee.location || "",
+    };
+    return valueMap[String(key)] || "";
+  }
+
+  function escapeHtml(value: string) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function exportWorkforceExcel() {
+    const rows = employees.filter((employee) => employee.active);
+    const header = WORKFORCE_COLUMNS.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("");
+    const help = WORKFORCE_HELP.map((item) => `<td>${escapeHtml(item)}</td>`).join("");
+    const body = rows.map((employee) => (
+      `<tr>${WORKFORCE_COLUMNS.map((column) => `<td>${escapeHtml(workforceValue(employee, column.key))}</td>`).join("")}</tr>`
+    )).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8" /></head><body><table border="1"><thead><tr>${header}</tr><tr>${help}</tr></thead><tbody>${body}</tbody></table></body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `Dati_forza_lavoro_compilato_${stamp}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 
   async function handlePhotoUpload(employeeId: string, file: File) {
     if (!file) return;
@@ -153,6 +288,16 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     setEditing((current) => current ? { ...current, [key]: value } : current);
   }
 
+  function updateWorkforceDraft<K extends keyof WorkforceData>(key: K, value: WorkforceData[K]) {
+    setEditing((current) => current ? {
+      ...current,
+      workforceData: {
+        ...(current.workforceData || {}),
+        [key]: value,
+      },
+    } : current);
+  }
+
   async function saveEmployee() {
     if (!editing) return;
     if (pin && !/^\d{4,6}$/.test(pin)) {
@@ -198,6 +343,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       hrNotes: data.hr_notes ?? "",
       managerId: data.manager_id,
       accessList: (data.access_list as string[]) ?? [],
+      workforceData: data.workforce_data && typeof data.workforce_data === "object" && !Array.isArray(data.workforce_data) ? data.workforce_data : {},
       lastEditedByName: data.last_edited_by?.name ?? null,
       lastEditedAt: data.last_edited_at ?? null,
     };
@@ -750,6 +896,91 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
 
             <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm">
               <div className="flex items-center gap-2 border-b border-black/5 pb-3">
+                <ClipboardList className="size-4 text-[#C66170]" />
+                <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Dati forza lavoro / Excel</h2>
+              </div>
+              <p className="text-[10px] text-neutral-400 font-semibold mt-1">
+                Questi campi compilano il file Excel "Dati forza lavoro".
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Nome</span>
+                  <Field
+                    value={editing.workforceData?.firstName || splitEmployeeName(editing.name).firstName}
+                    onChange={(e) => updateWorkforceDraft("firstName", e.target.value)}
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Cognome</span>
+                  <Field
+                    value={editing.workforceData?.lastName || splitEmployeeName(editing.name).lastName}
+                    onChange={(e) => updateWorkforceDraft("lastName", e.target.value)}
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Comune nascita</span>
+                  <Field value={editing.workforceData?.birthCity || ""} onChange={(e) => updateWorkforceDraft("birthCity", e.target.value)} />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Provincia nascita</span>
+                  <Field maxLength={2} value={editing.workforceData?.birthProvince || ""} onChange={(e) => updateWorkforceDraft("birthProvince", e.target.value.toUpperCase())} placeholder="MI" />
+                </label>
+                <label className="block space-y-1 lg:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Indirizzo residenza</span>
+                  <Field value={editing.workforceData?.residenceAddress || ""} onChange={(e) => updateWorkforceDraft("residenceAddress", e.target.value)} placeholder="Via e numero civico" />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">CAP residenza</span>
+                  <Field value={editing.workforceData?.residenceCap || ""} onChange={(e) => updateWorkforceDraft("residenceCap", e.target.value)} />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Comune residenza</span>
+                  <Field value={editing.workforceData?.residenceCity || ""} onChange={(e) => updateWorkforceDraft("residenceCity", e.target.value)} />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Provincia residenza</span>
+                  <Field maxLength={2} value={editing.workforceData?.residenceProvince || ""} onChange={(e) => updateWorkforceDraft("residenceProvince", e.target.value.toUpperCase())} placeholder="TO" />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">BIC</span>
+                  <Field value={editing.workforceData?.bic || ""} onChange={(e) => updateWorkforceDraft("bic", e.target.value.toUpperCase())} />
+                </label>
+                <label className="block space-y-1 lg:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Email personale</span>
+                  <Field type="email" value={editing.workforceData?.personalEmail || ""} onChange={(e) => updateWorkforceDraft("personalEmail", e.target.value)} placeholder="email personale, non aziendale" />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo rapporto</span>
+                  <Field value={editing.workforceData?.employmentType || ""} onChange={(e) => updateWorkforceDraft("employmentType", e.target.value)} placeholder="Determinato, tirocinio..." />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Livello contrattuale</span>
+                  <Field value={editing.workforceData?.contractLevel || ""} onChange={(e) => updateWorkforceDraft("contractLevel", e.target.value)} />
+                </label>
+                <label className="block space-y-1 lg:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Job title / Mansione Excel</span>
+                  <Field value={editing.workforceData?.jobTitle || editing.mansione || ""} onChange={(e) => updateWorkforceDraft("jobTitle", e.target.value)} />
+                </label>
+                <label className="block space-y-1 lg:col-span-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Sede di lavoro Excel</span>
+                  <Field value={editing.workforceData?.workLocation || editing.location || ""} onChange={(e) => updateWorkforceDraft("workLocation", e.target.value)} />
+                </label>
+                <label className="block space-y-1 md:col-span-2 lg:col-span-4">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Note Excel</span>
+                  <textarea
+                    value={editing.workforceData?.workforceNotes || ""}
+                    onChange={(e) => updateWorkforceDraft("workforceNotes", e.target.value)}
+                    placeholder="Accordi, premi fissi, detrazioni, aggiornamenti cedolino..."
+                    rows={3}
+                    className="w-full rounded-2xl border border-black/10 bg-white/80 p-3.5 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 resize-none font-medium"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm">
+              <div className="flex items-center gap-2 border-b border-black/5 pb-3">
                 <ListCheck className="size-4 text-[#C66170]" />
                 <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Accessi Abilitati</h2>
               </div>
@@ -888,6 +1119,14 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
           className="rounded-[20px] bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300"
         >
           <Plus className="size-4" /> Nuovo Dipendente
+        </Button>
+        <Button
+          type="button"
+          variant="soft"
+          onClick={exportWorkforceExcel}
+          className="rounded-[20px] border border-black/10 bg-white text-paradise-noir shadow-sm"
+        >
+          <Download className="size-4" /> Scarica Excel forza lavoro
         </Button>
       </div>
 

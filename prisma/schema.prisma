@@ -68,6 +68,7 @@ model User {
   manager_id        String?
   access_list       Json?
   hr_notes          String?
+  workforce_data    Json?
   candidate_id      String?
   header_color      String?
   sidebar_color     String?

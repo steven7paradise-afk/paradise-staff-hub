@@ -64,6 +64,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
       access_list: data.accessList !== undefined ? data.accessList : undefined,
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
+      workforce_data: data.workforceData !== undefined
+        ? (data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData) ? data.workforceData : {})
+        : undefined,
       google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
       google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : undefined,
       contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,

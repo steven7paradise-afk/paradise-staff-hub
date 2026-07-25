@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       manager_id: data.managerId ? String(data.managerId) : null,
       access_list: data.accessList !== undefined ? data.accessList : undefined,
       hr_notes: data.hrNotes ? String(data.hrNotes) : null,
+      workforce_data: data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData) ? data.workforceData : undefined,
       contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,
       last_edited_by_id: session.user.id,
       last_edited_at: new Date(),
