@@ -95,7 +95,7 @@ export default async function StaffPage() {
             managerId: user.manager_id,
             managerName: user.manager?.name ?? "",
             hrNotes: user.hr_notes ?? "",
-            accessList: user.access_list,
+            accessList: Array.isArray(user.access_list) ? user.access_list : [],
             iban: user.iban ?? "",
             contractHistory: user.contract_history,
             sicknessStats,
