@@ -167,11 +167,6 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
   const sheets = google.sheets({ version: "v4", auth });
 
   try {
-    const spreadsheet = await sheets.spreadsheets.get({
-      spreadsheetId,
-      fields: "sheets.properties.title",
-    });
-    const allSheetNames = spreadsheet.data.sheets?.map((sheet) => sheet.properties?.title).filter(Boolean) as string[] || [];
     const sheetNames = Array.from(new Set([
       "CONFERMA APPUNTAMENTI",
       configuredSheetName,
@@ -179,7 +174,6 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
       "conferma appuntamenti",
       "Registro Conferme Appuntamenti",
       "appointments",
-      ...allSheetNames,
     ]));
     let rows: unknown[][] = [];
     let usedSheetName = configuredSheetName;
