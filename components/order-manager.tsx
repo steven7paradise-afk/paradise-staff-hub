@@ -625,7 +625,7 @@ export function OrderManager({
     };
     const tinyLabel = (label: string, x: number, yPos: number, width: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.6);
+      doc.setFontSize(3.4);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
     };
@@ -636,7 +636,7 @@ export function OrderManager({
       visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 54)}...`;
       return visible;
     };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 5.7, maxLines = 2) => {
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 3.9, maxLines = 1) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
@@ -644,20 +644,20 @@ export function OrderManager({
     };
     const sectionHeading = (title: string, x: number, y: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.8);
+      doc.setFontSize(4.8);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(title.toUpperCase(), x, y);
     };
     const drawCell = (x: number, y: number, width: number, height: number, label: string, value: string, maxLines = 2) => {
-      tinyLabel(label, x, y + 2.4, width - 1.2);
-      valueText(value, x, y + 5.4, width - 1.2, 5.1, maxLines);
+      tinyLabel(label, x, y + 1.9, width - 1.2);
+      valueText(value, x, y + 4.5, width - 1.2, 3.6, 1);
       line(x, y + height, x + width, y + height, [248, 211, 228]);
     };
     const drawInfoRow = (y: number, left?: { label: string; value: string }, right?: { label: string; value: string }) => {
       const leftX = 40;
       const rightX = 72;
       const colW = 29;
-      const rowHeight = 7.2;
+      const rowHeight = 6.4;
       if (left) drawCell(leftX, y, colW, rowHeight, left.label, left.value);
       if (right) {
         line(70, y, 70, y + rowHeight, [248, 211, 228]);
@@ -680,7 +680,7 @@ export function OrderManager({
         doc.addImage(logoDataUrl, "PNG", 7, 6, 26, 10);
       } catch {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
+        doc.setFontSize(7);
         doc.setTextColor(0, 0, 0);
         doc.text(COMPANY_INFO.name, 7, 12);
       }
@@ -689,90 +689,90 @@ export function OrderManager({
     doc.setFillColor(pink[0], pink[1], pink[2]);
     doc.circle(39, 11, 5.3, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.4);
+    doc.setFontSize(5.4);
     doc.setTextColor(255, 255, 255);
     doc.text(initials || "PB", 39, 13.5, { align: "center" });
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.8);
+    doc.setFontSize(6.2);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.text(textLines(client, 39, 1), 47, 9.6);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.5);
+    doc.setFontSize(4);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
     doc.text(textLines(orderItems(order) || "Nessuna descrizione inserita", 39, 1), 47, 14.5);
 
     doc.setFillColor(pink[0], pink[1], pink[2]);
     doc.roundedRect(89, 6, 15, 6.5, 1.4, 1.4, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6);
+    doc.setFontSize(4.4);
     doc.setTextColor(255, 255, 255);
     doc.text("ORDINE", 96.5, 10.3, { align: "center" });
-    doc.setFontSize(11.5);
+    doc.setFontSize(8.2);
     doc.setTextColor(0, 0, 0);
     doc.text(`#${orderNo.replace(/^#/, "")}`, 96.5, 20, { align: "center" });
 
-    line(5, 23, pageWidth - 5, 23, pink);
+    line(5, 21.4, pageWidth - 5, 21.4, pink);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.4);
+    doc.setFontSize(4);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(`assistenza@paradisebeauty.it`, 30, 28, { align: "center" });
-    line(pageWidth / 2, 25.2, pageWidth / 2, 29.2, pink);
-    doc.text("www.paradisebeauty.it", 79, 28, { align: "center" });
+    doc.text(`assistenza@paradisebeauty.it`, 30, 25.8, { align: "center" });
+    line(pageWidth / 2, 23.7, pageWidth / 2, 27.6, pink);
+    doc.text("www.paradisebeauty.it", 79, 25.8, { align: "center" });
 
-    const cardY = 31;
-    const cardH = 39.5;
+    const cardY = 29;
+    const cardH = 43.2;
     doc.setDrawColor(248, 211, 228);
     doc.setLineWidth(0.38);
     doc.roundedRect(5, cardY, 31, cardH, 2.5, 2.5);
     doc.roundedRect(38, cardY, 67, cardH, 2.5, 2.5);
     line(36, cardY, 36, cardY + cardH, [248, 211, 228]);
 
-    sectionHeading("Riepilogo", 8, 37.4);
+    sectionHeading("Riepilogo", 8, 34.8);
     const summaryRows = [
       { label: "Tipo", value: taskType === "conversione" ? "CONVERSIONE CAPELLI" : "ACQUISTO EXTENSION" },
       { label: "Data creazione", value: orderDate(order) },
       { label: "Salone", value: order.user_location_name ?? "Non indicato" },
       { label: "Ultima modifica", value: formatDateTime(order.updated_at) },
     ];
-    let summaryY = 40.6;
+    let summaryY = 38;
     summaryRows.forEach((row) => {
       tinyLabel(row.label, 8, summaryY, 24);
-      valueText(row.value, 8, summaryY + 3.6, 24, 5.1, 2);
-      line(8, summaryY + 7.1, 33, summaryY + 7.1, [248, 211, 228]);
-      summaryY += 7.3;
+      valueText(row.value, 8, summaryY + 3.3, 24, 3.6, 1);
+      line(8, summaryY + 6.8, 33, summaryY + 6.8, [248, 211, 228]);
+      summaryY += 7.4;
     });
 
-    sectionHeading("Informazioni ordine", 40, 37.4);
-    line(40, 39.7, 101, 39.7, pink);
+    sectionHeading("Informazioni ordine", 40, 34.8);
+    line(40, 36.9, 101, 36.9, pink);
 
     const emailField = findOrderField(fields, ["email"]);
     const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
-    drawInfoRow(40.6, { label: "Nome cognome", value: client }, { label: "Email", value: emailField ? displayOrderFieldValue(emailField.value) : "Non indicato" });
-    drawInfoRow(47.8, { label: "Telefono", value: phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato" });
+    drawInfoRow(38, { label: "Nome cognome", value: client }, { label: "Email", value: emailField ? displayOrderFieldValue(emailField.value) : "Non indicato" });
+    drawInfoRow(44.4, { label: "Telefono", value: phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato" });
 
     const infoFields = selectedLabelFields.slice(0, 6);
-    let infoY = 55;
+    let infoY = 50.8;
     for (let index = 0; index < infoFields.length && infoY < 70; index += 2) {
       drawInfoRow(infoY, infoFields[index], infoFields[index + 1]);
-      infoY += 7.2;
+      infoY += 6.4;
     }
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
     doc.setLineWidth(0.32);
     doc.setLineDashPattern([1.8, 1.5], 0);
-    doc.line(2.5, 72.4, pageWidth - 2.5, 72.4);
+    doc.line(2.5, 74, pageWidth - 2.5, 74);
     doc.setLineDashPattern([], 0);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.6);
+    doc.setFontSize(3.6);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, 75.3, { align: "center" });
-    drawCode128(doc, barcodeValue, 21, 77.3, 68, 7.8);
+    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, 76.8, { align: "center" });
+    drawCode128(doc, barcodeValue, 21, 78.4, 68, 6.7);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.6);
+    doc.setFontSize(4.4);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 87.4, { align: "center" });
+    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 87.2, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 
