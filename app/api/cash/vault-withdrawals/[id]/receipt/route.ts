@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { signedDocumentUrl } from "@/lib/supabase-storage";
+import { downloadPrivateDocument } from "@/lib/supabase-storage";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -15,7 +15,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
   const { id } = await params;
   const withdrawal = await prisma.cashVaultWithdrawal.findUnique({
     where: { id },
-    select: { receipt_path: true, location_id: true },
+    select: { receipt_path: true, receipt_name: true, location_id: true },
   });
 
   if (!withdrawal?.receipt_path) {
@@ -25,6 +25,27 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
-  const url = await signedDocumentUrl(withdrawal.receipt_path);
-  return NextResponse.redirect(url);
+  const file = await downloadPrivateDocument(withdrawal.receipt_path);
+  const contentType = file.type || contentTypeFromName(withdrawal.receipt_name || withdrawal.receipt_path);
+  const bytes = await file.arrayBuffer();
+
+  return new NextResponse(bytes, {
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "private, max-age=300",
+      "Content-Disposition": `inline; filename="${safeReceiptName(withdrawal.receipt_name || "scontrino")}"`,
+    },
+  });
+}
+
+function contentTypeFromName(name: string) {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
+function safeReceiptName(name: string) {
+  return name.replace(/["\r\n]/g, "").trim() || "scontrino";
 }

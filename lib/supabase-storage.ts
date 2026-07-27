@@ -96,6 +96,14 @@ export async function signedDocumentUrl(path: string) {
   return data.signedUrl;
 }
 
+export async function downloadPrivateDocument(path: string) {
+  const client = storageClient();
+  const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
+  const { data, error } = await client.storage.from(bucket).download(path);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 export async function uploadInvoicePdf(userId: string, filename: string, buffer: ArrayBuffer) {
   const client = storageClient();
   const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
