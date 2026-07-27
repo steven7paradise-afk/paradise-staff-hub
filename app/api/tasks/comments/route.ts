@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   const taskId = String(payload.taskId ?? "");
   const message = String(payload.message ?? "").trim();
-  const files = payload.files; // Expected: Array of { name: string, url: string }
+  const files = await normalizeTaskCommentFiles(payload.files, taskId); // Array of { name, url, previewUrl, driveFileId }
 
   const hasFiles = Array.isArray(files) && files.length > 0;
   if (!taskId || (!message && !hasFiles)) {
@@ -107,11 +108,11 @@ export async function PATCH(request: NextRequest) {
   const payload = await request.json();
   const id = String(payload.id ?? "");
   const message = String(payload.message ?? "").trim();
-  const files = payload.files;
   const comment = await prisma.staffTaskComment.findUnique({ where: { id }, include: { task: true } });
   if (!comment) return NextResponse.json({ error: "Commento non trovato." }, { status: 404 });
   const canEdit = comment.user_id === session.user.id || session.user.role === "SUPER_ADMIN";
   if (!canEdit) return NextResponse.json({ error: "Puoi modificare solo i tuoi commenti." }, { status: 403 });
+  const files = payload.files !== undefined ? await normalizeTaskCommentFiles(payload.files, comment.task_id) : undefined;
   const updated = await prisma.staffTaskComment.update({ 
     where: { id }, 
     data: { 
@@ -121,4 +122,68 @@ export async function PATCH(request: NextRequest) {
     include: { user: true } 
   });
   return NextResponse.json(updated);
+}
+
+async function normalizeTaskCommentFiles(files: unknown, taskId: string) {
+  if (!Array.isArray(files)) return files;
+
+  const normalized = [];
+  for (const item of files) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const name = String(record.name ?? "immagine-task").trim() || "immagine-task";
+    const url = String(record.url ?? "").trim();
+
+    if (url.startsWith("/api/drive-image") || record.driveFileId || record.driveFileUrl) {
+      normalized.push(record);
+      continue;
+    }
+
+    if (!url.startsWith("data:image/")) {
+      normalized.push({ name, url });
+      continue;
+    }
+
+    const match = url.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      normalized.push({ name });
+      continue;
+    }
+
+    const mimeType = match[1] || "image/jpeg";
+    const buffer = Buffer.from(match[2], "base64");
+    const driveFile = await uploadTaskImageToGoogleDrive(buffer, taskImageFileName(name, taskId), mimeType);
+    normalized.push({
+      name: driveFile.name || name,
+      url: driveFile.previewUrl,
+      previewUrl: driveFile.previewUrl,
+      driveFileId: driveFile.id,
+      driveFileUrl: driveFile.webViewLink,
+      webContentLink: driveFile.webContentLink,
+      type: mimeType,
+    });
+  }
+
+  return normalized;
+}
+
+function taskImageFileName(name: string, taskId: string) {
+  const extension = safeExtension(name);
+  const cleanName = safeFilePart(name.replace(/\.[^.]+$/, "") || "immagine-task").slice(0, 60);
+  return `${new Date().toISOString().slice(0, 10)}-${taskId}-${cleanName}.${extension}`;
+}
+
+function safeExtension(name: string) {
+  const extension = String(name || "").split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!extension || extension.length > 5) return "jpg";
+  return extension;
+}
+
+function safeFilePart(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/[\/\\:*?"<>|]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .replace(/^-+|-+$/g, "") || "immagine-task";
 }

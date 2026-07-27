@@ -540,6 +540,62 @@ export async function uploadCashReceiptToGoogleDrive(
   };
 }
 
+export async function uploadTaskImageToGoogleDrive(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string
+) {
+  const rootFolderId = driveFolderId(
+    process.env.GOOGLE_DRIVE_TASK_ROOT_FOLDER_ID || process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
+    "0ABkOsn4uZjSQUk9PVA"
+  );
+  const drive = getDriveClient();
+  const taskFolderId = await getOrCreateSubfolder(drive, rootFolderId, "Task");
+
+  const bufferStream = new Readable();
+  bufferStream.push(buffer);
+  bufferStream.push(null);
+
+  const response = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [taskFolderId],
+    },
+    media: {
+      mimeType,
+      body: bufferStream,
+    },
+    fields: "id, name, webViewLink, webContentLink, mimeType, thumbnailLink",
+    supportsAllDrives: true,
+  });
+
+  const fileId = response.data.id!;
+
+  try {
+    await drive.permissions.create({
+      fileId,
+      requestBody: {
+        role: "reader",
+        type: "anyone",
+      },
+      supportsAllDrives: true,
+    });
+  } catch (err) {
+    console.error("Failed to set public read permissions on Google Drive task image:", err);
+  }
+
+  return {
+    id: fileId,
+    name: response.data.name,
+    webViewLink: response.data.webViewLink,
+    webContentLink: response.data.webContentLink,
+    mimeType: response.data.mimeType,
+    thumbnailLink: response.data.thumbnailLink,
+    previewUrl: directDriveImageUrl(fileId),
+    folderId: taskFolderId,
+  };
+}
+
 export async function uploadStaffPhotoToGoogleDrive(
   buffer: Buffer,
   fileName: string,

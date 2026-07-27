@@ -85,7 +85,7 @@ type TaskComment = {
   userPhoto: string | null; 
   createdAt: string; 
   updatedAt: string;
-  files?: { name: string; url: string }[] | null;
+  files?: { name: string; url?: string; previewUrl?: string; driveFileId?: string; driveFileUrl?: string }[] | null;
 };
 type TaskView = "HOME" | "TABLE" | "BOARD" | "CALENDAR" | "LIST";
 type TaskFilter = "TODAY" | "ACTIVE" | "NEW" | "WAITING" | "COMPLETED";
@@ -245,6 +245,13 @@ function isPreviewableImage(url?: string | null) {
 
 function attachmentKind(url?: string | null, name?: string | null): AttachmentPreview["kind"] {
   return isPreviewableImage(url) || isImageName(name) ? "image" : "file";
+}
+
+function taskFilePreviewUrl(file: { url?: string | null; previewUrl?: string | null; driveFileId?: string | null }) {
+  if (file.previewUrl) return file.previewUrl;
+  if (file.url) return file.url;
+  if (file.driveFileId) return `/api/drive-image?id=${encodeURIComponent(file.driveFileId)}`;
+  return "";
 }
 
 function MissingImagePreview({ name }: { name: string }) {
@@ -411,7 +418,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [timerPaused, setTimerPaused] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [commentFiles, setCommentFiles] = useState<{ name: string; url: string }[]>([]);
+  const [commentFiles, setCommentFiles] = useState<NonNullable<TaskComment["files"]>>([]);
   const [commentUploading, setCommentUploading] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
   const [todayAttendanceLogs, setTodayAttendanceLogs] = useState<TodayAttendanceLog[]>([]);
@@ -1658,13 +1665,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                                 {event.files && event.files.length > 0 && (
                                   <div className="mt-3 grid gap-2">
                                     {event.files.map((file: any, fileIdx: number) => {
-                                      const isImage = file.url?.startsWith("data:image/") || file.name?.match(/\.(jpeg|jpg|gif|png|webp)/i);
+                                      const previewUrl = taskFilePreviewUrl(file);
+                                      const isImage = previewUrl?.startsWith("data:image/") || previewUrl?.startsWith("/api/drive-image") || file.name?.match(/\.(jpeg|jpg|gif|png|webp|avif)/i);
                                       return (
                                         <div key={fileIdx} className="max-w-md">
                                           {isImage ? (
-                                            <ImagePreviewBlock name={file.name} url={file.url} />
+                                            <ImagePreviewBlock name={file.name} url={previewUrl} />
                                           ) : (
-                                            <AttachmentCard name={file.name} url={file.url} />
+                                            <AttachmentCard name={file.name} url={previewUrl || file.driveFileUrl || file.url} />
                                           )}
                                         </div>
                                       );
@@ -1738,8 +1746,13 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   {/* File Upload Previews */}
                   {commentFiles.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2 rounded-xl bg-black/[0.02] p-2">
-                      {commentFiles.map((file, idx) => (
-                        <div key={idx} className="relative flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-xs font-medium border border-black/5 shadow-2xs">
+                      {commentFiles.map((file, idx) => {
+                        const previewUrl = taskFilePreviewUrl(file);
+                        return (
+                        <div key={idx} className="relative flex items-center gap-2 rounded-lg bg-white px-2 py-1 text-xs font-medium border border-black/5 shadow-2xs">
+                          {previewUrl && attachmentKind(previewUrl, file.name) === "image" ? (
+                            <img src={previewUrl} alt={file.name} className="size-10 rounded-md object-cover" />
+                          ) : null}
                           <span className="truncate max-w-[120px]">{file.name}</span>
                           <button 
                             type="button" 
@@ -1749,7 +1762,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                             <X className="size-3.5" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
