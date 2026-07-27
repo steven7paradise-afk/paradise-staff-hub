@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { cashDateFromInput } from "@/lib/cash-records";
+import { uploadCashReceiptToGoogleDrive } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
-import { uploadCashReceipt } from "@/lib/supabase-storage";
 
 const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 
@@ -42,7 +42,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Data prelievo non valida." }, { status: 400 });
   }
 
-  const receiptPath = await uploadCashReceipt(session.user.id, receipt);
+  const receiptBuffer = Buffer.from(await receipt.arrayBuffer());
+  const receiptFileName = cashReceiptFileName(receipt.name, accountingDate, location.name, reason);
+  const driveReceipt = await uploadCashReceiptToGoogleDrive(receiptBuffer, receiptFileName, receipt.type);
   const response = await prisma.cashVaultWithdrawal.create({
     data: {
       user_id: session.user.id,
@@ -50,8 +52,8 @@ export async function POST(request: Request) {
       date: accountingDate,
       amount,
       reason,
-      receipt_path: receiptPath,
-      receipt_name: receipt.name,
+      receipt_path: `drive:${driveReceipt.id}`,
+      receipt_name: driveReceipt.name || receiptFileName,
       signature_name: session.user.name ?? "Admin",
       signature_role: session.user.role,
       signed_at: new Date(),
@@ -60,4 +62,29 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ response });
+}
+
+function cashReceiptFileName(originalName: string, date: Date, locationName: string, reason: string) {
+  const extension = safeExtension(originalName);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  const cleanLocation = safeFilePart(locationName || "Sede");
+  const cleanReason = safeFilePart(reason || "Spesa").slice(0, 50);
+  return `${year}-${month}-${day}-${cleanLocation}-${cleanReason}.${extension}`;
+}
+
+function safeExtension(name: string) {
+  const extension = String(name || "").split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!extension || extension.length > 5) return "jpg";
+  return extension;
+}
+
+function safeFilePart(value: string) {
+  return String(value || "")
+    .trim()
+    .replace(/[\/\\:*?"<>|]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .replace(/^-+|-+$/g, "") || "Spesa";
 }

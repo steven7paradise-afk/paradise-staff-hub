@@ -488,6 +488,58 @@ export async function uploadEmployeeDocumentToGoogleDrive(
   };
 }
 
+export async function uploadCashReceiptToGoogleDrive(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string
+) {
+  const rootFolderId = driveFolderId(process.env.GOOGLE_DRIVE_CASH_RECEIPTS_FOLDER_ID, "0ABkOsn4uZjSQUk9PVA");
+  const drive = getDriveClient();
+  const expensesFolderId = await getOrCreateSubfolder(drive, rootFolderId, "Spese");
+
+  const bufferStream = new Readable();
+  bufferStream.push(buffer);
+  bufferStream.push(null);
+
+  const response = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      parents: [expensesFolderId],
+    },
+    media: {
+      mimeType,
+      body: bufferStream,
+    },
+    fields: "id, name, webViewLink, webContentLink, mimeType",
+    supportsAllDrives: true,
+  });
+
+  const fileId = response.data.id!;
+
+  try {
+    await drive.permissions.create({
+      fileId,
+      requestBody: {
+        role: "reader",
+        type: "anyone",
+      },
+      supportsAllDrives: true,
+    });
+  } catch (err) {
+    console.error("Failed to set public read permissions on Google Drive cash receipt:", err);
+  }
+
+  return {
+    id: fileId,
+    name: response.data.name,
+    webViewLink: response.data.webViewLink,
+    webContentLink: response.data.webContentLink,
+    mimeType: response.data.mimeType,
+    imageUrl: directDriveImageUrl(fileId),
+    folderId: expensesFolderId,
+  };
+}
+
 export async function uploadStaffPhotoToGoogleDrive(
   buffer: Buffer,
   fileName: string,

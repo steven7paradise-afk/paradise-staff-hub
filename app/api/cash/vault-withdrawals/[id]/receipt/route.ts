@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { downloadGoogleDriveFile } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
 import { downloadPrivateDocument } from "@/lib/supabase-storage";
 
@@ -25,10 +26,21 @@ export async function GET(_request: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
+  const driveFileId = googleDriveReceiptId(withdrawal.receipt_path);
+  if (driveFileId) {
+    const driveFile = await downloadGoogleDriveFile(driveFileId);
+    return new NextResponse(driveFile.buffer, {
+      headers: {
+        "Content-Type": driveFile.mimeType || contentTypeFromName(driveFile.name),
+        "Cache-Control": "private, max-age=300",
+        "Content-Disposition": `inline; filename="${safeReceiptName(driveFile.name || withdrawal.receipt_name || "scontrino")}"`,
+      },
+    });
+  }
+
   const file = await downloadPrivateDocument(withdrawal.receipt_path);
   const contentType = file.type || contentTypeFromName(withdrawal.receipt_name || withdrawal.receipt_path);
   const bytes = await file.arrayBuffer();
-
   return new NextResponse(bytes, {
     headers: {
       "Content-Type": contentType,
@@ -48,4 +60,9 @@ function contentTypeFromName(name: string) {
 
 function safeReceiptName(name: string) {
   return name.replace(/["\r\n]/g, "").trim() || "scontrino";
+}
+
+function googleDriveReceiptId(value: string) {
+  if (value.startsWith("drive:")) return value.slice("drive:".length).trim();
+  return "";
 }
