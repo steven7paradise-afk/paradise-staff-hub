@@ -13,11 +13,197 @@ type AttendanceSheetRow = {
   note?: string | null;
 };
 
+const APPOINTMENT_STATUS_VALUES = new Set([
+  "PRENOTATO",
+  "NON_PRESENTATO",
+  "INIZIATO",
+  "IN_ATTESA",
+  "COMPLETATO",
+  "ARRIVATO_IN_RITARDO",
+  "PAGATO",
+]);
+
+type AppointmentSheetLookupInput = {
+  id: string;
+  customerName: string;
+  startDate: string;
+};
+
 function getPrivateKey() {
   if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
     return Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
   }
   return process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+}
+
+function normalizeAppointmentSheetStatus(value?: string | null) {
+  const normalized = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_")
+    .trim();
+
+  if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW") return "NON_PRESENTATO";
+  if (normalized === "ARRIVATO_IN_RITARDO" || normalized === "IN_RITARDO") return "ARRIVATO_IN_RITARDO";
+  if (normalized === "IN_ATTESA" || normalized === "ATTESA") return "IN_ATTESA";
+  if (normalized === "INIZIATO") return "INIZIATO";
+  if (normalized === "COMPLETATO" || normalized === "COMPLETA") return "COMPLETATO";
+  if (normalized === "PAGATO" || normalized === "PAID") return "PAGATO";
+  if (normalized === "PRENOTATO" || normalized === "CONFIRMED" || normalized === "CONFERMATO") return "PRENOTATO";
+  return APPOINTMENT_STATUS_VALUES.has(normalized) ? normalized : null;
+}
+
+function cellMatchesBookingId(cell: unknown, bookingId: string) {
+  const value = String(cell || "").trim();
+  if (!value) return false;
+  return value === bookingId || value.includes(bookingId);
+}
+
+function normalizeSheetText(value?: string | null) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dateKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(value: Date, days: number) {
+  const copy = new Date(value);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function parseSheetDate(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const serial = Number(raw.replace(",", "."));
+  if (Number.isFinite(serial) && serial > 20_000 && serial < 80_000) {
+    return new Date(Math.round((serial - 25569) * 86400 * 1000));
+  }
+
+  const iso = raw.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+
+  const italian = raw.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b/);
+  if (italian) {
+    const year = Number(italian[3].length === 2 ? `20${italian[3]}` : italian[3]);
+    return new Date(year, Number(italian[2]) - 1, Number(italian[1]));
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function rowDateKeys(row: unknown[]) {
+  return new Set(
+    row
+      .map(parseSheetDate)
+      .filter((date): date is Date => Boolean(date))
+      .map(dateKey),
+  );
+}
+
+function rowMatchesCustomer(row: unknown[], customerName: string) {
+  const normalizedName = normalizeSheetText(customerName);
+  if (!normalizedName) return false;
+  const rowText = normalizeSheetText(row.join(" "));
+  if (rowText.includes(normalizedName)) return true;
+
+  const nameParts = normalizedName.split(" ").filter((part) => part.length > 1);
+  return nameParts.length >= 2 && nameParts.every((part) => rowText.includes(part));
+}
+
+function rowMatchesAppointment(row: unknown[], booking: AppointmentSheetLookupInput) {
+  if (row.some((cell) => cellMatchesBookingId(cell, booking.id))) return true;
+  if (!rowMatchesCustomer(row, booking.customerName)) return false;
+
+  const appointmentDate = new Date(booking.startDate);
+  if (Number.isNaN(appointmentDate.getTime())) return true;
+
+  const expectedKeys = new Set([
+    dateKey(addDays(appointmentDate, -1)),
+    dateKey(appointmentDate),
+  ]);
+  const datesInRow = rowDateKeys(row);
+  if (datesInRow.size === 0) return true;
+  return Array.from(expectedKeys).some((key) => datesInRow.has(key));
+}
+
+export async function getAppointmentStatusesFromGoogleSheet(bookings: AppointmentSheetLookupInput[]) {
+  const lookupBookings = bookings.filter((booking) => booking.id && booking.customerName && booking.startDate);
+  if (!lookupBookings.length) return {};
+
+  const spreadsheetId =
+    process.env.GOOGLE_APPOINTMENTS_SHEET_ID ||
+    process.env.GOOGLE_SHEET_ID ||
+    "1r6kS_FrxNCJ1dLh5TrR6dvXaNAFzk0RG_EHThdrLgME";
+  const configuredSheetName = process.env.GOOGLE_APPOINTMENTS_SHEET_NAME || "appointments";
+  const sheetNames = Array.from(new Set([configuredSheetName, "Conferma appuntamenti", "conferma appuntamenti", "appointments"]));
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = getPrivateKey();
+
+  if (!spreadsheetId || !clientEmail || !privateKey) {
+    return {};
+  }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+  });
+
+  const sheets = google.sheets({ version: "v4", auth });
+
+  try {
+    let rows: unknown[][] = [];
+    let usedSheetName = configuredSheetName;
+    for (const sheetName of sheetNames) {
+      try {
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `'${sheetName.replace(/'/g, "''")}'!A:Z`,
+        });
+        rows = response.data.values || [];
+        usedSheetName = sheetName;
+        break;
+      } catch {
+        // Try the next likely tab name.
+      }
+    }
+
+    const statuses: Record<string, { status?: string; sheetNote?: string; updatedAt: string; updatedBy: string }> = {};
+
+    for (const row of rows.slice(1)) {
+      const status = normalizeAppointmentSheetStatus(row[7]);
+      const sheetNote = String(row[9] || "").trim();
+      if (!status && !sheetNote) continue;
+
+      for (const booking of lookupBookings) {
+        if (statuses[booking.id]) continue;
+        if (rowMatchesAppointment(row, booking)) {
+          statuses[booking.id] = {
+            ...(status ? { status } : {}),
+            ...(sheetNote ? { sheetNote } : {}),
+            updatedAt: new Date().toISOString(),
+            updatedBy: usedSheetName,
+          };
+        }
+      }
+    }
+
+    return statuses;
+  } catch (error) {
+    console.error("Failed to read appointment statuses from Google Sheet:", error);
+    return {};
+  }
 }
 
 export async function appendAttendanceToGoogleSheet(row: AttendanceSheetRow) {

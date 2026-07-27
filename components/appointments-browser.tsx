@@ -64,6 +64,7 @@ type AppointmentRecord = {
   localStatus?: AppointmentStatusValue | string | null;
   statusUpdatedAt?: string | null;
   statusUpdatedBy?: string | null;
+  sheetNote?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   notesText?: string | null;
@@ -1127,6 +1128,12 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                       {selectedBooking.statusUpdatedAt ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}` : ""}
                     </p>
                   ) : null}
+                  {selectedBooking.sheetNote ? (
+                    <div className="mt-4 rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">Nota conferma</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">{selectedBooking.sheetNote}</p>
+                    </div>
+                  ) : null}
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
@@ -1660,6 +1667,12 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                         Ultima modifica: {selectedBooking.statusUpdatedBy}
                         {selectedBooking.statusUpdatedAt ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}` : ""}
                       </p>
+                    ) : null}
+                    {selectedBooking.sheetNote ? (
+                      <div className="mt-3 rounded-2xl border border-black/5 bg-[#FFF6F7] p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">Nota conferma</p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#5D4A42]">{selectedBooking.sheetNote}</p>
+                      </div>
                     ) : null}
                   </div>
                 </div>
