@@ -80,7 +80,7 @@ export async function uploadFileToGoogleDrive(
   fileName: string,
   mimeType: string
 ) {
-  const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || "1LbwCUQSwbaWZ3BH9gnn8dm1dmhQbluvC";
+  const rootFolderId = driveFolderId(process.env.GOOGLE_DRIVE_FOLDER_ID, "1LbwCUQSwbaWZ3BH9gnn8dm1dmhQbluvC");
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -241,6 +241,14 @@ function directDriveImageUrl(fileId: string) {
   return `/api/drive-image?id=${encodeURIComponent(fileId)}`;
 }
 
+function driveFolderId(value: string | null | undefined, fallback: string) {
+  const clean = String(value || "").trim();
+  if (!clean || clean === "." || clean === "./" || clean.toLowerCase() === "undefined" || clean.toLowerCase() === "null") {
+    return fallback;
+  }
+  return clean;
+}
+
 export async function uploadOrderPhotoToGoogleDrive(
   buffer: Buffer,
   fileName: string,
@@ -248,9 +256,7 @@ export async function uploadOrderPhotoToGoogleDrive(
   clientName: string,
   orderNumber: string
 ) {
-  const rootFolderId =
-    process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID ||
-    "0ABwI50LPNFjKUk9PVA";
+  const rootFolderId = driveFolderId(process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID, "0ABwI50LPNFjKUk9PVA");
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -334,9 +340,7 @@ export async function uploadFotoOrdineToGoogleDrive(
   mimeType: string,
   orderNumber: string
 ) {
-  const rootFolderId =
-    process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID ||
-    "0ABwI50LPNFjKUk9PVA";
+  const rootFolderId = driveFolderId(process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID, "0ABwI50LPNFjKUk9PVA");
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -405,7 +409,7 @@ export async function uploadEmployeeDocumentToGoogleDrive(
   mimeType: string,
   employeeName: string
 ) {
-  const rootFolderId = process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID || "0ABkOsn4uZjSQUk9PVA";
+  const rootFolderId = driveFolderId(process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID, "0ABkOsn4uZjSQUk9PVA");
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -473,10 +477,10 @@ export async function uploadStaffPhotoToGoogleDrive(
   mimeType: string,
   employeeName: string
 ) {
-  const rootFolderId =
-    process.env.GOOGLE_DRIVE_STAFF_PHOTOS_FOLDER_ID ||
-    process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID ||
-    "0ABkOsn4uZjSQUk9PVA";
+  const rootFolderId = driveFolderId(
+    process.env.GOOGLE_DRIVE_STAFF_PHOTOS_FOLDER_ID || process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
+    "0ABkOsn4uZjSQUk9PVA"
+  );
   const drive = getDriveClient();
   const employeeFolderId = await getOrCreateSubfolder(drive, rootFolderId, cleanDriveName(employeeName));
 
@@ -523,10 +527,10 @@ export async function uploadStaffPhotoToGoogleDrive(
 }
 
 export async function findStaffPhotoInGoogleDrive(employeeName: string) {
-  const rootFolderId =
-    process.env.GOOGLE_DRIVE_STAFF_PHOTOS_FOLDER_ID ||
-    process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID ||
-    "0ABkOsn4uZjSQUk9PVA";
+  const rootFolderId = driveFolderId(
+    process.env.GOOGLE_DRIVE_STAFF_PHOTOS_FOLDER_ID || process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
+    "0ABkOsn4uZjSQUk9PVA"
+  );
   const drive = getDriveClient();
   const cleanEmployeeName = cleanDriveName(employeeName);
   const employeeFolderId = await findSubfolder(drive, rootFolderId, cleanEmployeeName);
