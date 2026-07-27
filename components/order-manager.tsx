@@ -592,48 +592,40 @@ export function OrderManager({
 
   async function downloadOrderLabelPdf(order: OrderResponse) {
     const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 203] });
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [90, 110] });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 7;
-    const contentWidth = pageWidth - margin * 2;
     const orderNo = orderNumber(order);
     const client = orderClientName(order);
-    const publicUrl = orderPublicUrl(orderNo.replace(/^#/, "").trim() || order.id);
     const fields = (order.form?.fields ?? [])
       .map((field) => ({ label: field.label, value: order.answers?.[field.id], id: field.id }))
       .filter((field) => field.value && !field.id.startsWith("__"));
     const taskType = getOrderTaskType(order);
-    const selectedLabelFields = orderLabelFieldsByType(order, fields);
+    const selectedLabelFields = orderLabelFieldsByType(order, fields).filter((field) => {
+      const label = field.label.toLowerCase();
+      if (taskType === "conversione") {
+        return label.includes("cosa") || label.includes("peso") || label.includes("extension") || label.includes("fasce");
+      }
+      return label.includes("cosa") || label.includes("grammi") || label.includes("lunghezza") || label.includes("colore") || label.includes("texture") || label.includes("extension") || label.includes("fasce");
+    });
     const barcodeValue = await resolveShopifyBarcodeValue(order, fields, orderNo);
     const logoDataUrl = await fetch("/logo-label-paradise.png")
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => (blob ? blobToDataUrl(blob) : ""))
       .catch(() => "");
 
-    let y = 8;
     const pink = [236, 83, 145] as const;
     const borderPink = [247, 181, 211] as const;
     const textDark = [18, 18, 22] as const;
     const textMuted = [92, 92, 105] as const;
-    const barcodeTop = 175;
-    const maxContentY = barcodeTop - 8;
     const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = borderPink) => {
       doc.setDrawColor(color[0], color[1], color[2]);
-      doc.setLineWidth(0.22);
+      doc.setLineWidth(0.36);
       doc.line(x1, y1, x2, y2);
-    };
-    const sectionTitle = (title: string) => {
-      if (y > barcodeTop - 12) return;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.2);
-      doc.setTextColor(pink[0], pink[1], pink[2]);
-      doc.text(title.toUpperCase(), margin, y);
-      y += 4;
     };
     const tinyLabel = (label: string, x: number, yPos: number, width: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(5.8);
+      doc.setFontSize(4.6);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
     };
@@ -644,137 +636,143 @@ export function OrderManager({
       visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 54)}...`;
       return visible;
     };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 6.8) => {
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 5.7, maxLines = 2) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-      doc.text(textLines(value, width), x, yPos);
+      doc.text(textLines(value, width, maxLines), x, yPos);
     };
-    const fullRow = (label: string, value: string) => {
-      if (y > maxContentY - 6) return;
-      const lines = textLines(value, contentWidth - 46);
-      const rowHeight = Math.max(7, lines.length * 3.4 + 3.2);
-      if (y + rowHeight > maxContentY) return;
-      line(margin, y, pageWidth - margin, y, [248, 211, 228]);
-      y += 2.8;
-      tinyLabel(label, margin + 6, y, 34);
-      doc.setFont("helvetica", "normal");
+    const sectionHeading = (title: string, x: number, y: number) => {
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(6.8);
-      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-      doc.text(lines, margin + 42, y);
-      y += rowHeight;
+      doc.setTextColor(pink[0], pink[1], pink[2]);
+      doc.text(title.toUpperCase(), x, y);
     };
-    const gridRow = (left?: { label: string; value: string }, right?: { label: string; value: string }) => {
-      if (y > maxContentY - 9) return;
-      line(margin, y, pageWidth - margin, y, [248, 211, 228]);
-      const colW = (contentWidth - 4) / 2;
-      const leftLines = left ? textLines(left.value, colW - 8) : [];
-      const rightLines = right ? textLines(right.value, colW - 8) : [];
-      const rowHeight = Math.max(10.5, Math.max(leftLines.length, rightLines.length) * 3.4 + 7.2);
-      if (y + rowHeight > maxContentY) return;
-      y += 2.8;
-      if (left) {
-        tinyLabel(left.label, margin + 6, y, colW - 8);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.8);
-        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-        doc.text(leftLines, margin + 6, y + 3.7);
-      }
+    const drawCell = (x: number, y: number, width: number, height: number, label: string, value: string, maxLines = 2) => {
+      tinyLabel(label, x, y + 2.4, width - 1.2);
+      valueText(value, x, y + 5.6, width - 1.2, 5.5, maxLines);
+      line(x, y + height, x + width, y + height, [248, 211, 228]);
+    };
+    const drawInfoRow = (y: number, left?: { label: string; value: string }, right?: { label: string; value: string }) => {
+      const leftX = 40;
+      const rightX = 72;
+      const colW = 29;
+      const rowHeight = 7.8;
+      if (left) drawCell(leftX, y, colW, rowHeight, left.label, left.value);
       if (right) {
-        line(margin + colW + 2, y - 2.4, margin + colW + 2, y + rowHeight - 2.5, [248, 211, 228]);
-        tinyLabel(right.label, margin + colW + 8, y, colW - 8);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.8);
-        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-        doc.text(rightLines, margin + colW + 8, y + 3.7);
+        line(70, y, 70, y + rowHeight, [248, 211, 228]);
+        drawCell(rightX, y, colW, rowHeight, right.label, right.value);
       }
-      y += rowHeight;
     };
+    const initials = client
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
-    doc.setLineWidth(0.35);
-    doc.roundedRect(5, 5, 92, 193, 3, 3);
+    doc.setLineWidth(0.48);
+    doc.roundedRect(2.5, 2.5, pageWidth - 5, pageHeight - 5, 4, 4);
 
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, "PNG", 12, 9, 30, 11);
+        doc.addImage(logoDataUrl, "PNG", 7, 6, 26, 10);
       } catch {
-        // If the browser cannot decode the logo, the text header still prints.
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text(COMPANY_INFO.name, 7, 12);
       }
     }
-    doc.setFont("helvetica", "bold");
-    doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.roundedRect(67, 10, 19, 8, 1.5, 1.5, "F");
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text("ORDINE", 76.5, 15.4, { align: "center" });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`#${orderNo.replace(/^#/, "")}`, 76.5, 27, { align: "center" });
-    line(margin, 32, pageWidth - margin, 32);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.2);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(COMPANY_INFO.email, 16, 35.5);
-    doc.text(COMPANY_INFO.website, 61, 35.5);
-    line(51, 31.5, 51, 38, [248, 211, 228]);
-    y = 42;
 
-    doc.setFillColor(255, 248, 251);
-    doc.setDrawColor(248, 211, 228);
-    doc.roundedRect(margin, y, contentWidth, 18, 2, 2, "FD");
     doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.circle(margin + 10, y + 9, 6, "F");
+    doc.circle(39, 11, 5.3, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(7.4);
     doc.setTextColor(255, 255, 255);
-    doc.text(client.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(), margin + 10, y + 11, { align: "center" });
-    doc.setFontSize(11);
+    doc.text(initials || "PB", 39, 13.5, { align: "center" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.8);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(doc.splitTextToSize(client, contentWidth - 28), margin + 20, y + 7);
+    doc.text(textLines(client, 39, 1), 47, 9.6);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(5.5);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth - 28), margin + 20, y + 12);
-    y += 22;
+    doc.text(textLines(orderItems(order) || "Nessuna descrizione inserita", 39, 1), 47, 14.5);
 
-    sectionTitle("Riepilogo");
-    gridRow({ label: "Tipo", value: taskType === "conversione" ? "CONVERSIONE CAPELLI" : "ACQUISTO EXTENSION" }, { label: "Data creazione", value: orderDate(order) });
-    gridRow({ label: "Salone", value: order.user_location_name ?? "Non indicato" }, { label: "Ultima modifica", value: formatDateTime(order.updated_at) });
+    doc.setFillColor(pink[0], pink[1], pink[2]);
+    doc.roundedRect(89, 6, 15, 6.5, 1.4, 1.4, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6);
+    doc.setTextColor(255, 255, 255);
+    doc.text("ORDINE", 96.5, 10.3, { align: "center" });
+    doc.setFontSize(11.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`#${orderNo.replace(/^#/, "")}`, 96.5, 20, { align: "center" });
 
-    sectionTitle("Informazioni ordine");
-    fullRow("Nome cognome", client);
+    line(5, 23, pageWidth - 5, 23, pink);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.4);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text(`assistenza@paradisebeauty.it`, 30, 28, { align: "center" });
+    line(pageWidth / 2, 25.2, pageWidth / 2, 29.2, pink);
+    doc.text("www.paradisebeauty.it", 79, 28, { align: "center" });
+
+    const cardY = 32;
+    const cardH = 35.5;
+    doc.setDrawColor(248, 211, 228);
+    doc.setLineWidth(0.38);
+    doc.roundedRect(5, cardY, 31, cardH, 2.5, 2.5);
+    doc.roundedRect(38, cardY, 67, cardH, 2.5, 2.5);
+    line(36, cardY, 36, cardY + cardH, [248, 211, 228]);
+
+    sectionHeading("Riepilogo", 8, 38.5);
+    const summaryRows = [
+      { label: "Tipo", value: taskType === "conversione" ? "CONVERSIONE CAPELLI" : "ACQUISTO EXTENSION" },
+      { label: "Data creazione", value: orderDate(order) },
+      { label: "Salone", value: order.user_location_name ?? "Non indicato" },
+      { label: "Ultima modifica", value: formatDateTime(order.updated_at) },
+    ];
+    let summaryY = 42;
+    summaryRows.forEach((row) => {
+      tinyLabel(row.label, 8, summaryY, 24);
+      valueText(row.value, 8, summaryY + 3.8, 24, 5.3, 2);
+      line(8, summaryY + 8.2, 33, summaryY + 8.2, [248, 211, 228]);
+      summaryY += 8.5;
+    });
+
+    sectionHeading("Informazioni ordine", 40, 38.5);
+    line(40, 40.8, 101, 40.8, pink);
+
     const emailField = findOrderField(fields, ["email"]);
-    if (emailField) fullRow("Email", displayOrderFieldValue(emailField.value));
     const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
-    if (phoneField) fullRow("Telefono", displayOrderFieldValue(phoneField.value));
-    for (let index = 0; index < selectedLabelFields.length; index += 2) {
-      gridRow(
-        selectedLabelFields[index],
-        selectedLabelFields[index + 1]
-          ? selectedLabelFields[index + 1]
-          : undefined
-      );
+    drawInfoRow(42, { label: "Nome cognome", value: client }, { label: "Email", value: emailField ? displayOrderFieldValue(emailField.value) : "Non indicato" });
+    drawInfoRow(49.8, { label: "Telefono", value: phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato" });
+
+    const infoFields = selectedLabelFields.slice(0, 6);
+    let infoY = 57.6;
+    for (let index = 0; index < infoFields.length && infoY < 67; index += 2) {
+      drawInfoRow(infoY, infoFields[index], infoFields[index + 1]);
+      infoY += 7.8;
     }
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
-    doc.setLineDashPattern([1.5, 1.2], 0);
-    line(5, barcodeTop - 5, 97, barcodeTop - 5, pink);
+    doc.setLineWidth(0.32);
+    doc.setLineDashPattern([1.8, 1.5], 0);
+    doc.line(2.5, 70.5, pageWidth - 2.5, 70.5);
     doc.setLineDashPattern([], 0);
+
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
+    doc.setFontSize(4.6);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, barcodeTop - 1.5, { align: "center" });
-    drawCode128(doc, barcodeValue, 16, barcodeTop + 2, 70, 16);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.3);
-    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(publicUrl.replace(/^https:\/\//, ""), pageWidth / 2, barcodeTop + 21, { align: "center" });
+    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, 74, { align: "center" });
+    drawCode128(doc, barcodeValue, 21, 76, 68, 8.5);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.2);
+    doc.setFontSize(5.6);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, pageHeight - 7, { align: "center" });
+    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 87.2, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 
