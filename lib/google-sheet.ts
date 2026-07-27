@@ -30,6 +30,12 @@ type AppointmentSheetLookupInput = {
 };
 
 function getPrivateKey() {
+  if (process.env.DRIVE_PRIVATE_KEY_BASE64) {
+    return Buffer.from(process.env.DRIVE_PRIVATE_KEY_BASE64, "base64").toString("utf8").replace(/\r/g, "").replace(/\\n/g, "\n");
+  }
+  if (process.env.DRIVE_PRIVATE_KEY) {
+    return process.env.DRIVE_PRIVATE_KEY.replace(/\r/g, "").replace(/\\n/g, "\n");
+  }
   if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
     return Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
   }
@@ -146,7 +152,7 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
     "1r6kS_FrxNCJ1dLh5TrR6dvXaNAFzk0RG_EHThdrLgME";
   const configuredSheetName = process.env.GOOGLE_APPOINTMENTS_SHEET_NAME || "appointments";
   const sheetNames = Array.from(new Set([configuredSheetName, "Conferma appuntamenti", "conferma appuntamenti", "appointments"]));
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
   if (!spreadsheetId || !clientEmail || !privateKey) {
@@ -207,7 +213,7 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
 
 export async function appendAttendanceToGoogleSheet(row: AttendanceSheetRow) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
   if (!spreadsheetId || !clientEmail || !privateKey) {
@@ -274,7 +280,7 @@ type FormSyncInput = {
 
 export async function appendFormResponseToGoogleSheet(input: FormSyncInput) {
   const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
   if (!spreadsheetId || !clientEmail || !privateKey) {
@@ -472,7 +478,7 @@ function asRecord(value: unknown) {
 
 async function getBackupSheetsClient() {
   const envSpreadsheetId = process.env.GOOGLE_SHEET_ID;
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
   if (!envSpreadsheetId || !clientEmail || !privateKey) {
