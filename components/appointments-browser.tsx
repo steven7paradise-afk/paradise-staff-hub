@@ -65,6 +65,7 @@ type AppointmentRecord = {
   localStatus?: AppointmentStatusValue | string | null;
   statusUpdatedAt?: string | null;
   statusUpdatedBy?: string | null;
+  sheetMatched?: boolean;
   sheetNote?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -795,20 +796,23 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
     );
   };
 
-  const WhatsAppSheetNote = ({ booking, compact = false }: { booking: AppointmentRecord; compact?: boolean }) => {
-    if (!booking.sheetNote) return null;
+  const WhatsAppSheetNote = ({ booking, compact = false, always = false }: { booking: AppointmentRecord; compact?: boolean; always?: boolean }) => {
+    const message = booking.sheetNote || (booking.sheetMatched ? "Conferma trovata, cella J vuota" : "Non trovato nel foglio conferme");
+    if (!always && !booking.sheetNote) return null;
+    const found = Boolean(booking.sheetMatched || booking.sheetNote);
     return (
       <div
         className={[
-          "inline-flex max-w-full items-start gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-800",
+          "inline-flex max-w-full items-start gap-2 rounded-2xl border",
+          found ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800",
           compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
         ].join(" ")}
-        title={booking.sheetNote}
+        title={message}
       >
         <MessageCircle className={compact ? "mt-0.5 size-3.5 shrink-0" : "mt-0.5 size-4 shrink-0"} />
         <span className="min-w-0">
           <span className="font-black">WhatsApp</span>
-          {!compact ? <span className="ml-1 font-semibold">{booking.sheetNote}</span> : null}
+          {!compact ? <span className="ml-1 font-semibold">{message}</span> : null}
         </span>
       </div>
     );
@@ -1102,6 +1106,9 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                       <Mail className="size-4 text-[#A56A42]" />
                       {selectedContacts?.email || "Email non disponibile"}
                     </p>
+                  </div>
+                  <div className="mt-4">
+                    <WhatsAppSheetNote booking={selectedBooking} always />
                   </div>
                 </section>
 
@@ -1662,6 +1669,9 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#C66170]">Dettaglio appuntamento</p>
                 <h3 className="mt-2 text-3xl font-black text-[#171717]">{selectedBooking.customerName}</h3>
                 <p className="mt-2 text-sm text-black/55">{selectedBooking.serviceTitle}</p>
+                <div className="mt-3">
+                  <WhatsAppSheetNote booking={selectedBooking} always />
+                </div>
                 {selectedBooking.bookingStr ? (
                   <p className="mt-3 inline-flex rounded-full bg-[#FFF1F5] px-3 py-1 text-xs font-black text-[#C66170]">
                     Ordine Shopify {formatOrderCode(selectedBooking.bookingStr)}

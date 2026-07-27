@@ -150,7 +150,7 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
   const spreadsheetId =
     process.env.GOOGLE_APPOINTMENTS_SHEET_ID ||
     "1r6kS_FrxNCJ1dLh5TrR6dvXaNAFzk0RG_EHThdrLgME";
-  const configuredSheetName = process.env.GOOGLE_APPOINTMENTS_SHEET_NAME || "appointments";
+  const configuredSheetName = process.env.GOOGLE_APPOINTMENTS_SHEET_NAME || "CONFERMA APPUNTAMENTI";
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -173,6 +173,7 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
     });
     const allSheetNames = spreadsheet.data.sheets?.map((sheet) => sheet.properties?.title).filter(Boolean) as string[] || [];
     const sheetNames = Array.from(new Set([
+      "CONFERMA APPUNTAMENTI",
       configuredSheetName,
       "Conferma appuntamenti",
       "conferma appuntamenti",

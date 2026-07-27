@@ -313,6 +313,7 @@ export default async function AppointmentsPage() {
         localStatus: sheetStatusOverrides[String(booking.id)]?.status ?? statusOverrides[String(booking.id)]?.status ?? null,
         statusUpdatedAt: sheetStatusOverrides[String(booking.id)]?.updatedAt ?? statusOverrides[String(booking.id)]?.updatedAt ?? null,
         statusUpdatedBy: sheetStatusOverrides[String(booking.id)]?.updatedBy ?? statusOverrides[String(booking.id)]?.updatedBy ?? null,
+        sheetMatched: Boolean(sheetStatusOverrides[String(booking.id)]),
         sheetNote: sheetStatusOverrides[String(booking.id)]?.sheetNote ?? null,
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
