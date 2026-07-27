@@ -650,14 +650,14 @@ export function OrderManager({
     };
     const drawCell = (x: number, y: number, width: number, height: number, label: string, value: string, maxLines = 2) => {
       tinyLabel(label, x, y + 2.4, width - 1.2);
-      valueText(value, x, y + 5.6, width - 1.2, 5.5, maxLines);
+      valueText(value, x, y + 5.4, width - 1.2, 5.1, maxLines);
       line(x, y + height, x + width, y + height, [248, 211, 228]);
     };
     const drawInfoRow = (y: number, left?: { label: string; value: string }, right?: { label: string; value: string }) => {
       const leftX = 40;
       const rightX = 72;
       const colW = 29;
-      const rowHeight = 7.8;
+      const rowHeight = 7.2;
       if (left) drawCell(leftX, y, colW, rowHeight, left.label, left.value);
       if (right) {
         line(70, y, 70, y + rowHeight, [248, 211, 228]);
@@ -720,59 +720,59 @@ export function OrderManager({
     line(pageWidth / 2, 25.2, pageWidth / 2, 29.2, pink);
     doc.text("www.paradisebeauty.it", 79, 28, { align: "center" });
 
-    const cardY = 32;
-    const cardH = 35.5;
+    const cardY = 31;
+    const cardH = 39.5;
     doc.setDrawColor(248, 211, 228);
     doc.setLineWidth(0.38);
     doc.roundedRect(5, cardY, 31, cardH, 2.5, 2.5);
     doc.roundedRect(38, cardY, 67, cardH, 2.5, 2.5);
     line(36, cardY, 36, cardY + cardH, [248, 211, 228]);
 
-    sectionHeading("Riepilogo", 8, 38.5);
+    sectionHeading("Riepilogo", 8, 37.4);
     const summaryRows = [
       { label: "Tipo", value: taskType === "conversione" ? "CONVERSIONE CAPELLI" : "ACQUISTO EXTENSION" },
       { label: "Data creazione", value: orderDate(order) },
       { label: "Salone", value: order.user_location_name ?? "Non indicato" },
       { label: "Ultima modifica", value: formatDateTime(order.updated_at) },
     ];
-    let summaryY = 42;
+    let summaryY = 40.6;
     summaryRows.forEach((row) => {
       tinyLabel(row.label, 8, summaryY, 24);
-      valueText(row.value, 8, summaryY + 3.8, 24, 5.3, 2);
-      line(8, summaryY + 8.2, 33, summaryY + 8.2, [248, 211, 228]);
-      summaryY += 8.5;
+      valueText(row.value, 8, summaryY + 3.6, 24, 5.1, 2);
+      line(8, summaryY + 7.1, 33, summaryY + 7.1, [248, 211, 228]);
+      summaryY += 7.3;
     });
 
-    sectionHeading("Informazioni ordine", 40, 38.5);
-    line(40, 40.8, 101, 40.8, pink);
+    sectionHeading("Informazioni ordine", 40, 37.4);
+    line(40, 39.7, 101, 39.7, pink);
 
     const emailField = findOrderField(fields, ["email"]);
     const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
-    drawInfoRow(42, { label: "Nome cognome", value: client }, { label: "Email", value: emailField ? displayOrderFieldValue(emailField.value) : "Non indicato" });
-    drawInfoRow(49.8, { label: "Telefono", value: phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato" });
+    drawInfoRow(40.6, { label: "Nome cognome", value: client }, { label: "Email", value: emailField ? displayOrderFieldValue(emailField.value) : "Non indicato" });
+    drawInfoRow(47.8, { label: "Telefono", value: phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato" });
 
     const infoFields = selectedLabelFields.slice(0, 6);
-    let infoY = 57.6;
-    for (let index = 0; index < infoFields.length && infoY < 67; index += 2) {
+    let infoY = 55;
+    for (let index = 0; index < infoFields.length && infoY < 70; index += 2) {
       drawInfoRow(infoY, infoFields[index], infoFields[index + 1]);
-      infoY += 7.8;
+      infoY += 7.2;
     }
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
     doc.setLineWidth(0.32);
     doc.setLineDashPattern([1.8, 1.5], 0);
-    doc.line(2.5, 70.5, pageWidth - 2.5, 70.5);
+    doc.line(2.5, 72.4, pageWidth - 2.5, 72.4);
     doc.setLineDashPattern([], 0);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(4.6);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, 74, { align: "center" });
-    drawCode128(doc, barcodeValue, 21, 76, 68, 8.5);
+    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, 75.3, { align: "center" });
+    drawCode128(doc, barcodeValue, 21, 77.3, 68, 7.8);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(5.6);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 87.2, { align: "center" });
+    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 87.4, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 

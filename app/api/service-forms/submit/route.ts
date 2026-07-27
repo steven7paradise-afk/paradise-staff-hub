@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         user: true,
+        form: true,
       },
     });
 

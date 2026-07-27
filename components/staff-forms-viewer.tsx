@@ -7,6 +7,7 @@ import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
+import { downloadOrderLabelPdf, isOrderLabelForm } from "@/lib/order-label-pdf-client";
 
 const CLIENT_CONTROL_FIELD_IDS = {
   serviceOwner: "client_control_service_owner",
@@ -904,6 +905,11 @@ export function StaffFormsViewer({
 
       if (result.response) {
         setResponses((prev) => [result.response, ...prev]);
+        if (isOrderLabelForm(result.response.form ?? selectedForm)) {
+          void downloadOrderLabelPdf(result.response).catch((labelError) => {
+            console.error("Failed to generate order label:", labelError);
+          });
+        }
       }
 
       setSuccess(true);
