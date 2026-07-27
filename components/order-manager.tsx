@@ -625,7 +625,7 @@ export function OrderManager({
     };
     const tinyLabel = (label: string, x: number, yPos: number, width: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.6);
+      doc.setFontSize(3.4);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
     };
@@ -636,7 +636,7 @@ export function OrderManager({
       visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 54)}...`;
       return visible;
     };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 5.7, maxLines = 2) => {
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 3.9, maxLines = 1) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
@@ -644,13 +644,13 @@ export function OrderManager({
     };
     const sectionHeading = (title: string, x: number, y: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.8);
+      doc.setFontSize(4.8);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(title.toUpperCase(), x, y);
     };
     const drawCell = (x: number, y: number, width: number, height: number, label: string, value: string, maxLines = 2) => {
       tinyLabel(label, x, y + 2.4, width - 1.2);
-      valueText(value, x, y + 5.4, width - 1.2, 5.1, maxLines);
+      valueText(value, x, y + 5.2, width - 1.2, 3.9, 1);
       line(x, y + height, x + width, y + height, [248, 211, 228]);
     };
     const drawInfoRow = (y: number, left?: { label: string; value: string }, right?: { label: string; value: string }) => {
@@ -680,7 +680,7 @@ export function OrderManager({
         doc.addImage(logoDataUrl, "PNG", 7, 6, 26, 10);
       } catch {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
+        doc.setFontSize(7);
         doc.setTextColor(0, 0, 0);
         doc.text(COMPANY_INFO.name, 7, 12);
       }
@@ -689,32 +689,32 @@ export function OrderManager({
     doc.setFillColor(pink[0], pink[1], pink[2]);
     doc.circle(39, 11, 5.3, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.4);
+    doc.setFontSize(5.4);
     doc.setTextColor(255, 255, 255);
     doc.text(initials || "PB", 39, 13.5, { align: "center" });
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.8);
+    doc.setFontSize(6.2);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.text(textLines(client, 39, 1), 47, 9.6);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.5);
+    doc.setFontSize(4);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
     doc.text(textLines(orderItems(order) || "Nessuna descrizione inserita", 39, 1), 47, 14.5);
 
     doc.setFillColor(pink[0], pink[1], pink[2]);
     doc.roundedRect(89, 6, 15, 6.5, 1.4, 1.4, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6);
+    doc.setFontSize(4.4);
     doc.setTextColor(255, 255, 255);
     doc.text("ORDINE", 96.5, 10.3, { align: "center" });
-    doc.setFontSize(11.5);
+    doc.setFontSize(8.2);
     doc.setTextColor(0, 0, 0);
     doc.text(`#${orderNo.replace(/^#/, "")}`, 96.5, 20, { align: "center" });
 
     line(5, 23, pageWidth - 5, 23, pink);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.4);
+    doc.setFontSize(4);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.text(`assistenza@paradisebeauty.it`, 30, 28, { align: "center" });
     line(pageWidth / 2, 25.2, pageWidth / 2, 29.2, pink);
@@ -738,7 +738,7 @@ export function OrderManager({
     let summaryY = 40.6;
     summaryRows.forEach((row) => {
       tinyLabel(row.label, 8, summaryY, 24);
-      valueText(row.value, 8, summaryY + 3.6, 24, 5.1, 2);
+      valueText(row.value, 8, summaryY + 3.6, 24, 3.9, 1);
       line(8, summaryY + 7.1, 33, summaryY + 7.1, [248, 211, 228]);
       summaryY += 7.3;
     });
@@ -765,12 +765,12 @@ export function OrderManager({
     doc.setLineDashPattern([], 0);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.6);
+    doc.setFontSize(3.6);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
     doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, 75.3, { align: "center" });
     drawCode128(doc, barcodeValue, 21, 77.3, 68, 7.8);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.6);
+    doc.setFontSize(4.4);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 87.4, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
