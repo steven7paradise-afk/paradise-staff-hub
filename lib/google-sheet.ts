@@ -143,7 +143,6 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
 
   const spreadsheetId =
     process.env.GOOGLE_APPOINTMENTS_SHEET_ID ||
-    process.env.GOOGLE_SHEET_ID ||
     "1r6kS_FrxNCJ1dLh5TrR6dvXaNAFzk0RG_EHThdrLgME";
   const configuredSheetName = process.env.GOOGLE_APPOINTMENTS_SHEET_NAME || "appointments";
   const sheetNames = Array.from(new Set([configuredSheetName, "Conferma appuntamenti", "conferma appuntamenti", "appointments"]));
