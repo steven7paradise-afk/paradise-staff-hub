@@ -80,7 +80,14 @@ export async function uploadFileToGoogleDrive(
   fileName: string,
   mimeType: string
 ) {
-  const rootFolderId = driveFolderId(process.env.GOOGLE_DRIVE_FOLDER_ID, "1LbwCUQSwbaWZ3BH9gnn8dm1dmhQbluvC");
+  const rootFolderId = firstDriveFolderId(
+    [
+      process.env.GOOGLE_DRIVE_FOLDER_ID,
+      process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID,
+      process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
+    ],
+    "1LbwCUQSwbaWZ3BH9gnn8dm1dmhQbluvC"
+  );
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();
 
@@ -247,6 +254,16 @@ function driveFolderId(value: string | null | undefined, fallback: string) {
     return fallback;
   }
   return clean;
+}
+
+function firstDriveFolderId(values: Array<string | null | undefined>, fallback: string) {
+  for (const value of values) {
+    const clean = String(value || "").trim();
+    if (clean && clean !== "." && clean !== "./" && clean.toLowerCase() !== "undefined" && clean.toLowerCase() !== "null") {
+      return clean;
+    }
+  }
+  return fallback;
 }
 
 export async function uploadOrderPhotoToGoogleDrive(
