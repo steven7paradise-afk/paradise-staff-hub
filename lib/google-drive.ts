@@ -82,11 +82,11 @@ export async function uploadFileToGoogleDrive(
 ) {
   const rootFolderId = firstDriveFolderId(
     [
-      process.env.GOOGLE_DRIVE_FOLDER_ID,
       process.env.GOOGLE_DRIVE_ORDER_PHOTOS_FOLDER_ID,
+      process.env.GOOGLE_DRIVE_FOLDER_ID,
       process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
     ],
-    "1LbwCUQSwbaWZ3BH9gnn8dm1dmhQbluvC"
+    "0ABwI50LPNFjKUk9PVA"
   );
   const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
   const privateKey = getPrivateKey();

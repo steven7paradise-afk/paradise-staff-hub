@@ -169,7 +169,9 @@ export async function POST(request: NextRequest) {
     
     return {
       driveFileId: driveFile.id,
-      driveFileUrl: `https://docs.google.com/uc?export=download&id=${driveFile.id}`,
+      driveFileUrl: `/api/drive-image?id=${encodeURIComponent(driveFile.id)}`,
+      webViewLink: driveFile.webViewLink,
+      webContentLink: driveFile.webContentLink,
       name: fileName,
       type: mimeType,
     };
