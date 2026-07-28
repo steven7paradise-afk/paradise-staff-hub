@@ -701,6 +701,15 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
                   </label>
 
                   <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Codice fiscale</span>
+                    <Field
+                      value={editing.fiscalCode || ""}
+                      onChange={(e) => updateDraft("fiscalCode", e.target.value.toUpperCase())}
+                      placeholder="Codice fiscale..."
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">IBAN</span>
                     <Field
                       value={editing.iban || ""}

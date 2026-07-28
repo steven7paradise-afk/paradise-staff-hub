@@ -1041,6 +1041,15 @@ export function StaffDirectory({
                   </label>
 
                   <label className="block space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Codice fiscale</span>
+                    <Field
+                      value={editForm.fiscalCode || ""}
+                      onChange={(e) => setEditForm(prev => prev ? { ...prev, fiscalCode: e.target.value.toUpperCase() } : null)}
+                      placeholder="Codice fiscale..."
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">IBAN</span>
                     <Field
                       value={editForm.iban || ""}
