@@ -315,6 +315,33 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
+function rotateDataUrl180(dataUrl: string) {
+  return new Promise<string>((resolve) => {
+    if (!dataUrl || typeof document === "undefined") {
+      resolve(dataUrl);
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const context = canvas.getContext("2d");
+      if (!context || !canvas.width || !canvas.height) {
+        resolve(dataUrl);
+        return;
+      }
+      context.translate(canvas.width / 2, canvas.height / 2);
+      context.rotate(Math.PI);
+      context.drawImage(image, -canvas.width / 2, -canvas.height / 2);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
+
 function orderPublicUrl(orderId: string) {
   return `${ORDER_LABEL_BASE_URL}/ordine/${encodeURIComponent(orderId)}`;
 }
@@ -604,6 +631,7 @@ export function OrderManager({
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => (blob ? blobToDataUrl(blob) : ""))
       .catch(() => "");
+    const rotatedLogoDataUrl = await rotateDataUrl180(logoDataUrl);
 
     const pink = [236, 83, 145] as const;
     const textDark = [18, 18, 22] as const;
@@ -648,14 +676,14 @@ export function OrderManager({
     const weightField = findOrderField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
     const service = orderItems(order) || (findOrderField(fields, ["servizio", "trattamento"]) ? displayOrderFieldValue(findOrderField(fields, ["servizio", "trattamento"])?.value) : "") || "Non indicato";
 
-    if (logoDataUrl) {
+    if (rotatedLogoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, "PNG", 8, 10, 48, 19);
+        doc.addImage(rotatedLogoDataUrl, "PNG", 8, 10, 48, 19);
       } catch {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(10);
         doc.setTextColor(0, 0, 0);
-        doc.text(COMPANY_INFO.name, 8, 20);
+        doc.text(COMPANY_INFO.name, 8, 20, { angle: 180 });
       }
     }
 
@@ -664,10 +692,10 @@ export function OrderManager({
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.8);
     doc.setTextColor(255, 255, 255);
-    doc.text("ORDINE", 81, 17.2, { align: "center" });
+    doc.text("ORDINE", 81, 17.2, { align: "center", angle: 180 });
     doc.setFontSize(16);
     doc.setTextColor(0, 0, 0);
-    doc.text(`#${orderNo.replace(/^#/, "")}`, 81, 34, { align: "center" });
+    doc.text(`#${orderNo.replace(/^#/, "")}`, 81, 34, { align: "center", angle: 180 });
 
     line(8, 43, 94, 43, pink, 0.9);
     doc.setFillColor(pink[0], pink[1], pink[2]);
