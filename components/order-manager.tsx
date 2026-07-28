@@ -592,7 +592,7 @@ export function OrderManager({
 
   async function downloadOrderLabelPdf(order: OrderResponse) {
     const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 102] });
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 180] });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const orderNo = orderNumber(order);
@@ -623,11 +623,11 @@ export function OrderManager({
     };
     const labelText = (label: string, x: number, yPos: number) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.8);
+      doc.setFontSize(6.6);
       doc.setTextColor(pink[0], pink[1], pink[2]);
       doc.text(label.toUpperCase(), x, yPos);
     };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 7.2, maxLines = 1) => {
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 11, maxLines = 1) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
@@ -635,8 +635,8 @@ export function OrderManager({
     };
     const infoCell = (x: number, y: number, width: number, label: string, value: string, maxLines = 1) => {
       labelText(label, x, y);
-      valueText(value || "Non indicato", x, y + 7, width, maxLines > 1 ? 7.4 : 8.2, maxLines);
-      line(x, y + 10.8, x + width, y + 10.8);
+      valueText(value || "Non indicato", x, y + 11, width, maxLines > 1 ? 9.2 : 11, maxLines);
+      line(x, y + 16, x + width, y + 16, palePink, 0.65);
     };
     const initials = client
       .split(" ")
@@ -648,59 +648,55 @@ export function OrderManager({
     const weightField = findOrderField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
     const service = orderItems(order) || (findOrderField(fields, ["servizio", "trattamento"]) ? displayOrderFieldValue(findOrderField(fields, ["servizio", "trattamento"])?.value) : "") || "Non indicato";
 
-    doc.setDrawColor(pink[0], pink[1], pink[2]);
-    doc.setLineWidth(0.65);
-    doc.roundedRect(2.5, 2.5, pageWidth - 5, pageHeight - 5, 4, 4);
-
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, "PNG", 7, 6, 35, 14);
+        doc.addImage(logoDataUrl, "PNG", 8, 10, 48, 19);
       } catch {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(7);
+        doc.setFontSize(10);
         doc.setTextColor(0, 0, 0);
-        doc.text(COMPANY_INFO.name, 7, 13);
+        doc.text(COMPANY_INFO.name, 8, 20);
       }
     }
 
     doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.roundedRect(77, 7, 19, 8.5, 2, 2, "F");
+    doc.roundedRect(68, 10, 26, 11, 2, 2, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.2);
+    doc.setFontSize(7.8);
     doc.setTextColor(255, 255, 255);
-    doc.text("ORDINE", 86.5, 12.7, { align: "center" });
-    doc.setFontSize(12);
+    doc.text("ORDINE", 81, 17.2, { align: "center" });
+    doc.setFontSize(16);
     doc.setTextColor(0, 0, 0);
-    doc.text(`#${orderNo.replace(/^#/, "")}`, 86.5, 24, { align: "center" });
+    doc.text(`#${orderNo.replace(/^#/, "")}`, 81, 34, { align: "center" });
 
-    line(6, 29, 96, 29, pink, 0.7);
+    line(8, 43, 94, 43, pink, 0.9);
     doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.circle(14, 40, 6.8, "F");
+    doc.circle(17, 60, 9, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6);
+    doc.setFontSize(8.2);
     doc.setTextColor(255, 255, 255);
-    doc.text(initials || "PB", 14, 42.2, { align: "center" });
+    doc.text(initials || "PB", 17, 63, { align: "center" });
 
-    doc.setFontSize(10);
+    doc.setFontSize(15);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(textLines(client, 70, 1), 24, 38.2);
+    doc.text(textLines(client, 62, 1), 32, 58);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.4);
+    doc.setFontSize(9);
     doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(textLines(service, 70, 1), 24, 45);
+    doc.text(textLines(service, 62, 1), 32, 69);
 
     doc.setDrawColor(palePink[0], palePink[1], palePink[2]);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(6, 52, 90, 28, 2.5, 2.5);
-    infoCell(9, 59, 41, "Telefono cliente", phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato");
-    infoCell(54, 59, 39, "Peso bilancia", weightField ? displayOrderFieldValue(weightField.value) : "Non indicato");
-    infoCell(9, 72, 41, "Data creazione", orderDate(order));
-    infoCell(54, 72, 39, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
+    doc.setLineWidth(0.75);
+    doc.roundedRect(8, 82, 86, 58, 3, 3);
+    infoCell(12, 96, 36, "Telefono cliente", phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato");
+    infoCell(55, 96, 35, "Peso bilancia", weightField ? displayOrderFieldValue(weightField.value) : "Non indicato");
+    infoCell(12, 122, 36, "Data creazione", orderDate(order));
+    infoCell(55, 122, 35, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(4.3);
+    doc.setFontSize(6.2);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 86, { align: "center" });
+    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 164, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 
