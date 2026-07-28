@@ -9,7 +9,7 @@ export type PlanningAccess = {
 
 export function normalizePlanningAccess(value: unknown): PlanningAccess {
   const allowedRoles: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-  const defaultRoles: Role[] = ["RESPONSABILE"];
+  const defaultRoles: Role[] = ["RESPONSABILE", "DIPENDENTE"];
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { roles: defaultRoles, userIds: [] };
   }

@@ -24,8 +24,7 @@ function romeDateParts(referenceDate = new Date()) {
 
 export function visibleScheduleMonthsForEmployee(referenceDate = new Date()): VisibleScheduleMonth[] {
   const current = romeDateParts(referenceDate);
-  const daysInCurrentMonth = new Date(Date.UTC(current.year, current.month + 1, 0)).getUTCDate();
-  const canSeeNextMonth = current.day >= daysInCurrentMonth - 2;
+  const canSeeNextMonth = true;
   const months: VisibleScheduleMonth[] = [{ month: current.month, year: current.year }];
 
   if (canSeeNextMonth) {

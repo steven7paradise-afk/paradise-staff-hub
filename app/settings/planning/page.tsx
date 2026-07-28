@@ -47,6 +47,7 @@ export default async function PlanningSettingsPage() {
     >
       <PlanningAccessSettings
         initialAccess={normalizePlanningAccess(accessSetting?.value)}
+        canManagePlanningVisibility={role === "SUPER_ADMIN" || role === "ADMIN"}
         users={users.map((user) => ({
           id: user.id,
           name: user.name,
