@@ -592,7 +592,7 @@ export function OrderManager({
 
   async function downloadOrderLabelPdf(order: OrderResponse) {
     const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [90, 102] });
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 102] });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const orderNo = orderNumber(order);
