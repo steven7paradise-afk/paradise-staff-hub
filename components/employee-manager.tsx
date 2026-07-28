@@ -111,6 +111,16 @@ const roles: { value: Role; label: string }[] = [
   { value: "SUPER_ADMIN", label: "Super Admin" },
 ];
 
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text };
+  }
+}
+
 export function EmployeeManager({ initialEmployees, locations }: { initialEmployees: Employee[]; locations: Location[] }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [availableLocations] = useState(locations);
@@ -306,58 +316,63 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     }
     setSaving(true);
     setMessage("");
-    const endpoint = creating ? "/api/employees" : `/api/employees/${editing.id}`;
-    const response = await fetch(endpoint, {
-      method: creating ? "POST" : "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editing, pin: pin || undefined, password: password || undefined }),
-    });
-    const data = await response.json();
-    setSaving(false);
+    try {
+      const endpoint = creating ? "/api/employees" : `/api/employees/${editing.id}`;
+      const response = await fetch(endpoint, {
+        method: creating ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...editing, pin: pin || undefined, password: password || undefined }),
+      });
+      const data = await readJsonResponse(response);
 
-    if (!response.ok) {
-      setMessage(data.error ?? "Modifica non salvata.");
-      return;
+      if (!response.ok || !data) {
+        setMessage(data?.error ?? "Modifica non salvata. Riprova tra poco.");
+        return;
+      }
+
+      const location = availableLocations.find((item) => item.id === data.sede_id)?.name ?? "Nessun salone";
+      const updated: Employee = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        sedeId: data.sede_id,
+        location,
+        active: data.active,
+        hasPin: Boolean(data.pinConfigured),
+        birthDate: data.birth_date ? String(data.birth_date).slice(0, 10) : "",
+        fiscalCode: data.fiscal_code ?? "",
+        contractStart: data.contract_start ? String(data.contract_start).slice(0, 10) : "",
+        contractEnd: data.contract_end ? String(data.contract_end).slice(0, 10) : "",
+        photoUrl: data.photo_url ?? "",
+        whatsappPhone: data.whatsapp_phone ?? "",
+        mansione: data.mansione ?? "",
+        googleCalendarId: data.google_calendar_id ?? "",
+        googleCalendarSync: data.google_calendar_sync ?? false,
+        iban: data.iban ?? "",
+        hrNotes: data.hr_notes ?? "",
+        managerId: data.manager_id,
+        accessList: (data.access_list as string[]) ?? [],
+        workforceData: data.workforce_data && typeof data.workforce_data === "object" && !Array.isArray(data.workforce_data) ? data.workforce_data : {},
+        lastEditedByName: data.last_edited_by?.name ?? null,
+        lastEditedAt: data.last_edited_at ?? null,
+      };
+      setEmployees((current) =>
+        creating ? [...current, updated].sort((a, b) => a.name.localeCompare(b.name)) : current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      const emailText = data.emailStatus?.skipped
+        ? " Email non inviata: configura provider email o invia credenziali manualmente."
+        : " Email con password provvisoria e PIN inviata al lavoratore.";
+      setMessage(creating ? `Utente creato. PIN/password provvisori generati.${emailText}` : "Utente salvato. PIN personale attivo per il tablet.");
+      setEditing(updated);
+      setCreating(false);
+      setPin("");
+      setPassword("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Errore durante il salvataggio.");
+    } finally {
+      setSaving(false);
     }
-
-    const location = availableLocations.find((item) => item.id === data.sede_id)?.name ?? "Nessun salone";
-    const updated: Employee = {
-      id: data.id,
-      name: data.name,
-      email: data.email,
-      role: data.role,
-      sedeId: data.sede_id,
-      location,
-      active: data.active,
-      hasPin: Boolean(data.pinConfigured),
-      birthDate: data.birth_date ? String(data.birth_date).slice(0, 10) : "",
-      fiscalCode: data.fiscal_code ?? "",
-      contractStart: data.contract_start ? String(data.contract_start).slice(0, 10) : "",
-      contractEnd: data.contract_end ? String(data.contract_end).slice(0, 10) : "",
-      photoUrl: data.photo_url ?? "",
-      whatsappPhone: data.whatsapp_phone ?? "",
-      mansione: data.mansione ?? "",
-      googleCalendarId: data.google_calendar_id ?? "",
-      googleCalendarSync: data.google_calendar_sync ?? false,
-      iban: data.iban ?? "",
-      hrNotes: data.hr_notes ?? "",
-      managerId: data.manager_id,
-      accessList: (data.access_list as string[]) ?? [],
-      workforceData: data.workforce_data && typeof data.workforce_data === "object" && !Array.isArray(data.workforce_data) ? data.workforce_data : {},
-      lastEditedByName: data.last_edited_by?.name ?? null,
-      lastEditedAt: data.last_edited_at ?? null,
-    };
-    setEmployees((current) =>
-      creating ? [...current, updated].sort((a, b) => a.name.localeCompare(b.name)) : current.map((item) => (item.id === updated.id ? updated : item)),
-    );
-    const emailText = data.emailStatus?.skipped
-      ? " Email non inviata: configura provider email o invia credenziali manualmente."
-      : " Email con password provvisoria e PIN inviata al lavoratore.";
-    setMessage(creating ? `Utente creato. PIN/password provvisori generati.${emailText}` : "Utente salvato. PIN personale attivo per il tablet.");
-    setEditing(updated);
-    setCreating(false);
-    setPin("");
-    setPassword("");
   }
 
   const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (

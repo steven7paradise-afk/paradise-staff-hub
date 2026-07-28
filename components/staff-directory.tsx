@@ -68,6 +68,16 @@ type ContractRow = {
 type Location = { id: string; name: string };
 type Manager = { id: string; name: string; role: string };
 
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text };
+  }
+}
+
 class SafetyErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
@@ -536,9 +546,9 @@ export function StaffDirectory({
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Errore durante la creazione del dipendente.");
+      const data = await readJsonResponse(response);
+      if (!response.ok || !data) {
+        throw new Error(data?.error || "Errore durante la creazione del dipendente.");
       }
 
       const locName = locations.find((l) => l.id === data.sede_id)?.name ?? "Nessuna sede";
