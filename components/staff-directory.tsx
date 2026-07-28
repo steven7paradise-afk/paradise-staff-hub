@@ -923,12 +923,25 @@ export function StaffDirectory({
                     {editForm.active ? "Attivo" : "Disattivato"}
                   </span>
                   <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                    Codice: {editForm.fiscalCode || "0"}
+                    Codice fiscale: {editForm.fiscalCode || "Non inserito"}
                   </span>
                   <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1">
                     <MapPin className="size-3 text-red-500" />
                     {editForm.location}
                   </span>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    { label: "WhatsApp", value: editForm.whatsappPhone || "Non inserito" },
+                    { label: "Data nascita", value: editForm.birthDate ? formatContractDate(editForm.birthDate) : "Non inserita" },
+                    { label: "Codice fiscale", value: editForm.fiscalCode || "Non inserito" },
+                    { label: "IBAN", value: editForm.iban || "Non inserito" },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-black/5 bg-white/65 px-3 py-2 shadow-sm">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-neutral-400">{item.label}</p>
+                      <p className="mt-1 truncate text-xs font-extrabold text-neutral-700" title={item.value}>{item.value}</p>
+                    </div>
+                  ))}
                 </div>
                 {editForm.lastEditedByName && (
                   <p className="text-[11px] text-neutral-400 font-semibold mt-2.5 italic">
@@ -1693,6 +1706,18 @@ export function StaffDirectory({
                       <span>{emp.whatsappPhone}</span>
                     </div>
                   )}
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="size-3.5 text-neutral-400" />
+                    <span>CF: <strong className="text-neutral-700 dark:text-neutral-200">{emp.fiscalCode || "Non inserito"}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="size-3.5 text-neutral-400" />
+                    <span>Nascita: <strong className="text-neutral-700 dark:text-neutral-200">{emp.birthDate ? formatContractDate(emp.birthDate) : "Non inserita"}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="size-3.5 text-neutral-400" />
+                    <span>IBAN: <strong className="text-neutral-700 dark:text-neutral-200">{emp.iban || "Non inserito"}</strong></span>
+                  </div>
                   {emp.managerName && (
                     <div className="flex items-center gap-2">
                       <User className="size-3.5 text-neutral-400" />
