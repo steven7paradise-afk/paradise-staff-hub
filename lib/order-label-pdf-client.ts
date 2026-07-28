@@ -157,33 +157,6 @@ function blobToDataUrl(blob: Blob) {
   });
 }
 
-function rotateDataUrl180(dataUrl: string) {
-  return new Promise<string>((resolve) => {
-    if (!dataUrl || typeof document === "undefined") {
-      resolve(dataUrl);
-      return;
-    }
-
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth || image.width;
-      canvas.height = image.naturalHeight || image.height;
-      const context = canvas.getContext("2d");
-      if (!context || !canvas.width || !canvas.height) {
-        resolve(dataUrl);
-        return;
-      }
-      context.translate(canvas.width / 2, canvas.height / 2);
-      context.rotate(Math.PI);
-      context.drawImage(image, -canvas.width / 2, -canvas.height / 2);
-      resolve(canvas.toDataURL("image/png"));
-    };
-    image.onerror = () => resolve(dataUrl);
-    image.src = dataUrl;
-  });
-}
-
 function shopifyBarcodeValue(order: OrderLabelResponse, fields: OrderLabelField[], orderNo: string) {
   const haystack = [
     orderNo,
@@ -254,12 +227,20 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
     .then((response) => (response.ok ? response.blob() : null))
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
     .catch(() => "");
-  const rotatedLogoDataUrl = await rotateDataUrl180(logoDataUrl);
 
   const pink = [236, 83, 145] as const;
   const textDark = [18, 18, 22] as const;
   const textMuted = [92, 92, 105] as const;
   const palePink = [249, 196, 222] as const;
+  const drawUpsideDownText = (text: string, x: number, y: number, options: Record<string, unknown> = {}) => {
+    doc.text(text, pageWidth - x, pageHeight - y, { ...options, angle: 180 });
+  };
+  const drawUpsideDownImage = (dataUrl: string, x: number, y: number, width: number, height: number) => {
+    doc.addImage(dataUrl, "PNG", pageWidth - x - width, pageHeight - y - height, width, height, undefined, "FAST", 180);
+  };
+  const drawUpsideDownRoundedRect = (x: number, y: number, width: number, height: number, radius = 2) => {
+    doc.roundedRect(pageWidth - x - width, pageHeight - y - height, width, height, radius, radius, "F");
+  };
   const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = palePink, width = 0.45) => {
     doc.setDrawColor(color[0], color[1], color[2]);
     doc.setLineWidth(width);
@@ -294,26 +275,26 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
   const weightField = findField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
   const service = orderItems(order) || fieldValue(order, ["servizio", "trattamento"]) || "Non indicato";
 
-  if (rotatedLogoDataUrl) {
+  if (logoDataUrl) {
     try {
-      doc.addImage(rotatedLogoDataUrl, "PNG", 8, 10, 48, 19);
+      drawUpsideDownImage(logoDataUrl, 8, 10, 48, 19);
     } catch {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      doc.text("PARADISE BEAUTY", 8, 20, { angle: 180 });
+      drawUpsideDownText("PARADISE BEAUTY", 8, 20);
     }
   }
 
   doc.setFillColor(pink[0], pink[1], pink[2]);
-  doc.roundedRect(74, 10, 26, 11, 2, 2, "F");
+  drawUpsideDownRoundedRect(74, 10, 26, 11, 2);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(7.8);
   doc.setTextColor(255, 255, 255);
-  doc.text("ORDINE", 87, 17.2, { align: "center", angle: 180 });
+  drawUpsideDownText("ORDINE", 87, 17.2, { align: "center" });
   doc.setFontSize(16);
   doc.setTextColor(0, 0, 0);
-  doc.text(`#${orderNo.replace(/^#/, "")}`, 87, 34, { align: "center", angle: 180 });
+  drawUpsideDownText(`#${orderNo.replace(/^#/, "")}`, 87, 34, { align: "center" });
 
   line(8, 43, 100, 43, pink, 0.9);
   doc.setFillColor(pink[0], pink[1], pink[2]);
