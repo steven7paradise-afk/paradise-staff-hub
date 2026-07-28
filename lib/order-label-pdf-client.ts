@@ -192,15 +192,15 @@ function shortSvgText(value: string, max = 42) {
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
-function svgToRotatedPortraitDataUrl(svg: string) {
+function svgToDataUrl(svg: string) {
   return new Promise<string>((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
       const sourceWidth = 1520;
       const sourceHeight = 1020;
       const canvas = document.createElement("canvas");
-      canvas.width = sourceHeight;
-      canvas.height = sourceWidth;
+      canvas.width = sourceWidth;
+      canvas.height = sourceHeight;
       const context = canvas.getContext("2d");
       if (!context) {
         reject(new Error("Canvas non disponibile"));
@@ -208,8 +208,6 @@ function svgToRotatedPortraitDataUrl(svg: string) {
       }
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
-      context.translate(canvas.width, 0);
-      context.rotate(Math.PI / 2);
       context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
       resolve(canvas.toDataURL("image/png", 1));
     };
@@ -278,7 +276,7 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 152] });
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [152, 102] });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
@@ -334,7 +332,7 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <text x="760" y="952" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" fill="#121216">Paradise Beauty - Etichetta ordine</text>
     </svg>
   `;
-  const labelImageDataUrl = await svgToRotatedPortraitDataUrl(svg);
+  const labelImageDataUrl = await svgToDataUrl(svg);
   doc.addImage(labelImageDataUrl, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
   return { doc, fileName: `Etichetta-orizzontale-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
 }
