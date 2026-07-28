@@ -32,6 +32,7 @@ import {
   ShoppingBag,
   ChevronRight,
   Mic,
+  Sparkles,
   Camera,
   Trash2
 } from "lucide-react";
@@ -55,6 +56,36 @@ const requestTypes = [
   { value: "RIPOSO", label: "Riposo" },
   { value: "MALATTIA", label: "Malattia" },
 ];
+
+const appointmentNoteSuggestions = [
+  "Cliente simpatica",
+  "Cliente si e trovata bene",
+  "Cliente poco collaborativa",
+  "Cliente arrivata in ritardo",
+  "Capelli molto sottili",
+  "Capelli poco curati",
+  "Cute sensibile",
+  "Ha bisogno di consulenza colore",
+  "Spiegata manutenzione a casa",
+];
+
+type LearnedNoteSuggestion = { text: string; count: number; lastUsed: number };
+
+function normalizeNoteSuggestion(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.!?;:,]+$/g, "")
+    .trim();
+}
+
+function extractNoteSuggestions(note: string) {
+  return note
+    .split(/[.\n;]+/)
+    .map(normalizeNoteSuggestion)
+    .filter((item) => item.length >= 8 && item.length <= 90)
+    .filter((item) => item.split(/\s+/).length >= 2)
+    .slice(0, 8);
+}
 
 type ClockStatus = "OUT" | "IN" | "BREAK";
 type TabletDevice = { id: string; name: string; locationName: string };
@@ -343,6 +374,8 @@ export function TabletClock({
   const [activeCameraSlot, setActiveCameraSlot] = useState<string | null>(null);
   const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("environment");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [notePolishing, setNotePolishing] = useState(false);
+  const [learnedNoteSuggestions, setLearnedNoteSuggestions] = useState<LearnedNoteSuggestion[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Response details editing
@@ -619,6 +652,27 @@ export function TabletClock({
     }
   }, [cameraStream]);
 
+  useEffect(() => {
+    if (!device?.id) return;
+    fetch("/api/client-control/note-suggestions", {
+      cache: "no-store",
+      headers: { "x-device-id": device.id },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!Array.isArray(data?.suggestions)) return;
+        setLearnedNoteSuggestions(data.suggestions);
+      })
+      .catch(() => setLearnedNoteSuggestions([]));
+  }, [device?.id]);
+
+  const frequentNoteSuggestions = useMemo(() => {
+    const fixed = new Set(appointmentNoteSuggestions.map((item) => item.toLowerCase()));
+    return learnedNoteSuggestions
+      .filter((item) => !fixed.has(item.text.toLowerCase()))
+      .slice(0, 8);
+  }, [learnedNoteSuggestions]);
+
   const stopCamera = () => {
     if (cameraStream) {
       cameraStream.getTracks().forEach((track) => track.stop());
@@ -758,6 +812,7 @@ export function TabletClock({
       if (!res.ok) {
         throw new Error(data.error || "Errore durante il salvataggio.");
       }
+      void rememberAppointmentNotePhrases(appointmentForm.customNoteText);
       
       setPhotoPrimaFronteFile(null);
       if (photoPrimaFrontePreview) {
@@ -886,6 +941,108 @@ export function TabletClock({
     };
 
     recognition.start();
+  };
+
+  const appendAppointmentNoteSuggestion = (suggestion: string) => {
+    setAppointmentForm((prev) => {
+      const current = prev.customNoteText.trim();
+      return {
+        ...prev,
+        customNoteText: current ? `${current}. ${suggestion}` : suggestion,
+        notes: true,
+      };
+    });
+  };
+
+  const rememberAppointmentNotePhrases = async (note: string) => {
+    const phrases = extractNoteSuggestions(note);
+    if (phrases.length === 0) return;
+
+    try {
+      const response = await fetch("/api/client-control/note-suggestions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(device?.id ? { "x-device-id": device.id } : {}),
+        },
+        body: JSON.stringify({ note }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && Array.isArray(data?.suggestions)) {
+        setLearnedNoteSuggestions(data.suggestions);
+      }
+    } catch {
+      // Suggerimenti salvati nel database: se fallisce, il salvataggio scheda resta valido.
+    }
+  };
+
+  const selectedAppointmentStaffNames = () => {
+    const employees = clientAnalytics?.employees ?? [];
+    return appointmentForm.staffIds
+      .map((id) => employees.find((emp: any) => emp.id === id)?.name)
+      .filter(Boolean);
+  };
+
+  const hasAppointmentNoteContext = () =>
+    !!(
+      appointmentForm.customNoteText.trim() ||
+      appointmentForm.clientName.trim() ||
+      appointmentForm.shopifyOrder.trim() ||
+      appointmentForm.serviceTitle.trim() ||
+      appointmentForm.depositPaid ||
+      appointmentForm.paid ||
+      appointmentForm.staffIds.length ||
+      appointmentForm.notes ||
+      appointmentForm.beforeMedia ||
+      appointmentForm.afterMedia ||
+      appointmentForm.products ||
+      appointmentForm.review
+    );
+
+  const polishAppointmentNote = async () => {
+    const note = appointmentForm.customNoteText.trim();
+    if (!hasAppointmentNoteContext() || notePolishing) return;
+    setNotePolishing(true);
+    setAppointmentMessage(null);
+    try {
+      const response = await fetch("/api/client-control/polish-note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note,
+          clientName: appointmentForm.clientName,
+          serviceTitle: appointmentForm.serviceTitle,
+          orderNumber: appointmentForm.shopifyOrder,
+          salon: appointmentForm.salon,
+          depositPaid: appointmentForm.depositPaid,
+          paid: appointmentForm.paid,
+          instagramTag: appointmentForm.instagramTag,
+          staffNames: selectedAppointmentStaffNames(),
+          checks: {
+            notes: appointmentForm.notes,
+            beforeMedia: appointmentForm.beforeMedia,
+            afterMedia: appointmentForm.afterMedia,
+            products: appointmentForm.products,
+            review: appointmentForm.review,
+          },
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.note) {
+        throw new Error(data?.error || "Non riesco a sistemare la nota.");
+      }
+      setAppointmentForm((prev) => ({
+        ...prev,
+        customNoteText: data.note,
+        notes: true,
+      }));
+      sound("success");
+    } catch (err: any) {
+      setAppointmentMessage({ type: "error", text: err.message || "Non riesco a sistemare la nota." });
+      sound("error");
+    } finally {
+      setNotePolishing(false);
+    }
   };
 
   function sound(kind: "tap" | "success" | "error", force = false) {
@@ -2212,34 +2369,75 @@ export function TabletClock({
                             <label className="block col-span-2">
                               <div className="flex items-center justify-between">
                                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo Nota Shopify</span>
-                                <button
-                                  type="button"
-                                  onClick={toggleSpeechRecognition}
-                                  className={cn(
-                                    "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition active:scale-95",
-                                    isRecording
-                                      ? "bg-red-500 text-white animate-pulse"
-                                      : "bg-black/5 text-black/60 hover:bg-black/10"
-                                  )}
-                                >
-                                  {isRecording ? (
-                                    <>
-                                      <span className="size-1.5 rounded-full bg-white animate-ping" />
-                                      <span>Ascolto...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Mic className="size-3 text-[#ff8bb2]" />
-                                      <span>Ditta a voce</span>
-                                    </>
-                                  )}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={polishAppointmentNote}
+                                    disabled={!hasAppointmentNoteContext() || notePolishing}
+                                    className="flex items-center gap-1.5 rounded-full bg-[#FCE5F3] px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition active:scale-95 disabled:opacity-45"
+                                  >
+                                    <Sparkles className="size-3" />
+                                    <span>{notePolishing ? "Sistemo..." : "Sistema IA"}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={toggleSpeechRecognition}
+                                    className={cn(
+                                      "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition active:scale-95",
+                                      isRecording
+                                        ? "bg-red-500 text-white animate-pulse"
+                                        : "bg-black/5 text-black/60 hover:bg-black/10"
+                                    )}
+                                  >
+                                    {isRecording ? (
+                                      <>
+                                        <span className="size-1.5 rounded-full bg-white animate-ping" />
+                                        <span>Ascolto...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Mic className="size-3 text-[#ff8bb2]" />
+                                        <span>Detta a voce</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                              {frequentNoteSuggestions.length > 0 ? (
+                                <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-2">
+                                  <p className="px-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">Usate spesso</p>
+                                  <div className="mt-1.5 flex flex-wrap gap-2">
+                                    {frequentNoteSuggestions.map((suggestion) => (
+                                      <button
+                                        key={suggestion.text}
+                                        type="button"
+                                        onClick={() => appendAppointmentNoteSuggestion(suggestion.text)}
+                                        className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-[11px] font-black text-[#B83D7F] active:scale-95"
+                                        title={`Usata ${suggestion.count} volte`}
+                                      >
+                                        + {suggestion.text}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {appointmentNoteSuggestions.map((suggestion) => (
+                                  <button
+                                    key={suggestion}
+                                    type="button"
+                                    onClick={() => appendAppointmentNoteSuggestion(suggestion)}
+                                    className="rounded-full border border-[#F3B5D4] bg-[#FFF4FA] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] active:scale-95"
+                                  >
+                                    + {suggestion}
+                                  </button>
+                                ))}
                               </div>
                               <SmoothTextarea
                                 value={appointmentForm.customNoteText}
                                 onChange={(val) => setAppointmentForm((prev) => ({ ...prev, customNoteText: val }))}
-                                className="mt-1 min-h-20 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
-                                placeholder="Scrivi qui la nota da aggiungere o clicca 'Ditta a voce' per registrare"
+                                className="mt-2 min-h-24 w-full rounded-2xl border border-black/10 bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
+                                placeholder="Scrivi qui la nota, usa i suggerimenti oppure clicca 'Detta a voce'"
                               />
                               <span className="text-[10px] font-semibold text-black/45 mt-1 block">
                                 La nota verrà firmata con i nomi dei collaboratori selezionati (es: "Staff: Aurora e Melissa").

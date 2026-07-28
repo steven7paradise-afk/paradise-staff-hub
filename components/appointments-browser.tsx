@@ -18,6 +18,7 @@ import {
   Trash,
   UserRound,
   UsersRound,
+  MessageCircle,
   X,
   Loader2,
 } from "lucide-react";
@@ -64,6 +65,8 @@ type AppointmentRecord = {
   localStatus?: AppointmentStatusValue | string | null;
   statusUpdatedAt?: string | null;
   statusUpdatedBy?: string | null;
+  sheetMatched?: boolean;
+  sheetNote?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   notesText?: string | null;
@@ -793,6 +796,28 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
     );
   };
 
+  const WhatsAppSheetNote = ({ booking, compact = false, always = false }: { booking: AppointmentRecord; compact?: boolean; always?: boolean }) => {
+    const message = booking.sheetNote || (booking.sheetMatched ? "Conferma trovata, cella J vuota" : "Non trovato nel foglio conferme");
+    if (!always && !booking.sheetNote) return null;
+    const found = Boolean(booking.sheetMatched || booking.sheetNote);
+    return (
+      <div
+        className={[
+          "inline-flex max-w-full items-start gap-2 rounded-2xl border",
+          found ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800",
+          compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
+        ].join(" ")}
+        title={message}
+      >
+        <MessageCircle className={compact ? "mt-0.5 size-3.5 shrink-0" : "mt-0.5 size-4 shrink-0"} />
+        <span className="min-w-0">
+          <span className="font-black">WhatsApp</span>
+          {!compact ? <span className="ml-1 font-semibold">{message}</span> : null}
+        </span>
+      </div>
+    );
+  };
+
   const tableBookings = filteredBookings.slice(0, visibleCount);
   const prenotateCount = initialBookings.filter((booking) => !booking.isCanceled).length;
   const inArrivoCount = initialBookings.filter((booking) => !booking.isCanceled && new Date(booking.startDate).getTime() >= Date.now()).length;
@@ -1010,9 +1035,12 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
 
                       <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
                         <StatusControl booking={booking} compact />
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${booking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
-                          {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${booking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                            {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                          </span>
+                          <WhatsAppSheetNote booking={booking} compact />
+                        </div>
                       </div>
 
                       <span className="grid size-10 place-items-center rounded-xl border border-[#E8D8CF] bg-white text-[#8D5E49]">
@@ -1046,9 +1074,12 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
               <div className="flex items-start justify-between border-b border-[#E8D8CF] p-6">
                 <div>
                   <h2 className="font-serif text-2xl font-semibold text-[#1F1F1F]">Dettaglio prenotazione</h2>
-                  <span className={`mt-5 inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}>
-                    {selectedBooking.isCanceled ? "Annullato" : appointmentStatusLabels[selectedStatus]}
-                  </span>
+                  <div className="mt-5 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}>
+                      {selectedBooking.isCanceled ? "Annullato" : appointmentStatusLabels[selectedStatus]}
+                    </span>
+                    <WhatsAppSheetNote booking={selectedBooking} compact />
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1075,6 +1106,9 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                       <Mail className="size-4 text-[#A56A42]" />
                       {selectedContacts?.email || "Email non disponibile"}
                     </p>
+                  </div>
+                  <div className="mt-4">
+                    <WhatsAppSheetNote booking={selectedBooking} always />
                   </div>
                 </section>
 
@@ -1118,14 +1152,21 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
 
                 <section className="border-t border-[#E8D8CF] pt-5">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Stato</p>
-                  <div className="mt-4">
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
                     <StatusControl booking={selectedBooking} />
+                    <WhatsAppSheetNote booking={selectedBooking} />
                   </div>
                   {selectedBooking.statusUpdatedBy ? (
                     <p className="mt-3 text-xs font-medium text-[#8A7266]">
                       Ultima modifica: {selectedBooking.statusUpdatedBy}
                       {selectedBooking.statusUpdatedAt ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}` : ""}
                     </p>
+                  ) : null}
+                  {selectedBooking.sheetNote ? (
+                    <div className="mt-4 rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">Nota conferma</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">{selectedBooking.sheetNote}</p>
+                    </div>
                   ) : null}
                 </section>
 
@@ -1628,6 +1669,9 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                 <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#C66170]">Dettaglio appuntamento</p>
                 <h3 className="mt-2 text-3xl font-black text-[#171717]">{selectedBooking.customerName}</h3>
                 <p className="mt-2 text-sm text-black/55">{selectedBooking.serviceTitle}</p>
+                <div className="mt-3">
+                  <WhatsAppSheetNote booking={selectedBooking} always />
+                </div>
                 {selectedBooking.bookingStr ? (
                   <p className="mt-3 inline-flex rounded-full bg-[#FFF1F5] px-3 py-1 text-xs font-black text-[#C66170]">
                     Ordine Shopify {formatOrderCode(selectedBooking.bookingStr)}
@@ -1655,11 +1699,20 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                     <div className="mt-3">
                       <StatusControl booking={selectedBooking} />
                     </div>
+                    <div className="mt-3">
+                      <WhatsAppSheetNote booking={selectedBooking} />
+                    </div>
                     {selectedBooking.statusUpdatedBy ? (
                       <p className="mt-2 text-xs font-bold text-black/40">
                         Ultima modifica: {selectedBooking.statusUpdatedBy}
                         {selectedBooking.statusUpdatedAt ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}` : ""}
                       </p>
+                    ) : null}
+                    {selectedBooking.sheetNote ? (
+                      <div className="mt-3 rounded-2xl border border-black/5 bg-[#FFF6F7] p-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">Nota conferma</p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#5D4A42]">{selectedBooking.sheetNote}</p>
+                      </div>
                     ) : null}
                   </div>
                 </div>

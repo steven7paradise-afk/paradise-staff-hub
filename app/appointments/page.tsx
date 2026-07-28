@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 import { syncCowlendarConsultations } from "@/lib/google-calendar";
+import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 
 export const dynamic = "force-dynamic";
 
@@ -181,9 +182,21 @@ export default async function AppointmentsPage() {
     }
   }
 
-  const [shopifyOrderNames, statusSetting] = await Promise.all([
+  const [shopifyOrderNames, statusSetting, sheetStatusOverrides] = await Promise.all([
     getShopifyOrderNamesBulk(bookings.map((b: any) => b.order_id).filter(Boolean)),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }),
+    getAppointmentStatusesFromGoogleSheet(bookings.map((booking: any) => ({
+      id: String(booking.id),
+      customerName:
+        booking.customer?.name?.trim() ||
+        [booking.form_data?.firstname, booking.form_data?.lastname]
+          .map((value: unknown) => String(value || "").trim())
+          .filter(Boolean)
+          .join(" ") ||
+        booking.booking_str ||
+        "",
+      startDate: booking.start_date,
+    }))),
   ]);
 
   const statusOverrides =
@@ -297,9 +310,11 @@ export default async function AppointmentsPage() {
         financialStatus: booking.financial_status || null,
         attendance: booking.attendance || null,
         isCanceled: Boolean(booking.is_canceled),
-        localStatus: statusOverrides[String(booking.id)]?.status ?? null,
-        statusUpdatedAt: statusOverrides[String(booking.id)]?.updatedAt ?? null,
-        statusUpdatedBy: statusOverrides[String(booking.id)]?.updatedBy ?? null,
+        localStatus: sheetStatusOverrides[String(booking.id)]?.status ?? statusOverrides[String(booking.id)]?.status ?? null,
+        statusUpdatedAt: sheetStatusOverrides[String(booking.id)]?.updatedAt ?? statusOverrides[String(booking.id)]?.updatedAt ?? null,
+        statusUpdatedBy: sheetStatusOverrides[String(booking.id)]?.updatedBy ?? statusOverrides[String(booking.id)]?.updatedBy ?? null,
+        sheetMatched: Boolean(sheetStatusOverrides[String(booking.id)]),
+        sheetNote: sheetStatusOverrides[String(booking.id)]?.sheetNote ?? null,
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
         notesText: notesText || null,

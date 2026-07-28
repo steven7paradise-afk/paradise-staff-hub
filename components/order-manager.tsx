@@ -592,189 +592,115 @@ export function OrderManager({
 
   async function downloadOrderLabelPdf(order: OrderResponse) {
     const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 203] });
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [90, 102] });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 7;
-    const contentWidth = pageWidth - margin * 2;
     const orderNo = orderNumber(order);
     const client = orderClientName(order);
-    const publicUrl = orderPublicUrl(orderNo.replace(/^#/, "").trim() || order.id);
     const fields = (order.form?.fields ?? [])
       .map((field) => ({ label: field.label, value: order.answers?.[field.id], id: field.id }))
       .filter((field) => field.value && !field.id.startsWith("__"));
-    const taskType = getOrderTaskType(order);
-    const selectedLabelFields = orderLabelFieldsByType(order, fields);
-    const barcodeValue = await resolveShopifyBarcodeValue(order, fields, orderNo);
     const logoDataUrl = await fetch("/logo-label-paradise.png")
       .then((response) => (response.ok ? response.blob() : null))
       .then((blob) => (blob ? blobToDataUrl(blob) : ""))
       .catch(() => "");
 
-    let y = 8;
     const pink = [236, 83, 145] as const;
-    const borderPink = [247, 181, 211] as const;
     const textDark = [18, 18, 22] as const;
     const textMuted = [92, 92, 105] as const;
-    const barcodeTop = 175;
-    const maxContentY = barcodeTop - 8;
-    const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = borderPink) => {
+    const palePink = [249, 196, 222] as const;
+    const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = palePink, width = 0.45) => {
       doc.setDrawColor(color[0], color[1], color[2]);
-      doc.setLineWidth(0.22);
+      doc.setLineWidth(width);
       doc.line(x1, y1, x2, y2);
     };
-    const sectionTitle = (title: string) => {
-      if (y > barcodeTop - 12) return;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.2);
-      doc.setTextColor(pink[0], pink[1], pink[2]);
-      doc.text(title.toUpperCase(), margin, y);
-      y += 4;
-    };
-    const tinyLabel = (label: string, x: number, yPos: number, width: number) => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(5.8);
-      doc.setTextColor(pink[0], pink[1], pink[2]);
-      doc.text(doc.splitTextToSize(label.toUpperCase(), width), x, yPos);
-    };
-    const textLines = (value: string, width: number, maxLines = 2) => {
+    const textLines = (value: string, width: number, maxLines = 1) => {
       const lines = doc.splitTextToSize(value || "Non indicato", width).map((line: string) => line.trim());
       if (lines.length <= maxLines) return lines;
       const visible = lines.slice(0, maxLines);
-      visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 54)}...`;
+      visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 44)}...`;
       return visible;
     };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 6.8) => {
+    const labelText = (label: string, x: number, yPos: number) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(4.8);
+      doc.setTextColor(pink[0], pink[1], pink[2]);
+      doc.text(label.toUpperCase(), x, yPos);
+    };
+    const valueText = (value: string, x: number, yPos: number, width: number, size = 7.2, maxLines = 1) => {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(size);
       doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-      doc.text(textLines(value, width), x, yPos);
+      doc.text(textLines(value, width, maxLines), x, yPos);
     };
-    const fullRow = (label: string, value: string) => {
-      if (y > maxContentY - 6) return;
-      const lines = textLines(value, contentWidth - 46);
-      const rowHeight = Math.max(7, lines.length * 3.4 + 3.2);
-      if (y + rowHeight > maxContentY) return;
-      line(margin, y, pageWidth - margin, y, [248, 211, 228]);
-      y += 2.8;
-      tinyLabel(label, margin + 6, y, 34);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.8);
-      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-      doc.text(lines, margin + 42, y);
-      y += rowHeight;
+    const infoCell = (x: number, y: number, width: number, label: string, value: string, maxLines = 1) => {
+      labelText(label, x, y);
+      valueText(value || "Non indicato", x, y + 7, width, maxLines > 1 ? 7.4 : 8.2, maxLines);
+      line(x, y + 10.8, x + width, y + 10.8);
     };
-    const gridRow = (left?: { label: string; value: string }, right?: { label: string; value: string }) => {
-      if (y > maxContentY - 9) return;
-      line(margin, y, pageWidth - margin, y, [248, 211, 228]);
-      const colW = (contentWidth - 4) / 2;
-      const leftLines = left ? textLines(left.value, colW - 8) : [];
-      const rightLines = right ? textLines(right.value, colW - 8) : [];
-      const rowHeight = Math.max(10.5, Math.max(leftLines.length, rightLines.length) * 3.4 + 7.2);
-      if (y + rowHeight > maxContentY) return;
-      y += 2.8;
-      if (left) {
-        tinyLabel(left.label, margin + 6, y, colW - 8);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.8);
-        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-        doc.text(leftLines, margin + 6, y + 3.7);
-      }
-      if (right) {
-        line(margin + colW + 2, y - 2.4, margin + colW + 2, y + rowHeight - 2.5, [248, 211, 228]);
-        tinyLabel(right.label, margin + colW + 8, y, colW - 8);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.8);
-        doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-        doc.text(rightLines, margin + colW + 8, y + 3.7);
-      }
-      y += rowHeight;
-    };
+    const initials = client
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+    const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
+    const weightField = findOrderField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
+    const service = orderItems(order) || (findOrderField(fields, ["servizio", "trattamento"]) ? displayOrderFieldValue(findOrderField(fields, ["servizio", "trattamento"])?.value) : "") || "Non indicato";
 
     doc.setDrawColor(pink[0], pink[1], pink[2]);
-    doc.setLineWidth(0.35);
-    doc.roundedRect(5, 5, 92, 193, 3, 3);
+    doc.setLineWidth(0.65);
+    doc.roundedRect(2.5, 2.5, pageWidth - 5, pageHeight - 5, 4, 4);
 
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, "PNG", 12, 9, 30, 11);
+        doc.addImage(logoDataUrl, "PNG", 7, 6, 35, 14);
       } catch {
-        // If the browser cannot decode the logo, the text header still prints.
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(0, 0, 0);
+        doc.text(COMPANY_INFO.name, 7, 13);
       }
     }
-    doc.setFont("helvetica", "bold");
+
     doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.roundedRect(67, 10, 19, 8, 1.5, 1.5, "F");
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text("ORDINE", 76.5, 15.4, { align: "center" });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`#${orderNo.replace(/^#/, "")}`, 76.5, 27, { align: "center" });
-    line(margin, 32, pageWidth - margin, 32);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.2);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(COMPANY_INFO.email, 16, 35.5);
-    doc.text(COMPANY_INFO.website, 61, 35.5);
-    line(51, 31.5, 51, 38, [248, 211, 228]);
-    y = 42;
-
-    doc.setFillColor(255, 248, 251);
-    doc.setDrawColor(248, 211, 228);
-    doc.roundedRect(margin, y, contentWidth, 18, 2, 2, "FD");
-    doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.circle(margin + 10, y + 9, 6, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(255, 255, 255);
-    doc.text(client.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(), margin + 10, y + 11, { align: "center" });
-    doc.setFontSize(11);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(doc.splitTextToSize(client, contentWidth - 28), margin + 20, y + 7);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(doc.splitTextToSize(orderItems(order) || "Nessuna descrizione inserita", contentWidth - 28), margin + 20, y + 12);
-    y += 22;
-
-    sectionTitle("Riepilogo");
-    gridRow({ label: "Tipo", value: taskType === "conversione" ? "CONVERSIONE CAPELLI" : "ACQUISTO EXTENSION" }, { label: "Data creazione", value: orderDate(order) });
-    gridRow({ label: "Salone", value: order.user_location_name ?? "Non indicato" }, { label: "Ultima modifica", value: formatDateTime(order.updated_at) });
-
-    sectionTitle("Informazioni ordine");
-    fullRow("Nome cognome", client);
-    const emailField = findOrderField(fields, ["email"]);
-    if (emailField) fullRow("Email", displayOrderFieldValue(emailField.value));
-    const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
-    if (phoneField) fullRow("Telefono", displayOrderFieldValue(phoneField.value));
-    for (let index = 0; index < selectedLabelFields.length; index += 2) {
-      gridRow(
-        selectedLabelFields[index],
-        selectedLabelFields[index + 1]
-          ? selectedLabelFields[index + 1]
-          : undefined
-      );
-    }
-
-    doc.setDrawColor(pink[0], pink[1], pink[2]);
-    doc.setLineDashPattern([1.5, 1.2], 0);
-    line(5, barcodeTop - 5, 97, barcodeTop - 5, pink);
-    doc.setLineDashPattern([], 0);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
-    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(`Barcode Shopify: ${barcodeValue}`, pageWidth / 2, barcodeTop - 1.5, { align: "center" });
-    drawCode128(doc, barcodeValue, 16, barcodeTop + 2, 70, 16);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.3);
-    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(publicUrl.replace(/^https:\/\//, ""), pageWidth / 2, barcodeTop + 21, { align: "center" });
+    doc.roundedRect(77, 7, 19, 8.5, 2, 2, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.2);
+    doc.setTextColor(255, 255, 255);
+    doc.text("ORDINE", 86.5, 12.7, { align: "center" });
+    doc.setFontSize(12);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`#${orderNo.replace(/^#/, "")}`, 86.5, 24, { align: "center" });
+
+    line(6, 29, 96, 29, pink, 0.7);
+    doc.setFillColor(pink[0], pink[1], pink[2]);
+    doc.circle(14, 40, 6.8, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6);
+    doc.setTextColor(255, 255, 255);
+    doc.text(initials || "PB", 14, 42.2, { align: "center" });
+
+    doc.setFontSize(10);
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, pageHeight - 7, { align: "center" });
+    doc.text(textLines(client, 70, 1), 24, 38.2);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.4);
+    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+    doc.text(textLines(service, 70, 1), 24, 45);
+
+    doc.setDrawColor(palePink[0], palePink[1], palePink[2]);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(6, 52, 90, 28, 2.5, 2.5);
+    infoCell(9, 59, 41, "Telefono cliente", phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato");
+    infoCell(54, 59, 39, "Peso bilancia", weightField ? displayOrderFieldValue(weightField.value) : "Non indicato");
+    infoCell(9, 72, 41, "Data creazione", orderDate(order));
+    infoCell(54, 72, 39, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(4.3);
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, 86, { align: "center" });
     doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 

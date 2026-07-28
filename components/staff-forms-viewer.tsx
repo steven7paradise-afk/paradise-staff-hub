@@ -163,6 +163,12 @@ function pickupProofUrl(order: PickupReadyOrder) {
   return order.pickup?.proof?.driveFileUrl || order.pickup?.proof?.webViewLink || order.pickup?.proof?.webContentLink || "";
 }
 
+function isOrderLabelForm(form?: { name?: string | null; category?: string | null } | null) {
+  const name = String(form?.name || "").toLowerCase();
+  const category = String(form?.category || "").toLowerCase();
+  return name.includes("modulo ordine") || category.includes("ordini");
+}
+
 export function StaffFormsViewer({
   forms,
   employees = [],
@@ -904,6 +910,13 @@ export function StaffFormsViewer({
 
       if (result.response) {
         setResponses((prev) => [result.response, ...prev]);
+        if (isOrderLabelForm(result.response.form ?? selectedForm)) {
+          void import("@/lib/order-label-pdf-client")
+            .then(({ downloadOrderLabelPdf }) => downloadOrderLabelPdf(result.response))
+            .catch((labelError) => {
+              console.error("Failed to generate order label:", labelError);
+            });
+        }
       }
 
       setSuccess(true);
