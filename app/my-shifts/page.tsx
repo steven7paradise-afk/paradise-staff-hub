@@ -6,6 +6,7 @@ import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { monthlyPersonalHours, plannedHours } from "@/lib/personal-hours";
+import { normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 import { prisma } from "@/lib/prisma";
 import { coerceEmployeeScheduleMonth, isEmployeeScheduleMonthVisible, visibleScheduleMonthsForEmployee } from "@/lib/schedule-visibility";
 import { cn } from "@/lib/utils";
@@ -40,8 +41,10 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const parsedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
   const parsedYear = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
   const isEmployee = session.user.role === "DIPENDENTE";
-  const employeeAllowedMonths = isEmployee ? visibleScheduleMonthsForEmployee(today) : undefined;
-  const selectedMonth = isEmployee ? coerceEmployeeScheduleMonth(parsedMonth, parsedYear, today) : { month: parsedMonth, year: parsedYear };
+  const planningAccessSetting = isEmployee ? await prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }) : null;
+  const planningAccess = normalizePlanningAccess(planningAccessSetting?.value);
+  const employeeAllowedMonths = isEmployee ? visibleScheduleMonthsForEmployee(today, planningAccess.nextMonthVisible) : undefined;
+  const selectedMonth = isEmployee ? coerceEmployeeScheduleMonth(parsedMonth, parsedYear, today, planningAccess.nextMonthVisible) : { month: parsedMonth, year: parsedYear };
   const month = selectedMonth.month;
   const year = selectedMonth.year;
   
@@ -77,8 +80,8 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   
   const previous = new Date(Date.UTC(year, month - 1, 1));
   const next = new Date(Date.UTC(year, month + 1, 1));
-  const canOpenPreviousMonth = !isEmployee || isEmployeeScheduleMonthVisible(previous.getUTCMonth(), previous.getUTCFullYear(), today);
-  const canOpenNextMonth = !isEmployee || isEmployeeScheduleMonthVisible(next.getUTCMonth(), next.getUTCFullYear(), today);
+  const canOpenPreviousMonth = !isEmployee || isEmployeeScheduleMonthVisible(previous.getUTCMonth(), previous.getUTCFullYear(), today, planningAccess.nextMonthVisible);
+  const canOpenNextMonth = !isEmployee || isEmployeeScheduleMonthVisible(next.getUTCMonth(), next.getUTCFullYear(), today, planningAccess.nextMonthVisible);
 
   const percentage = planned > 0 ? Math.round((worked / planned) * 100) : 0;
 

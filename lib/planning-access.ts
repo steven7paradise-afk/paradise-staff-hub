@@ -5,13 +5,14 @@ export const PLANNING_ACCESS_KEY = "planning_view_access";
 export type PlanningAccess = {
   roles: Role[];
   userIds: string[];
+  nextMonthVisible: boolean;
 };
 
 export function normalizePlanningAccess(value: unknown): PlanningAccess {
   const allowedRoles: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   const defaultRoles: Role[] = ["RESPONSABILE", "DIPENDENTE"];
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { roles: defaultRoles, userIds: [] };
+    return { roles: defaultRoles, userIds: [], nextMonthVisible: true };
   }
   const data = value as Record<string, unknown>;
   const roles = Array.isArray(data.roles)
@@ -20,7 +21,8 @@ export function normalizePlanningAccess(value: unknown): PlanningAccess {
   const userIds = Array.isArray(data.userIds)
     ? data.userIds.filter((id): id is string => typeof id === "string" && id.length > 0)
     : [];
-  return { roles, userIds };
+  const nextMonthVisible = typeof data.nextMonthVisible === "boolean" ? data.nextMonthVisible : true;
+  return { roles, userIds, nextMonthVisible };
 }
 
 export function canViewPlanning(role?: Role | string, userId?: string | null, access?: PlanningAccess) {

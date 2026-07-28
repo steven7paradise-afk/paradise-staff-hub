@@ -25,7 +25,7 @@ export default async function SchedulesPage() {
 
   const userCanEditPlanning = canEditPlanning(role) || (accessUser ? await canEditForUser(prisma, "/schedules", accessUser) : false);
   const isEmployee = role === "DIPENDENTE";
-  const employeeWindow = isEmployee ? employeeScheduleWindow(new Date()) : null;
+  const employeeWindow = isEmployee ? employeeScheduleWindow(new Date(), planningAccess.nextMonthVisible) : null;
   const [employees, locations, categories, entries, workerOverrides, workersOrderSetting] = await Promise.all([
     prisma.user.findMany({
       where: {

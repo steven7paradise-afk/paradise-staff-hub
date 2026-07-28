@@ -74,6 +74,10 @@ export function PlanningAccessSettings({
     save({ ...access, roles });
   }
 
+  function setNextMonthVisible(enabled: boolean) {
+    save({ ...access, nextMonthVisible: enabled });
+  }
+
   function toggleUser(userId: string) {
     const userIds = access.userIds.includes(userId)
       ? access.userIds.filter((item) => item !== userId)
@@ -123,6 +127,39 @@ export function PlanningAccessSettings({
                   className={cn(
                     "absolute top-1 size-7 rounded-full bg-white shadow-sm transition",
                     access.roles.includes("DIPENDENTE") ? "left-8" : "left-1"
+                  )}
+                />
+              </span>
+            </button>
+          </div>
+        ) : null}
+
+        {canManagePlanningVisibility ? (
+          <div className="mt-4 rounded-[22px] border border-black/5 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+            <button
+              type="button"
+              onClick={() => setNextMonthVisible(!access.nextMonthVisible)}
+              className="flex w-full items-center justify-between gap-4 text-left"
+            >
+              <span>
+                <span className="block text-[10px] font-extrabold uppercase tracking-[0.22em] text-black/35 dark:text-white/35">Mese successivo</span>
+                <span className="mt-1 block text-base font-black text-paradise-noir dark:text-white">Mostra agosto / mese prossimo</span>
+                <span className="mt-1 block text-xs font-bold text-black/45 dark:text-white/45">
+                  {access.nextMonthVisible ? "Attivo: lo staff può aprire anche il mese successivo." : "Disattivo: lo staff vede solo il mese corrente."}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  "relative h-8 w-14 shrink-0 rounded-full border transition",
+                  access.nextMonthVisible
+                    ? "border-paradise-pink bg-paradise-pink"
+                    : "border-black/10 bg-black/10 dark:border-white/15 dark:bg-white/10"
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-1 size-6 rounded-full bg-white shadow-sm transition",
+                    access.nextMonthVisible ? "left-7" : "left-1"
                   )}
                 />
               </span>

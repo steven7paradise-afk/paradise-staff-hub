@@ -22,12 +22,11 @@ function romeDateParts(referenceDate = new Date()) {
   };
 }
 
-export function visibleScheduleMonthsForEmployee(referenceDate = new Date()): VisibleScheduleMonth[] {
+export function visibleScheduleMonthsForEmployee(referenceDate = new Date(), includeNextMonth = true): VisibleScheduleMonth[] {
   const current = romeDateParts(referenceDate);
-  const canSeeNextMonth = true;
   const months: VisibleScheduleMonth[] = [{ month: current.month, year: current.year }];
 
-  if (canSeeNextMonth) {
+  if (includeNextMonth) {
     const next = new Date(Date.UTC(current.year, current.month + 1, 1));
     months.push({ month: next.getUTCMonth(), year: next.getUTCFullYear() });
   }
@@ -35,20 +34,20 @@ export function visibleScheduleMonthsForEmployee(referenceDate = new Date()): Vi
   return months;
 }
 
-export function isEmployeeScheduleMonthVisible(month: number, year: number, referenceDate = new Date()) {
-  return visibleScheduleMonthsForEmployee(referenceDate).some((visible) => visible.month === month && visible.year === year);
+export function isEmployeeScheduleMonthVisible(month: number, year: number, referenceDate = new Date(), includeNextMonth = true) {
+  return visibleScheduleMonthsForEmployee(referenceDate, includeNextMonth).some((visible) => visible.month === month && visible.year === year);
 }
 
-export function coerceEmployeeScheduleMonth(month: number, year: number, referenceDate = new Date()): VisibleScheduleMonth {
-  if (isEmployeeScheduleMonthVisible(month, year, referenceDate)) {
+export function coerceEmployeeScheduleMonth(month: number, year: number, referenceDate = new Date(), includeNextMonth = true): VisibleScheduleMonth {
+  if (isEmployeeScheduleMonthVisible(month, year, referenceDate, includeNextMonth)) {
     return { month, year };
   }
 
-  return visibleScheduleMonthsForEmployee(referenceDate)[0];
+  return visibleScheduleMonthsForEmployee(referenceDate, includeNextMonth)[0];
 }
 
-export function employeeScheduleWindow(referenceDate = new Date()) {
-  const months = visibleScheduleMonthsForEmployee(referenceDate);
+export function employeeScheduleWindow(referenceDate = new Date(), includeNextMonth = true) {
+  const months = visibleScheduleMonthsForEmployee(referenceDate, includeNextMonth);
   const first = months[0];
   const last = months[months.length - 1];
 

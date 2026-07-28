@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { ScheduleCardViewer } from "@/components/schedule-card-viewer";
 import { coerceEmployeeScheduleMonth } from "@/lib/schedule-visibility";
+import { normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,9 @@ export default async function ScheduleCardPage({
   const requestedYear = Number(values.year);
   const parsedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
   const parsedYear = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
-  const selectedMonth = currentUserRole === "DIPENDENTE" ? coerceEmployeeScheduleMonth(parsedMonth, parsedYear, today) : { month: parsedMonth, year: parsedYear };
+  const planningAccessSetting = currentUserRole === "DIPENDENTE" ? await prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }) : null;
+  const planningAccess = normalizePlanningAccess(planningAccessSetting?.value);
+  const selectedMonth = currentUserRole === "DIPENDENTE" ? coerceEmployeeScheduleMonth(parsedMonth, parsedYear, today, planningAccess.nextMonthVisible) : { month: parsedMonth, year: parsedYear };
   const month = selectedMonth.month;
   const year = selectedMonth.year;
 
