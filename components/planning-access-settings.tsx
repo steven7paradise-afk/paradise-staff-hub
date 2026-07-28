@@ -97,22 +97,23 @@ export function PlanningAccessSettings({
           </div>
         </div>
 
-        <div className="mt-6">
-          {canManagePlanningVisibility ? (
+        {canManagePlanningVisibility ? (
+          <div className="mt-6 rounded-[22px] border-2 border-paradise-pink/45 bg-paradise-softPink/45 p-4 shadow-sm">
             <button
               type="button"
               onClick={() => setStaffPlanningVisible(!access.roles.includes("DIPENDENTE"))}
-              className="mb-5 flex w-full items-center justify-between rounded-2xl border border-paradise-pink/25 bg-paradise-softPink/35 px-4 py-4 text-left transition hover:bg-paradise-softPink/55"
+              className="flex w-full items-center justify-between gap-4 text-left"
             >
               <span>
-                <span className="block text-sm font-black text-paradise-noir dark:text-white">Planning visibile allo staff</span>
-                <span className="mt-1 block text-xs font-semibold text-black/45 dark:text-white/45">
-                  Accendi o spegni la vista planning per i dipendenti.
+                <span className="block text-[10px] font-extrabold uppercase tracking-[0.22em] text-[#B85B68]">Switch admin</span>
+                <span className="mt-1 block text-lg font-black text-paradise-noir dark:text-white">Planning staff</span>
+                <span className="mt-1 block text-sm font-bold text-[#B85B68]">
+                  {access.roles.includes("DIPENDENTE") ? "Attivo: i dipendenti vedono planning e turni." : "Disattivo: i dipendenti non vedono il planning."}
                 </span>
               </span>
               <span
                 className={cn(
-                  "relative h-7 w-12 rounded-full border transition",
+                  "relative h-9 w-16 shrink-0 rounded-full border transition",
                   access.roles.includes("DIPENDENTE")
                     ? "border-paradise-pink bg-paradise-pink"
                     : "border-black/10 bg-black/10 dark:border-white/15 dark:bg-white/10"
@@ -120,14 +121,16 @@ export function PlanningAccessSettings({
               >
                 <span
                   className={cn(
-                    "absolute top-1 size-5 rounded-full bg-white shadow-sm transition",
-                    access.roles.includes("DIPENDENTE") ? "left-6" : "left-1"
+                    "absolute top-1 size-7 rounded-full bg-white shadow-sm transition",
+                    access.roles.includes("DIPENDENTE") ? "left-8" : "left-1"
                   )}
                 />
               </span>
             </button>
-          ) : null}
+          </div>
+        ) : null}
 
+        <div className="mt-6">
           <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.18em] text-black/40 dark:text-white/40">Ruoli abilitati</p>
           <div className="grid gap-2">
             {roleOptions.map((role) => {
