@@ -10,17 +10,6 @@ import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
-const ORDER_LABEL_BASE_URL = "https://www.paradisebeauty.it";
-const COMPANY_INFO = {
-  name: "PARADISE BEAUTY",
-  subtitle: "Paradise Hair & Beauty",
-  website: "www.paradisebeauty.it",
-  email: "assistenza@paradisebeauty.it",
-  phone: "",
-  vat: "",
-  address: "",
-};
-
 type OrderPhoto = {
   url: string;
   previewUrl?: string;
@@ -296,56 +285,6 @@ function orderFieldIcon(label: string) {
   return null;
 }
 
-function cleanPdfFileName(value: string) {
-  return value
-    .trim()
-    .replace(/^#/, "")
-    .replace(/[\/\\:*?"<>|]+/g, " ")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 80);
-}
-
-function blobToDataUrl(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-function rotateDataUrl180(dataUrl: string) {
-  return new Promise<string>((resolve) => {
-    if (!dataUrl || typeof document === "undefined") {
-      resolve(dataUrl);
-      return;
-    }
-
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth || image.width;
-      canvas.height = image.naturalHeight || image.height;
-      const context = canvas.getContext("2d");
-      if (!context || !canvas.width || !canvas.height) {
-        resolve(dataUrl);
-        return;
-      }
-      context.translate(canvas.width / 2, canvas.height / 2);
-      context.rotate(Math.PI);
-      context.drawImage(image, -canvas.width / 2, -canvas.height / 2);
-      resolve(canvas.toDataURL("image/png"));
-    };
-    image.onerror = () => resolve(dataUrl);
-    image.src = dataUrl;
-  });
-}
-
-function orderPublicUrl(orderId: string) {
-  return `${ORDER_LABEL_BASE_URL}/ordine/${encodeURIComponent(orderId)}`;
-}
-
 function labelIncludes(label: string, terms: string[]) {
   const clean = label.toLowerCase();
   return terms.some((term) => clean.includes(term));
@@ -353,110 +292,6 @@ function labelIncludes(label: string, terms: string[]) {
 
 function findOrderField(fields: Array<{ label: string; value: any; id: string }>, terms: string[]) {
   return fields.find((field) => labelIncludes(field.label, terms));
-}
-
-function orderLabelFieldValue(fields: Array<{ label: string; value: any; id: string }>, label: string, terms: string[]) {
-  const field = findOrderField(fields, terms);
-  return {
-    label,
-    value: field ? displayOrderFieldValue(field.value) : "Non indicato",
-  };
-}
-
-function orderLabelFieldsByType(order: OrderResponse, fields: Array<{ label: string; value: any; id: string }>) {
-  const taskType = getOrderTaskType(order);
-  const common = [orderLabelFieldValue(fields, "Cosa dobbiamo fare?", ["cosa dobbiamo fare", "cosa", "fare"])];
-
-  if (taskType === "conversione") {
-    return [
-      ...common,
-      orderLabelFieldValue(fields, "Peso sulla bilancia", ["peso sulla bilancia", "peso"]),
-      orderLabelFieldValue(fields, "Extension Paradise a", ["extension paradise"]),
-      orderLabelFieldValue(fields, "Quante fasce?", ["quante fasce", "fasce"]),
-      orderLabelFieldValue(fields, "Pagamento", ["pagamento"]),
-      orderLabelFieldValue(fields, "Quanto manca pagare?", ["manca pagare", "quanto manca"]),
-    ];
-  }
-
-  return [
-    ...common,
-    orderLabelFieldValue(fields, "Grammi", ["grammi", "grammo"]),
-    orderLabelFieldValue(fields, "Lunghezza in cm", ["lunghezza"]),
-    orderLabelFieldValue(fields, "Colore", ["colore"]),
-    orderLabelFieldValue(fields, "Texture", ["texture"]),
-    orderLabelFieldValue(fields, "Extension Paradise a", ["extension paradise"]),
-    orderLabelFieldValue(fields, "Quante fasce?", ["quante fasce", "fasce"]),
-    orderLabelFieldValue(fields, "Quanto ha pagato?", ["quanto ha pagato", "ha pagato"]),
-    orderLabelFieldValue(fields, "Quanto manca pagare?", ["manca pagare", "quanto manca"]),
-  ];
-}
-
-function shopifyBarcodeValue(order: OrderResponse, fields: Array<{ label: string; value: any; id: string }>, orderNo: string) {
-  const haystack = [
-    orderNo,
-    JSON.stringify(order.answers ?? {}),
-    ...fields.map((field) => displayOrderFieldValue(field.value)),
-  ].join(" ");
-  const adminMatch = haystack.match(/admin\.shopify\.com\/store\/[^/\s]+\/orders\/(\d+)/i);
-  if (adminMatch?.[1]) return adminMatch[1];
-  const orderUrlMatch = haystack.match(/\/orders\/(\d{8,})/i);
-  if (orderUrlMatch?.[1]) return orderUrlMatch[1];
-  const numericOrder = orderNo.replace(/\D/g, "");
-  return numericOrder || order.id;
-}
-
-async function resolveShopifyBarcodeValue(order: OrderResponse, fields: Array<{ label: string; value: any; id: string }>, orderNo: string) {
-  const fallback = shopifyBarcodeValue(order, fields, orderNo);
-  try {
-    const response = await fetch(`/api/orders/${encodeURIComponent(order.id)}/shopify-barcode`, { cache: "no-store" });
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.barcodeValue) return fallback;
-    return String(data.barcodeValue);
-  } catch {
-    return fallback;
-  }
-}
-
-const CODE128_PATTERNS = [
-  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
-  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
-  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
-  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
-  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
-  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
-  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
-  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
-  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
-  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
-  "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
-];
-
-function code128Values(value: string) {
-  const safe = value
-    .split("")
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      return code >= 32 && code <= 127 ? char : "-";
-    })
-    .join("");
-  const values = [104, ...safe.split("").map((char) => char.charCodeAt(0) - 32)];
-  const checksum = values.reduce((sum, code, index) => sum + code * (index === 0 ? 1 : index), 0) % 103;
-  return [...values, checksum, 106];
-}
-
-function drawCode128(doc: any, value: string, x: number, y: number, width: number, height: number) {
-  const patterns = code128Values(value).map((code) => CODE128_PATTERNS[code]).join("");
-  const totalModules = patterns.split("").reduce((sum, item) => sum + Number(item), 0);
-  const moduleWidth = width / totalModules;
-  let cursor = x;
-  doc.setFillColor(0, 0, 0);
-  patterns.split("").forEach((item, index) => {
-    const segmentWidth = Number(item) * moduleWidth;
-    if (index % 2 === 0) {
-      doc.rect(cursor, y, segmentWidth, height, "F");
-    }
-    cursor += segmentWidth;
-  });
 }
 
 function orderPickup(order: OrderResponse) {
@@ -615,117 +450,6 @@ export function OrderManager({
     } finally {
       setUploadingPhoto(false);
     }
-  }
-
-  async function downloadOrderLabelPdf(order: OrderResponse) {
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [108, 152] });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const orderNo = orderNumber(order);
-    const client = orderClientName(order);
-    const fields = (order.form?.fields ?? [])
-      .map((field) => ({ label: field.label, value: order.answers?.[field.id], id: field.id }))
-      .filter((field) => field.value && !field.id.startsWith("__"));
-    const logoDataUrl = await fetch("/logo-label-paradise.png")
-      .then((response) => (response.ok ? response.blob() : null))
-      .then((blob) => (blob ? blobToDataUrl(blob) : ""))
-      .catch(() => "");
-    const rotatedLogoDataUrl = await rotateDataUrl180(logoDataUrl);
-
-    const pink = [236, 83, 145] as const;
-    const textDark = [18, 18, 22] as const;
-    const textMuted = [92, 92, 105] as const;
-    const palePink = [249, 196, 222] as const;
-    const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = palePink, width = 0.45) => {
-      doc.setDrawColor(color[0], color[1], color[2]);
-      doc.setLineWidth(width);
-      doc.line(x1, y1, x2, y2);
-    };
-    const textLines = (value: string, width: number, maxLines = 1) => {
-      const lines = doc.splitTextToSize(value || "Non indicato", width).map((line: string) => line.trim());
-      if (lines.length <= maxLines) return lines;
-      const visible = lines.slice(0, maxLines);
-      visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 44)}...`;
-      return visible;
-    };
-    const labelText = (label: string, x: number, yPos: number) => {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.6);
-      doc.setTextColor(pink[0], pink[1], pink[2]);
-      doc.text(label.toUpperCase(), x, yPos);
-    };
-    const valueText = (value: string, x: number, yPos: number, width: number, size = 11, maxLines = 1) => {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(size);
-      doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-      doc.text(textLines(value, width, maxLines), x, yPos);
-    };
-    const infoCell = (x: number, y: number, width: number, label: string, value: string, maxLines = 1) => {
-      labelText(label, x, y);
-      valueText(value || "Non indicato", x, y + 11, width, maxLines > 1 ? 9.2 : 11, maxLines);
-      line(x, y + 16, x + width, y + 16, palePink, 0.65);
-    };
-    const initials = client
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-    const phoneField = findOrderField(fields, ["telefono", "whatsapp"]);
-    const weightField = findOrderField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
-    const service = orderItems(order) || (findOrderField(fields, ["servizio", "trattamento"]) ? displayOrderFieldValue(findOrderField(fields, ["servizio", "trattamento"])?.value) : "") || "Non indicato";
-
-    if (rotatedLogoDataUrl) {
-      try {
-        doc.addImage(rotatedLogoDataUrl, "PNG", 8, 10, 48, 19);
-      } catch {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0);
-        doc.text(COMPANY_INFO.name, 8, 20, { angle: 180 });
-      }
-    }
-
-    doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.roundedRect(74, 10, 26, 11, 2, 2, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.8);
-    doc.setTextColor(255, 255, 255);
-    doc.text("ORDINE", 87, 17.2, { align: "center", angle: 180 });
-    doc.setFontSize(16);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`#${orderNo.replace(/^#/, "")}`, 87, 34, { align: "center", angle: 180 });
-
-    line(8, 43, 100, 43, pink, 0.9);
-    doc.setFillColor(pink[0], pink[1], pink[2]);
-    doc.circle(17, 60, 9, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.2);
-    doc.setTextColor(255, 255, 255);
-    doc.text(initials || "PB", 17, 63, { align: "center" });
-
-    doc.setFontSize(15);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(textLines(client, 68, 1), 32, 58);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-    doc.text(textLines(service, 68, 1), 32, 69);
-
-    doc.setDrawColor(palePink[0], palePink[1], palePink[2]);
-    doc.setLineWidth(0.75);
-    doc.roundedRect(8, 78, 92, 50, 3, 3);
-    infoCell(12, 92, 38, "Telefono cliente", phoneField ? displayOrderFieldValue(phoneField.value) : "Non indicato");
-    infoCell(58, 92, 38, "Peso bilancia", weightField ? displayOrderFieldValue(weightField.value) : "Non indicato");
-    infoCell(12, 116, 38, "Data creazione", orderDate(order));
-    infoCell(58, 116, 38, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.2);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, pageHeight - 10, { align: "center" });
-    doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
   }
 
   function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -1088,7 +812,14 @@ export function OrderManager({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Button variant="soft" onClick={() => void downloadOrderLabelPdf(selected)}><Printer className="size-4" /> Stampa</Button>
+                <Button
+                  variant="soft"
+                  onClick={() => void import("@/lib/order-label-pdf-client")
+                    .then(({ printOrderLabelPdf }) => printOrderLabelPdf(selected))
+                  }
+                >
+                  <Printer className="size-4" /> Stampa
+                </Button>
                 <Button variant="soft" onClick={() => setSelected(null)}><X className="size-4" /> Chiudi</Button>
               </div>
             </div>

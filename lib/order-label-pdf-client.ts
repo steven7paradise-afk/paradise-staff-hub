@@ -179,6 +179,45 @@ function rotateDataUrl180(dataUrl: string) {
   });
 }
 
+function escapeSvgText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function shortSvgText(value: string, max = 42) {
+  const clean = (value || "Non indicato").replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+function svgToRotatedPortraitDataUrl(svg: string) {
+  return new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const sourceWidth = 1520;
+      const sourceHeight = 1020;
+      const canvas = document.createElement("canvas");
+      canvas.width = sourceHeight;
+      canvas.height = sourceWidth;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("Canvas non disponibile"));
+        return;
+      }
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.translate(canvas.width, 0);
+      context.rotate(Math.PI / 2);
+      context.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+      resolve(canvas.toDataURL("image/png", 1));
+    };
+    image.onerror = reject;
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  });
+}
+
 function shopifyBarcodeValue(order: OrderLabelResponse, fields: OrderLabelField[], orderNo: string) {
   const haystack = [
     orderNo,
@@ -237,9 +276,9 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
   return name.includes("modulo ordine") || category.includes("ordini");
 }
 
-export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
+async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [152, 102] });
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [102, 152] });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
@@ -250,93 +289,74 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
     .catch(() => "");
 
-  const pink = [236, 83, 145] as const;
-  const textDark = [18, 18, 22] as const;
-  const textMuted = [92, 92, 105] as const;
-  const palePink = [249, 196, 222] as const;
-  const line = (x1: number, y1: number, x2: number, y2: number, color: readonly number[] = palePink, width = 0.45) => {
-    doc.setDrawColor(color[0], color[1], color[2]);
-    doc.setLineWidth(width);
-    doc.line(x1, y1, x2, y2);
-  };
-  const textLines = (value: string, width: number, maxLines = 1) => {
-    const lines = doc.splitTextToSize(value || "Non indicato", width).map((line: string) => line.trim());
-    if (lines.length <= maxLines) return lines;
-    const visible = lines.slice(0, maxLines);
-    visible[maxLines - 1] = `${visible[maxLines - 1].replace(/\.+$/, "").slice(0, 44)}...`;
-    return visible;
-  };
-  const labelText = (label: string, x: number, yPos: number) => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.6);
-    doc.setTextColor(pink[0], pink[1], pink[2]);
-    doc.text(label.toUpperCase(), x, yPos);
-  };
-  const valueText = (value: string, x: number, yPos: number, width: number, size = 11, maxLines = 1) => {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(size);
-    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-    doc.text(textLines(value, width, maxLines), x, yPos);
-  };
-  const infoCell = (x: number, y: number, width: number, label: string, value: string, maxLines = 1) => {
-    labelText(label, x, y);
-    valueText(value || "Non indicato", x, y + 9, width, maxLines > 1 ? 8.5 : 10.5, maxLines);
-    line(x, y + 13, x + width, y + 13, palePink, 0.65);
-  };
   const initials = client.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const phoneField = findField(fields, ["telefono", "whatsapp"]);
   const weightField = findField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
   const service = orderItems(order) || fieldValue(order, ["servizio", "trattamento"]) || "Non indicato";
-  const rotatedLogoDataUrl = logoDataUrl ? await rotateDataUrl180(logoDataUrl).catch(() => logoDataUrl) : "";
+  const cleanOrderNo = `#${orderNo.replace(/^#/, "")}`;
+  const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
+  const weight = weightField ? displayValue(weightField.value) : "Non indicato";
+  const createdAt = orderDate(order.created_at);
+  const logoImage = logoDataUrl
+    ? `<image href="${logoDataUrl}" x="80" y="70" width="420" height="170" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="90" y="155" font-size="52" font-weight="800" fill="#111">Paradise Beauty</text>`;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1520" height="1020" viewBox="0 0 1520 1020">
+      <rect width="1520" height="1020" fill="#ffffff"/>
+      ${logoImage}
+      <rect x="1210" y="78" width="220" height="96" rx="22" fill="#ec5391"/>
+      <text x="1320" y="138" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#ffffff">ORDINE</text>
+      <text x="1320" y="295" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+      <line x1="80" y1="355" x2="1440" y2="355" stroke="#ec5391" stroke-width="8"/>
 
-  if (rotatedLogoDataUrl) {
-    try {
-      doc.addImage(rotatedLogoDataUrl, "PNG", 8, 7, 43, 17, undefined, "FAST");
-    } catch {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(0, 0, 0);
-      doc.text("PARADISE BEAUTY", 50, 19, { angle: 180 });
-    }
+      <circle cx="158" cy="520" r="70" fill="#ec5391"/>
+      <text x="158" y="543" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
+      <text x="270" y="500" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 34))}</text>
+      <text x="270" y="570" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 58))}</text>
+
+      <rect x="80" y="662" width="1360" height="214" rx="28" fill="#ffffff" stroke="#f9c4de" stroke-width="7"/>
+      <text x="120" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
+      <text x="120" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
+      <line x1="120" y1="848" x2="545" y2="848" stroke="#f9c4de" stroke-width="6"/>
+
+      <text x="610" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
+      <text x="610" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 18))}</text>
+      <line x1="610" y1="848" x2="880" y2="848" stroke="#f9c4de" stroke-width="6"/>
+
+      <text x="940" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
+      <text x="940" y="810" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
+      <line x1="940" y1="848" x2="1185" y2="848" stroke="#f9c4de" stroke-width="6"/>
+
+      <text x="1240" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
+      <text x="1240" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
+      <line x1="1240" y1="848" x2="1400" y2="848" stroke="#f9c4de" stroke-width="6"/>
+
+      <text x="760" y="952" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" fill="#121216">Paradise Beauty - Etichetta ordine</text>
+    </svg>
+  `;
+  const labelImageDataUrl = await svgToRotatedPortraitDataUrl(svg);
+  doc.addImage(labelImageDataUrl, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
+  return { doc, fileName: `Etichetta-orizzontale-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
+}
+
+export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
+  const { doc, fileName } = await buildOrderLabelPdf(order);
+  doc.save(fileName);
+}
+
+export async function printOrderLabelPdf(order: OrderLabelResponse) {
+  const { doc, fileName } = await buildOrderLabelPdf(order);
+  const blobUrl = URL.createObjectURL(doc.output("blob"));
+  const printWindow = window.open(blobUrl, "_blank", "noopener,noreferrer");
+  if (!printWindow) {
+    doc.save(fileName);
+    return;
   }
-
-  doc.setFillColor(pink[0], pink[1], pink[2]);
-  doc.roundedRect(126, 8, 18, 10, 2, 2, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  doc.setTextColor(255, 255, 255);
-  doc.text("ORDINE", 139, 16, { align: "center", angle: 180 });
-  doc.setFontSize(15);
-  doc.setTextColor(0, 0, 0);
-  doc.text(`#${orderNo.replace(/^#/, "")}`, 135, 30, { align: "center", angle: 180 });
-
-  line(8, 35, pageWidth - 8, 35, pink, 0.9);
-  doc.setFillColor(pink[0], pink[1], pink[2]);
-  doc.circle(18, 53, 8, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(initials || "PB", 18, 56, { align: "center" });
-
-  doc.setFontSize(15.5);
-  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.text(textLines(client, 104, 1), 32, 50);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.4);
-  doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-  doc.text(textLines(service, 104, 1), 32, 60);
-
-  doc.setDrawColor(palePink[0], palePink[1], palePink[2]);
-  doc.setLineWidth(0.75);
-  doc.roundedRect(8, 69, pageWidth - 16, 23, 3, 3);
-  infoCell(12, 78, 28, "Telefono cliente", phoneField ? displayValue(phoneField.value) : "Non indicato");
-  infoCell(45, 78, 25, "Peso bilancia", weightField ? displayValue(weightField.value) : "Non indicato");
-  infoCell(77, 78, 28, "Data creazione", orderDate(order.created_at));
-  infoCell(112, 78, 26, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(6.2);
-  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.text("Paradise Beauty - Etichetta ordine", pageWidth / 2, pageHeight - 5.5, { align: "center" });
-  doc.save(`Etichetta-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`);
+  const print = () => {
+    printWindow.focus();
+    printWindow.print();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  };
+  printWindow.addEventListener("load", print, { once: true });
+  window.setTimeout(print, 800);
 }

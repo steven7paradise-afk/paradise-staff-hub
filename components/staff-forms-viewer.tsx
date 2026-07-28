@@ -912,7 +912,7 @@ export function StaffFormsViewer({
         setResponses((prev) => [result.response, ...prev]);
         if (isOrderLabelForm(result.response.form ?? selectedForm)) {
           void import("@/lib/order-label-pdf-client")
-            .then(({ downloadOrderLabelPdf }) => downloadOrderLabelPdf(result.response))
+            .then(({ printOrderLabelPdf }) => printOrderLabelPdf(result.response))
             .catch((labelError) => {
               console.error("Failed to generate order label:", labelError);
             });
