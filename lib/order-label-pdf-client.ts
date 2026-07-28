@@ -217,7 +217,7 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 
 export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [90, 110] });
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [90, 102] });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
@@ -282,16 +282,16 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
   }
 
   doc.setFillColor(pink[0], pink[1], pink[2]);
-  doc.roundedRect(82, 7, 21, 8.5, 2, 2, "F");
+  doc.roundedRect(77, 7, 19, 8.5, 2, 2, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(6.2);
   doc.setTextColor(255, 255, 255);
-  doc.text("ORDINE", 92.5, 12.7, { align: "center" });
+  doc.text("ORDINE", 86.5, 12.7, { align: "center" });
   doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
-  doc.text(`#${orderNo.replace(/^#/, "")}`, 92.5, 24, { align: "center" });
+  doc.text(`#${orderNo.replace(/^#/, "")}`, 86.5, 24, { align: "center" });
 
-  line(6, 29, 104, 29, pink, 0.7);
+  line(6, 29, 96, 29, pink, 0.7);
   doc.setFillColor(pink[0], pink[1], pink[2]);
   doc.circle(14, 40, 6.8, "F");
   doc.setFont("helvetica", "bold");
@@ -301,19 +301,19 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
 
   doc.setFontSize(10);
   doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.text(textLines(client, 78, 1), 24, 38.2);
+  doc.text(textLines(client, 70, 1), 24, 38.2);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(6.4);
   doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-  doc.text(textLines(service, 78, 1), 24, 45);
+  doc.text(textLines(service, 70, 1), 24, 45);
 
   doc.setDrawColor(palePink[0], palePink[1], palePink[2]);
   doc.setLineWidth(0.5);
-  doc.roundedRect(6, 52, 98, 28, 2.5, 2.5);
-  infoCell(9, 59, 45, "Telefono cliente", phoneField ? displayValue(phoneField.value) : "Non indicato");
-  infoCell(57, 59, 44, "Peso bilancia", weightField ? displayValue(weightField.value) : "Non indicato");
-  infoCell(9, 72, 45, "Data creazione", orderDate(order.created_at));
-  infoCell(57, 72, 44, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
+  doc.roundedRect(6, 52, 90, 28, 2.5, 2.5);
+  infoCell(9, 59, 41, "Telefono cliente", phoneField ? displayValue(phoneField.value) : "Non indicato");
+  infoCell(54, 59, 39, "Peso bilancia", weightField ? displayValue(weightField.value) : "Non indicato");
+  infoCell(9, 72, 41, "Data creazione", orderDate(order.created_at));
+  infoCell(54, 72, 39, "Numero ordine", `#${orderNo.replace(/^#/, "")}`);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(4.3);

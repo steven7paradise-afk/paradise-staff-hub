@@ -69,6 +69,24 @@ const appointmentNoteSuggestions = [
   "Spiegata manutenzione a casa",
 ];
 
+type LearnedNoteSuggestion = { text: string; count: number; lastUsed: number };
+
+function normalizeNoteSuggestion(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.!?;:,]+$/g, "")
+    .trim();
+}
+
+function extractNoteSuggestions(note: string) {
+  return note
+    .split(/[.\n;]+/)
+    .map(normalizeNoteSuggestion)
+    .filter((item) => item.length >= 8 && item.length <= 90)
+    .filter((item) => item.split(/\s+/).length >= 2)
+    .slice(0, 8);
+}
+
 type ClockStatus = "OUT" | "IN" | "BREAK";
 type TabletDevice = { id: string; name: string; locationName: string };
 type IdentifiedWorker = {
@@ -357,6 +375,7 @@ export function TabletClock({
   const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("environment");
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [notePolishing, setNotePolishing] = useState(false);
+  const [learnedNoteSuggestions, setLearnedNoteSuggestions] = useState<LearnedNoteSuggestion[]>([]);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Response details editing
@@ -633,6 +652,27 @@ export function TabletClock({
     }
   }, [cameraStream]);
 
+  useEffect(() => {
+    if (!device?.id) return;
+    fetch("/api/client-control/note-suggestions", {
+      cache: "no-store",
+      headers: { "x-device-id": device.id },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!Array.isArray(data?.suggestions)) return;
+        setLearnedNoteSuggestions(data.suggestions);
+      })
+      .catch(() => setLearnedNoteSuggestions([]));
+  }, [device?.id]);
+
+  const frequentNoteSuggestions = useMemo(() => {
+    const fixed = new Set(appointmentNoteSuggestions.map((item) => item.toLowerCase()));
+    return learnedNoteSuggestions
+      .filter((item) => !fixed.has(item.text.toLowerCase()))
+      .slice(0, 8);
+  }, [learnedNoteSuggestions]);
+
   const stopCamera = () => {
     if (cameraStream) {
       cameraStream.getTracks().forEach((track) => track.stop());
@@ -772,6 +812,7 @@ export function TabletClock({
       if (!res.ok) {
         throw new Error(data.error || "Errore durante il salvataggio.");
       }
+      void rememberAppointmentNotePhrases(appointmentForm.customNoteText);
       
       setPhotoPrimaFronteFile(null);
       if (photoPrimaFrontePreview) {
@@ -911,6 +952,28 @@ export function TabletClock({
         notes: true,
       };
     });
+  };
+
+  const rememberAppointmentNotePhrases = async (note: string) => {
+    const phrases = extractNoteSuggestions(note);
+    if (phrases.length === 0) return;
+
+    try {
+      const response = await fetch("/api/client-control/note-suggestions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(device?.id ? { "x-device-id": device.id } : {}),
+        },
+        body: JSON.stringify({ note }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && Array.isArray(data?.suggestions)) {
+        setLearnedNoteSuggestions(data.suggestions);
+      }
+    } catch {
+      // Suggerimenti salvati nel database: se fallisce, il salvataggio scheda resta valido.
+    }
   };
 
   const selectedAppointmentStaffNames = () => {
@@ -2340,6 +2403,24 @@ export function TabletClock({
                                   </button>
                                 </div>
                               </div>
+                              {frequentNoteSuggestions.length > 0 ? (
+                                <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-2">
+                                  <p className="px-1 text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">Usate spesso</p>
+                                  <div className="mt-1.5 flex flex-wrap gap-2">
+                                    {frequentNoteSuggestions.map((suggestion) => (
+                                      <button
+                                        key={suggestion.text}
+                                        type="button"
+                                        onClick={() => appendAppointmentNoteSuggestion(suggestion.text)}
+                                        className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-[11px] font-black text-[#B83D7F] active:scale-95"
+                                        title={`Usata ${suggestion.count} volte`}
+                                      >
+                                        + {suggestion.text}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {appointmentNoteSuggestions.map((suggestion) => (
                                   <button
