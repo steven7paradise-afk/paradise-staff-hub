@@ -55,6 +55,20 @@ function displayRange(request: RequestRecord) {
   return `${dateRange}, ${request.startTime} - ${request.endTime}`;
 }
 
+function daysLabel(request: RequestRecord) {
+  const start = new Date(request.startDate);
+  const end = new Date(request.endDate);
+  const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+  return days === 1 ? "1 giorno" : `${days} giorni`;
+}
+
+function statusTone(status: RequestRecord["status"]): "pink" | "gold" | "green" | "dark" {
+  if (status === "APPROVED") return "green";
+  if (status === "PENDING") return "gold";
+  if (status === "FLAGGED") return "gold";
+  return "pink";
+}
+
 function getRequestIcon(type: string) {
   switch (type) {
     case "FERIE":
@@ -143,6 +157,197 @@ function DecisionNoteField({
   );
 }
 
+function RequestDetailPanel({
+  request,
+  canApprove,
+  canFlag,
+  saving,
+  medicalDraft,
+  decisionDraft,
+  onMedicalDraftChange,
+  onDecisionDraftChange,
+  onChangeStatus,
+  onUpdateSickness,
+  onClose,
+}: {
+  request: RequestRecord;
+  canApprove: boolean;
+  canFlag: boolean;
+  saving: string | null;
+  medicalDraft: string;
+  decisionDraft: string;
+  onMedicalDraftChange: (value: string) => void;
+  onDecisionDraftChange: (value: string) => void;
+  onChangeStatus: (id: string, status: "APPROVED" | "REJECTED" | "FLAGGED") => void;
+  onUpdateSickness: (id: string, payload: { medicalCode?: string | null; sicknessUnjustified?: boolean }) => void;
+  onClose?: () => void;
+}) {
+  const isPending = request.status === "PENDING";
+  const workerNote = request.reason?.trim() || "Nessuna nota lavoratore";
+  const adminNote = request.adminNote?.trim() || "Nessuna nota admin";
+  const canEditDecision = (canApprove || canFlag) && isPending;
+
+  return (
+    <aside className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm lg:sticky lg:top-5">
+      <div className="flex items-start justify-between gap-4 border-b border-black/5 px-5 py-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Dettaglio richiesta</p>
+          <h2 className="mt-1 text-xl font-black text-paradise-noir">{request.employee}</h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge tone={statusTone(request.status)}>{statusLabels[request.status]}</Badge>
+            <Badge tone="pink">{typeLabels[request.type]}</Badge>
+          </div>
+        </div>
+        {onClose ? (
+          <button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-2xl border border-black/10 bg-white text-black/55 lg:hidden">
+            <X className="size-4" />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="space-y-4 px-5 py-4">
+        <div className="rounded-2xl bg-[#FAF7F9] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Periodo e orario</p>
+          <p className="mt-2 flex items-center gap-2 text-sm font-black text-paradise-noir">
+            <Calendar className="size-4 text-black/35" />
+            {formatDate(request.startDate)} <span className="text-black/25">→</span> {formatDate(request.endDate)}
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-black/55">
+            <Clock className="size-4 text-black/30" />
+            {request.startTime || request.endTime ? `${request.startTime ?? "--:--"} - ${request.endTime ?? "--:--"}` : "Intera giornata"}
+            <span className="text-black/30">•</span>
+            {daysLabel(request)}
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          <div className="rounded-2xl border border-black/5 p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Inviata il</p>
+            <p className="mt-1 text-sm font-black text-paradise-noir">{formatDateTime(request.createdAt)}</p>
+          </div>
+          <div className="rounded-2xl border border-black/5 p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Stato richiesta</p>
+            <p className="mt-1 text-sm font-black text-paradise-noir">{statusLabels[request.status]}</p>
+          </div>
+        </div>
+
+        {request.type === "MALATTIA" ? (
+          <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-rose-700">
+              <Heart className="size-3.5" />
+              Giustificazione malattia
+            </p>
+            {request.medicalCode ? (
+              <p className="mt-2 flex items-center gap-2 text-sm font-black text-emerald-800">
+                <ShieldCheck className="size-4" />
+                {request.medicalCode}
+              </p>
+            ) : request.sicknessUnjustified ? (
+              <p className="mt-2 flex items-center gap-2 text-sm font-black text-rose-700">
+                <AlertCircle className="size-4" />
+                Non giustificata
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-2">
+                <input
+                  type="text"
+                  value={medicalDraft}
+                  placeholder="Codice protocollo medico"
+                  onChange={(event) => onMedicalDraftChange(event.target.value)}
+                  className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled={saving === request.id}
+                    onClick={() => {
+                      const inputVal = medicalDraft.trim();
+                      if (!inputVal) return alert("Inserisci un codice valido.");
+                      onUpdateSickness(request.id, { medicalCode: inputVal });
+                    }}
+                    className="h-10 rounded-xl bg-rose-600 px-4 text-xs font-black text-white transition hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    Salva codice
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving === request.id}
+                    onClick={() => onUpdateSickness(request.id, { sicknessUnjustified: true })}
+                    className="h-10 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                  >
+                    Non giustificata
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-black/5 bg-white p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Motivo lavoratore</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65">{workerNote}</p>
+          </div>
+          <div className={cn(
+            "rounded-2xl border p-3",
+            request.adminNote ? "border-paradise-pink/30 bg-paradise-pink/10" : "border-black/5 bg-neutral-50"
+          )}>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Motivo approvazione / nota admin</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65">{adminNote}</p>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-black/5 p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Approvazione</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">Approvata da</p>
+              <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? request.approvedBy ?? "Non registrato" : "Non ancora approvata"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">Approvata il</p>
+              <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? formatDateTime(request.approvedAt) : "—"}</p>
+            </div>
+          </div>
+        </div>
+
+        {canEditDecision ? (
+          <div className="rounded-2xl border border-paradise-pink/20 bg-paradise-softPink/20 p-3">
+            <DecisionNoteField value={decisionDraft} onChange={onDecisionDraftChange} />
+            {canApprove ? (
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <button
+                  disabled={saving === request.id}
+                  onClick={() => onChangeStatus(request.id, "APPROVED")}
+                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  <Check className="size-3.5" /> Approva
+                </button>
+                <button
+                  disabled={saving === request.id}
+                  onClick={() => onChangeStatus(request.id, "REJECTED")}
+                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                >
+                  <X className="size-3.5" /> Rifiuta
+                </button>
+              </div>
+            ) : null}
+            {canFlag ? (
+              <button
+                disabled={saving === request.id}
+                onClick={() => onChangeStatus(request.id, "FLAGGED")}
+                className="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-paradise-gold/30 bg-paradise-gold/20 text-xs font-black text-amber-800 transition hover:bg-paradise-gold/30 disabled:opacity-50"
+              >
+                <Flag className="size-3.5" /> Segnala ad Admin
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
 function DatePickerStable({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const current = value ? new Date(`${value}T00:00:00.000Z`) : null;
   const today = new Date();
@@ -186,6 +391,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [medicalDrafts, setMedicalDrafts] = useState<Record<string, string>>({});
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
   const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>("JUSTIFY");
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const employeeView = role === "DIPENDENTE";
   const canApprove = role === "ADMIN" || role === "SUPER_ADMIN";
   const canCreateForWorkers = role === "ADMIN" || role === "SUPER_ADMIN";
@@ -208,6 +415,9 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     { key: "JUSTIFY", label: "Da giustificare", count: urgentSicknessRequests.length, tone: "pink" },
     ...requestSections.map((section) => ({ key: section.type, label: section.title, count: section.items.length, tone: section.tone })),
   ];
+  const visibleRequests = activeFilter === "JUSTIFY" ? urgentSicknessRequests : activeSection?.items ?? [];
+  const selectedRequest = requests.find((request) => request.id === selectedRequestId && visibleRequests.some((item) => item.id === request.id)) ?? visibleRequests[0] ?? null;
+  const approvedRequests = requests.filter((request) => request.status === "APPROVED").length;
 
   async function createRequest() {
     if (!form.startDate || !form.endDate) {
@@ -406,18 +616,22 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
         </p>
       ) : null}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[22px] border border-black/5 bg-white px-5 py-4 shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Totale</p>
           <p className="mt-1 text-2xl font-black text-paradise-noir">{requests.length}</p>
         </div>
-        <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-500">Da giustificare</p>
-          <p className="mt-1 text-2xl font-black text-rose-700">{urgentSicknessRequests.length}</p>
-        </div>
         <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">In attesa</p>
           <p className="mt-1 text-2xl font-black text-amber-900">{pendingRequests}</p>
+        </div>
+        <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Approvate</p>
+          <p className="mt-1 text-2xl font-black text-emerald-900">{approvedRequests}</p>
+        </div>
+        <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-500">Da giustificare</p>
+          <p className="mt-1 text-2xl font-black text-rose-700">{urgentSicknessRequests.length}</p>
         </div>
       </div>
 
@@ -459,255 +673,169 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
         </Card>
       ) : null}
 
-      {activeFilter === "JUSTIFY" ? (
-        <section className="mb-6 overflow-hidden rounded-[26px] border border-rose-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-5 py-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500">Priorità</p>
-              <h2 className="mt-1 text-lg font-black text-paradise-noir">Malattie da giustificare</h2>
-            </div>
-            <Badge tone="pink">{urgentSicknessRequests.length} senza protocollo</Badge>
-          </div>
-          {urgentSicknessRequests.length === 0 ? (
-            <div className="px-5 py-8 text-sm font-semibold text-black/35">
-              Nessuna malattia da giustificare.
-            </div>
-          ) : (
-            <div className="divide-y divide-black/5">
-              {urgentSicknessRequests.map((request) => {
-              const isPending = request.status === "PENDING";
-              const draft = medicalDrafts[request.id] ?? "";
-              return (
-                <div key={request.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[1.1fr_1fr_minmax(340px,1.2fr)] lg:items-center">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-500 ring-1 ring-rose-100">
-                      <Heart className="size-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-paradise-noir">{request.employee}</p>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">Malattia</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-black/5 bg-neutral-50 px-4 py-3">
-                    <p className="flex items-center gap-2 text-sm font-bold text-paradise-noir">
-                      <Calendar className="size-3.5 text-black/35" />
-                      {formatDate(request.startDate)}
-                      <span className="text-black/25">→</span>
-                      {formatDate(request.endDate)}
-                    </p>
-                    {request.reason ? (
-                      <p className="mt-1 line-clamp-1 text-xs italic text-black/45">{request.reason}</p>
-                    ) : null}
-                  </div>
-
-                  <div className="rounded-2xl border border-rose-100 bg-rose-50/40 p-3">
-                    <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-rose-700">
-                      <AlertCircle className="size-3.5" />
-                      Protocollo obbligatorio
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-                      <input
-                        type="text"
-                        value={draft}
-                        placeholder="Es. INPS123456"
-                        onChange={(event) => setMedicalDrafts((current) => ({ ...current, [request.id]: event.target.value }))}
-                        className="h-10 min-w-0 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
-                      />
-                      <button
-                        onClick={async () => {
-                          const inputVal = draft.trim();
-                          if (!inputVal) return alert("Inserisci un codice valido.");
-                          await updateSicknessJustification(request.id, { medicalCode: inputVal });
-                          setMedicalDrafts((current) => ({ ...current, [request.id]: "" }));
-                        }}
-                        disabled={saving === request.id}
-                        className="h-10 rounded-xl bg-rose-600 px-4 text-sm font-black text-white transition hover:bg-rose-700 active:scale-95 disabled:opacity-50"
-                      >
-                        Salva
-                      </button>
-                      <button
-                        onClick={() => updateSicknessJustification(request.id, { sicknessUnjustified: true })}
-                        disabled={saving === request.id}
-                        className="h-10 rounded-xl border border-rose-200 bg-white px-4 text-sm font-black text-rose-700 transition hover:bg-rose-50 active:scale-95 disabled:opacity-50"
-                      >
-                        Non giustificata
-                      </button>
-                    </div>
-                    <RequestMetaPanel request={request} />
-                    {canApprove && isPending ? (
-                      <div className="mt-3 space-y-2">
-                        <DecisionNoteField
-                          value={decisionDrafts[request.id] ?? ""}
-                          onChange={(value) => setDecisionDrafts((current) => ({ ...current, [request.id]: value }))}
-                        />
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <button
-                            disabled={saving === request.id}
-                            onClick={() => changeStatus(request.id, "APPROVED")}
-                            className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
-                          >
-                            <Check className="size-3.5" /> Approva
-                          </button>
-                          <button
-                            disabled={saving === request.id}
-                            onClick={() => changeStatus(request.id, "REJECTED")}
-                            className="flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            <X className="size-3.5" /> Rifiuta
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              );
-              })}
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      {activeFilter !== "JUSTIFY" && activeSection ? (
-        <section className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-neutral-50 ring-1 ring-black/5">
-                    {getRequestIcon(activeSection.type)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/35">Categoria</p>
-                    <h2 className="mt-1 text-lg font-black text-paradise-noir">{activeSection.title}</h2>
-                    <p className="mt-0.5 text-xs text-black/45">{activeSection.description}</p>
-                  </div>
-                </div>
-                <Badge tone={activeSection.tone}>{activeSection.items.length} richieste</Badge>
-              </div>
-
-              {activeSection.items.length === 0 ? (
-                <div className="px-5 py-6 text-sm font-semibold text-black/35">
-                  Nessuna richiesta in questa categoria.
-                </div>
-              ) : (
-                <div className="divide-y divide-black/5">
-                  {activeSection.items.map((request) => {
-          const isPending = request.status === "PENDING";
-          const isApproved = request.status === "APPROVED";
-          const isRejected = request.status === "REJECTED";
-          const isFlagged = request.status === "FLAGGED";
-
-          return (
-            <div
-              key={request.id}
-              className={cn(
-                "grid gap-4 px-5 py-4 transition-colors hover:bg-neutral-50/70 xl:grid-cols-[1.2fr_1fr_1.3fr_auto] xl:items-center",
-                isRejected && "bg-rose-50/25",
-                isFlagged && "bg-amber-50/30"
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                  <div className={cn(
-                    "flex size-10 shrink-0 items-center justify-center rounded-2xl border",
-                    isApproved && "bg-emerald-500/10 border-emerald-500/20",
-                    isRejected && "bg-rose-500/10 border-rose-500/20",
-                    isFlagged && "bg-paradise-gold/15 border-paradise-gold/30",
-                    isPending && "bg-neutral-50 border-neutral-200"
-                  )}>
-                    {getRequestIcon(request.type)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? typeLabels[request.type] : request.employee}</p>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">
-                      {employeeView ? statusLabels[request.status] : typeLabels[request.type]}
-                    </p>
-                  </div>
-              </div>
-
-              <div className="rounded-2xl border border-black/5 bg-neutral-50 px-4 py-3">
-                <p className="flex items-center gap-2 text-sm font-bold text-paradise-noir">
-                  <Calendar className="size-3.5 text-black/35" />
-                  {formatDate(request.startDate)}
-                  <span className="text-black/25">→</span>
-                  {formatDate(request.endDate)}
-                </p>
-                {(request.startTime || request.endTime) ? (
-                  <p className="mt-1 flex items-center gap-2 text-xs font-semibold text-black/50">
-                    <Clock className="size-3.5 text-black/30" />
-                    {request.startTime ?? "--:--"} - {request.endTime ?? "--:--"}
-                  </p>
-                ) : null}
-              </div>
-
+      {requests.length > 0 ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
+          <section className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
               <div className="min-w-0">
-                {request.type === "MALATTIA" ? (
-                  <Badge tone={request.medicalCode ? (isApproved ? "green" : "gold") : request.sicknessUnjustified ? "pink" : "gold"}>
-                    {request.medicalCode
-                      ? (isApproved ? "Malattia Giustificata" : "Malattia (Certificato Inviato)")
-                      : request.sicknessUnjustified ? "Non Giustificata" : "Protocollo Mancante"}
-                  </Badge>
-                ) : (
-                  <Badge tone={isApproved ? "green" : isFlagged ? "gold" : "pink"}>
-                    {statusLabels[request.status]}
-                  </Badge>
-                )}
-                {request.medicalCode ? (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-800">
-                    <ShieldCheck className="size-3.5" />
-                    <span className="font-mono">{request.medicalCode}</span>
-                  </p>
-                ) : request.sicknessUnjustified ? (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs font-bold text-rose-700">
-                    <AlertCircle className="size-3.5" />
-                    Non giustificata
-                  </p>
-                ) : request.reason ? (
-                  <p className="mt-2 line-clamp-1 text-xs italic text-black/45">{request.reason}</p>
-                ) : null}
-                <RequestMetaPanel request={request} />
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/35">
+                  {activeFilter === "JUSTIFY" ? "Priorità" : "Categoria"}
+                </p>
+                <h2 className="mt-1 text-lg font-black text-paradise-noir">
+                  {activeFilter === "JUSTIFY" ? "Malattie da giustificare" : activeSection?.title}
+                </h2>
+                <p className="mt-0.5 text-xs text-black/45">
+                  {activeFilter === "JUSTIFY" ? "Richieste malattia senza protocollo o conferma." : activeSection?.description}
+                </p>
               </div>
-
-              {canApprove && isPending && (
-                <div className="min-w-[250px] space-y-2">
-                  <DecisionNoteField
-                    value={decisionDrafts[request.id] ?? ""}
-                    onChange={(value) => setDecisionDrafts((current) => ({ ...current, [request.id]: value }))}
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      disabled={saving === request.id}
-                      onClick={() => changeStatus(request.id, "APPROVED")}
-                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white shadow-sm transition-colors hover:bg-emerald-600 disabled:opacity-50"
-                    >
-                      <Check className="size-3.5" /> Approva
-                    </button>
-                    <button
-                      disabled={saving === request.id}
-                      onClick={() => changeStatus(request.id, "REJECTED")}
-                      className="flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 shadow-sm transition-colors hover:bg-rose-50 disabled:opacity-50"
-                    >
-                      <X className="size-3.5" /> Rifiuta
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {role === "RESPONSABILE" && isPending && (
-                <div>
-                  <button
-                    disabled={saving === request.id}
-                    onClick={() => changeStatus(request.id, "FLAGGED")}
-                    className="w-full flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-paradise-gold/20 border border-paradise-gold/30 text-amber-800 font-bold text-xs shadow-sm hover:bg-paradise-gold/30 transition-colors disabled:opacity-50"
-                  >
-                    <Flag className="size-3.5" /> Segnala ad Admin
-                  </button>
-                </div>
-              )}
+              <Badge tone={activeFilter === "JUSTIFY" ? "pink" : activeSection?.tone ?? "dark"}>{visibleRequests.length} richieste</Badge>
             </div>
-          );
+
+            {visibleRequests.length === 0 ? (
+              <div className="px-5 py-10 text-center text-sm font-semibold text-black/35">
+                Nessuna richiesta in questa sezione.
+              </div>
+            ) : (
+              <>
+                <div className="hidden grid-cols-[minmax(180px,1.1fr)_140px_minmax(210px,1fr)_120px_170px_86px] gap-3 border-b border-black/5 bg-neutral-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-black/35 xl:grid">
+                  <span>Dipendente</span>
+                  <span>Tipo</span>
+                  <span>Periodo</span>
+                  <span>Stato</span>
+                  <span>Approvazione</span>
+                  <span className="text-right">Azioni</span>
+                </div>
+                <div className="divide-y divide-black/5">
+                  {visibleRequests.map((request) => {
+                    const isSelected = selectedRequest?.id === request.id;
+                    const isPending = request.status === "PENDING";
+                    const isApproved = request.status === "APPROVED";
+                    const isRejected = request.status === "REJECTED";
+                    const isFlagged = request.status === "FLAGGED";
+                    const hasSicknessProblem = needsSicknessJustification(request);
+
+                    return (
+                      <button
+                        key={request.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedRequestId(request.id);
+                          setMobileDetailOpen(true);
+                        }}
+                        className={cn(
+                          "grid w-full gap-3 px-5 py-4 text-left transition hover:bg-neutral-50/70 xl:grid-cols-[minmax(180px,1.1fr)_140px_minmax(210px,1fr)_120px_170px_86px] xl:items-center",
+                          isSelected && "bg-paradise-softPink/20 ring-1 ring-inset ring-paradise-pink/40",
+                          isRejected && !isSelected && "bg-rose-50/25",
+                          isFlagged && !isSelected && "bg-amber-50/30"
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className={cn(
+                            "flex size-10 shrink-0 items-center justify-center rounded-2xl border",
+                            isApproved && "border-emerald-500/20 bg-emerald-500/10",
+                            isRejected && "border-rose-500/20 bg-rose-500/10",
+                            isFlagged && "border-paradise-gold/30 bg-paradise-gold/15",
+                            isPending && "border-neutral-200 bg-neutral-50"
+                          )}>
+                            {getRequestIcon(request.type)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? typeLabels[request.type] : request.employee}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">
+                              {employeeView ? request.employee : typeLabels[request.type]}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={request.type === "FERIE" ? "gold" : request.type === "RIPOSO" ? "green" : request.type === "ALTRO" ? "dark" : "pink"}>{typeLabels[request.type]}</Badge>
+                          {hasSicknessProblem ? <Badge tone="pink">Manca protocollo</Badge> : null}
+                        </div>
+
+                        <div className="rounded-2xl border border-black/5 bg-neutral-50 px-4 py-3 xl:border-0 xl:bg-transparent xl:p-0">
+                          <p className="flex items-center gap-2 text-sm font-bold text-paradise-noir">
+                            <Calendar className="size-3.5 text-black/35" />
+                            {formatDate(request.startDate)}
+                            <span className="text-black/25">→</span>
+                            {formatDate(request.endDate)}
+                          </p>
+                          <p className="mt-1 flex items-center gap-2 text-xs font-semibold text-black/50">
+                            <Clock className="size-3.5 text-black/30" />
+                            {request.startTime || request.endTime ? `${request.startTime ?? "--:--"} - ${request.endTime ?? "--:--"}` : "Intera giornata"}
+                            <span className="text-black/30">•</span>
+                            {daysLabel(request)}
+                          </p>
+                        </div>
+
+                        <div>
+                          <Badge tone={statusTone(request.status)}>{statusLabels[request.status]}</Badge>
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black text-paradise-noir">
+                            {isApproved ? request.approvedBy ?? "Non registrato" : isPending ? "Da approvare" : statusLabels[request.status]}
+                          </p>
+                          <p className="mt-0.5 truncate text-[11px] font-semibold text-black/40">
+                            {isApproved ? formatDateTime(request.approvedAt) : request.adminNote?.trim() || request.reason?.trim() || "Nessuna nota"}
+                          </p>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <span className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-black text-paradise-noir shadow-sm">
+                            Apri
+                          </span>
+                        </div>
+                      </button>
+                    );
                   })}
                 </div>
-              )}
-        </section>
+              </>
+            )}
+          </section>
+
+          <div className="hidden lg:block">
+            {selectedRequest ? (
+              <RequestDetailPanel
+                request={selectedRequest}
+                canApprove={canApprove}
+                canFlag={role === "RESPONSABILE"}
+                saving={saving}
+                medicalDraft={medicalDrafts[selectedRequest.id] ?? ""}
+                decisionDraft={decisionDrafts[selectedRequest.id] ?? ""}
+                onMedicalDraftChange={(value) => setMedicalDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
+                onDecisionDraftChange={(value) => setDecisionDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
+                onChangeStatus={(id, status) => changeStatus(id, status)}
+                onUpdateSickness={async (id, payload) => {
+                  await updateSicknessJustification(id, payload);
+                  setMedicalDrafts((current) => ({ ...current, [id]: "" }));
+                }}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {mobileDetailOpen && selectedRequest ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-3 backdrop-blur-sm lg:hidden">
+          <div className="max-h-[88dvh] w-full overflow-y-auto rounded-[28px] bg-[#F8F3F6]">
+            <RequestDetailPanel
+              request={selectedRequest}
+              canApprove={canApprove}
+              canFlag={role === "RESPONSABILE"}
+              saving={saving}
+              medicalDraft={medicalDrafts[selectedRequest.id] ?? ""}
+              decisionDraft={decisionDrafts[selectedRequest.id] ?? ""}
+              onMedicalDraftChange={(value) => setMedicalDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
+              onDecisionDraftChange={(value) => setDecisionDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
+              onChangeStatus={(id, status) => changeStatus(id, status)}
+              onUpdateSickness={async (id, payload) => {
+                await updateSicknessJustification(id, payload);
+                setMedicalDrafts((current) => ({ ...current, [id]: "" }));
+              }}
+              onClose={() => setMobileDetailOpen(false)}
+            />
+          </div>
+        </div>
       ) : null}
     </>
   );
