@@ -117,6 +117,42 @@ function createAssignmentsFromEntries(entries: ScheduleEntry[], year: number, mo
   return assignments;
 }
 
+function sameScheduleDay(left: string, right: string) {
+  const leftDate = new Date(left);
+  const rightDate = new Date(right);
+  return (
+    leftDate.getUTCFullYear() === rightDate.getUTCFullYear() &&
+    leftDate.getUTCMonth() === rightDate.getUTCMonth() &&
+    leftDate.getUTCDate() === rightDate.getUTCDate()
+  );
+}
+
+function replaceScheduleEntry(current: ScheduleEntry[], next: ScheduleEntry) {
+  return [
+    ...current.filter((entry) => !(entry.userId === next.userId && sameScheduleDay(entry.date, next.date))),
+    next,
+  ];
+}
+
+function removeScheduleEntry(current: ScheduleEntry[], userId: string, date: string, locationId?: string | null) {
+  return current.filter((entry) => {
+    if (entry.userId !== userId || !sameScheduleDay(entry.date, date)) return true;
+    if (locationId && entry.locationId && entry.locationId !== locationId) return true;
+    return false;
+  });
+}
+
+function scheduleEntryFromApi(value: any, fallback: ScheduleEntry): ScheduleEntry {
+  return {
+    userId: String(value?.user_id ?? value?.userId ?? fallback.userId),
+    locationId: value?.location_id ?? value?.locationId ?? fallback.locationId ?? null,
+    categoryId: String(value?.category_id ?? value?.categoryId ?? fallback.categoryId),
+    date: String(value?.date ?? fallback.date),
+    startTime: value?.start_time ?? value?.startTime ?? fallback.startTime ?? null,
+    endTime: value?.end_time ?? value?.endTime ?? fallback.endTime ?? null,
+  };
+}
+
 function minutesBetween(startTime?: string | null, endTime?: string | null) {
   if (!startTime || !endTime) return 0;
   const [startHours, startMinutes] = startTime.split(":").map(Number);
@@ -196,12 +232,13 @@ export function MonthlySchedulePlanner({
     }, {}),
   );
   const [categories, setCategories] = useState(savedCategories);
+  const [scheduleEntries, setScheduleEntries] = useState(entries);
   const [activeCategoryId, setActiveCategoryId] = useState(
     savedCategories.find((category) => !category.locationId || category.locationId === initialLocationId)?.id ?? "",
   );
   const [assignments, setAssignments] = useState<AssignmentMap>(() =>
     createAssignmentsFromEntries(
-      entries,
+      scheduleEntries,
       initialPlannerYear,
       initialPlannerMonth,
       employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((employee) => employee.id),
@@ -276,7 +313,7 @@ export function MonthlySchedulePlanner({
   const activeWorkers = useMemo(() => {
     const base = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId === selectedLocationId);
     const plannedExternalIds = new Set(
-      entries
+      scheduleEntries
         .filter((entry) => {
           const date = new Date(entry.date);
           return entry.locationId === selectedLocationId && date.getUTCFullYear() === year && date.getUTCMonth() === month;
@@ -295,7 +332,7 @@ export function MonthlySchedulePlanner({
       if (idxB === -1) return -1;
       return idxA - idxB;
     });
-  }, [employees, entries, month, selectedExtraWorkerIds, selectedLocationId, year, workersOrderList]);
+  }, [employees, scheduleEntries, month, selectedExtraWorkerIds, selectedLocationId, year, workersOrderList]);
   const availableExternalWorkers = useMemo(
     () =>
       employees
@@ -318,14 +355,14 @@ export function MonthlySchedulePlanner({
     setMonth(nextMonth);
     setYear(nextYear);
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(entries, nextYear, nextMonth, workerIds, selectedLocationId, selectedExtraWorkerIds));
+    setAssignments(createAssignmentsFromEntries(scheduleEntries, nextYear, nextMonth, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
   function setScheduleLocation(locationId: string) {
     setSelectedLocationId(locationId);
     const locationWorkers = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN");
     const locationExtraWorkerIds = extraWorkerIdsByLocation[locationId] ?? [];
-    setAssignments(createAssignmentsFromEntries(entries, year, month, locationWorkers.map((worker) => worker.id), locationId, locationExtraWorkerIds));
+    setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, locationWorkers.map((worker) => worker.id), locationId, locationExtraWorkerIds));
     const firstCategory = categories.find((category) => !category.locationId || category.locationId === locationId);
     setActiveCategoryId(firstCategory?.id ?? "");
   }
@@ -412,6 +449,15 @@ export function MonthlySchedulePlanner({
       setPlannerMessage(data.error ?? "Turno non salvato.");
       return;
     }
+    const savedEntry = await response.json();
+    setScheduleEntries((current) => replaceScheduleEntry(current, scheduleEntryFromApi(savedEntry, {
+      userId: next.workerId,
+      locationId: selectedLocationId,
+      categoryId: next.categoryId,
+      date: date.toISOString(),
+      startTime,
+      endTime,
+    })));
     setCellEditor(null);
     setPlannerMessage("Planning aggiornato.");
   }
@@ -441,6 +487,7 @@ export function MonthlySchedulePlanner({
       setPlannerMessage(data.error ?? "Turno non eliminato.");
       return;
     }
+    setScheduleEntries((current) => removeScheduleEntry(current, workerId, date.toISOString(), selectedLocationId));
     setCellEditor(null);
     setPlannerMessage("Cella svuotata.");
   }
@@ -457,7 +504,7 @@ export function MonthlySchedulePlanner({
     const base = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId === locationId);
     const extraIds = new Set([
       ...(extraWorkerIdsByLocation[locationId] ?? []),
-      ...entries
+      ...scheduleEntries
         .filter((entry) => {
           const date = new Date(entry.date);
           return entry.locationId === locationId && date.getUTCFullYear() === year && date.getUTCMonth() === month;
@@ -471,7 +518,7 @@ export function MonthlySchedulePlanner({
   function assignmentsForLocation(locationId: string, workers: ScheduleWorker[]) {
     if (locationId === selectedLocationId) return assignments;
     return createAssignmentsFromEntries(
-      entries,
+      scheduleEntries,
       year,
       month,
       workers.map((worker) => worker.id),
@@ -542,7 +589,7 @@ export function MonthlySchedulePlanner({
       return;
     }
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(entries, year, month, workerIds, selectedLocationId, [...selectedExtraWorkerIds, userId]));
+    setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, [...selectedExtraWorkerIds, userId]));
     setPlannerMessage("Lavoratore aggiunto al planning del salone.");
   }
 
@@ -567,7 +614,7 @@ export function MonthlySchedulePlanner({
     }
     const nextExtraIds = selectedExtraWorkerIds.filter((id) => id !== userId);
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(entries, year, month, workerIds, selectedLocationId, nextExtraIds));
+    setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, nextExtraIds));
     setPlannerMessage("Lavoratore rimosso dalla lista del salone.");
   }
 
@@ -620,7 +667,7 @@ export function MonthlySchedulePlanner({
 
   function resetMonth() {
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(entries, year, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
+    setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
   function setScheduleYear(nextYear: number) {
@@ -630,7 +677,7 @@ export function MonthlySchedulePlanner({
     }
     setYear(nextYear);
     const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
-    setAssignments(createAssignmentsFromEntries(entries, nextYear, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
+    setAssignments(createAssignmentsFromEntries(scheduleEntries, nextYear, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
   async function applyBulkAssignment() {
@@ -707,6 +754,19 @@ export function MonthlySchedulePlanner({
       }
 
       setAssignments(updatedAssignments);
+      setScheduleEntries((current) =>
+        payload.reduce<ScheduleEntry[]>(
+          (nextEntries, item) => replaceScheduleEntry(nextEntries, {
+            userId: String(item.userId),
+            locationId: item.locationId,
+            categoryId: String(item.categoryId),
+            date: String(item.date),
+            startTime: item.startTime ?? null,
+            endTime: item.endTime ?? null,
+          }),
+          current,
+        )
+      );
       setPlannerMessage(`Salvati con successo ${payload.length} turni.`);
     } catch (e) {
       setPlannerMessage("Errore di connessione.");
@@ -776,6 +836,12 @@ export function MonthlySchedulePlanner({
       }
 
       setAssignments(updatedAssignments);
+      setScheduleEntries((current) =>
+        payload.reduce<ScheduleEntry[]>(
+          (nextEntries, item) => removeScheduleEntry(nextEntries, String(item.userId), String(item.date), item.locationId),
+          current,
+        )
+      );
       setPlannerMessage(`Svuotate con successo ${payload.length} celle.`);
     } catch (e) {
       setPlannerMessage("Errore di connessione.");
