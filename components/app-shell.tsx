@@ -367,20 +367,18 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     : baseItems;
 
   const items = filterMenuItems(rawItems);
+  const sidebarItems = getStructuredMenuItems(items).map((item: any) => ({
+    href: item.href,
+    label: getSidebarLabel(item.href, item.label),
+    iconName: item.iconName,
+    section: item.section,
+  }));
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
     month: "long",
     year: "numeric",
     timeZone: "Europe/Rome",
   }).format(new Date());
-  const mobileItems = currentRole === "DIPENDENTE"
-    ? [
-        { href: "/my-shifts", label: "I miei turni", iconName: "Timer", roles: ["DIPENDENTE"] as Role[] },
-        { href: "/requests", label: "Calendario", iconName: "CalendarDays", roles: ["DIPENDENTE"] as Role[] },
-        { href: "/dashboard", label: "Timbrature", iconName: "Clock3", roles: ["DIPENDENTE"] as Role[] },
-        { href: "/profile", label: "Altro", iconName: "MoreHorizontal", roles: ["DIPENDENTE"] as Role[] },
-      ]
-    : [];
 
   const aside = (
       <aside className={cn(
@@ -400,42 +398,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userPhoto={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
-            items={filterMenuItems(
-              (currentRole === "DIPENDENTE"
-                ? [
-                    { href: "/dashboard", label: "Home", iconName: "Home" },
-                    { href: "/my-shifts", label: "I miei turni", iconName: "Timer" },
-                    { href: "/requests", label: "Calendario", iconName: "CalendarDays" },
-                    ...(userHasPlanningAccess
-                      ? [{ href: "/schedules", label: "Planning", iconName: "CalendarDays" }]
-                      : []),
-                    { href: "/documents", label: "Documenti", iconName: "FileText" },
-                    ...(userHasTaskAccess
-                      ? [{ href: "/tasks", label: "Task", iconName: "CheckSquare" }]
-                      : []),
-                    ...(servicePageNum === 3 || hasFormsAccess
-                      ? [{ href: "/service-forms", label: "Cassa", iconName: "ReceiptText" }]
-                      : []),
-                    ...(userHasTablesAccess
-                      ? [{ href: "/tables", label: "Tabelle", iconName: "Table2" }]
-                      : []),
-                    { href: "/orders", label: "Ordini", iconName: "ShoppingCart" },
-                    { href: "/foto", label: "Foto", iconName: "Camera" },
-                    ...(servicePageNum === 1
-                      ? [{ href: "/service-notes", label: "NOTE", iconName: "FilePenLine" }]
-                      : []),
-                    ...(userHasSocialAccess
-                      ? [{ href: "/social-calendar", label: "Programmazione Social", iconName: "Share2" }]
-                      : []),
-                    ...(userHasAppointmentsAccess
-                      ? [{ href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays" }]
-                      : []),
-                    ...(userHasOnlineConsultationsAccess
-                      ? [{ href: "/consulenza-online", label: "Consulenza Online", iconName: "Video" }]
-                      : []),
-                  ]
-                : baseItems) as any
-            )}
+            items={sidebarItems}
             logoutButton={
               <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white px-4 py-3 text-xs font-black uppercase tracking-wider transition-all duration-200" />
             }
@@ -478,13 +441,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userName={currentUser?.name ?? session?.user?.name ?? ""}
             userPhoto={currentUser?.photo_url}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            currentRole={currentRole}
             unreadNotifications={unreadNotifications}
-            items={items.map((item: any) => ({
-              href: item.href,
-              label: item.label,
-              iconName: item.iconName,
-              section: item.section,
-            }))}
+            items={sidebarItems}
             sidebarConfig={sidebarConfig}
           />
         </div>
