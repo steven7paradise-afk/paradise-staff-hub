@@ -25,7 +25,6 @@ import {
   Tag,
   Timer,
   Table2,
-  UserRound,
   X,
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -1476,79 +1475,66 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 backdrop-blur-sm md:block md:overflow-y-auto md:bg-[#F8F3F6] md:px-6 md:py-6">
-          <div className="max-h-[92dvh] w-full space-y-5 overflow-y-auto rounded-t-[36px] bg-[#F8F3F6] p-4 pb-32 shadow-2xl md:mx-auto md:max-h-none md:max-w-6xl md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-40 md:shadow-none">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 backdrop-blur-sm md:block md:overflow-y-auto md:bg-[#F8F3F6] md:px-5 md:py-5">
+          <div className="max-h-[94dvh] w-full space-y-3 overflow-y-auto rounded-t-[28px] bg-[#F8F3F6] p-3 pb-28 shadow-2xl md:mx-auto md:max-h-none md:max-w-[1360px] md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-24 md:shadow-none">
             <div className="mx-auto mb-2 h-1.5 w-14 rounded-full bg-black/15 md:hidden" />
-            <div className="flex items-center justify-between pt-2 md:pt-4">
-              <button onClick={() => setSelected(null)} className="grid size-12 place-items-center rounded-2xl bg-white shadow-sm"><ArrowLeft className="size-5" /></button>
-              {canAssign || selected.createdById === userId ? (
-                <button onClick={() => openEditTask(selected)} className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold shadow-sm">
-                  <Pencil className="size-4" /> Modifica task
-                </button>
-              ) : null}
-            </div>
-            <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
-            <div className="space-y-5 xl:sticky xl:top-4">
-            <Card className="bg-white p-5">
-              <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
-              <h1 className="mt-4 text-2xl font-semibold tracking-tight">{selected.title}</h1>
-              <div className="mt-5 grid gap-2">
-                {[
-                  { icon: UserRound, label: "Assegnata da", value: selected.createdByName, photo: selected.createdByPhoto },
-                  { 
-                    icon: UserRound, 
-                    label: "Assegnata a", 
-                    value: selected.assignees && selected.assignees.length > 0
-                      ? selected.assignees.length === 1 
-                        ? selected.assignees[0].name 
-                        : `${selected.assignees.length} collaboratori`
-                      : selected.assignedToName || "Nessuno"
-                  },
-                  { icon: CalendarDays, label: "Scadenza", value: formatFullDate(selected.dueDate) },
-                ].map((row) => {
-                  const Icon = row.icon;
-                  return (
-                    <div key={row.label} className="flex items-center justify-between gap-3 rounded-2xl bg-[#FAF7F9] px-3 py-2.5">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="flex size-8 shrink-0 items-center justify-center">
-                          {row.label === "Assegnata a" ? (
-                            selected.assignees && selected.assignees.length === 1 ? (
-                              <Avatar name={selected.assignees[0].name} photoUrl={selected.assignees[0].photoUrl} className="size-8" />
-                            ) : (
-                              <Icon className="size-4.5 text-black/45" />
-                            )
-                          ) : (
-                            "photo" in row ? (
-                              <Avatar name={row.value} photoUrl={row.photo ?? null} className="size-8" />
-                            ) : (
-                              <Icon className="size-4.5 text-black/45" />
-                            )
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11px] text-black/40">{row.label}</p>
-                          <p className="truncate text-sm font-semibold">{row.value}</p>
-                        </div>
-                      </div>
-                      
-                      {row.label === "Assegnata a" && selected.assignees && selected.assignees.length > 1 && (
-                        <div className="flex -space-x-1.5 overflow-visible shrink-0 ml-auto mr-1">
-                          {selected.assignees.map((assignee) => (
-                            <div key={assignee.id} className="group relative">
-                              <Avatar name={assignee.name} photoUrl={assignee.photoUrl} className="size-7 rounded-full ring-2 ring-[#FAF7F9] transition-transform hover:z-10 hover:scale-110" />
-                              <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 scale-90 rounded bg-black/85 px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-all duration-200 group-hover:scale-100 group-hover:opacity-100 whitespace-nowrap">
-                                {assignee.name}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+            <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
+              <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
+                <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
+                  <button onClick={() => setSelected(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm"><ArrowLeft className="size-5" /></button>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="truncate text-2xl font-black tracking-tight md:text-3xl">{selected.title}</h1>
+                      <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
                     </div>
-                  );
-                })}
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-black/35">{formatCategoryLabel(selected.category)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
+                  <CalendarDays className="size-5 shrink-0 text-black/45" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Scadenza</p>
+                    <p className="text-sm font-black">{formatFullDate(selected.dueDate)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
+                  <Avatar name={selected.createdByName} photoUrl={selected.createdByPhoto ?? null} className="size-9" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Assegnata da</p>
+                    <p className="truncate text-sm font-black">{selected.createdByName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
+                  {selected.assignees && selected.assignees.length === 1 ? (
+                    <Avatar name={selected.assignees[0].name} photoUrl={selected.assignees[0].photoUrl} className="size-9" />
+                  ) : (
+                    <div className="flex -space-x-2">
+                      {(selected.assignees.length > 0 ? selected.assignees : [{ id: selected.assignedToId, name: selected.assignedToName || "Nessuno", photoUrl: selected.assignedToPhoto }]).slice(0, 4).map((assignee) => (
+                        <Avatar key={assignee.id || assignee.name} name={assignee.name} photoUrl={assignee.photoUrl ?? null} className="size-9 ring-2 ring-white" />
+                      ))}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Assegnata a</p>
+                    <p className="truncate text-sm font-black">
+                      {selected.assignees && selected.assignees.length > 0
+                        ? selected.assignees.length === 1 ? selected.assignees[0].name : `${selected.assignees.length} collaboratori`
+                        : selected.assignedToName || "Nessuno"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end p-4">
+                  {canAssign || selected.createdById === userId ? (
+                    <button onClick={() => openEditTask(selected)} className="inline-flex h-11 items-center gap-2 rounded-2xl bg-[#FAF7F9] px-4 text-sm font-black shadow-sm">
+                      <Pencil className="size-4" /> <span className="hidden sm:inline">Modifica task</span>
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </Card>
-            <Card className="bg-white p-5">
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[minmax(320px,410px)_minmax(0,1fr)] xl:items-start">
+            <div className="space-y-4 xl:sticky xl:top-4">
+            <Card className="bg-white p-4 md:p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold">Descrizione</h2>
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
@@ -1570,7 +1556,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             </Card>
 
             {selected.checklist && selected.checklist.length > 0 ? (
-              <Card className="bg-white p-5">
+              <Card className="bg-white p-4 md:p-5">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="font-semibold">Checklist</h2>
                   <span className="text-sm font-semibold text-[#8064D8]">
@@ -1599,7 +1585,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
             {/* Prova completamento (se presente) */}
             {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
-              <Card className="bg-white p-5">
+              <Card className="bg-white p-4 md:p-5">
                 <h2 className="font-semibold">Prova completamento</h2>
                 {selected.completionNote ? <p className="mt-4 leading-7 text-black/55">{selected.completionNote}</p> : null}
                 <div className="mt-4 grid gap-3">
@@ -1612,8 +1598,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             ) : null}
 
             {/* Timeline Feed Cronologico Unificato */}
-            <Card className="bg-white p-5">
-              <div className="mb-6 flex items-center justify-between border-b border-black/5 pb-4">
+            <Card className="bg-white p-4 md:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-black/5 pb-3">
                 <div>
                   <h2 className="font-semibold">Attività e cronologia</h2>
                   <p className="mt-1 text-xs text-black/45">Il flusso storico di tutti gli eventi, commenti e note della task.</p>
@@ -1622,8 +1608,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               </div>
 
               {/* Timeline feed (scrollable list) */}
-              <div className="max-h-[350px] overflow-y-auto pr-3 -mr-3 scrollbar-thin">
-                <div className="relative border-l border-black/10 pl-5 ml-3 space-y-6 py-2">
+              <div className="max-h-[320px] overflow-y-auto pr-2 -mr-2 scrollbar-thin xl:max-h-[360px]">
+                <div className="relative ml-2 space-y-4 border-l border-black/10 py-1 pl-4 md:ml-3 md:space-y-5 md:pl-5">
                   {timelineEvents.map((event, idx) => {
                     const isComment = event.type === "comment";
 
@@ -1634,7 +1620,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
                         {isComment ? (
                           /* Comment Element */
-                          <div className="rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-4 hover:bg-[#FAF7F9]/50 transition animate-in fade-in duration-200">
+                          <div className="rounded-2xl border border-black/5 bg-[#FAF7F9]/30 p-3 transition animate-in fade-in duration-200 hover:bg-[#FAF7F9]/50 md:p-4">
                             <div className="flex items-start gap-3">
                               <Avatar name={event.commentUser || "Collaboratore"} photoUrl={event.commentPhoto ?? null} className="size-8" />
                               <div className="min-w-0 flex-1">
@@ -1713,13 +1699,13 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               </div>
 
               {/* Comment Input Box at bottom of timeline */}
-              <div className="mt-6 border-t border-black/5 pt-5 space-y-4">
+              <div className="mt-4 space-y-3 border-t border-black/5 pt-4">
                 <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-black/45">
                   {editingCommentId ? "Modifica il commento" : "Aggiungi commento o nota"}
                 </h3>
-                <div className="rounded-2xl border border-black/10 p-3 bg-[#FAF7F9]/40">
+                <div className="rounded-2xl border border-black/10 bg-[#FAF7F9]/40 p-3">
                   <textarea 
-                    className="min-h-20 w-full resize-none rounded-xl border border-black/5 px-3 py-2 text-sm outline-none bg-white shadow-xs focus:border-[#8064D8] transition" 
+                    className="min-h-16 w-full resize-none rounded-xl border border-black/5 bg-white px-3 py-2 text-sm shadow-xs outline-none transition focus:border-[#8064D8] md:min-h-20" 
                     value={commentText} 
                     onChange={(event) => setCommentText(event.target.value)} 
                     placeholder="Scrivi un aggiornamento, nota o commento... usa @nome per taggare una persona" 
@@ -1767,8 +1753,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     </div>
                   )}
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
                       <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
                         <FileImage className="size-4" /> Foto
                         <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { void attachCommentFiles(event.target.files); event.currentTarget.value = ""; }} />
@@ -1779,13 +1765,13 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                       </label>
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 sm:justify-end">
                       {editingCommentId && (
                         <Button variant="soft" className="h-9 text-xs" onClick={() => { setEditingCommentId(null); setCommentText(""); setCommentFiles([]); }}>
                           Annulla
                         </Button>
                       )}
-                      <Button className="h-9 text-xs" disabled={commentUploading || commentSaving} onClick={saveComment}>
+                      <Button className="h-9 min-w-24 text-xs" disabled={commentUploading || commentSaving} onClick={saveComment}>
                         <Send className="size-3.5" /> {commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
                       </Button>
                     </div>
@@ -1794,14 +1780,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               </div>
             </Card>
             {(selected.status === "ACTIVE" || selected.status === "WAITING" || selected.timerSeconds > 0) ? (
-              <Card className="bg-white p-5">
+              <Card className="bg-white p-4 md:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="inline-flex items-center gap-2 text-sm font-semibold text-black/45">
                       <Timer className="size-4 text-[#C66170]" />
                       Cronometro lavorativo
                     </p>
-                    <p className="mt-2 text-4xl font-black tabular-nums tracking-tight text-black">
+                    <p className="mt-2 text-3xl font-black tabular-nums tracking-tight text-black md:text-4xl">
                       {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs))}
                     </p>
                     <p className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-bold ${timerAttendance.tone === "work" ? "bg-emerald-50 text-emerald-700" : timerAttendance.tone === "pause" ? "bg-amber-50 text-amber-700" : "bg-black/5 text-black/45"}`}>
@@ -1809,11 +1795,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:min-w-60">
-                    <div className="rounded-2xl bg-[#FAF7F9] p-4">
+                    <div className="rounded-2xl bg-[#FAF7F9] p-3 md:p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Giorni totali</p>
                       <p className="mt-1 text-2xl font-black">{totalTaskDays(selected)}</p>
                     </div>
-                    <div className="rounded-2xl bg-[#FAF7F9] p-4">
+                    <div className="rounded-2xl bg-[#FAF7F9] p-3 md:p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Stato task</p>
                       <p className="mt-1 text-sm font-black">{statusLabel(selected.status)}</p>
                     </div>
@@ -1825,9 +1811,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               </Card>
             ) : null}
             {isCompletedTask(selected) ? null : (
-            <div className="sticky bottom-4 z-10 grid grid-cols-2 gap-3 rounded-[24px] border border-black/5 bg-white/95 p-3 shadow-xl backdrop-blur">
+            <div className="sticky bottom-2 z-10 grid grid-cols-1 gap-2 rounded-[20px] border border-black/5 bg-white/95 p-2 shadow-xl backdrop-blur sm:grid-cols-2 md:bottom-4 md:gap-3 md:rounded-[24px] md:p-3">
               {isNewTask(selected) ? (
-                <Button className="col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
+                <Button className="sm:col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
                   <Clock3 className="size-4" /> Metti in corso
                 </Button>
               ) : (
