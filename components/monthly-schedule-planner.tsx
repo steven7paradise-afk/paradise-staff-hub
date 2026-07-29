@@ -394,7 +394,13 @@ export function MonthlySchedulePlanner({
 
     if (!categoryAllowsTimeEdit(activeCategory)) {
       if (previous?.categoryId === activeCategory.id) {
-        await clearCellAssignmentFor(workerId, day);
+        setCellEditor({
+          workerId,
+          day,
+          categoryId: activeCategory.id,
+          startTime: previous?.startTime ?? activeCategory.startTime ?? "",
+          endTime: previous?.endTime ?? activeCategory.endTime ?? "",
+        });
         return;
       }
       await saveCellAssignment({
@@ -1531,8 +1537,10 @@ export function MonthlySchedulePlanner({
               </div>
               {editorIsExternalCommitment ? (
                 <p className="text-xs font-medium text-black/45 dark:text-white/45">Questo e un impegno gia presente in un altro salone. Serve per non creare doppio turno.</p>
-              ) : !editorCanChangeTime ? (
+              ) : !editorCanChangeTime && editorCategory?.startTime && editorCategory?.endTime ? (
                 <p className="text-xs font-medium text-black/45 dark:text-white/45">Questa categoria usa sempre l'orario fisso. Attiva la modifica orario quando crei una categoria nuova.</p>
+              ) : !editorCanChangeTime ? (
+                <p className="text-xs font-medium text-black/45 dark:text-white/45">Questa categoria non conta ore. Per eliminarla dalla cella usa Svuota.</p>
               ) : null}
               <p className="rounded-2xl bg-paradise-nude dark:bg-neutral-850 px-4 py-3 text-sm text-black/60 dark:text-white/60">
                 Ore cella: <strong>{formatHours(minutesBetween(cellEditor.startTime, cellEditor.endTime))}</strong>
