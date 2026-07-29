@@ -426,8 +426,9 @@ export function MonthlySchedulePlanner({
     }
     const key = assignmentKey(next.workerId, next.day);
     const previous = assignments[key];
-    const startTime = next.startTime || category.startTime || "";
-    const endTime = next.endTime || category.endTime || "";
+    const useCellTime = categoryAllowsTimeEdit(category);
+    const startTime = useCellTime ? (next.startTime || category.startTime || "") : (category.startTime || "");
+    const endTime = useCellTime ? (next.endTime || category.endTime || "") : (category.endTime || "");
     setAssignments((current) => ({
       ...current,
       [key]: { categoryId: next.categoryId, startTime, endTime, locationId: selectedLocationId },
@@ -1489,8 +1490,8 @@ export function MonthlySchedulePlanner({
                         ? {
                             ...current,
                             categoryId: event.target.value,
-                            startTime: category?.startTime ?? current.startTime,
-                            endTime: category?.endTime ?? current.endTime,
+                            startTime: category?.startTime ?? "",
+                            endTime: category?.endTime ?? "",
                           }
                         : current,
                     );
