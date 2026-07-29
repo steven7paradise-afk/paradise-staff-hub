@@ -6,6 +6,7 @@ import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName }
 export const dynamic = "force-dynamic";
 
 const SETTING_KEY = "client_control_note_suggestions";
+const MIN_FREQUENT_USES = 3;
 
 type LearnedNoteSuggestion = { text: string; count: number; lastUsed: number };
 
@@ -28,6 +29,12 @@ function normalizeSuggestions(value: unknown): LearnedNoteSuggestion[] {
     .filter((item) => item.text.length >= 8)
     .sort((a, b) => b.count - a.count || b.lastUsed - a.lastUsed)
     .slice(0, 50);
+}
+
+function frequentSuggestions(value: unknown) {
+  return normalizeSuggestions(value)
+    .filter((item) => item.count >= MIN_FREQUENT_USES)
+    .slice(0, 12);
 }
 
 function extractNoteSuggestions(note: string) {
@@ -54,7 +61,7 @@ export async function GET(request: NextRequest) {
   }
 
   const setting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
-  return NextResponse.json({ suggestions: normalizeSuggestions(setting?.value) });
+  return NextResponse.json({ suggestions: frequentSuggestions(setting?.value), minUses: MIN_FREQUENT_USES });
 }
 
 export async function POST(request: NextRequest) {
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
   const phrases = extractNoteSuggestions(note);
   if (phrases.length === 0) {
     const setting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
-    return NextResponse.json({ suggestions: normalizeSuggestions(setting?.value) });
+    return NextResponse.json({ suggestions: frequentSuggestions(setting?.value), minUses: MIN_FREQUENT_USES });
   }
 
   const nowMs = Date.now();
@@ -103,5 +110,5 @@ export async function POST(request: NextRequest) {
     return suggestions;
   });
 
-  return NextResponse.json({ suggestions: updated });
+  return NextResponse.json({ suggestions: frequentSuggestions(updated), minUses: MIN_FREQUENT_USES });
 }

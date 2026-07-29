@@ -69,6 +69,8 @@ const appointmentNoteSuggestions = [
   "Spiegata manutenzione a casa",
 ];
 
+const minFrequentNoteUses = 3;
+
 type LearnedNoteSuggestion = { text: string; count: number; lastUsed: number };
 
 function normalizeNoteSuggestion(value: string) {
@@ -669,6 +671,7 @@ export function TabletClock({
   const frequentNoteSuggestions = useMemo(() => {
     const fixed = new Set(appointmentNoteSuggestions.map((item) => item.toLowerCase()));
     return learnedNoteSuggestions
+      .filter((item) => item.count >= minFrequentNoteUses)
       .filter((item) => !fixed.has(item.text.toLowerCase()))
       .slice(0, 8);
   }, [learnedNoteSuggestions]);
