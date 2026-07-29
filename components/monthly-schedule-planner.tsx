@@ -457,14 +457,24 @@ export function MonthlySchedulePlanner({
       return;
     }
     const savedEntry = await response.json();
-    setScheduleEntries((current) => replaceScheduleEntry(current, scheduleEntryFromApi(savedEntry, {
+    const normalizedEntry = scheduleEntryFromApi(savedEntry, {
       userId: next.workerId,
       locationId: selectedLocationId,
       categoryId: next.categoryId,
       date: date.toISOString(),
       startTime,
       endTime,
-    })));
+    });
+    setAssignments((current) => ({
+      ...current,
+      [key]: {
+        categoryId: normalizedEntry.categoryId,
+        startTime: normalizedEntry.startTime,
+        endTime: normalizedEntry.endTime,
+        locationId: normalizedEntry.locationId ?? selectedLocationId,
+      },
+    }));
+    setScheduleEntries((current) => replaceScheduleEntry(current, normalizedEntry));
     setCellEditor(null);
     setPlannerMessage("Planning aggiornato.");
   }
