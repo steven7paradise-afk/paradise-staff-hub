@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { 
   ArrowLeft, 
-  Bell, 
   User, 
   Mail, 
   CalendarDays, 
@@ -13,23 +12,15 @@ import {
   ShieldAlert, 
   MapPin, 
   ChevronRight, 
-  FileCheck2, 
   FileText, 
   LockKeyhole, 
-  Sparkles,
-  BadgeCheck,
-  Gift,
-  Trophy,
+  Camera, 
+  Download,
+  X,
+  FileCheck,
   Award,
-  TrendingUp,
-  Copy,
-  Check,
-  Zap,
-  Clock,
-  Camera,
-  X
+  Clock
 } from "lucide-react";
-import { Badge, Card } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { LogoutButton } from "@/components/logout-button";
@@ -78,6 +69,15 @@ type ClientProfileProps = {
     url: string;
     date: string;
   }>;
+  documentsList?: Array<{
+    id: string;
+    title: string;
+    fileUrl: string;
+    type: string;
+    month: number | null;
+    year: number | null;
+    createdAt: string;
+  }>;
   settingsNode: React.ReactNode;
 };
 
@@ -88,6 +88,7 @@ export function ClientProfile({
   pointsStats,
   unreadNotifications,
   clientPhotos,
+  documentsList = [],
   settingsNode
 }: ClientProfileProps) {
   const [userPhoto, setUserPhoto] = useState(user.photoUrl);
@@ -117,37 +118,37 @@ export function ClientProfile({
 
   const availablePoints = pointsStats?.availablePoints ?? 0;
   const schedeCount = pointsStats?.schedeCount ?? 0;
-  const workerGoal = pointsStats?.workerGoal ?? 100;
+  const workerGoal = pointsStats?.workerGoal ?? 150; // default is 150 based on mockup "72 / 150 SCHEDE"
   const salonSchedeCount = pointsStats?.salonSchedeCount ?? 0;
   const salonGoal = pointsStats?.salonGoal ?? 500;
 
   const workerPercent = Math.min(100, Math.round((schedeCount / (workerGoal || 1)) * 100));
   const salonPercent = Math.min(100, Math.round((salonSchedeCount / (salonGoal || 1)) * 100));
 
+  const isEmployee = user.role === "DIPENDENTE";
+
   const details = [
-    { label: "Nome e Cognome", value: user.name, icon: User, color: "border-l-pink-500" },
-    { label: "Email di Servizio", value: user.email, icon: Mail, copyable: true, color: "border-l-rose-500" },
-    { label: "Data di Nascita", value: user.birthDateLabel, icon: CalendarDays, color: "border-l-purple-500" },
-    { label: "Codice Fiscale / ID", value: user.fiscalCode, icon: Fingerprint, copyable: true, color: "border-l-amber-500" },
-    { label: "Inizio Contratto", value: user.contractStartLabel, icon: Briefcase, color: "border-l-emerald-500" },
-    { label: "Scadenza Contratto", value: user.contractEndLabel, icon: ShieldAlert, color: "border-l-indigo-500" },
-    { label: "Salone Primario", value: user.locationName, icon: MapPin, color: "border-l-teal-500" },
+    { label: "Nome e Cognome", value: user.name, icon: User },
+    { label: "Email di Servizio", value: user.email, icon: Mail, copyable: true },
+    { label: "Data di Nascita", value: user.birthDateLabel, icon: CalendarDays },
+    { label: "Codice Fiscale / ID", value: user.fiscalCode, icon: Fingerprint, copyable: true },
+    { label: "Inizio Contratto", value: user.contractStartLabel, icon: Briefcase },
+    { label: "Scadenza Contratto", value: user.contractEndLabel, icon: ShieldAlert },
+    { label: "Salone Primario", value: user.locationName, icon: MapPin },
   ];
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 pb-16">
+    <div className="w-full max-w-6xl mx-auto space-y-8 pb-20 px-4 md:px-0 font-sans antialiased text-neutral-900 selection:bg-neutral-200">
       
-      {/* 🌸 LUXURY PARADISE HERO BANNER (REFINED ELEGANT DESIGN) */}
-      <div className="relative overflow-hidden bg-[color:var(--sidebar)] border-b border-black/5 dark:border-white/10 md:border md:border-black/5 md:dark:border-white/10 pt-20 pb-6 px-6 md:p-8 text-[color:var(--sidebar-text)] shadow-soft rounded-none md:rounded-3xl -mx-4 -mt-5 sm:-mx-6 sm:-mt-5 md:mx-0 md:mt-0">
-        <div className="absolute -right-20 -top-20 w-80 h-80 bg-black/5 dark:bg-white/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -left-20 -bottom-20 w-80 h-80 bg-black/5 dark:bg-white/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
-          {/* Avatar & Main Identity */}
-          <div className="flex flex-col md:flex-row items-center gap-5 text-center md:text-left">
-            <div className="relative group">
-              <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-pink-400 via-rose-300 to-amber-300 opacity-60 blur group-hover:opacity-90 transition duration-500" />
-              <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border-4 border-[color:var(--sidebar)] bg-zinc-100 flex items-center justify-center text-3xl font-black text-zinc-800 shadow-lg">
+      {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
+      <div className="border border-neutral-200 bg-white p-8 md:p-12 rounded-[24px] shadow-2xs space-y-8">
+        <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
+          
+          {/* Left Side: Avatar & Name */}
+          <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+            <div className="relative group shrink-0">
+              <div className="absolute -inset-0.5 rounded-full bg-neutral-200 blur-xs opacity-50 transition duration-300" />
+              <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border border-neutral-200 bg-neutral-50 flex items-center justify-center text-4xl font-serif text-neutral-800 shadow-lg">
                 {userPhoto ? (
                   <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
@@ -156,211 +157,188 @@ export function ClientProfile({
               </div>
             </div>
 
-            <div>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                <span className="text-[10px] font-black uppercase tracking-widest bg-black/10 dark:bg-white/10 text-[color:var(--sidebar-text)] border border-black/5 dark:border-white/10 px-3 py-1 rounded-full shadow-2xs">
-                  {user.role === "DIPENDENTE" ? "COLLABORATORE PARADISE" : user.role}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-500 bg-neutral-100 border border-neutral-200/60 px-3 py-1 rounded-full">
+                  {isEmployee ? "Collaboratore" : user.role.replace("_", " ")}
                 </span>
-                <span className="text-[10px] font-black uppercase tracking-widest bg-[color:var(--sidebar-text)] text-[color:var(--sidebar)] px-3 py-1 rounded-full shadow-2xs flex items-center gap-1">
-                  <MapPin size={10} className="text-pink-500" />
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-500 bg-neutral-50 border border-neutral-200/60 px-3 py-1 rounded-full flex items-center gap-1">
+                  <MapPin size={9} className="text-neutral-400" />
                   {user.locationName}
                 </span>
               </div>
 
-              <h1 className="text-2xl md:text-3xl font-black tracking-tight text-[color:var(--sidebar-text)] uppercase mt-2">
+              <h1 className="text-3xl md:text-4xl font-serif font-light text-neutral-900 tracking-wide uppercase">
                 {user.name}
               </h1>
 
-              <p className="text-xs text-[color:var(--sidebar-text)] opacity-70 font-medium mt-0.5">
+              <p className="text-[11px] text-neutral-400 font-bold uppercase tracking-[0.2em]">
                 {user.email}
               </p>
             </div>
           </div>
 
-          {/* Points & Stats High-Impact Badges */}
-          <div className="grid grid-cols-3 gap-3 w-full md:w-auto shrink-0">
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-3.5 text-center rounded-2xl shadow-xs">
-              <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 block">PUNTI DISPONIBILI</span>
-              <span className="text-xl md:text-2xl font-black text-emerald-500 block mt-0.5">{availablePoints} P</span>
-            </div>
-
-            <div className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-3.5 text-center rounded-2xl shadow-xs">
-              <span className="text-[9px] font-black uppercase tracking-widest text-[color:var(--sidebar-text)] opacity-60 block">SCHEDE MESE</span>
-              <span className="text-xl md:text-2xl font-black text-[color:var(--sidebar-text)] block mt-0.5">{schedeCount}</span>
-            </div>
-
-            <div className="bg-pink-500/10 border border-pink-500/20 p-3.5 text-center rounded-2xl shadow-xs">
-              <span className="text-[9px] font-black uppercase tracking-widest text-pink-600 block">ORE LAVORATE</span>
-              <span className="text-xl md:text-2xl font-black text-pink-500 block mt-0.5">{stats.workedHours}h</span>
+          {/* Right Side: Luxury Points Display */}
+          <div className="flex flex-col items-center md:items-end justify-center gap-1 border-t md:border-t-0 pt-6 md:pt-0 w-full md:w-auto shrink-0 md:pl-8 border-neutral-100">
+            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">SALDO PUNTI PREMIUM</span>
+            <span className="text-4xl md:text-5xl font-serif font-light text-neutral-900 mt-1">
+              {availablePoints} <span className="text-xs font-sans font-bold tracking-[0.2em] text-neutral-500 uppercase ml-1">Punti</span>
+            </span>
+            <div className="text-[10px] font-bold text-neutral-400 tracking-wider uppercase mt-1">
+              Disponibili per il riscatto
             </div>
           </div>
         </div>
 
-        {/* UX Navigation Tabs */}
-        <div className="flex items-center gap-2 mt-8 pt-4 border-t border-black/10 dark:border-white/10 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("points")}
-            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider transition rounded-xl flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "points"
-                ? "bg-[color:var(--sidebar-text)] text-[color:var(--sidebar)] shadow-sm"
-                : "bg-black/5 hover:bg-black/10 text-[color:var(--sidebar-text)] opacity-80"
-            }`}
-          >
-            <Gift size={15} />
-            <span>Punti & Traguardi</span>
-            <span className="bg-emerald-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full">{availablePoints}P</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("info")}
-            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider transition rounded-xl flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "info"
-                ? "bg-[color:var(--sidebar-text)] text-[color:var(--sidebar)] shadow-sm"
-                : "bg-black/5 hover:bg-black/10 text-[color:var(--sidebar-text)] opacity-80"
-            }`}
-          >
-            <User size={15} />
-            <span>Informazioni Personali</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("security")}
-            className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider transition rounded-xl flex items-center gap-2 whitespace-nowrap ${
-              activeTab === "security"
-                ? "bg-[color:var(--sidebar-text)] text-[color:var(--sidebar)] shadow-sm"
-                : "bg-black/5 hover:bg-black/10 text-[color:var(--sidebar-text)] opacity-80"
-            }`}
-          >
-            <LockKeyhole size={15} />
-            <span>Impostazioni & Password</span>
-          </button>
+        {/* Premium Underlined Navigation Tabs (Dior Style) */}
+        <div className="flex items-center gap-8 border-b border-neutral-200 overflow-x-auto pb-px">
+          {[
+            { id: "points", label: "Punti & Traguardi" },
+            { id: "info", label: "Informazioni & Documenti" },
+            { id: "security", label: "Impostazioni & Sicurezza" }
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "py-4 text-xs font-bold uppercase tracking-[0.25em] border-b-2 transition duration-200 whitespace-nowrap -mb-px",
+                  isActive 
+                    ? "border-neutral-900 text-neutral-900 font-black" 
+                    : "border-transparent text-neutral-400 hover:text-neutral-600"
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 🟢 TAB 1: PUNTI & TRAGUARDI PARADISE */}
+      {/* 🔴 TAB 1: PUNTI & TRAGUARDI */}
       {activeTab === "points" && (
-        <div className="space-y-6 animate-fadeIn">
-          {/* Main Points Card */}
-          <div className="bg-white border border-zinc-200 p-6 md:p-8 space-y-6 shadow-sm">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-zinc-100 pb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center font-black shadow-sm">
-                  <Gift size={24} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-black uppercase tracking-tight text-black">
-                    Saldo Punti & Riscatto Premi
-                  </h2>
-                  <p className="text-xs text-zinc-500">
-                    Accumuli 10 Punti quando raggiungi l'obiettivo personale e 10 Punti quando il salone raggiunge il suo target!
-                  </p>
-                </div>
+        <div className="space-y-8 animate-in fade-in duration-200">
+          
+          {/* Target Progress Section */}
+          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-neutral-100">
+              <div className="space-y-1.5 text-left">
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">OBIETTIVI MENSILI</span>
+                <h2 className="text-xl font-serif font-light text-neutral-900 uppercase">
+                  Andamento & Premi
+                </h2>
               </div>
-
-              <div className="bg-zinc-50 border border-zinc-200 px-5 py-3 text-right rounded-xl">
-                <div className="text-3xl font-black text-black">
-                  {availablePoints} <span className="text-xs font-black text-emerald-600 uppercase">PUNTI</span>
-                </div>
-                <div className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-widest">
-                  PRONTI DA RISCATTARE
-                </div>
+              
+              <div className="text-xs font-bold text-neutral-400 tracking-[0.1em] uppercase flex flex-wrap gap-4">
+                <span>Bonus Extra: <strong className="text-neutral-900 font-extrabold">+{pointsStats?.manualBonusPoints ?? 0}P</strong></span>
+                <span className="opacity-50">|</span>
+                <span>Riscattati: <strong className="text-neutral-900 font-extrabold">-{pointsStats?.redeemedPoints ?? 0}P</strong></span>
               </div>
             </div>
 
-            {/* Target Progress Bars */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Personal Goal */}
-              <div className="p-5 bg-zinc-50 border border-zinc-200 rounded-2xl space-y-3">
-                <div className="flex justify-between items-center text-xs font-black uppercase">
-                  <span className="text-zinc-600">Obiettivo Personale ({user.name.split(" ")[0]})</span>
-                  <span className="text-black font-extrabold">{schedeCount} / {workerGoal} SCHEDE</span>
+            {/* Target Progress Cards */}
+            <div className={cn("grid gap-8", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
+              
+              {/* OBIETTIVO PERSONALE */}
+              <div className="p-6 bg-neutral-50 border border-neutral-200 rounded-[20px] space-y-4 text-left">
+                <div className="flex justify-between items-end">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">DIPENDENTE</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-neutral-800">
+                      Obiettivo Personale ({user.name.split(" ")[0]})
+                    </span>
+                  </div>
+                  <span className="text-sm font-serif font-light text-neutral-900">
+                    {schedeCount} / {workerGoal} <span className="text-[10px] font-sans font-bold tracking-wider text-neutral-500 uppercase">Schede</span>
+                  </span>
                 </div>
 
-                <div className="w-full h-2.5 bg-zinc-200 rounded-full overflow-hidden">
+                {/* Sleek Minimalist Black Progress Bar */}
+                <div className="w-full h-1 bg-neutral-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-black transition-all duration-700"
+                    className="h-full bg-neutral-900 transition-all duration-700"
                     style={{ width: `${workerPercent}%` }}
                   />
                 </div>
 
-                <div className="flex justify-between items-center text-[10px] font-bold">
-                  <span className="text-zinc-400">{workerPercent}% RAGGIUNTO</span>
-                  <span className={pointsStats?.workerEarned ? "text-emerald-600 font-extrabold" : "text-amber-600"}>
+                <div className="flex justify-between items-center text-[10px] font-bold tracking-wider uppercase">
+                  <span className="text-neutral-400">{workerPercent}% RAGGIUNTO</span>
+                  <span className={pointsStats?.workerEarned ? "text-neutral-900 font-black" : "text-amber-700"}>
                     {pointsStats?.workerEarned ? "🎉 TRAGUARDO SBLOCCATO (+10P)" : "IN CORSO (+10P)"}
                   </span>
                 </div>
               </div>
 
-              {/* Salon Goal */}
-              <div className="p-5 bg-zinc-50 border border-zinc-200 rounded-2xl space-y-3">
-                <div className="flex justify-between items-center text-xs font-black uppercase">
-                  <span className="text-zinc-600">Obiettivo Salone</span>
-                  <span className="text-black font-extrabold">{salonSchedeCount} / {salonGoal} SCHEDE</span>
-                </div>
+              {/* OBIETTIVO SALONE - ONLY visible for non-employees (e.g. admins) */}
+              {!isEmployee && (
+                <div className="p-6 bg-neutral-50 border border-neutral-200 rounded-[20px] space-y-4 text-left">
+                  <div className="flex justify-between items-end">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">STRUTTURA</span>
+                      <span className="text-sm font-bold uppercase tracking-wider text-neutral-800">
+                        Obiettivo Salone
+                      </span>
+                    </div>
+                    <span className="text-sm font-serif font-light text-neutral-900">
+                      {salonSchedeCount} / {salonGoal} <span className="text-[10px] font-sans font-bold tracking-wider text-neutral-500 uppercase">Schede</span>
+                    </span>
+                  </div>
 
-                <div className="w-full h-2.5 bg-zinc-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-red-600 transition-all duration-700"
-                    style={{ width: `${salonPercent}%` }}
-                  />
-                </div>
+                  {/* Sleek Minimalist Progress Bar */}
+                  <div className="w-full h-1 bg-neutral-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-neutral-500 transition-all duration-700"
+                      style={{ width: `${salonPercent}%` }}
+                    />
+                  </div>
 
-                <div className="flex justify-between items-center text-[10px] font-bold">
-                  <span className="text-zinc-400">{salonPercent}% RAGGIUNTO</span>
-                  <span className={pointsStats?.salonEarned ? "text-emerald-600 font-extrabold" : "text-amber-600"}>
-                    {pointsStats?.salonEarned ? "🎉 TRAGUARDO SBLOCCATO (+10P)" : "IN CORSO (+10P)"}
-                  </span>
+                  <div className="flex justify-between items-center text-[10px] font-bold tracking-wider uppercase">
+                    <span className="text-neutral-400">{salonPercent}% RAGGIUNTO</span>
+                    <span className={pointsStats?.salonEarned ? "text-neutral-900 font-black" : "text-amber-700"}>
+                      {pointsStats?.salonEarned ? "🎉 TRAGUARDO SBLOCCATO (+10P)" : "IN CORSO (+10P)"}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Redeem Reward Button */}
-            <div className="pt-4 border-t border-zinc-100 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="text-xs font-bold text-zinc-500 space-x-4">
-                <span>Bonus Extra Admin: <strong className="text-black">+{pointsStats?.manualBonusPoints ?? 0}P</strong></span>
-                <span>·</span>
-                <span>Punti Riscattati: <strong className="text-red-600">-{pointsStats?.redeemedPoints ?? 0}P</strong></span>
-              </div>
-
+            {/* Redeem Action Row */}
+            <div className="pt-6 border-t border-neutral-100 flex justify-end">
               {availablePoints >= 10 ? (
                 <Link
                   href="/requests"
-                  className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider px-6 py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-md transition transform active:scale-95"
+                  className="w-full md:w-auto bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs uppercase tracking-[0.2em] px-8 py-4 rounded-xl shadow-xs transition duration-200 text-center active:scale-98"
                 >
-                  <Gift size={18} />
-                  <span>RISCATTA PREMIO (10 PUNTI)</span>
+                  Riscatta Premio (10 Punti)
                 </Link>
               ) : (
-                <div className="w-full md:w-auto text-xs font-black uppercase text-zinc-400 bg-zinc-100 px-4 py-2.5 rounded-xl border border-zinc-200 text-center">
-                  RAGGIUNGI 10 PUNTI PER RISCATTARE UN PREMIO
+                <div className="w-full md:w-auto text-[10px] font-bold uppercase tracking-[0.25em] text-neutral-400 bg-neutral-50 border border-neutral-200 px-6 py-3 rounded-xl text-center">
+                  Raggiungi 10 punti per riscattare un premio
                 </div>
               )}
             </div>
           </div>
 
-          {/* 📸 GALLERIA LAVORI CLIENTE (INSTAGRAM STYLE FEED) */}
-          <div className="bg-white border border-zinc-200 p-6 md:p-8 space-y-6 shadow-sm">
-            <div className="flex items-center gap-3 border-b border-zinc-100 pb-5">
-              <div className="w-12 h-12 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center font-black shadow-sm">
-                <Camera size={24} />
-              </div>
-              <div>
-                <h2 className="text-lg font-black uppercase tracking-tight text-black">
-                  Galleria Lavori Cliente
-                </h2>
-                <p className="text-xs text-zinc-500">
-                  I tuoi lavori eseguiti in salone. Mostra 1 foto frontale per ciascuna cliente.
-                </p>
-              </div>
+          {/* 📸 GALLERY FEED (INSTAGRAM STYLE LUXURY) */}
+          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6">
+            <div className="border-b border-neutral-100 pb-5 text-left">
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">GALLERIA IMMAGINI</span>
+              <h2 className="text-xl font-serif font-light text-neutral-900 uppercase mt-1">
+                Lavori Eseguiti Cliente
+              </h2>
+              <p className="text-xs text-neutral-400 mt-1 font-medium">
+                I tuoi servizi registrati con documentazione fotografica frontale.
+              </p>
             </div>
 
             {clientPhotos.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 md:grid-cols-4 lg:grid-cols-5">
+              <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 md:gap-4">
                 {clientPhotos.map((photo, index) => (
                   <div
                     key={photo.id}
                     onClick={() => setSelectedPhotoIndex(index)}
-                    className="aspect-square relative overflow-hidden rounded-2xl bg-zinc-100 group cursor-pointer border border-black/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xs"
+                    className="aspect-square relative overflow-hidden rounded-xl bg-neutral-50 group cursor-pointer border border-neutral-200 hover:scale-[1.01] transition-all duration-300"
                   >
                     <img
                       src={photo.url}
@@ -368,21 +346,19 @@ export function ClientProfile({
                       className="size-full object-cover select-none pointer-events-none"
                       loading="lazy"
                     />
-                    <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-pink-300">Ordine</span>
-                      <span className="text-xs font-black">#{photo.orderNumber}</span>
+                    <div className="absolute inset-0 bg-neutral-955/40 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-neutral-300">ORDINE</span>
+                      <span className="text-sm font-semibold tracking-wider">#{photo.orderNumber}</span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="py-12 flex flex-col items-center justify-center text-center border-2 border-dashed border-zinc-200 rounded-2xl p-6 bg-zinc-50">
-                <div className="size-12 rounded-full bg-zinc-100 flex items-center justify-center text-zinc-400 mb-3 shadow-2xs">
-                  <Camera size={20} />
-                </div>
-                <p className="text-xs font-black text-zinc-800 uppercase tracking-wide">Nessun lavoro registrato</p>
-                <p className="text-[11px] text-zinc-500 mt-1 max-w-xs">
-                  Usa la fotocamera del portale nella sezione Ordini per caricare le foto prima/dopo delle tue clienti in salone.
+              <div className="py-12 flex flex-col items-center justify-center text-center border border-dashed border-neutral-200 rounded-2xl bg-neutral-50 p-6">
+                <Camera size={24} className="text-neutral-400 mb-2" />
+                <p className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Nessun lavoro registrato</p>
+                <p className="text-[11px] text-neutral-400 mt-1 max-w-xs">
+                  Carica le foto prima/dopo durante la compilazione degli ordini cliente.
                 </p>
               </div>
             )}
@@ -390,64 +366,143 @@ export function ClientProfile({
         </div>
       )}
 
-      {/* 👤 TAB 2: INFORMAZIONI PERSONALI */}
+      {/* 👤 TAB 2: INFORMAZIONI PERSONALI & DOCUMENTI PROPRI */}
       {activeTab === "info" && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="bg-white border border-zinc-200 p-6 md:p-8 space-y-6 shadow-sm">
-            <div className="flex items-center gap-2 border-b border-zinc-100 pb-4">
-              <User className="text-pink-600" size={20} />
-              <h2 className="text-base font-black uppercase tracking-wider text-black">
-                Dettagli & Dati Personali
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
+          
+          {/* Personal Info Column (1/3) */}
+          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6 lg:col-span-1 h-fit text-left">
+            <div className="border-b border-neutral-100 pb-4">
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">DATI REGISTRATI</span>
+              <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
+                Dati Anagrafici
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {details.map(({ label, value, icon: Icon, copyable, color }) => (
-                <div
-                  key={label}
-                  className={`p-4 bg-zinc-50 border border-zinc-200 rounded-2xl flex items-center justify-between gap-3 border-l-4 ${color}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-white border border-zinc-200 flex items-center justify-center text-zinc-700 shrink-0">
-                      <Icon size={18} />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block">{label}</span>
-                      <span className="text-xs font-bold text-black block mt-0.5">{value}</span>
-                    </div>
+            <div className="space-y-5">
+              {details.map(({ label, value, copyable }) => (
+                <div key={label} className="group border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">{label}</span>
+                    {copyable && (
+                      <button
+                        onClick={() => handleCopy(value, label)}
+                        className="text-neutral-400 hover:text-neutral-900 transition-colors p-1"
+                        title="Copia"
+                      >
+                        {copiedField === label ? <span className="text-[8px] font-black text-emerald-600 tracking-wider">COPIATO</span> : <span className="text-[9px] hover:underline">COPIA</span>}
+                      </button>
+                    )}
                   </div>
-
-                  {copyable && (
-                    <button
-                      onClick={() => handleCopy(value, label)}
-                      className="text-zinc-400 hover:text-black p-2 transition"
-                      title="Copia"
-                    >
-                      {copiedField === label ? <Check size={16} className="text-emerald-600" /> : <Copy size={16} />}
-                    </button>
-                  )}
+                  <span className="text-xs font-semibold text-neutral-800 block mt-1">{value}</span>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Documents Column (2/3) */}
+          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6 lg:col-span-2 text-left">
+            <div className="border-b border-neutral-100 pb-4">
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">ARCHIVIO UFFICIALE</span>
+              <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
+                I Miei Documenti Propri
+              </h2>
+              <p className="text-xs text-neutral-400 mt-1 font-medium">
+                Visualizza e scarica i tuoi cedolini, contratti e altri documenti emessi.
+              </p>
+            </div>
+
+            {documentsList.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-neutral-100 text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400 border-b border-neutral-100">
+                      <th className="py-3 pr-4">Titolo Documento</th>
+                      <th className="py-3 px-4">Tipologia</th>
+                      <th className="py-3 px-4">Periodo</th>
+                      <th className="py-3 px-4">Data Emissione</th>
+                      <th className="py-3 pl-4 text-right">Azioni</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 font-semibold text-neutral-700">
+                    {documentsList.map((doc) => {
+                      const isCedolino = doc.type === "CEDOLINO";
+                      const isContratto = doc.type === "CONTRATTO";
+
+                      // Month Label mapping
+                      const months = ["Gen", "Feb", "Mar", "Apr", "Mag", "Giu", "Lug", "Ago", "Set", "Ott", "Nov", "Dic"];
+                      const periodLabel = isCedolino && doc.month !== null && doc.year
+                        ? `${months[doc.month - 1]} ${doc.year}`
+                        : "—";
+
+                      return (
+                        <tr key={doc.id} className="hover:bg-neutral-50/50 transition duration-150">
+                          <td className="py-4 pr-4 font-bold text-neutral-900 flex items-center gap-2.5">
+                            {isContratto ? (
+                              <FileCheck size={15} className="text-neutral-400 shrink-0" />
+                            ) : (
+                              <FileText size={15} className="text-neutral-400 shrink-0" />
+                            )}
+                            <span className="truncate max-w-[180px] sm:max-w-xs">{doc.title}</span>
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={cn(
+                              "text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border",
+                              isContratto && "bg-neutral-900 border-neutral-900 text-white",
+                              isCedolino && "bg-zinc-50 border-neutral-300 text-neutral-700",
+                              !isContratto && !isCedolino && "bg-neutral-50 border-neutral-200 text-neutral-400"
+                            )}>
+                              {doc.type}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-neutral-500 font-mono text-[11px]">{periodLabel}</td>
+                          <td className="py-4 px-4 text-neutral-400">
+                            {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(doc.createdAt))}
+                          </td>
+                          <td className="py-4 pl-4 text-right">
+                            <a
+                              href={`/api/documents/${doc.id}/download`}
+                              className="inline-flex size-8 items-center justify-center rounded-full border border-neutral-200 hover:border-neutral-900 hover:bg-neutral-900 hover:text-white transition duration-200 text-neutral-500 active:scale-95"
+                              title="Scarica documento"
+                              download
+                            >
+                              <Download size={13} />
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-12 flex flex-col items-center justify-center text-center border border-dashed border-neutral-200 rounded-2xl bg-neutral-50 p-6">
+                <FileText size={24} className="text-neutral-300 mb-2" />
+                <p className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Nessun documento disponibile</p>
+                <p className="text-[11px] text-neutral-400 mt-1 max-w-xs">
+                  Quando l'amministrazione caricherà i tuoi contratti o cedolini, appariranno in questo elenco.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* 🔒 TAB 3: SICUREZZA & PASSWORD */}
+      {/* 🔒 TAB 3: IMPOSTAZIONI & SICUREZZA */}
       {activeTab === "security" && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="bg-white border border-zinc-200 p-6 md:p-8 space-y-6 shadow-sm">
-            <div className="flex items-center gap-2 border-b border-zinc-100 pb-4">
-              <LockKeyhole className="text-purple-600" size={20} />
-              <h2 className="text-base font-black uppercase tracking-wider text-black">
-                Sicurezza, Foto & Password
+        <div className="space-y-8 animate-in fade-in duration-200">
+          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6 text-left">
+            <div className="border-b border-neutral-100 pb-4">
+              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">PREFERENZE</span>
+              <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
+                Sicurezza & Account
               </h2>
             </div>
 
             {settingsNode}
 
-            <div className="pt-4 border-t border-zinc-100">
-              <LogoutButton className="bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider px-6 py-3 rounded-xl transition" />
+            <div className="pt-6 border-t border-neutral-100 flex justify-end">
+              <LogoutButton className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-[0.2em] px-8 py-3.5 rounded-xl transition duration-200 text-center active:scale-98" />
             </div>
           </div>
         </div>
@@ -455,15 +510,15 @@ export function ClientProfile({
 
       {/* 🖼️ INSTAGRAM POST LIGHTBOX MODAL */}
       {selectedPhotoIndex !== null && clientPhotos[selectedPhotoIndex] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 md:p-6 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-4xl bg-white dark:bg-neutral-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 md:p-6 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-4xl bg-white rounded-[24px] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
             
             {/* Close Button */}
             <button
               onClick={() => setSelectedPhotoIndex(null)}
-              className="absolute top-4 right-4 z-10 size-10 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition active:scale-95"
+              className="absolute top-4 right-4 z-10 size-9 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition active:scale-95"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
 
             {/* Left/Right Navigation Arrows */}
@@ -474,24 +529,24 @@ export function ClientProfile({
                     e.stopPropagation();
                     setSelectedPhotoIndex((prev) => (prev !== null ? (prev - 1 + clientPhotos.length) % clientPhotos.length : null));
                   }}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 size-11 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition active:scale-95"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 size-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition active:scale-95"
                 >
-                  <ArrowLeft size={20} />
+                  <ArrowLeft size={18} />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedPhotoIndex((prev) => (prev !== null ? (prev + 1) % clientPhotos.length : null));
                   }}
-                  className="absolute right-16 md:right-4 top-1/2 -translate-y-1/2 z-10 size-11 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition active:scale-95"
+                  className="absolute right-16 md:right-4 top-1/2 -translate-y-1/2 z-10 size-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition active:scale-95"
                 >
-                  <ChevronRight size={20} />
+                  <ChevronRight size={18} />
                 </button>
               </>
             )}
 
-            {/* Image container (left on desktop) */}
-            <div className="flex-1 bg-black flex items-center justify-center min-h-[300px] md:min-h-0 aspect-square md:aspect-auto">
+            {/* Image container */}
+            <div className="flex-1 bg-neutral-950 flex items-center justify-center min-h-[300px] md:min-h-0 aspect-square md:aspect-auto">
               <img
                 src={clientPhotos[selectedPhotoIndex].url}
                 alt={`Ordine ${clientPhotos[selectedPhotoIndex].orderNumber}`}
@@ -499,33 +554,33 @@ export function ClientProfile({
               />
             </div>
 
-            {/* Details panel (right on desktop) */}
-            <div className="w-full md:w-[350px] shrink-0 p-6 flex flex-col justify-between border-t md:border-t-0 md:border-l border-zinc-100 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-              <div className="space-y-4">
+            {/* Details panel */}
+            <div className="w-full md:w-[320px] shrink-0 p-6 flex flex-col justify-between bg-white text-left">
+              <div className="space-y-5">
                 {/* Author Info */}
-                <div className="flex items-center gap-3 pb-4 border-b border-zinc-100 dark:border-neutral-800">
-                  <div className="size-10 rounded-full overflow-hidden border border-black/5 dark:border-white/10 bg-zinc-100 flex items-center justify-center text-xs font-black text-zinc-800">
+                <div className="flex items-center gap-3 pb-4 border-b border-neutral-100">
+                  <div className="size-9 rounded-full overflow-hidden border border-neutral-200 bg-neutral-100 flex items-center justify-center text-xs font-bold text-neutral-800">
                     {userPhoto ? (
                       <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="size-full object-cover" />
                     ) : (
                       user.name.slice(0, 2).toUpperCase()
                     )}
                   </div>
-                  <div className="text-left">
-                    <p className="text-xs font-black uppercase text-black dark:text-white leading-tight">{user.name}</p>
-                    <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{user.role === "DIPENDENTE" ? "COLLABORATORE" : user.role}</p>
+                  <div>
+                    <p className="text-xs font-black uppercase text-neutral-900 leading-tight">{user.name}</p>
+                    <p className="text-[8px] font-bold text-neutral-400 uppercase tracking-widest">{isEmployee ? "Collaboratore" : user.role}</p>
                   </div>
                 </div>
 
                 {/* Details */}
-                <div className="space-y-3 pt-2 text-left">
+                <div className="space-y-4 pt-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-zinc-400 uppercase tracking-wider text-[10px]">Ordine Cliente</span>
-                    <span className="font-black text-pink-600 bg-pink-500/10 px-2.5 py-1 rounded-lg">#{clientPhotos[selectedPhotoIndex].orderNumber}</span>
+                    <span className="font-bold text-neutral-400 uppercase tracking-wider text-[9px]">Ordine Cliente</span>
+                    <span className="font-bold text-neutral-800 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded text-[10px]">#{clientPhotos[selectedPhotoIndex].orderNumber}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-zinc-400 uppercase tracking-wider text-[10px]">Data Lavoro</span>
-                    <span className="font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1">
+                    <span className="font-bold text-neutral-400 uppercase tracking-wider text-[9px]">Data Caricamento</span>
+                    <span className="font-medium text-neutral-600 flex items-center gap-1">
                       <Clock size={12} className="opacity-75" />
                       {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(clientPhotos[selectedPhotoIndex].date))}
                     </span>
@@ -534,7 +589,7 @@ export function ClientProfile({
               </div>
 
               {/* Bottom message */}
-              <div className="mt-8 pt-4 border-t border-zinc-100 dark:border-neutral-800 text-[10px] text-center text-zinc-400 font-bold uppercase tracking-widest">
+              <div className="mt-8 pt-4 border-t border-neutral-100 text-[8px] text-center text-neutral-400 font-bold uppercase tracking-[0.25em]">
                 Lavoro eseguito in salone
               </div>
             </div>

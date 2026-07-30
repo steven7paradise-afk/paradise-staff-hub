@@ -64,7 +64,7 @@ export default async function ProfilePage() {
     prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } }),
     prisma.workHourRecord.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } } }),
     prisma.leaveRequest.count({ where: { user_id: user.id, status: "PENDING" } }),
-    prisma.document.count({ where: { user_id: user.id } }),
+    prisma.document.findMany({ where: { user_id: user.id }, orderBy: { created_at: "desc" } }),
     prisma.notification.count({ where: { user_id: session.user.id, read: false } }),
     prisma.staffTask.count({ where: { assignees: { some: { id: user.id } }, status: "ACTIVE" } }),
     prisma.user.findMany({
@@ -224,9 +224,18 @@ export default async function ProfilePage() {
           plannedHours,
           workedHours,
           openRequests,
-          documents,
+          documents: documents.length,
           taskInProgress,
         }}
+        documentsList={documents.map(d => ({
+          id: d.id,
+          title: d.title,
+          fileUrl: d.file_url,
+          type: d.type,
+          month: d.month,
+          year: d.year,
+          createdAt: d.created_at.toISOString()
+        }))}
         pointsStats={{
           schedeCount,
           workerGoal,

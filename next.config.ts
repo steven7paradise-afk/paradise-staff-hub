@@ -9,6 +9,7 @@ const nextConfig: any = {
     config.cache = false;
     return config;
   },
+  turbopack: {},
 };
 
 export default nextConfig;
