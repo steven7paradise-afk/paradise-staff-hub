@@ -108,6 +108,7 @@ type Props = {
     type: string;
     createdAt: string;
   }>;
+  unreadNotifications?: number;
   todayAppointmentsCount?: { total: number; completed: number; pending: number };
   appointmentsTimeline?: AppointmentItem[];
   teamInTurno?: { id: string; name?: string | null; photo_url?: string | null }[];
@@ -151,6 +152,7 @@ export function DashboardRedesignClient({
   },
   communications = [],
   unreadCommunications = [],
+  unreadNotifications = 0,
   todayAppointmentsCount = { total: 16, completed: 0, pending: 16 },
   appointmentsTimeline = [],
   teamInTurno = [],

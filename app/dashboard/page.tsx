@@ -87,6 +87,7 @@ export default async function DashboardPage() {
     clockRuleSetting,
     allEmployees,
     unreadCommunications,
+    unreadNotificationsCount,
   ] = await Promise.all([
     safe(prisma.setting.findUnique({ where: { key: DASHBOARD_SETTINGS_KEY } }), null),
     safe(prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }), []),
@@ -133,6 +134,12 @@ export default async function DashboardPage() {
       },
       orderBy: { created_at: "desc" }
     }), []),
+    safe(prisma.notification.count({
+      where: {
+        user_id: currentUser.id,
+        read: false
+      }
+    }), 0),
   ]);
 
   // Parse Dashboard Settings (Goals, Promos, Products, Announcements, Worker Bonus Map)
@@ -345,6 +352,7 @@ export default async function DashboardPage() {
           type: c.type,
           createdAt: c.created_at.toISOString()
         }))}
+        unreadNotifications={unreadNotificationsCount}
         todayAppointmentsCount={todayAppointmentsCount}
         appointmentsTimeline={appointmentsTimeline}
         teamInTurno={teamInTurno}
