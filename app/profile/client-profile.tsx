@@ -179,15 +179,16 @@ export function ClientProfile({
           </div>
 
           {/* Right Side: Luxury Points Display */}
-          <div className="flex flex-col items-center md:items-end justify-center gap-1 border-t md:border-t-0 pt-6 md:pt-0 w-full md:w-auto shrink-0 md:pl-8 border-neutral-100">
-            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">SALDO PUNTI PREMIUM</span>
-            <span className="text-4xl md:text-5xl font-serif font-light text-neutral-900 mt-1">
+          <Link href="/points" className="flex flex-col items-center md:items-end justify-center gap-1 border-t md:border-t-0 pt-6 md:pt-0 w-full md:w-auto shrink-0 md:pl-8 border-neutral-100 group">
+            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400 group-hover:text-neutral-600 transition">SALDO PUNTI PREMIUM</span>
+            <span className="text-4xl md:text-5xl font-serif font-light text-neutral-900 mt-1 group-hover:underline decoration-neutral-300">
               {availablePoints} <span className="text-xs font-sans font-bold tracking-[0.2em] text-neutral-500 uppercase ml-1">Punti</span>
             </span>
-            <div className="text-[10px] font-bold text-neutral-400 tracking-wider uppercase mt-1">
-              Disponibili per il riscatto
+            <div className="text-[10px] font-bold text-neutral-400 tracking-wider uppercase mt-1 flex items-center gap-1 group-hover:text-neutral-600 transition">
+              <span>Disponibili per il riscatto</span>
+              <span className="underline font-black text-[9px] tracking-wide ml-1">DETTAGLIO</span>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Premium Underlined Navigation Tabs (Dior Style) */}

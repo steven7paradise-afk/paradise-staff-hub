@@ -627,12 +627,15 @@ export function DashboardRedesignClient({
                 <Gift size={14} className="text-neutral-400" />
               </div>
 
-              <div>
+               <div>
                 <div className="text-3xl font-serif font-light text-neutral-900">
                   {displayedAvailablePoints} <span className="text-[10px] font-sans font-bold tracking-wider text-emerald-700 uppercase">PUNTI DISPONIBILI</span>
                 </div>
-                <div className="text-[8px] font-bold uppercase tracking-widest text-neutral-400 mt-1">
-                  Traguardo personale & letture
+                <div className="flex items-center justify-between text-[8px] font-bold uppercase tracking-widest text-neutral-400 mt-1">
+                  <span>Traguardo personale & letture</span>
+                  <Link href="/points" className="text-neutral-950 font-black tracking-wider underline hover:text-neutral-600 transition">
+                    VEDI DETTAGLIO
+                  </Link>
                 </div>
               </div>
 
