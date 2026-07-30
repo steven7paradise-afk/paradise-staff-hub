@@ -174,6 +174,99 @@ export function DashboardRedesignClient({
   const [claimedBonusPoints, setClaimedBonusPoints] = useState(0);
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
+  const [currentStatus, setCurrentStatus] = useState<"IN_TURNO" | "IN_PAUSA" | "NON_IN_TURNO">("NON_IN_TURNO");
+  const [workedSeconds, setWorkedSeconds] = useState(0);
+  const [breakSeconds, setBreakSeconds] = useState(0);
+  const [lastLogTime, setLastLogTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!recentLogs || recentLogs.length === 0) {
+      setCurrentStatus("NON_IN_TURNO");
+      setWorkedSeconds(0);
+      setBreakSeconds(0);
+      return;
+    }
+
+    const sortedLogs = [...recentLogs].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const lastLog = sortedLogs[sortedLogs.length - 1];
+    let status: "IN_TURNO" | "IN_PAUSA" | "NON_IN_TURNO" = "NON_IN_TURNO";
+    if (lastLog.type === "ENTRATA" || lastLog.type === "RIENTRO") {
+      status = "IN_TURNO";
+    } else if (lastLog.type === "PAUSA") {
+      status = "IN_PAUSA";
+    } else if (lastLog.type === "USCITA") {
+      status = "NON_IN_TURNO";
+    }
+    setCurrentStatus(status);
+    setLastLogTime(lastLog.time || null);
+
+    let totalWorkedMs = 0;
+    let totalBreakMs = 0;
+    
+    let lastEntryTime: number | null = null;
+    let lastPauseTime: number | null = null;
+
+    for (let i = 0; i < sortedLogs.length; i++) {
+      const log = sortedLogs[i];
+      const logMs = new Date(log.timestamp).getTime();
+
+      if (log.type === "ENTRATA" || log.type === "RIENTRO") {
+        lastEntryTime = logMs;
+        if (lastPauseTime !== null) {
+          totalBreakMs += logMs - lastPauseTime;
+          lastPauseTime = null;
+        }
+      } else if (log.type === "PAUSA") {
+        lastPauseTime = logMs;
+        if (lastEntryTime !== null) {
+          totalWorkedMs += logMs - lastEntryTime;
+          lastEntryTime = null;
+        }
+      } else if (log.type === "USCITA") {
+        if (lastEntryTime !== null) {
+          totalWorkedMs += logMs - lastEntryTime;
+          lastEntryTime = null;
+        }
+      }
+    }
+
+    const updateTimes = () => {
+      const now = Date.now();
+      let currentWorkedSecs = Math.floor(totalWorkedMs / 1000);
+      let currentBreakSecs = Math.floor(totalBreakMs / 1000);
+
+      if (status === "IN_TURNO" && lastEntryTime !== null) {
+        currentWorkedSecs += Math.floor((now - lastEntryTime) / 1000);
+      } else if (status === "IN_PAUSA" && lastPauseTime !== null) {
+        currentBreakSecs += Math.floor((now - lastPauseTime) / 1000);
+      }
+
+      setWorkedSeconds(currentWorkedSecs);
+      setBreakSeconds(currentBreakSecs);
+    };
+
+    updateTimes();
+    const interval = setInterval(updateTimes, 1000);
+
+    return () => clearInterval(interval);
+  }, [recentLogs]);
+
+  const formatSeconds = (totalSecs: number) => {
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const formatSecondsHM = (totalSecs: number) => {
+    const hours = Math.floor(totalSecs / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  };
+
   // Sync unread communications state
   useEffect(() => {
     if (unreadCommunications) {
@@ -319,10 +412,28 @@ export function DashboardRedesignClient({
             </div>
 
             <div className="hidden sm:flex items-center gap-2 border-l border-neutral-200 pl-4 text-[10px] font-black uppercase tracking-[0.15em] text-neutral-500">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>IN TURNO</span>
-              <span className="text-neutral-300 font-normal">·</span>
-              <span className="font-mono text-neutral-700">{workedHoursFormatted || "00:00"}</span>
+              {currentStatus === "IN_TURNO" ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-emerald-700 font-black">IN TURNO</span>
+                  <span className="text-neutral-300 font-normal">·</span>
+                  <span className="font-mono text-neutral-800 font-bold">{formatSeconds(workedSeconds)}</span>
+                </>
+              ) : currentStatus === "IN_PAUSA" ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-amber-600 font-black">IN PAUSA</span>
+                  <span className="text-neutral-300 font-normal">·</span>
+                  <span className="font-mono text-amber-600 font-bold">{formatSeconds(breakSeconds)}</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-neutral-300" />
+                  <span className="text-neutral-400">FUORI TURNO</span>
+                  <span className="text-neutral-300 font-normal">·</span>
+                  <span className="font-mono text-neutral-500 font-bold">{formatSeconds(workedSeconds)}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -664,21 +775,45 @@ export function DashboardRedesignClient({
             </div>
 
             {/* BOX 4: ORE LAVORATE */}
-            <div className="p-6 space-y-4 flex flex-col justify-between bg-white text-left">
+            <div className={cn(
+              "p-6 space-y-4 flex flex-col justify-between text-left transition-all duration-300 rounded-[20px] border",
+              currentStatus === "IN_PAUSA"
+                ? "bg-amber-50/10 border-amber-200/80 shadow-xs"
+                : currentStatus === "IN_TURNO"
+                ? "bg-emerald-50/5 border-emerald-200/60 shadow-xs"
+                : "bg-white border-neutral-200"
+            )}>
               <div className="flex justify-between items-start">
                 <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-400">
-                  ORE PRESENZA OGGI
+                  {currentStatus === "IN_PAUSA" ? "TEMPO IN PAUSA OGGI" : "ORE PRESENZA OGGI"}
                 </span>
-                <Clock size={14} className="text-neutral-400" />
+                <Clock size={14} className={cn(
+                  "transition-colors duration-300",
+                  currentStatus === "IN_PAUSA" ? "text-amber-500" : currentStatus === "IN_TURNO" ? "text-emerald-500" : "text-neutral-400"
+                )} />
               </div>
 
-              <div className="text-3xl font-serif font-light text-neutral-900 flex items-center gap-2">
-                <span>{workedHoursFormatted || "00:00"}</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <div className={cn(
+                "text-3xl font-serif font-light flex items-center gap-2 transition-colors duration-300",
+                currentStatus === "IN_PAUSA" ? "text-amber-600" : currentStatus === "IN_TURNO" ? "text-emerald-700" : "text-neutral-900"
+              )}>
+                <span>
+                  {currentStatus === "IN_PAUSA" ? formatSeconds(breakSeconds) : formatSeconds(workedSeconds)}
+                </span>
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full animate-pulse transition-colors duration-300",
+                  currentStatus === "IN_PAUSA" ? "bg-amber-500" : currentStatus === "IN_TURNO" ? "bg-emerald-500" : "bg-neutral-300"
+                )} />
               </div>
 
               <p className="text-[8px] font-black uppercase tracking-[0.2em] text-neutral-400 border-t border-neutral-100 pt-2">
-                PAUSA {breakDurationMinutes} MINUTI REGISTRATI
+                {currentStatus === "IN_PAUSA" ? (
+                  `IN PAUSA DALLE ${lastLogTime || ""} · LAVORATO: ${formatSecondsHM(workedSeconds)}`
+                ) : currentStatus === "IN_TURNO" ? (
+                  `IN TURNO · PAUSA ACCUMULATA: ${Math.floor(breakSeconds / 60)} MIN`
+                ) : (
+                  "TURNO TERMINATO"
+                )}
               </p>
             </div>
 
