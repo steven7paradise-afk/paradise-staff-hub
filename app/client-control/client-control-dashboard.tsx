@@ -883,7 +883,44 @@ export function ClientControlDashboard({
                       <p className="font-black">{money(answers[CLIENT_CONTROL_FIELD_IDS.paid])}</p>
                       <p className="text-xs font-semibold text-black/40">Acconto {money(answers[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</p>
                     </td>
-                    <td className="px-5 py-4"><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">{checks}/5</span></td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-1.5 select-none">
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-black tracking-wide border",
+                            checks === 5 
+                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700" 
+                              : checks >= 3 
+                              ? "bg-amber-500/10 border-amber-500/20 text-amber-700" 
+                              : "bg-neutral-100 border-neutral-200 text-neutral-500"
+                          )}>
+                            {checks}/5
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {[
+                            { label: "N", active: truthy(answers[CLIENT_CONTROL_FIELD_IDS.notes]), title: "Note" },
+                            { label: "FP", active: truthy(answers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]), title: "Foto Prima" },
+                            { label: "FD", active: truthy(answers[CLIENT_CONTROL_FIELD_IDS.afterMedia]), title: "Foto Dopo" },
+                            { label: "PR", active: truthy(answers[CLIENT_CONTROL_FIELD_IDS.products]), title: "Prodotti" },
+                            { label: "RC", active: truthy(answers[CLIENT_CONTROL_FIELD_IDS.review]), title: "Recensione" },
+                          ].map((ind, i) => (
+                            <span
+                              key={i}
+                              title={ind.title}
+                              className={cn(
+                                "text-[8px] font-black px-1.5 py-0.5 rounded border tracking-wide transition-all",
+                                ind.active
+                                  ? "bg-emerald-500/15 border-emerald-500/20 text-emerald-700 font-extrabold"
+                                  : "bg-neutral-50 border-neutral-100 text-neutral-300 dark:border-white/5"
+                              )}
+                            >
+                              {ind.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-5 py-4">
                       <select
                         value={status}
