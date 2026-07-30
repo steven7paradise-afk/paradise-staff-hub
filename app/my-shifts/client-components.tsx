@@ -810,43 +810,92 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
                 type="button"
                 onClick={() => setSelectedDay(day)}
                 className={cn(
-                  "min-h-[112px] border-b border-r border-black/[0.04] bg-white p-3 text-left transition hover:z-10 hover:scale-[1.01] hover:shadow-soft focus:outline-none focus:ring-2 focus:ring-paradise-pink/45",
-                  !day.categoryColor && state === "rest" && "bg-neutral-50",
+                  "min-h-[120px] border-b border-r border-black/[0.04] bg-white p-3 text-left transition hover:z-10 hover:scale-[1.01] hover:shadow-soft focus:outline-none focus:ring-2 focus:ring-paradise-pink/45 flex flex-col justify-between",
+                  !day.categoryColor && state === "rest" && "bg-neutral-50/60",
                   !day.categoryColor && state === "empty" && "bg-white"
                 )}
                 style={{ backgroundColor: background, borderColor }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="grid size-8 place-items-center rounded-xl bg-white/80 text-sm font-black text-paradise-noir shadow-sm ring-1 ring-black/5">
-                    {day.dayNum}
-                  </span>
-                  {day.categoryColor ? (
-                    <span
-                      className="rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] shadow-sm ring-1 ring-black/5"
-                      style={{
-                        backgroundColor: day.categoryColor,
-                        color: day.categoryTextColor || "#111111",
-                      }}
-                    >
-                      {day.shiftName.slice(0, 10)}
+                <div>
+                  {/* Row 1: Day Number and Category Tag */}
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-sm font-serif font-light text-neutral-800">
+                      {day.dayNum}
                     </span>
-                  ) : null}
+                    {day.categoryColor ? (
+                      <span
+                        className="rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider"
+                        style={{
+                          backgroundColor: day.categoryColor,
+                          color: day.categoryTextColor || "#111111",
+                        }}
+                      >
+                        {day.shiftName.slice(0, 12)}
+                      </span>
+                    ) : (
+                      state === "rest" && (
+                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-neutral-400">
+                          Riposo
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  {/* Row 2: Shift Times (Planned vs Actual) */}
+                  <div className="mt-3.5 space-y-1 text-left min-w-0">
+                    {/* Planned time */}
+                    {day.plannedHours > 0 && (
+                      <div className="flex items-center gap-1.5 text-[9px] font-semibold text-neutral-400 uppercase tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+                        <span className="truncate">Prev: {day.shiftTime}</span>
+                      </div>
+                    )}
+
+                    {/* Actual / Worked times */}
+                    {day.workedHours > 0 && (day.firstEntry || day.lastExit) ? (
+                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-neutral-800 uppercase tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="truncate">Eff: {day.firstEntry || "—"} - {day.lastExit || "—"}</span>
+                      </div>
+                    ) : (
+                      day.workedHours > 0 && (
+                        <div className="flex items-center gap-1.5 text-[9px] font-bold text-neutral-800 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          <span>Eff: {compactHours(day.workedHours)}h</span>
+                        </div>
+                      )
+                    )}
+
+                    {/* Non scheduled day off */}
+                    {day.plannedHours === 0 && state === "rest" && (
+                      <div className="text-[10px] font-semibold text-neutral-400/80 uppercase tracking-wide">
+                        Nessun orario
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-3">
-                  <p className="truncate text-sm font-black text-paradise-noir">{day.shiftName}</p>
-                  <p className="mt-0.5 truncate text-[11px] font-bold text-black/45">{day.shiftTime}</p>
-                </div>
-                {(day.workedHours > 0 || day.plannedHours > 0) ? (
-                  <p className={cn("mt-3 inline-flex rounded-full bg-white/80 px-2 py-1 text-[10px] font-black shadow-sm ring-1 ring-black/[0.04]", Math.abs(diff) < 0.01 ? "text-emerald-600" : diff > 0 ? "text-sky-600" : "text-rose-600")}>
-                    {Math.abs(diff) < 0.01 ? "OK" : `${diff > 0 ? "+" : ""}${compactHours(diff)}h`}
-                  </p>
-                ) : null}
+
+                {/* Row 3: Hours Difference Badge */}
+                {(day.workedHours > 0 || day.plannedHours > 0) && (
+                  <div className="mt-2.5">
+                    <span className={cn(
+                      "inline-flex rounded px-1.5 py-0.5 text-[8px] font-black tracking-widest uppercase border",
+                      Math.abs(diff) < 0.01
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700"
+                        : diff > 0
+                        ? "bg-sky-500/10 border-sky-500/20 text-sky-700"
+                        : "bg-rose-500/10 border-rose-500/20 text-rose-700"
+                    )}>
+                      {Math.abs(diff) < 0.01 ? "OK" : `${diff > 0 ? "+" : ""}${compactHours(diff)}h`}
+                    </span>
+                  </div>
+                )}
               </button>
             );
           })}
         </div>
 
-        <div className="space-y-2 bg-white p-3 sm:hidden">
+        <div className="space-y-2.5 bg-white p-3 sm:hidden">
           {days.map((day) => {
             const state = getCalendarDayState(day);
             const diff = day.workedHours - day.plannedHours;
@@ -856,10 +905,10 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
                 ? `+${compactHours(diff)}h extra`
                 : `${compactHours(diff)}h mancanti`;
             const diffClass = Math.abs(diff) < 0.01
-              ? "bg-emerald-50 text-emerald-700"
+              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-700"
               : diff > 0
-                ? "bg-sky-50 text-sky-700"
-                : "bg-rose-50 text-rose-700";
+                ? "bg-sky-500/10 border border-sky-500/20 text-sky-700"
+                : "bg-rose-500/10 border border-rose-500/20 text-rose-700";
             const background = day.categoryColor ? alphaColor(day.categoryColor, "18") : undefined;
             const borderColor = day.categoryColor ? alphaColor(day.categoryColor, "55") : undefined;
 
@@ -869,36 +918,68 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
                 type="button"
                 onClick={() => setSelectedDay(day)}
                 className={cn(
-                  "w-full rounded-2xl border border-black/5 bg-white p-3 text-left shadow-sm transition active:scale-[0.99]",
-                  !day.categoryColor && state === "rest" && "bg-neutral-50"
+                  "w-full rounded-2xl border border-black/5 bg-white p-3.5 text-left shadow-2xs transition active:scale-[0.99] flex flex-col gap-2.5",
+                  !day.categoryColor && state === "rest" && "bg-neutral-50/60"
                 )}
                 style={{ backgroundColor: background, borderColor }}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white font-black text-paradise-noir shadow-sm ring-1 ring-black/5">
+                <div className="flex items-start justify-between gap-3 w-full">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-white font-serif text-[15px] font-light text-neutral-800 shadow-sm border border-neutral-100">
                       <span>{day.dayNum}</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">{day.dayName}</p>
-                      <div className="mt-1 flex min-w-0 items-center gap-2">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-400">{day.dayName}</p>
+                      <div className="mt-1 flex items-center gap-1.5">
                         {day.categoryColor ? (
-                          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: day.categoryColor }} />
-                        ) : null}
-                        <p className="truncate text-sm font-black text-paradise-noir">{day.shiftName}</p>
+                          <span
+                            className="rounded px-1 text-[8px] font-black uppercase tracking-wider"
+                            style={{
+                              backgroundColor: day.categoryColor,
+                              color: day.categoryTextColor || "#111111",
+                            }}
+                          >
+                            {day.shiftName}
+                          </span>
+                        ) : (
+                          <span className="rounded bg-neutral-100 px-1 text-[8px] font-black uppercase tracking-wider text-neutral-400">
+                            {state === "rest" ? "Riposo" : "Vuoto"}
+                          </span>
+                        )}
                       </div>
-                      <p className="mt-0.5 text-xs font-semibold text-black/45">{day.shiftTime}</p>
-                      {(day.workedHours > 0 || day.plannedHours > 0) ? (
-                        <p className="mt-1 text-[11px] font-bold text-black/35">
-                          Prev. {compactHours(day.plannedHours)}h · Lav. {compactHours(day.workedHours)}h
-                        </p>
-                      ) : null}
                     </div>
                   </div>
-                  <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black", diffClass)}>
-                    {day.workedHours > 0 || day.plannedHours > 0 ? diffLabel : "Vuoto"}
-                  </span>
+
+                  {(day.workedHours > 0 || day.plannedHours > 0) ? (
+                    <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-[9px] font-black uppercase tracking-wider", diffClass)}>
+                      {diffLabel}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-lg bg-neutral-100 text-neutral-400 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                      Vuoto
+                    </span>
+                  )}
                 </div>
+
+                {/* Mobile time breakdown list */}
+                {(day.plannedHours > 0 || day.workedHours > 0) && (
+                  <div className="pl-[52px] grid grid-cols-2 gap-2 text-left border-t border-neutral-100/50 pt-2 w-full">
+                    {day.plannedHours > 0 && (
+                      <div className="space-y-0.5">
+                        <span className="text-[8px] font-black uppercase tracking-wider text-neutral-400 block">Previsto</span>
+                        <span className="text-[10px] font-bold text-neutral-600 block">{day.shiftTime}</span>
+                      </div>
+                    )}
+                    {day.workedHours > 0 && (
+                      <div className="space-y-0.5">
+                        <span className="text-[8px] font-black uppercase tracking-wider text-neutral-400 block">Effettivo</span>
+                        <span className="text-[10px] font-black text-neutral-800 block">
+                          {day.firstEntry || "—"} - {day.lastExit || "—"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </button>
             );
           })}
