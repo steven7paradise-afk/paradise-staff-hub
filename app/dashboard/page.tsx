@@ -86,6 +86,7 @@ export default async function DashboardPage() {
     todayServiceResponses,
     clockRuleSetting,
     allEmployees,
+    unreadCommunications,
   ] = await Promise.all([
     safe(prisma.setting.findUnique({ where: { key: DASHBOARD_SETTINGS_KEY } }), null),
     safe(prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }), []),
@@ -123,6 +124,14 @@ export default async function DashboardPage() {
       where: { active: true, role: { not: "SUPER_ADMIN" } },
       orderBy: { name: "asc" },
       select: { id: true, name: true }
+    }), []),
+    safe(prisma.notification.findMany({
+      where: {
+        user_id: currentUser.id,
+        type: "COMUNICAZIONE",
+        read: false
+      },
+      orderBy: { created_at: "desc" }
     }), []),
   ]);
 
@@ -329,6 +338,13 @@ export default async function DashboardPage() {
         sideCard2={sideCard2}
         productOfMonth={productOfMonth}
         communications={communications}
+        unreadCommunications={unreadCommunications.map(c => ({
+          id: c.id,
+          title: c.title,
+          message: c.message,
+          type: c.type,
+          createdAt: c.created_at.toISOString()
+        }))}
         todayAppointmentsCount={todayAppointmentsCount}
         appointmentsTimeline={appointmentsTimeline}
         teamInTurno={teamInTurno}

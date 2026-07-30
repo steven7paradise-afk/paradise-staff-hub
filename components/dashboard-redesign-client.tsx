@@ -13,9 +13,16 @@ import {
   ExternalLink,
   Award,
   TrendingUp,
-  Gift
+  Gift,
+  Check,
+  Megaphone,
+  FileText,
+  Camera,
+  Star,
+  BookOpen
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { cn } from "@/lib/utils";
 
 type Promo = {
   id: string;
@@ -94,6 +101,13 @@ type Props = {
   sideCard2?: SideCard;
   productOfMonth?: ProductOfMonth;
   communications?: Communication[];
+  unreadCommunications?: Array<{
+    id: string;
+    title: string;
+    message: string;
+    type: string;
+    createdAt: string;
+  }>;
   todayAppointmentsCount?: { total: number; completed: number; pending: number };
   appointmentsTimeline?: AppointmentItem[];
   teamInTurno?: { id: string; name?: string | null; photo_url?: string | null }[];
@@ -136,6 +150,7 @@ export function DashboardRedesignClient({
     badge: "RETAIL",
   },
   communications = [],
+  unreadCommunications = [],
   todayAppointmentsCount = { total: 16, completed: 0, pending: 16 },
   appointmentsTimeline = [],
   teamInTurno = [],
@@ -153,10 +168,19 @@ export function DashboardRedesignClient({
   const userRole = currentUser?.role || "DIPENDENTE";
 
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>("");
+  const [activeComms, setActiveComms] = useState<any[]>([]);
+  const [claimedBonusPoints, setClaimedBonusPoints] = useState(0);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  // Sync unread communications state
+  useEffect(() => {
+    if (unreadCommunications) {
+      setActiveComms(unreadCommunications);
+    }
+  }, [unreadCommunications]);
 
   useEffect(() => {
     if (allWorkerPoints && allWorkerPoints.length > 0) {
-      // Check if current user matches a worker in allWorkerPoints
       const myMatch = allWorkerPoints.find((w) => 
         w.id === currentUser.id || 
         w.name.toLowerCase().includes(userName.toLowerCase()) || 
@@ -165,7 +189,6 @@ export function DashboardRedesignClient({
       if (myMatch) {
         setSelectedWorkerId(myMatch.id);
       } else {
-        // Default to Aurora Dassisti if present, or first worker
         const aurora = allWorkerPoints.find((w) => w.name.toLowerCase().includes("aurora"));
         setSelectedWorkerId(aurora ? aurora.id : allWorkerPoints[0].id);
       }
@@ -176,11 +199,13 @@ export function DashboardRedesignClient({
     id: currentUser.id,
     name: userName,
     points: currentWorkerPoints,
+    availablePoints: currentWorkerPoints,
+    manualBonusPoints: 0,
+    redeemedPoints: 0,
   };
 
   const activeWorkerPoints = selectedWorker ? selectedWorker.points : currentWorkerPoints;
   const activeWorkerPercent = Math.min(100, Math.round((activeWorkerPoints / Math.max(1, workerGoal)) * 100));
-  const activeWorkerRemaining = Math.max(0, workerGoal - activeWorkerPoints);
 
   // Filter valid active promos (not expired)
   const activePromos = (promos || []).filter((p) => p && p.active && (!p.expirationDate || p.expirationDate >= todayStr));
@@ -208,17 +233,26 @@ export function DashboardRedesignClient({
     active: true
   };
 
-  // Salon Points Calculation (% and remaining)
   const salonPercent = Math.min(100, Math.round((currentSalonPoints / Math.max(1, salonGoal)) * 100));
-  const salonRemaining = Math.max(0, salonGoal - currentSalonPoints);
-
-  // Worker Points Calculation (% and remaining)
-  const workerPercent = Math.min(100, Math.round((currentWorkerPoints / Math.max(1, workerGoal)) * 100));
-  const workerRemaining = Math.max(0, workerGoal - currentWorkerPoints);
-
   const isSuperAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
 
-  // Helper for title styling (split words to highlight red/pink if GLOW or -20%)
+  const handleClaimPoint = async (commId: string) => {
+    setClaimingId(commId);
+    try {
+      const res = await fetch(`/api/notifications/${commId}/claim-point`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        setClaimedBonusPoints((prev) => prev + 1);
+        setActiveComms((prev) => prev.filter((c) => c.id !== commId));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
   const renderTitle = (title: string) => {
     const parts = (title || "").split(" ");
     return parts.map((part, i) => {
@@ -239,21 +273,8 @@ export function DashboardRedesignClient({
     .slice(0, 2)
     .toUpperCase() || "PS";
 
-  const teamNamesStr = (teamInTurno || []).length > 0 
-    ? teamInTurno.slice(0, 3).map((w) => (w?.name || "Staff").split(" ")[0].toUpperCase()).join(" · ") + (teamInTurno.length > 3 ? ` +${teamInTurno.length - 3}` : "")
-    : "MIRIAM · GIUSEPPE · AURORA +22";
-
-  // Materiale Grafico Action Link
   const matUrl = activePromo?.materialeGraficoUrl || "/documents";
   const isMatExternal = matUrl.startsWith("http://") || matUrl.startsWith("https://");
-
-  const safeTimeline = (appointmentsTimeline && appointmentsTimeline.length > 0)
-    ? appointmentsTimeline
-    : [
-        { id: "app-1", time: "11:14", clientName: "ILARIA DEL MONACO", services: "CONTROLLO CLIENTE", status: "SCHEDULED" },
-        { id: "app-2", time: "14:30", clientName: "GIULIA MARINO", services: "TAGLIO + PIEGA • 45 MIN", status: "SCHEDULED" },
-        { id: "app-3", time: "15:30", clientName: "ELENA COSTA", services: "COLORE + CHERATINA", status: "SCHEDULED" },
-      ];
 
   const safeComms = (communications && communications.length > 0)
     ? communications
@@ -262,15 +283,19 @@ export function DashboardRedesignClient({
         { id: "comm-2", title: "Riunione staff venerdì 25", detail: "Ore 18:30 dopo chiusura. Presenza obbligatoria.", tag: "DIREZIONE • IERI" },
       ];
 
-  return (
-    <div className="bg-transparent min-h-screen text-[#111111] font-sans antialiased pb-12">
-      <div className="max-w-[1280px] mx-auto space-y-7">
+  const displayedAvailablePoints = (selectedWorker?.availablePoints ?? 0) + claimedBonusPoints;
+  const displayedManualBonus = (selectedWorker?.manualBonusPoints ?? 0) + claimedBonusPoints;
 
-        {/* TOP HEADER BAR (EXACT MOCKUP STYLE) */}
-        <div className="bg-transparent px-0 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+  const truthy = (val: any) => !!val;
+
+  return (
+    <div className="bg-transparent min-h-screen text-neutral-900 font-sans antialiased pb-16">
+      <div className="max-w-[1280px] mx-auto space-y-8">
+
+        {/* TOP HEADER BAR */}
+        <div className="bg-white border border-neutral-200 px-6 py-4 rounded-[20px] shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            {/* Avatar Initials Box */}
-            <div className="w-10 h-10 bg-black text-white font-extrabold text-xs tracking-wider flex items-center justify-center shrink-0">
+            <div className="w-11 h-11 rounded-full overflow-hidden border border-neutral-200 bg-neutral-50 flex items-center justify-center text-sm font-bold text-neutral-800 shadow-xs shrink-0">
               {currentUser?.photo_url ? (
                 <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={userName} className="w-full h-full object-cover" />
               ) : (
@@ -278,96 +303,123 @@ export function DashboardRedesignClient({
               )}
             </div>
 
-            {/* Name & Role */}
-            <div>
-              <h1 className="text-sm font-black text-black tracking-wider uppercase leading-none">
+            <div className="text-left">
+              <h1 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase leading-none">
                 {userName}
               </h1>
-              <p className="text-[10px] font-bold text-zinc-400 tracking-wider uppercase mt-1">
+              <p className="text-[9px] font-black text-neutral-400 tracking-[0.2em] uppercase mt-1">
                 {userRole === "DIPENDENTE" ? "HAIR STYLIST" : userRole.replace("_", " ")}
               </p>
             </div>
 
-            {/* Location Pill Badge */}
-            <div className="ml-2 inline-flex items-center gap-1.5 bg-[#dc2626] text-white px-3 py-1 text-[10px] font-black tracking-wider uppercase">
-              <span>◆</span>
+            <div className="ml-2 inline-flex items-center gap-1 bg-neutral-900 text-white px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase">
               <span>{currentUser?.locationName ? currentUser.locationName.toUpperCase() : "SALONE BUENOS AIRES"}</span>
             </div>
 
-            {/* In Turno Status */}
-            <div className="hidden sm:flex items-center gap-2 border-l border-zinc-200 pl-4 text-[11px] font-extrabold uppercase tracking-wider text-black">
+            <div className="hidden sm:flex items-center gap-2 border-l border-neutral-200 pl-4 text-[10px] font-black uppercase tracking-[0.15em] text-neutral-500">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>IN TURNO</span>
-              <span className="text-zinc-400 font-normal">·</span>
-              <span className="font-mono">{workedHoursFormatted || "00:00"}</span>
+              <span className="text-neutral-300 font-normal">·</span>
+              <span className="font-mono text-neutral-700">{workedHoursFormatted || "00:00"}</span>
             </div>
           </div>
 
-          {/* Right Header Controls */}
           <div className="flex items-center gap-3">
             {isSuperAdmin && (
               <Link 
                 href="/settings/dashboard"
-                className="text-[10px] font-black uppercase tracking-wider bg-black text-white px-3.5 py-2 hover:bg-zinc-800 transition flex items-center gap-1.5"
+                className="text-[9px] font-black uppercase tracking-[0.18em] bg-neutral-900 text-white px-4 py-2.5 rounded-full hover:bg-neutral-800 transition duration-200 flex items-center gap-1.5 shadow-2xs"
               >
-                <Settings size={13} />
-                <span>GESTITORE OBIETTIVI</span>
+                <Settings size={12} />
+                <span>Gestione Obiettivi</span>
               </Link>
             )}
 
-            <button className="p-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-600 transition">
-              <Bell size={16} />
-            </button>
+            <Link href="/notifications" className="p-2.5 border border-neutral-200 hover:bg-neutral-50 rounded-full text-neutral-500 transition duration-200 relative">
+              <Bell size={15} />
+              {unreadNotifications > 0 && (
+                <span className="absolute top-0.5 right-0.5 size-2 bg-red-600 rounded-full" />
+              )}
+            </Link>
           </div>
         </div>
 
+        {/* 📢 AVVISI E COMUNICAZIONI DA FIRMARE (AT THE VERY TOP) */}
+        {activeComms.length > 0 && (
+          <div className="space-y-3">
+            <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-400 block text-left">COMUNICAZIONI IMPORTANTI DA LEGGERE</span>
+            <div className="space-y-3">
+              {activeComms.map((comm) => (
+                <div 
+                  key={comm.id}
+                  className="bg-neutral-50 border border-neutral-200 p-5 md:p-6 rounded-[20px] shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 text-left animate-in fade-in duration-200"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-600 animate-ping" />
+                      <h4 className="text-xs font-black text-neutral-900 uppercase tracking-wider">{comm.title}</h4>
+                    </div>
+                    <p className="text-xs text-neutral-600 pl-4 font-normal leading-relaxed">{comm.message}</p>
+                    <p className="text-[8px] font-bold uppercase tracking-widest text-neutral-400 pl-4 mt-0.5">
+                      Inserito il {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(comm.createdAt))}
+                    </p>
+                  </div>
+
+                  <button
+                    disabled={claimingId === comm.id}
+                    onClick={() => handleClaimPoint(comm.id)}
+                    className="shrink-0 bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-[9px] tracking-[0.18em] uppercase px-5 py-3 rounded-xl shadow-2xs transition duration-200 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Check size={12} />
+                    <span>Ho compreso (+1 Punto)</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* SECTION 1: PROMO & CAMPAGNE ATTIVE */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-zinc-300 pb-2">
-            <h2 className="text-xs font-black uppercase tracking-[0.18em] text-black">
+          <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400 text-left">
               PROMO & CAMPAGNE ATTIVE
             </h2>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-              {activePromos.length} ATTIVE · DA PROPORRE IN CASSA
+            <span className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+              {activePromos.length} ATTIVE · IN CASSA
             </span>
           </div>
 
-          {/* Promo Layout Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Main Featured Promo Card (Black Box) */}
-            <div className="lg:col-span-2 bg-black text-white p-7 md:p-9 flex flex-col justify-between min-h-[290px] relative overflow-hidden">
-              {/* Subtle background circle decoration */}
-              <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-80 h-80 rounded-full border border-zinc-800/60 pointer-events-none" />
+            {/* Main Featured Promo Card */}
+            <div className="lg:col-span-2 bg-neutral-950 text-white p-8 md:p-10 rounded-[24px] flex flex-col justify-between min-h-[290px] relative overflow-hidden shadow-soft">
+              <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-80 h-80 rounded-full border border-neutral-800 pointer-events-none" />
 
-              <div className="space-y-4 relative z-10">
-                {/* Red dot header */}
-                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#dc2626]">
-                  <span className="w-2 h-2 rounded-full bg-[#dc2626]" />
+              <div className="space-y-4 relative z-10 text-left">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.25em] text-[#dc2626]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#dc2626]" />
                   <span>{activePromo.subtitle || "PROMO DELLA SETTIMANA"}</span>
                 </div>
 
-                {/* Big Bold Promo Title */}
-                <h3 className="text-2xl md:text-4xl font-black tracking-tight leading-none uppercase">
+                <h3 className="text-2xl md:text-3xl font-serif font-light tracking-wide leading-none uppercase">
                   {renderTitle(activePromo.title || "")}
                 </h3>
 
-                {/* Promo Description */}
-                <p className="text-xs md:text-sm text-zinc-300 max-w-xl leading-relaxed font-normal">
+                <p className="text-xs md:text-sm text-neutral-400 max-w-xl leading-relaxed font-normal">
                   {activePromo.description}
                 </p>
               </div>
 
-              {/* Buttons & Indicators Footer */}
-              <div className="pt-6 flex flex-wrap items-center justify-between gap-4 border-t border-zinc-800/80 relative z-10 mt-6">
+              <div className="pt-6 flex flex-wrap items-center justify-between gap-4 border-t border-neutral-800/80 relative z-10 mt-6">
                 <div className="flex flex-wrap items-center gap-3">
                   {activePromo.ctaUrl && (
                     <Link
                       href={activePromo.ctaUrl}
-                      className="bg-white hover:bg-zinc-100 text-black text-xs font-black uppercase tracking-wider px-5 py-3 flex items-center gap-2 transition"
+                      className="bg-white hover:bg-neutral-100 text-neutral-900 text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg flex items-center gap-1.5 transition"
                     >
-                      <Upload size={14} className="rotate-90" />
-                      <span>{activePromo.ctaText || "CONDIVIDI COL CLIENTE"}</span>
+                      <Upload size={13} className="rotate-90" />
+                      <span>{activePromo.ctaText || "CONDIVIDI"}</span>
                     </Link>
                   )}
 
@@ -376,22 +428,22 @@ export function DashboardRedesignClient({
                       href={matUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="border border-zinc-700 hover:border-zinc-500 text-white text-xs font-black uppercase tracking-wider px-5 py-3 transition flex items-center gap-1.5"
+                      className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg transition flex items-center gap-1.5"
                     >
                       <span>MATERIALE GRAFICO</span>
-                      <ExternalLink size={13} />
+                      <ExternalLink size={12} />
                     </a>
                   ) : (
                     <Link
                       href={matUrl}
-                      className="border border-zinc-700 hover:border-zinc-500 text-white text-xs font-black uppercase tracking-wider px-5 py-3 transition"
+                      className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg transition"
                     >
                       MATERIALE GRAFICO
                     </Link>
                   )}
 
                   {activePromo.badge && (
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-2">
+                    <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-[0.2em] ml-2">
                       {activePromo.badge}
                     </span>
                   )}
@@ -405,7 +457,7 @@ export function DashboardRedesignClient({
                         key={i}
                         onClick={() => setCurrentSlideIndex(i)}
                         className={`h-0.5 transition-all duration-300 ${
-                          i === currentSlideIndex ? "w-8 bg-white" : "w-3 bg-zinc-700"
+                          i === currentSlideIndex ? "w-6 bg-white" : "w-2 bg-neutral-700"
                         }`}
                       />
                     ))}
@@ -420,22 +472,22 @@ export function DashboardRedesignClient({
               {/* Card 1: Porta un'amica */}
               <Link 
                 href={sideCard1?.url || "/client-control"}
-                className="bg-white border border-zinc-200/80 p-6 flex flex-col justify-between flex-1 shadow-sm hover:border-zinc-400 transition"
+                className="bg-white border border-neutral-200 p-6 flex flex-col justify-between flex-1 rounded-[20px] shadow-2xs hover:border-neutral-400 transition duration-200 text-left"
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">
                       {sideCard1?.category || "PORTA UN'AMICA"}
                     </span>
-                    <h4 className="text-base font-black text-black tracking-tight uppercase mt-1">
+                    <h4 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase mt-1">
                       {sideCard1?.title || "PIEGA IN OMAGGIO"}
                     </h4>
                   </div>
-                  <span className="text-lg font-black text-[#dc2626]">
+                  <span className="text-sm font-black text-[#dc2626]">
                     {sideCard1?.badge || "x2"}
                   </span>
                 </div>
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400 mt-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-3 leading-relaxed">
                   {sideCard1?.description || "NUOVA CLIENTE PRESENTATA = PIEGA GRATIS"}
                 </p>
               </Link>
@@ -443,22 +495,22 @@ export function DashboardRedesignClient({
               {/* Card 2: Loyalty */}
               <Link 
                 href={sideCard2?.url || "/tables"}
-                className="bg-white border border-zinc-200/80 p-6 flex flex-col justify-between flex-1 shadow-sm hover:border-zinc-400 transition"
+                className="bg-white border border-neutral-200 p-6 flex flex-col justify-between flex-1 rounded-[20px] shadow-2xs hover:border-neutral-400 transition duration-200 text-left"
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">
                       {sideCard2?.category || "LOYALTY · PARADISE CARD"}
                     </span>
-                    <h4 className="text-base font-black text-black tracking-tight uppercase mt-1">
+                    <h4 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase mt-1">
                       {sideCard2?.title || "PUNTI DOPPI"}
                     </h4>
                   </div>
-                  <div className="text-[#dc2626] font-bold text-sm">
+                  <div className="text-[#dc2626] font-bold text-xs tracking-wider">
                     {sideCard2?.badge || "◆"}
                   </div>
                 </div>
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400 mt-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-3 leading-relaxed">
                   {sideCard2?.description || "SU TUTTI I PRODOTTI RETAIL FINO A DOMENICA"}
                 </p>
               </Link>
@@ -468,66 +520,69 @@ export function DashboardRedesignClient({
           </div>
         </div>
 
-        {/* SECTION 2: OGGI IN SALONE & CONNECTED ROW BAR */}
+        {/* SECTION 2: ORE & TARGETS */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-zinc-300 pb-2">
-            <h2 className="text-xs font-black uppercase tracking-[0.18em] text-black">
-              OGGI IN SALONE
+          <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400 text-left">
+              RENDICONTO & TRAGUARDI
             </h2>
           </div>
 
-          {/* 4 Connected KPI Boxes Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border border-zinc-300 bg-white shadow-sm divide-y md:divide-y-0 md:divide-x divide-zinc-200">
+          {/* Connected KPI Boxes Row */}
+          <div className={cn(
+            "grid border border-neutral-200 bg-white shadow-2xs divide-y md:divide-y-0 md:divide-x divide-neutral-200 rounded-[24px] overflow-hidden",
+            isSuperAdmin ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 md:grid-cols-3"
+          )}>
             
-            {/* BOX 1: OBIETTIVO SALONE (BLACK BOX) */}
-            <div className="bg-black text-white p-6 space-y-4 flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                    OBIETTIVO SALONE · {currentMonthName}
-                  </span>
-                  <Zap size={15} className="text-white" />
+            {/* BOX 1: OBIETTIVO SALONE (BLACK BOX) - ONLY visible for Admin */}
+            {isSuperAdmin && (
+              <div className="bg-neutral-955 text-white p-6 space-y-4 flex flex-col justify-between text-left">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-400">
+                      OBIETTIVO SALONE · {currentMonthName}
+                    </span>
+                    <Zap size={13} className="text-white" />
+                  </div>
+
+                  <div className="text-2xl font-serif font-light tracking-wide text-white mt-3">
+                    {currentSalonPoints} <span className="text-[10px] font-sans font-bold tracking-wider text-neutral-500 uppercase">/ {salonGoal} SCHEDE</span>
+                  </div>
                 </div>
 
-                <div className="text-2xl md:text-3xl font-black tracking-tight text-white mt-2">
-                  {currentSalonPoints} <span className="text-xs font-normal text-zinc-400">/ {salonGoal} SCHEDE</span>
+                <div className="space-y-2">
+                  <div className="w-full h-1 bg-neutral-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-neutral-400 transition-all duration-700" 
+                      style={{ width: `${salonPercent}%` }} 
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[8px] font-black tracking-widest uppercase">
+                    <span className="text-neutral-500">{salonPercent}% RAGGIUNTO</span>
+                    <span className={salonPercent >= 100 ? "text-white font-extrabold" : "text-amber-500"}>
+                      {salonPercent >= 100 ? "SBLOCCATO (+10P)" : "IN CORSO"}
+                    </span>
+                  </div>
                 </div>
               </div>
-
-              {/* Progress bar */}
-              <div className="space-y-2">
-                <div className="w-full h-1.5 bg-zinc-800">
-                  <div 
-                    className="h-full bg-[#dc2626] transition-all duration-700" 
-                    style={{ width: `${salonPercent}%` }} 
-                  />
-                </div>
-                <div className="flex justify-between items-center text-[9px] font-black tracking-widest uppercase">
-                  <span className="text-zinc-400">{salonPercent}% RAGGIUNTO</span>
-                  <span className={salonPercent >= 100 ? "text-emerald-400 font-extrabold" : "text-amber-400"}>
-                    {salonPercent >= 100 ? "🎉 +10 PUNTI GUADAGNATI!" : "+10 PUNTI AL TRAGUARDO"}
-                  </span>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* BOX 2: OBIETTIVO PERSONALE */}
-            <div className="p-6 space-y-4 flex flex-col justify-between bg-white">
+            <div className="p-6 space-y-4 flex flex-col justify-between bg-white text-left">
               <div>
                 <div className="flex justify-between items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                  <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-400">
                     OBIETTIVO PERSONALE
                   </span>
-                  <Award size={15} className="text-zinc-400 shrink-0" />
+                  <Award size={14} className="text-neutral-400 shrink-0" />
                 </div>
 
-                {/* For Super Admin / Admin: show worker selector dropdown. For normal staff: private personal view only */}
                 {isSuperAdmin && allWorkerPoints && allWorkerPoints.length > 0 ? (
                   <div className="mt-1.5">
                     <select
                       value={selectedWorkerId}
                       onChange={(e) => setSelectedWorkerId(e.target.value)}
-                      className="w-full text-[11px] font-black uppercase tracking-wider bg-zinc-50 border border-zinc-200 px-2 py-1 focus:outline-none focus:border-black cursor-pointer text-black"
+                      className="w-full text-[10px] font-black uppercase tracking-wider bg-neutral-50 border border-neutral-200 px-2 py-1 rounded focus:outline-none focus:border-black cursor-pointer text-black"
                     >
                       {allWorkerPoints.map((w) => (
                         <option key={w.id} value={w.id}>
@@ -537,123 +592,121 @@ export function DashboardRedesignClient({
                     </select>
                   </div>
                 ) : (
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-pink-500 font-extrabold mt-1">
-                    IL TUO OBIETTIVO ({userName.split(" ")[0].toUpperCase()})
+                  <div className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-500 mt-1">
+                    PERSONALE ({userName.split(" ")[0].toUpperCase()})
                   </div>
                 )}
 
-                <div className="text-2xl md:text-3xl font-black tracking-tight text-black mt-2">
-                  {activeWorkerPoints} <span className="text-xs font-normal text-zinc-400">/ {workerGoal} SCHEDE</span>
+                <div className="text-2xl font-serif font-light tracking-wide text-neutral-900 mt-3">
+                  {activeWorkerPoints} <span className="text-[10px] font-sans font-bold tracking-wider text-neutral-400 uppercase">/ {workerGoal} SCHEDE</span>
                 </div>
               </div>
 
-              {/* Personal Progress bar */}
               <div className="space-y-2">
-                <div className="w-full h-1.5 bg-zinc-200">
+                <div className="w-full h-1 bg-neutral-100 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-black transition-all duration-700" 
+                    className="h-full bg-neutral-900 transition-all duration-700" 
                     style={{ width: `${activeWorkerPercent}%` }} 
                   />
                 </div>
-                <div className="flex justify-between items-center text-[9px] font-black tracking-widest uppercase">
-                  <span className="text-zinc-400">{activeWorkerPercent}% PERSONALE</span>
-                  <span className={activeWorkerPercent >= 100 ? "text-emerald-600 font-extrabold" : "text-amber-600 font-bold"}>
-                    {activeWorkerPercent >= 100 ? "🎉 +10 PUNTI GUADAGNATI!" : "+10 PUNTI AL TRAGUARDO"}
+                <div className="flex justify-between items-center text-[8px] font-black tracking-widest uppercase">
+                  <span className="text-neutral-400">{activeWorkerPercent}% RAGGIUNTO</span>
+                  <span className={activeWorkerPercent >= 100 ? "text-neutral-900 font-extrabold" : "text-amber-700"}>
+                    {activeWorkerPercent >= 100 ? "🎉 COMPLETATO (+10P)" : "IN CORSO (+10P)"}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* BOX 3: SALDO PUNTI & RISCATTO PREMI */}
-            <div className="p-6 space-y-4 flex flex-col justify-between bg-white">
+            <div className="p-6 space-y-4 flex flex-col justify-between bg-white text-left">
               <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  SALDO PUNTI & PREMI
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-400">
+                  SALDO PUNTI PREMIUM
                 </span>
-                <Gift size={15} className="text-[#dc2626]" />
+                <Gift size={14} className="text-neutral-400" />
               </div>
 
               <div>
-                <div className="text-3xl md:text-4xl font-black text-black">
-                  {selectedWorker?.availablePoints ?? (activeWorkerPercent >= 100 ? 10 : 0)} <span className="text-xs font-black uppercase tracking-wider text-emerald-600">PUNTI DISPONIBILI</span>
+                <div className="text-3xl font-serif font-light text-neutral-900">
+                  {displayedAvailablePoints} <span className="text-[10px] font-sans font-bold tracking-wider text-emerald-700 uppercase">PUNTI DISPONIBILI</span>
                 </div>
-                <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 mt-1">
-                  TRAGUARDO SALONE (10P) + PERSONALE (10P)
+                <div className="text-[8px] font-bold uppercase tracking-widest text-neutral-400 mt-1">
+                  Traguardo personale & letture
                 </div>
               </div>
 
-              {/* Action Button: RISCATTA PREMIO */}
-              <div className="pt-2 border-t border-zinc-100 space-y-1.5">
-                {(selectedWorker?.availablePoints ?? (activeWorkerPercent >= 100 ? 10 : 0)) >= 10 ? (
+              <div className="pt-2 border-t border-neutral-100 space-y-2">
+                {displayedAvailablePoints >= 10 ? (
                   <Link
                     href="/requests"
-                    className="w-full bg-[#dc2626] hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wider py-2 px-3 flex items-center justify-center gap-1.5 transition shadow-sm"
+                    className="w-full bg-neutral-900 hover:bg-neutral-800 text-white text-[9px] font-black uppercase tracking-[0.18em] py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition shadow-2xs"
                   >
-                    <Gift size={13} />
-                    <span>RISCATTA PREMIO (10 PUNTI)</span>
+                    <Gift size={12} />
+                    <span>Riscatta Premio (10P)</span>
                   </Link>
                 ) : (
-                  <div className="text-[9px] font-extrabold uppercase text-zinc-400 text-center py-1 bg-zinc-50 border border-zinc-100">
-                    RAGGIUNGI 10 PUNTI PER RISCATTARE IL PREMIO
+                  <div className="text-[8px] font-black uppercase text-neutral-400 text-center py-1.5 bg-neutral-50 border border-neutral-200 rounded">
+                    Mancano {10 - displayedAvailablePoints} punti al riscatto
                   </div>
                 )}
 
-                <div className="flex justify-between text-[9px] font-bold text-zinc-500 uppercase pt-0.5">
-                  <span>RISCATTATI: {selectedWorker?.redeemedPoints ?? 0}P</span>
-                  <span>BONUS EXTRA ADMIN: +{selectedWorker?.manualBonusPoints ?? 0}P</span>
+                <div className="flex justify-between text-[8px] font-black tracking-wider text-neutral-400 uppercase pt-0.5">
+                  <span>Riscattati: {selectedWorker?.redeemedPoints ?? 0}P</span>
+                  <span>Extra Admin: +{displayedManualBonus}P</span>
                 </div>
               </div>
             </div>
 
             {/* BOX 4: ORE LAVORATE */}
-            <div className="p-6 space-y-4 flex flex-col justify-between bg-white">
+            <div className="p-6 space-y-4 flex flex-col justify-between bg-white text-left">
               <div className="flex justify-between items-start">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  ORE LAVORATE OGGI
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-400">
+                  ORE PRESENZA OGGI
                 </span>
-                <Clock size={15} className="text-zinc-400" />
+                <Clock size={14} className="text-neutral-400" />
               </div>
 
-              <div className="text-3xl md:text-4xl font-black text-black flex items-center gap-2">
+              <div className="text-3xl font-serif font-light text-neutral-900 flex items-center gap-2">
                 <span>{workedHoursFormatted || "00:00"}</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-[#dc2626]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </div>
 
-              <p className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
-                PAUSA {breakDurationMinutes} / 60 MIN
+              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-neutral-400 border-t border-neutral-100 pt-2">
+                PAUSA {breakDurationMinutes} MINUTI REGISTRATI
               </p>
             </div>
 
           </div>
         </div>
 
-        {/* SECTION 3: BOTTOM 3-COLUMN GRID */}
+        {/* SECTION 3: BOTTOM GRID */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Column 1: COMUNICAZIONI DIREZIONE */}
-          <div className="bg-white border border-zinc-200/80 p-6 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
-              <h3 className="text-xs font-black uppercase tracking-[0.18em] text-black">
-                COMUNICAZIONI DIREZIONE
+          <div className="bg-white border border-neutral-200 p-6 space-y-5 rounded-[24px] shadow-2xs text-left">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <h3 className="text-xs font-serif font-light text-neutral-900 tracking-wide uppercase">
+                Bacheca Direzione
               </h3>
-              <Link href="/notifications" className="text-[10px] font-black uppercase tracking-wider text-[#dc2626] hover:underline">
-                VEDI TUTTO
+              <Link href="/notifications" className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500 hover:text-neutral-900 transition">
+                Vedi Tutto
               </Link>
             </div>
 
             <div className="space-y-4 pt-1">
               {safeComms.slice(0, 3).map((comm, idx) => (
-                <div key={comm.id || idx} className="space-y-1 border-b border-zinc-100 pb-3 last:border-0">
+                <div key={comm.id || idx} className="space-y-1.5 border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#dc2626] shrink-0" />
-                    <h4 className="text-xs font-black text-black uppercase tracking-wide">
+                    <Megaphone size={12} className="text-neutral-400 shrink-0" />
+                    <h4 className="text-xs font-bold text-neutral-900 uppercase tracking-wide">
                       {comm.title}
                     </h4>
                   </div>
-                  <p className="text-xs text-zinc-500 pl-4 font-normal leading-relaxed">
+                  <p className="text-xs text-neutral-500 pl-5 font-normal leading-relaxed">
                     {comm.detail}
                   </p>
-                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400 pl-4 pt-0.5">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-neutral-400 pl-5">
                     {comm.tag}
                   </p>
                 </div>
@@ -661,39 +714,33 @@ export function DashboardRedesignClient({
             </div>
           </div>
 
-          {/* Column 2: PROSSIMO CLIENTE */}
-          <div className="bg-white border border-zinc-200/80 p-6 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
-              <h3 className="text-xs font-black uppercase tracking-[0.18em] text-black">
-                PROSSIMO CLIENTE
+          {/* Column 2: SCHEMA PUNTI & REGOLAMENTO (REPLACED PROSSIMO CLIENTE) */}
+          <div className="bg-white border border-neutral-200 p-6 space-y-5 rounded-[24px] shadow-2xs text-left">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <h3 className="text-xs font-serif font-light text-neutral-900 tracking-wide uppercase">
+                Schema Punti & Regolamento
               </h3>
-              <Link href="/appointments" className="text-[10px] font-black uppercase tracking-wider text-[#dc2626] hover:underline">
-                AGENDA
-              </Link>
+              <BookOpen size={14} className="text-neutral-400" />
             </div>
 
-            <div className="space-y-3 pt-1">
-              {safeTimeline.map((item, idx) => (
-                <div 
-                  key={item.id || idx}
-                  className={`p-4 flex items-center justify-between transition ${
-                    idx === 0 
-                      ? "bg-black text-white" 
-                      : "bg-white border border-zinc-200 text-black"
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <span className={`text-sm font-black tracking-wider ${idx === 0 ? "text-white" : "text-black"}`}>
-                      {item.time}
-                    </span>
-                    <div>
-                      <div className={`text-xs font-black uppercase tracking-wide ${idx === 0 ? "text-white" : "text-black"}`}>
-                        {item.clientName}
-                      </div>
-                      <div className={`text-[9px] font-bold uppercase tracking-wider ${idx === 0 ? "text-zinc-400" : "text-zinc-400"}`}>
-                        {item.services}
-                      </div>
+            <div className="space-y-3.5 pt-1 text-xs">
+              {[
+                { title: "Foto Cliente Prima/Dopo", desc: "Carica 1 foto frontale prima e dopo il servizio per documentazione.", pts: "+1 Punto", icon: Camera },
+                { title: "Controllo Note e Qualità", desc: "Compila accuratamente le note per ogni cliente su Controllo Cliente.", pts: "Qualità", icon: FileText },
+                { title: "Obiettivo Personale", desc: "Raggiungi il tuo target mensile di schede compilate.", pts: "+10 Punti", icon: Award },
+                { title: "Obiettivo Salone (Admin)", desc: "Collabora per raggiungere il target cumulativo del salone.", pts: "+10 Punti", icon: Zap },
+                { title: "Lettura Avvisi Importanti", desc: "Leggi e firma gli avvisi in cima per dichiarare la comprensione.", pts: "+1 Punto", icon: Bell },
+              ].map((rule, idx) => (
+                <div key={idx} className="flex items-start gap-3 border-b border-neutral-100 pb-2.5 last:border-0 last:pb-0">
+                  <div className="w-6 h-6 rounded-lg bg-neutral-50 border border-neutral-200 flex items-center justify-center text-neutral-600 shrink-0 mt-0.5">
+                    <rule.icon size={12} />
+                  </div>
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center justify-between font-bold text-neutral-900">
+                      <span>{rule.title}</span>
+                      <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider font-mono">{rule.pts}</span>
                     </div>
+                    <p className="text-[11px] text-neutral-400 leading-normal">{rule.desc}</p>
                   </div>
                 </div>
               ))}
@@ -701,42 +748,41 @@ export function DashboardRedesignClient({
           </div>
 
           {/* Column 3: PRODOTTO DEL MESE */}
-          <div className="bg-white border border-zinc-200/80 p-6 space-y-4 shadow-sm flex flex-col justify-between">
+          <div className="bg-white border border-neutral-200 p-6 space-y-5 rounded-[24px] shadow-2xs flex flex-col justify-between text-left">
             <div>
-              <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
-                <h3 className="text-xs font-black uppercase tracking-[0.18em] text-black">
-                  PRODOTTO DEL MESE
+              <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+                <h3 className="text-xs font-serif font-light text-neutral-900 tracking-wide uppercase">
+                  Prodotto Del Mese
                 </h3>
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#dc2626]">
+                <span className="text-[9px] font-black uppercase tracking-widest text-[#dc2626] bg-[#dc2626]/10 px-2 py-0.5 rounded-full border border-[#dc2626]/20">
                   {productOfMonth?.badge || "RETAIL"}
                 </span>
               </div>
 
-              {/* Product Placeholder Image Box */}
-              <div className="mt-4 border border-zinc-200 h-32 bg-zinc-50 flex items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 opacity-10 bg-[linear-gradient(45deg,#000_25%,transparent_25%,transparent_50%,#000_50%,#000_75%,transparent_75%,transparent)] bg-[length:16px_16px]" />
-                <div className="w-8 h-16 border-2 border-zinc-300 rounded-b-lg relative z-10 flex items-center justify-center">
-                  <span className="text-zinc-300 text-[10px] font-black">P</span>
+              {/* Minimal product box */}
+              <div className="mt-4 border border-neutral-200 h-32 bg-neutral-50 flex items-center justify-center relative overflow-hidden rounded-xl">
+                <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(45deg,#000_25%,transparent_25%,transparent_50%,#000_50%,#000_75%,transparent_75%,transparent)] bg-[length:16px_16px]" />
+                <div className="w-8 h-16 border border-neutral-300 rounded-b-lg relative z-10 flex items-center justify-center">
+                  <span className="text-neutral-400 text-[10px] font-black">P</span>
                 </div>
               </div>
 
-              {/* Product Details */}
-              <div className="mt-4 text-center space-y-2">
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#dc2626]">
+              <div className="mt-4 text-center space-y-1">
+                <span className="text-[8px] font-black uppercase tracking-widest text-[#dc2626] block">
                   ◆ {productOfMonth?.subtitle || "CONSIGLIATO · UPSELL"}
                 </span>
-                <h4 className="text-sm font-black uppercase text-black tracking-wider">
+                <h4 className="text-sm font-serif font-light uppercase text-neutral-900 tracking-wider">
                   {productOfMonth?.title || "PRO-GLOW SERUM"}
                 </h4>
-                <p className="text-xs text-zinc-500 font-normal leading-relaxed">
+                <p className="text-[11px] text-neutral-400 font-medium leading-relaxed max-w-xs mx-auto">
                   {productOfMonth?.description || "Siero termoprotettivo. Perfetto da abbinare a ogni cheratina."}
                 </p>
 
-                <div className="pt-2 flex items-center justify-center gap-3 text-xs font-black">
+                <div className="pt-2 flex items-center justify-center gap-3 text-xs font-bold text-neutral-800">
                   {(productOfMonth?.originalPrice || 0) > 0 && (
-                    <span className="text-zinc-400 line-through">€{productOfMonth?.originalPrice}</span>
+                    <span className="text-neutral-400 line-through">€{productOfMonth?.originalPrice}</span>
                   )}
-                  <span className="text-black text-sm">€{productOfMonth?.discountPrice || 26}</span>
+                  <span className="text-neutral-900 text-sm font-mono">€{productOfMonth?.discountPrice || 26}</span>
                 </div>
               </div>
             </div>
@@ -745,8 +791,8 @@ export function DashboardRedesignClient({
         </div>
 
         {/* BOTTOM FOOTER BRANDING LINE */}
-        <div className="pt-6 text-center text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
-          PARADISE — STAFF HUB — PROMO EDITION · CONCEPT DI REDESIGN
+        <div className="pt-8 text-center text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">
+          PARADISE — STAFF HUB — DIOR EDITORIAL REDESIGN
         </div>
 
       </div>
