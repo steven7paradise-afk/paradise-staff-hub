@@ -381,6 +381,9 @@ export function DashboardRedesignClient({
   const displayedAvailablePoints = (selectedWorker?.availablePoints ?? 0) + claimedBonusPoints;
   const displayedManualBonus = (selectedWorker?.manualBonusPoints ?? 0) + claimedBonusPoints;
 
+  const isCard1Empty = !sideCard1 || !sideCard1.title || sideCard1.title.trim() === "." || sideCard1.title.trim() === "";
+  const isCard2Empty = !sideCard2 || !sideCard2.title || sideCard2.title.trim() === "." || sideCard2.title.trim() === "";
+
   const truthy = (val: any) => !!val;
 
   return (
@@ -503,10 +506,16 @@ export function DashboardRedesignClient({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className={cn(
+            "grid grid-cols-1 gap-6",
+            (isCard1Empty && isCard2Empty) ? "lg:grid-cols-1" : "lg:grid-cols-3"
+          )}>
             
             {/* Main Featured Promo Card */}
-            <div className="lg:col-span-2 bg-neutral-950 text-white p-8 md:p-10 rounded-[24px] flex flex-col justify-between min-h-[290px] relative overflow-hidden shadow-soft">
+            <div className={cn(
+              "bg-neutral-950 text-white p-8 md:p-10 rounded-[24px] flex flex-col justify-between min-h-[290px] relative overflow-hidden shadow-soft",
+              (isCard1Empty && isCard2Empty) ? "lg:col-span-1" : "lg:col-span-2"
+            )}>
               <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-80 h-80 rounded-full border border-neutral-800 pointer-events-none" />
 
               <div className="space-y-4 relative z-10 text-left">
@@ -580,55 +589,61 @@ export function DashboardRedesignClient({
             </div>
 
             {/* Right Side Stacked Cards */}
-            <div className="space-y-4 flex flex-col justify-between">
-              
-              {/* Card 1: Porta un'amica */}
-              <Link 
-                href={sideCard1?.url || "/client-control"}
-                className="bg-white border border-neutral-200 p-6 flex flex-col justify-between flex-1 rounded-[20px] shadow-2xs hover:border-neutral-400 transition duration-200 text-left"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">
-                      {sideCard1?.category || "PORTA UN'AMICA"}
-                    </span>
-                    <h4 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase mt-1">
-                      {sideCard1?.title || "PIEGA IN OMAGGIO"}
-                    </h4>
-                  </div>
-                  <span className="text-sm font-black text-[#dc2626]">
-                    {sideCard1?.badge || "x2"}
-                  </span>
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-3 leading-relaxed">
-                  {sideCard1?.description || "NUOVA CLIENTE PRESENTATA = PIEGA GRATIS"}
-                </p>
-              </Link>
+            {(!isCard1Empty || !isCard2Empty) && (
+              <div className="space-y-4 flex flex-col justify-between">
+                
+                {/* Card 1: Porta un'amica */}
+                {!isCard1Empty && (
+                  <Link 
+                    href={sideCard1?.url || "/client-control"}
+                    className="bg-white border border-neutral-200 p-6 flex flex-col justify-between flex-1 rounded-[20px] shadow-2xs hover:border-neutral-400 transition duration-200 text-left"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">
+                          {sideCard1?.category || "PORTA UN'AMICA"}
+                        </span>
+                        <h4 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase mt-1">
+                          {sideCard1?.title || "PIEGA IN OMAGGIO"}
+                        </h4>
+                      </div>
+                      <span className="text-sm font-black text-[#dc2626]">
+                        {sideCard1?.badge || "x2"}
+                      </span>
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-3 leading-relaxed">
+                      {sideCard1?.description || "NUOVA CLIENTE PRESENTATA = PIEGA GRATIS"}
+                    </p>
+                  </Link>
+                )}
 
-              {/* Card 2: Loyalty */}
-              <Link 
-                href={sideCard2?.url || "/tables"}
-                className="bg-white border border-neutral-200 p-6 flex flex-col justify-between flex-1 rounded-[20px] shadow-2xs hover:border-neutral-400 transition duration-200 text-left"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">
-                      {sideCard2?.category || "LOYALTY · PARADISE CARD"}
-                    </span>
-                    <h4 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase mt-1">
-                      {sideCard2?.title || "PUNTI DOPPI"}
-                    </h4>
-                  </div>
-                  <div className="text-[#dc2626] font-bold text-xs tracking-wider">
-                    {sideCard2?.badge || "◆"}
-                  </div>
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-3 leading-relaxed">
-                  {sideCard2?.description || "SU TUTTI I PRODOTTI RETAIL FINO A DOMENICA"}
-                </p>
-              </Link>
+                {/* Card 2: Loyalty */}
+                {!isCard2Empty && (
+                  <Link 
+                    href={sideCard2?.url || "/tables"}
+                    className="bg-white border border-neutral-200 p-6 flex flex-col justify-between flex-1 rounded-[20px] shadow-2xs hover:border-neutral-400 transition duration-200 text-left"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">
+                          {sideCard2?.category || "LOYALTY · PARADISE CARD"}
+                        </span>
+                        <h4 className="text-base font-serif font-light text-neutral-900 tracking-wide uppercase mt-1">
+                          {sideCard2?.title || "PUNTI DOPPI"}
+                        </h4>
+                      </div>
+                      <div className="text-[#dc2626] font-bold text-xs tracking-wider">
+                        {sideCard2?.badge || "◆"}
+                      </div>
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mt-3 leading-relaxed">
+                      {sideCard2?.description || "SU TUTTI I PRODOTTI RETAIL FINO A DOMENICA"}
+                    </p>
+                  </Link>
+                )}
 
-            </div>
+              </div>
+            )}
 
           </div>
         </div>
