@@ -375,6 +375,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
+            sidebarConfig={sidebarConfig}
             logoutButton={
               <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white px-4 py-3 text-xs font-black uppercase tracking-wider transition-all duration-200" />
             }
