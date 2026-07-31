@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
-import { canAccess, type Role } from "@/lib/roles";
+import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
 import { pinLookup } from "@/lib/pin";
 
 export const authConfig = {
@@ -106,15 +106,17 @@ export const authConfig = {
       try {
         const dbUser = await prisma.user.findUnique({
           where: { id: auth.user.id },
-          select: { role: true, mansione: true }
+          select: { id: true, role: true, mansione: true }
         });
 
         if (!dbUser) return false;
+        const permissions = await getEffectivePermissionSet(prisma, dbUser);
 
         return canAccess(
           pathname, 
           dbUser.role as Role, 
-          dbUser.mansione || undefined
+          dbUser.mansione || undefined,
+          permissions
         );
       } catch (err) {
         console.error("Auth dynamic check error:", err);

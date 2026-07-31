@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Check, ChevronDown, LockKeyhole, Loader2, Search, ShieldCheck, ShieldOff, Users } from "lucide-react";
+import { Check, ChevronDown, LockKeyhole, Loader2, Plus, Search, ShieldCheck, ShieldOff, Trash2, UserCheck, Users } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
-import { roleLabels, routePermissions, type Role } from "@/lib/roles";
+import { defaultEditRolesForPath, roleLabels, routePermissions, type MansionePermissionMap, type PermissionSet, type Role, type RolePermissionMap } from "@/lib/roles";
 
 type UserType = {
   id: string;
@@ -23,6 +23,8 @@ type RolesSettingsClientProps = {
     role: Role | string;
     name?: string | null;
   };
+  initialRolePermissions: RolePermissionMap;
+  initialMansionePermissions: MansionePermissionMap;
 };
 
 type RouteMeta = {
@@ -83,14 +85,6 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/settings/sidebar": { name: "Sidebar", description: "Organizzazione menu laterale.", group: "Impostazioni" },
 };
 
-function getEditRoles(path: string): Role[] {
-  if (path === "/social-calendar") return ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-  if (path === "/orders" || path === "/recruitment") return ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
-  if (path === "/settings/tables" || path === "/settings/planning" || path === "/settings/forms") return ["SUPER_ADMIN", "ADMIN"];
-  if (path.startsWith("/settings")) return ["SUPER_ADMIN"];
-  return ["SUPER_ADMIN", "ADMIN"];
-}
-
 function routeTitle(path: string) {
   return ROUTE_META[path]?.name || path.split("/").filter(Boolean).join(" / ") || "Home";
 }
@@ -119,29 +113,81 @@ function employeeInitials(name: string) {
     .join("") || "P";
 }
 
-export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesSettingsClientProps) {
+function emptyPermissionSet(): PermissionSet {
+  return { view: [], edit: [] };
+}
+
+function rolesForRoute(rolePermissions: RolePermissionMap, path: string, kind: keyof PermissionSet) {
+  return ROLES.filter((role) => rolePermissions[role]?.[kind]?.includes(path));
+}
+
+function groupedByArea<T extends { group: string }>(items: T[]) {
+  return items.reduce<Record<string, T[]>>((acc, item) => {
+    if (!acc[item.group]) acc[item.group] = [];
+    acc[item.group].push(item);
+    return acc;
+  }, {});
+}
+
+function permissionHas(permission: PermissionSet, path: string, kind: keyof PermissionSet) {
+  return permission[kind].includes(path);
+}
+
+function nextPermissionSet(current: PermissionSet, path: string, kind: keyof PermissionSet, checked: boolean): PermissionSet {
+  let view = [...current.view];
+  let edit = [...current.edit];
+
+  if (kind === "view") {
+    view = checked ? Array.from(new Set([...view, path])) : view.filter((route) => route !== path);
+    if (!checked) edit = edit.filter((route) => route !== path);
+  } else {
+    edit = checked ? Array.from(new Set([...edit, path])) : edit.filter((route) => route !== path);
+    if (checked) view = Array.from(new Set([...view, path]));
+  }
+
+  return { view, edit };
+}
+
+export function RolesSettingsClient({
+  users: initialUsers,
+  currentUser,
+  initialRolePermissions,
+  initialMansionePermissions,
+}: RolesSettingsClientProps) {
   const [users, setUsers] = useState(initialUsers);
-  const [activeTab, setActiveTab] = useState<"matrix" | "staff">("matrix");
+  const [rolePermissions, setRolePermissions] = useState<RolePermissionMap>(initialRolePermissions);
+  const [mansionePermissions, setMansionePermissions] = useState<MansionePermissionMap>(initialMansionePermissions);
+  const [activeTab, setActiveTab] = useState<"roles" | "mansioni" | "staff">("roles");
   const [selectedRole, setSelectedRole] = useState<Role | "ALL">("ALL");
+  const [selectedMansione, setSelectedMansione] = useState<string>("");
+  const [newMansioneName, setNewMansioneName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [savingPermissions, setSavingPermissions] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const isAdmin = currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
+  const allRoutes = useMemo(() => Object.keys(routePermissions), []);
+
+  const mansioneNames = useMemo(() => {
+    const fromUsers = users.map((user) => user.mansione?.trim().toLowerCase()).filter((name): name is string => Boolean(name));
+    return Array.from(new Set([...Object.keys(mansionePermissions), ...fromUsers])).sort((a, b) => a.localeCompare(b));
+  }, [mansionePermissions, users]);
 
   const pages = useMemo(() => {
-    return Object.entries(routePermissions)
-      .map(([path, viewRoles]) => ({
+    return allRoutes
+      .map((path) => ({
         path,
         name: routeTitle(path),
         description: routeDescription(path),
         group: routeGroup(path),
-        viewRoles,
-        editRoles: getEditRoles(path),
+        viewRoles: rolesForRoute(rolePermissions, path, "view"),
+        editRoles: rolesForRoute(rolePermissions, path, "edit"),
+        defaultEditRoles: defaultEditRolesForPath(path),
       }))
       .sort((a, b) => `${a.group}-${a.name}`.localeCompare(`${b.group}-${b.name}`));
-  }, []);
+  }, [allRoutes, rolePermissions]);
 
   const filteredPages = selectedRole === "ALL"
     ? pages
@@ -150,8 +196,8 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
   const roleStats = ROLES.map((role) => ({
     role,
     users: users.filter((user) => user.role === role).length,
-    visible: pages.filter((page) => page.viewRoles.includes(role)).length,
-    editable: pages.filter((page) => page.editRoles.includes(role)).length,
+    visible: rolePermissions[role]?.view.length ?? 0,
+    editable: rolePermissions[role]?.edit.length ?? 0,
   }));
 
   const filteredUsers = users.filter((user) => {
@@ -166,25 +212,92 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
     );
   });
 
-  const groupedPages = filteredPages.reduce<Record<string, typeof filteredPages>>((acc, page) => {
-    if (!acc[page.group]) acc[page.group] = [];
-    acc[page.group].push(page);
-    return acc;
-  }, {});
+  const groupedPages = groupedByArea(filteredPages);
+  const activeMansione = selectedMansione || mansioneNames[0] || "";
+  const activeMansionePermission = activeMansione ? mansionePermissions[activeMansione] || emptyPermissionSet() : emptyPermissionSet();
 
   const showMessage = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
     window.setTimeout(() => setMessage(null), 3500);
   };
 
-  const handleRoleChange = async (userId: string, role: Role) => {
-    if (!isAdmin) {
-      showMessage("error", "Solo Admin e Super Admin possono modificare i ruoli.");
-      return;
+  const savePermissionMaps = async (nextRoles: RolePermissionMap, nextMansioni: MansionePermissionMap) => {
+    if (!isSuperAdmin) {
+      showMessage("error", "Solo Super Admin puo modificare la matrice permessi.");
+      return false;
     }
 
-    if (role === "SUPER_ADMIN" && !isSuperAdmin) {
-      showMessage("error", "Solo un Super Admin puo assegnare il ruolo Super Admin.");
+    setSavingPermissions(true);
+    try {
+      const res = await fetch("/api/settings/roles/permissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rolePermissions: nextRoles, mansionePermissions: nextMansioni }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile salvare i permessi.");
+
+      setRolePermissions(data.rolePermissions);
+      setMansionePermissions(data.mansionePermissions);
+      showMessage("success", "Matrice permessi salvata.");
+      return true;
+    } catch (err: any) {
+      showMessage("error", err.message || "Errore durante il salvataggio.");
+      return false;
+    } finally {
+      setSavingPermissions(false);
+    }
+  };
+
+  const handleToggleRolePermission = async (role: Role, path: string, kind: keyof PermissionSet, checked: boolean) => {
+    if (role === "SUPER_ADMIN") return;
+    const nextRoles = {
+      ...rolePermissions,
+      [role]: nextPermissionSet(rolePermissions[role] || emptyPermissionSet(), path, kind, checked),
+    };
+    setRolePermissions(nextRoles);
+    await savePermissionMaps(nextRoles, mansionePermissions);
+  };
+
+  const handleToggleMansionePermission = async (mansione: string, path: string, kind: keyof PermissionSet, checked: boolean) => {
+    const clean = mansione.trim().toLowerCase();
+    if (!clean) return;
+    const nextMansioni = {
+      ...mansionePermissions,
+      [clean]: nextPermissionSet(mansionePermissions[clean] || emptyPermissionSet(), path, kind, checked),
+    };
+    setMansionePermissions(nextMansioni);
+    await savePermissionMaps(rolePermissions, nextMansioni);
+  };
+
+  const handleCreateMansione = async () => {
+    const clean = newMansioneName.trim().toLowerCase();
+    if (!clean) return;
+    if (mansionePermissions[clean]) {
+      setSelectedMansione(clean);
+      setNewMansioneName("");
+      return;
+    }
+    const nextMansioni = { ...mansionePermissions, [clean]: emptyPermissionSet() };
+    setMansionePermissions(nextMansioni);
+    setSelectedMansione(clean);
+    setNewMansioneName("");
+    await savePermissionMaps(rolePermissions, nextMansioni);
+  };
+
+  const handleDeleteMansione = async (mansione: string) => {
+    const clean = mansione.trim().toLowerCase();
+    if (!clean || !confirm(`Eliminare la matrice permessi per "${clean}"?`)) return;
+    const nextMansioni = { ...mansionePermissions };
+    delete nextMansioni[clean];
+    setMansionePermissions(nextMansioni);
+    setSelectedMansione("");
+    await savePermissionMaps(rolePermissions, nextMansioni);
+  };
+
+  const handleRoleChange = async (userId: string, role: Role) => {
+    if (!isSuperAdmin) {
+      showMessage("error", "Solo Super Admin puo modificare i ruoli di sistema.");
       return;
     }
 
@@ -198,11 +311,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Impossibile aggiornare il ruolo.");
 
-      setUsers((current) =>
-        current.map((user) =>
-          user.id === userId ? { ...user, role, access_list: null } as any : user
-        )
-      );
+      setUsers((current) => current.map((user) => user.id === userId ? { ...user, role } : user));
       showMessage("success", `Ruolo aggiornato: ${data.user.name} ora e ${roleLabels[role]}.`);
     } catch (err: any) {
       showMessage("error", err.message || "Errore durante il salvataggio.");
@@ -210,6 +319,84 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
       setUpdatingUserId(null);
     }
   };
+
+  const handleMansioneChange = async (userId: string, mansione: string) => {
+    if (!isAdmin) {
+      showMessage("error", "Solo Admin e Super Admin possono modificare le mansioni.");
+      return;
+    }
+
+    setUpdatingUserId(userId);
+    try {
+      const cleanMansione = mansione.trim().toLowerCase();
+      const res = await fetch("/api/settings/roles/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, mansione: cleanMansione || null, accessList: null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile aggiornare la mansione.");
+
+      setUsers((current) => current.map((user) => user.id === userId ? { ...user, mansione: cleanMansione || null } : user));
+      showMessage("success", `Mansione aggiornata per ${data.user.name}.`);
+    } catch (err: any) {
+      showMessage("error", err.message || "Errore durante il salvataggio.");
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+  const renderRoleToggles = (path: string, kind: keyof PermissionSet) => (
+    <div className="flex flex-wrap gap-1.5">
+      {ROLES.map((role) => {
+        const checked = rolePermissions[role]?.[kind]?.includes(path) ?? false;
+        const locked = role === "SUPER_ADMIN" || !isSuperAdmin || savingPermissions;
+        return (
+          <label
+            key={`${path}-${kind}-${role}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
+              checked ? "border-[#C66170]/35 bg-pink-50 text-[#B85B68]" : "border-slate-200 bg-slate-50 text-slate-400"
+            } ${locked ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={locked}
+              onChange={(event) => handleToggleRolePermission(role, path, kind, event.target.checked)}
+              className="size-3 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170]"
+            />
+            {roleLabels[role]}
+          </label>
+        );
+      })}
+    </div>
+  );
+
+  const renderMansioneToggles = (path: string, permission: PermissionSet) => (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {(["view", "edit"] as const).map((kind) => {
+        const checked = permissionHas(permission, path, kind);
+        const disabled = !isSuperAdmin || savingPermissions || !activeMansione;
+        return (
+          <label
+            key={`${activeMansione}-${path}-${kind}`}
+            className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black uppercase tracking-wider ${
+              checked ? "border-[#C66170]/35 bg-pink-50 text-[#B85B68]" : "border-slate-200 bg-slate-50 text-slate-500"
+            } ${disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
+          >
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={disabled}
+              onChange={(event) => handleToggleMansionePermission(activeMansione, path, kind, event.target.checked)}
+              className="size-3.5 rounded border-slate-300 text-[#C66170] focus:ring-[#C66170]"
+            />
+            {kind === "view" ? "Vede" : "Modifica"}
+          </label>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -228,7 +415,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
             type="button"
             onClick={() => {
               setSelectedRole(stat.role);
-              setActiveTab("matrix");
+              setActiveTab("roles");
             }}
             className={`rounded-[28px] border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
               selectedRole === stat.role ? "border-[#C66170] ring-4 ring-pink-100" : "border-black/5"
@@ -254,29 +441,29 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-2xl bg-slate-100 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab("matrix")}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-              activeTab === "matrix" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <ShieldCheck className="size-4" />
-            Matrice ruoli
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("staff")}
-            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-              activeTab === "staff" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <Users className="size-4" />
-            Staff e ruoli
-          </button>
+          {[
+            { id: "roles", label: "Ruoli sistema", icon: ShieldCheck },
+            { id: "mansioni", label: "Mansioni operative", icon: UserCheck },
+            { id: "staff", label: "Staff", icon: Users },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+                  activeTab === tab.id ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Icon className="size-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
-        {activeTab === "matrix" ? (
+        {activeTab === "roles" ? (
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -300,7 +487,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
               </button>
             ))}
           </div>
-        ) : (
+        ) : activeTab === "staff" ? (
           <div className="flex min-w-[280px] items-center gap-2 rounded-2xl border border-black/5 bg-white px-3 py-2">
             <Search className="size-4 text-slate-400" />
             <input
@@ -310,10 +497,17 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
               className="w-full bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
             />
           </div>
-        )}
+        ) : null}
       </div>
 
-      {activeTab === "matrix" ? (
+      {savingPermissions ? (
+        <div className="inline-flex items-center gap-2 rounded-full bg-pink-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-[#B85B68]">
+          <Loader2 className="size-4 animate-spin" />
+          Salvataggio permessi
+        </div>
+      ) : null}
+
+      {activeTab === "roles" ? (
         <div className="space-y-5">
           {Object.entries(groupedPages).map(([group, groupPages]) => (
             <Card key={group} className="overflow-hidden border-white/80 bg-white p-0">
@@ -327,9 +521,9 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
 
               <div className="divide-y divide-black/5">
                 {groupPages.map((page) => (
-                  <div key={page.path} className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(260px,1.2fr)_1fr_1fr] lg:items-center">
+                  <div key={page.path} className="grid gap-4 px-5 py-4 xl:grid-cols-[minmax(240px,1fr)_1.25fr_1.25fr] xl:items-start">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-black text-slate-950">{page.name}</p>
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-500">{page.path}</span>
                       </div>
@@ -341,11 +535,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                         <Check className="size-3.5" />
                         Vede
                       </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {page.viewRoles.map((role) => (
-                          <Badge key={role} tone={roleTone(role)}>{roleLabels[role]}</Badge>
-                        ))}
-                      </div>
+                      {renderRoleToggles(page.path, "view")}
                     </div>
 
                     <div>
@@ -353,16 +543,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                         <LockKeyhole className="size-3.5" />
                         Modifica
                       </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {page.editRoles.length > 0 ? page.editRoles.map((role) => (
-                          <Badge key={role} tone={roleTone(role)}>{roleLabels[role]}</Badge>
-                        )) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">
-                            <ShieldOff className="size-3" />
-                            Nessuno
-                          </span>
-                        )}
-                      </div>
+                      {renderRoleToggles(page.path, "edit")}
                     </div>
                   </div>
                 ))}
@@ -370,19 +551,115 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
             </Card>
           ))}
         </div>
+      ) : activeTab === "mansioni" ? (
+        <div className="grid gap-6 xl:grid-cols-[320px_1fr]">
+          <Card className="border-white/80 bg-white p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#C66170]">Mansioni</p>
+            <h3 className="mt-1 text-xl font-black text-slate-950">Profili operativi</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Usa questi profili per Parrucchiera, Assistenza, Sarta, Social o altre mansioni. Si applicano ai collaboratori non Admin.
+            </p>
+
+            <div className="mt-5 flex gap-2">
+              <input
+                value={newMansioneName}
+                onChange={(event) => setNewMansioneName(event.target.value)}
+                placeholder="Nuova mansione..."
+                className="h-11 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-[#C66170] focus:ring-4 focus:ring-pink-100"
+              />
+              <button
+                type="button"
+                onClick={handleCreateMansione}
+                disabled={!isSuperAdmin || savingPermissions}
+                className="grid size-11 place-items-center rounded-2xl bg-[#C66170] text-white transition hover:bg-[#A74758] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="size-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-2">
+              {mansioneNames.length === 0 ? (
+                <p className="rounded-2xl bg-slate-50 px-4 py-5 text-center text-sm font-bold text-slate-400">
+                  Nessuna mansione configurata.
+                </p>
+              ) : null}
+              {mansioneNames.map((mansione) => {
+                const active = activeMansione === mansione;
+                const permission = mansionePermissions[mansione] || emptyPermissionSet();
+                return (
+                  <button
+                    key={mansione}
+                    type="button"
+                    onClick={() => setSelectedMansione(mansione)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                      active ? "border-[#C66170] bg-pink-50" : "border-black/5 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <p className="text-sm font-black capitalize text-slate-950">{mansione}</p>
+                    <p className="mt-1 text-xs font-bold text-slate-500">{permission.view.length} vede · {permission.edit.length} modifica</p>
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden border-white/80 bg-white p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#C66170]">Permessi mansione</p>
+                <h3 className="mt-1 text-xl font-black capitalize text-slate-950">{activeMansione || "Seleziona mansione"}</h3>
+              </div>
+              {activeMansione ? (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteMansione(activeMansione)}
+                  disabled={!isSuperAdmin || savingPermissions}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-2 text-xs font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 className="size-4" />
+                  Elimina
+                </button>
+              ) : null}
+            </div>
+
+            {activeMansione ? (
+              <div className="divide-y divide-black/5">
+                {pages.map((page) => (
+                  <div key={page.path} className="grid gap-4 px-5 py-4 lg:grid-cols-[1fr_260px] lg:items-center">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-black text-slate-950">{page.name}</p>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-500">{page.path}</span>
+                      </div>
+                      <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">{page.description}</p>
+                    </div>
+                    {renderMansioneToggles(page.path, activeMansionePermission)}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid min-h-[280px] place-items-center p-10 text-center">
+                <div>
+                  <ShieldOff className="mx-auto size-8 text-slate-300" />
+                  <p className="mt-3 text-sm font-bold text-slate-400">Crea o seleziona una mansione.</p>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
       ) : (
         <Card className="overflow-hidden border-white/80 bg-white p-0">
           <div className="border-b border-black/5 px-5 py-4">
             <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#C66170]">Ruoli staff</p>
-            <h3 className="mt-1 text-xl font-black text-slate-950">Cambia il ruolo, non i permessi singoli</h3>
+            <h3 className="mt-1 text-xl font-black text-slate-950">Assegna ruolo e mansione</h3>
             <p className="mt-1 text-sm text-slate-500">
-              I permessi vengono applicati automaticamente dalla matrice ruoli. Quando cambi ruolo, il menu e le pagine si aggiornano da soli.
+              Il ruolo sistema decide la base. La mansione operativa puo specializzare i collaboratori non Admin.
             </p>
           </div>
 
           <div className="divide-y divide-black/5">
             {filteredUsers.map((user) => (
-              <div key={user.id} className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(260px,1fr)_1fr_auto] md:items-center">
+              <div key={user.id} className="grid gap-4 px-5 py-4 xl:grid-cols-[minmax(260px,1fr)_1fr_auto_auto] xl:items-center">
                 <div className="flex min-w-0 items-center gap-3">
                   {user.photo_url ? (
                     <img src={resolveDrivePhotoUrl(user.photo_url)} alt={user.name} className="size-12 rounded-2xl object-cover ring-1 ring-black/5" />
@@ -400,7 +677,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge tone={roleTone(user.role)}>{roleLabels[user.role]}</Badge>
                   <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-600">{user.location?.name || "Sede non assegnata"}</span>
-                  {user.mansione ? <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-600">{user.mansione}</span> : null}
+                  {user.mansione ? <span className="rounded-full bg-slate-100 px-3 py-1 font-bold capitalize text-slate-600">{user.mansione}</span> : null}
                 </div>
 
                 <div className="relative">
@@ -413,7 +690,7 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                     <>
                       <select
                         value={user.role}
-                        disabled={!isAdmin}
+                        disabled={!isSuperAdmin}
                         onChange={(event) => handleRoleChange(user.id, event.target.value as Role)}
                         className="h-11 min-w-[210px] appearance-none rounded-2xl border border-black/10 bg-white px-4 pr-10 text-sm font-black text-slate-900 outline-none transition focus:border-[#C66170] focus:ring-4 focus:ring-pink-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                       >
@@ -426,6 +703,21 @@ export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesS
                       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
                     </>
                   )}
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={user.mansione || ""}
+                    disabled={!isAdmin || updatingUserId === user.id}
+                    onChange={(event) => handleMansioneChange(user.id, event.target.value)}
+                    className="h-11 min-w-[220px] appearance-none rounded-2xl border border-black/10 bg-white px-4 pr-10 text-sm font-black capitalize text-slate-900 outline-none transition focus:border-[#C66170] focus:ring-4 focus:ring-pink-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="">Nessuna mansione</option>
+                    {mansioneNames.map((mansione) => (
+                      <option key={mansione} value={mansione}>{mansione}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
                 </div>
               </div>
             ))}

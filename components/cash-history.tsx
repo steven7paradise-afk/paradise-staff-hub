@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FileDown, Trash2, Calendar, Search, Loader2 } from "lucide-react";
+import { CheckCircle2, FileDown, Trash2, Calendar, Search, Loader2, ExternalLink } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 type CashLocation = {
@@ -40,6 +40,8 @@ export function CashHistory({
         withdrawals: val.withdrawals || 0,
         notes: val.notes || "",
         daily_breakdown: val.daily_breakdown || [],
+        transaction_breakdown: val.transaction_breakdown || [],
+        pdf_drive: val.pdf_drive || null,
         closed_at: val.closed_at,
         closed_by_name: val.closed_by_name || "Admin",
       };
@@ -177,7 +179,8 @@ export function CashHistory({
                               wc.bank_deposit,
                               wc.withdrawals,
                               wc.notes,
-                              wc.daily_breakdown
+                              wc.daily_breakdown,
+                              wc.transaction_breakdown
                             )
                           }
                           title="Scarica PDF Chiusura"
@@ -185,6 +188,17 @@ export function CashHistory({
                         >
                           <FileDown className="size-4" />
                         </button>
+                        {wc.pdf_drive?.webViewLink ? (
+                          <a
+                            href={wc.pdf_drive.webViewLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Apri PDF su Drive"
+                            className="grid size-8 place-items-center rounded-xl bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100"
+                          >
+                            <ExternalLink className="size-3.5" />
+                          </a>
+                        ) : null}
                         {!isResponsible ? (
                           <button
                             type="button"
@@ -221,7 +235,8 @@ function generateHistoryClosePdf(
   bankDeposit: number,
   withdrawals: number,
   notes: string,
-  breakdown: any[]
+  breakdown: any[],
+  transactions: any[] = []
 ) {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -272,7 +287,7 @@ function generateHistoryClosePdf(
 
   // Table of days
   doc.setFont("helvetica", "bold");
-  doc.text("DETTAGLIO GIORNALIERO DICHIARATO:", 15, 80);
+  doc.text("CHIUSURE CASSA DEL PERIODO:", 15, 80);
 
   // Table header
   doc.setFillColor(240, 240, 240);
@@ -304,6 +319,41 @@ function generateHistoryClosePdf(
     doc.line(15, y + 2.5, 195, y + 2.5);
     y += 8;
   });
+
+  if (transactions.length > 0) {
+    y += 7;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(50, 50, 50);
+    doc.text("TRANSAZIONI / PRELIEVI DEL PERIODO:", 15, y);
+    y += 5;
+
+    doc.setFillColor(250, 247, 249);
+    doc.rect(15, y, 180, 8, "F");
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    doc.text("Data", 18, y + 5.5);
+    doc.text("Motivo", 48, y + 5.5);
+    doc.text("Operatore", 125, y + 5.5);
+    doc.text("Importo", 180, y + 5.5, { align: "right" });
+    y += 13;
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(30, 30, 30);
+    transactions.forEach((item: any) => {
+      if (y > 250) {
+        doc.addPage();
+        y = 20;
+      }
+      const amount = Number(item.amount || 0);
+      doc.text(String(item.date || "-"), 18, y);
+      doc.text(doc.splitTextToSize(String(item.reason || "Motivo non indicato"), 72)[0] || "-", 48, y);
+      doc.text(doc.splitTextToSize(String(item.operator || "Operatore"), 34)[0] || "-", 125, y);
+      doc.text(`-${amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" })}`, 180, y, { align: "right" });
+      doc.setDrawColor(245, 245, 245);
+      doc.line(15, y + 2.5, 195, y + 2.5);
+      y += 8;
+    });
+  }
 
   // Total block
   y += 5;

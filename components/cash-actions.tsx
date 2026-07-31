@@ -23,6 +23,23 @@ function todayInputValue() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+function monthIsStillOpen(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return false;
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date() < new Date(year, monthNumber, 1);
+}
+
+function monthDisplayLabel(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return month;
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(new Date(year, monthNumber - 1, 1));
+}
+
+function money(value: unknown) {
+  const amount = Number(String(value ?? "0").replace(",", "."));
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 const fieldClass = "mt-1 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-[#111017] shadow-inner outline-none [color-scheme:light] placeholder:text-black/35 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/15";
 const textAreaClass = "mt-1 min-h-28 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm font-semibold text-[#111017] shadow-inner outline-none [color-scheme:light] placeholder:text-black/35 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/15";
 
@@ -183,12 +200,17 @@ export function CashActions({
   }
 
   async function closeMonth() {
-    if (!confirm(`Vuoi chiudere il mese ${month}? Dopo la chiusura resta nello storico e puoi iniziare un nuovo conteggio.`)) return;
+    const label = monthDisplayLabel(month);
+    const confirmEarly = monthIsStillOpen(month);
+    const message = confirmEarly
+      ? `ATTENZIONE: il mese ${label} non è ancora finito. Sei sicuro di voler fare la chiusura mensile adesso?`
+      : `Vuoi chiudere il mese ${label}? Dopo la chiusura resta nello storico e puoi iniziare un nuovo conteggio.`;
+    if (!confirm(message)) return;
     setClosing(true);
     const response = await fetch("/api/cash/close-month", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month }),
+      body: JSON.stringify({ month, confirmEarly }),
     });
     setClosing(false);
     if (!response.ok) {
@@ -582,6 +604,22 @@ export function CashActions({
                   return dB - dA;
                 });
 
+                const weeklyVaultWithdrawals = vaultWithdrawals
+                  .filter((vw: any) => {
+                    const locId = vw.user_location_id || vw.location?.id;
+                    if (locId !== selectedWeekCloseLocationId) return false;
+                    const rawDate = vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || vw.date || vw.created_at;
+                    const vwDate = typeof rawDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+                      ? new Date(rawDate + "T00:00:00")
+                      : new Date(rawDate);
+                    return vwDate >= startRange && vwDate <= endRange;
+                  })
+                  .sort((a: any, b: any) => {
+                    const aDate = new Date(a.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || a.date || a.created_at).getTime();
+                    const bDate = new Date(b.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || b.date || b.created_at).getTime();
+                    return bDate - aDate;
+                  });
+
                 const totalWithdrawnWeek = sortedClosings.reduce(
                   (sum, c) => sum + Number(c.answers?.cash_withdrawn || 0),
                   0
@@ -638,9 +676,9 @@ export function CashActions({
                     )}
 
                     <div>
-                      <h3 className="text-xs font-black uppercase tracking-wider text-black/40 mb-2">Dettaglio Giornaliero Dichiarato</h3>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-black/40 mb-2">Chiusure cassa del periodo</h3>
                       {sortedClosings.length === 0 ? (
-                        <p className="text-xs text-black/45 italic py-2">Nessuna chiusura giornaliera registrata in questo periodo.</p>
+                        <p className="text-xs text-black/45 italic py-2">Nessuna chiusura cassa registrata in questo periodo.</p>
                       ) : (
                         <div className="overflow-hidden border border-black/5 rounded-xl bg-[#FAF7F9]">
                           <table className="w-full text-left border-collapse">
@@ -669,6 +707,51 @@ export function CashActions({
                                 <td colSpan={2} className="px-4 py-2">Totale Dichiarato Settimana</td>
                                 <td className="px-4 py-2 text-right text-[#A74758]">
                                   {totalDeclaredWeek.toLocaleString("it-IT", { style: "currency", currency: "EUR" })}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-black/40 mb-2">Transazioni / prelievi del periodo</h3>
+                      {weeklyVaultWithdrawals.length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-black/10 bg-[#FAF7F9] px-4 py-3 text-xs font-semibold text-black/40">
+                          Nessun prelievo o spesa registrata per questo salone nel periodo selezionato.
+                        </p>
+                      ) : (
+                        <div className="overflow-hidden rounded-xl border border-black/5 bg-white">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-black/5 text-[10px] font-black uppercase text-black/45">
+                                <th className="px-4 py-2">Data</th>
+                                <th className="px-4 py-2">Motivo</th>
+                                <th className="px-4 py-2">Operatore</th>
+                                <th className="px-4 py-2 text-right">Importo</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-black/5 text-xs">
+                              {weeklyVaultWithdrawals.map((vw: any) => {
+                                const rawDate = vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || vw.date || vw.created_at;
+                                const dateStr = new Date(rawDate).toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" });
+                                const amount = money(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.amount] || vw.amount);
+                                const reason = String(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.reason] || vw.reason || "Motivo non indicato");
+                                const operator = vw.answers?._signature?.user_name || vw.user?.name || "Operatore";
+                                return (
+                                  <tr key={vw.id}>
+                                    <td className="px-4 py-2 font-bold capitalize">{dateStr}</td>
+                                    <td className="px-4 py-2 text-black/65">{reason}</td>
+                                    <td className="px-4 py-2 text-black/50">{operator}</td>
+                                    <td className="px-4 py-2 text-right font-black text-amber-700">-{amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" })}</td>
+                                  </tr>
+                                );
+                              })}
+                              <tr className="bg-black/5 font-black">
+                                <td colSpan={3} className="px-4 py-2">Totale transazioni / prelievi</td>
+                                <td className="px-4 py-2 text-right text-amber-700">
+                                  -{weeklyVaultWithdrawals.reduce((sum: number, vw: any) => sum + money(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.amount] || vw.amount), 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}
                                 </td>
                               </tr>
                             </tbody>
@@ -768,7 +851,8 @@ export function CashActions({
                                 calculatedDeposit,
                                 calculatedPrelievi,
                                 weekCloseNotes,
-                                sortedClosings
+                                sortedClosings,
+                                weeklyVaultWithdrawals
                               );
                             }}
                             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-black text-black transition hover:bg-black/5"
@@ -792,6 +876,12 @@ export function CashActions({
                                 amount: Number(c.answers?.cash_withdrawn || 0),
                                 operator: c.answers?._signature?.user_name || c.user?.name || "Lavoratore"
                               }));
+                              const transactionBreakdown = weeklyVaultWithdrawals.map((vw: any) => ({
+                                date: new Date(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || vw.date || vw.created_at).toLocaleDateString("it-IT"),
+                                amount: money(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.amount] || vw.amount),
+                                reason: String(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.reason] || vw.reason || "Motivo non indicato"),
+                                operator: vw.answers?._signature?.user_name || vw.user?.name || "Operatore",
+                              }));
                               const response = await fetch("/api/cash/close-week", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -801,7 +891,8 @@ export function CashActions({
                                   bankDeposit: calculatedDeposit,
                                   withdrawals: calculatedPrelievi,
                                   notes: weekCloseNotes,
-                                  dailyBreakdown: breakdown
+                                  dailyBreakdown: breakdown,
+                                  transactionBreakdown
                                 })
                               });
                               setSavingWeekClose(false);
@@ -809,7 +900,7 @@ export function CashActions({
                                 alert("Errore durante il salvataggio della chiusura.");
                                 return;
                               }
-                              generateWeeklyClosePdf(
+                              const doc = generateWeeklyClosePdf(
                                 locationName,
                                 currentTargetWeekKey || "",
                                 "Chiusura",
@@ -817,8 +908,30 @@ export function CashActions({
                                 calculatedDeposit,
                                 calculatedPrelievi,
                                 weekCloseNotes,
-                                sortedClosings
+                                sortedClosings,
+                                weeklyVaultWithdrawals
                               );
+                              if (doc) {
+                                try {
+                                  const uploadResponse = await fetch("/api/cash/weekly-close-pdf", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      locationId: selectedWeekCloseLocationId,
+                                      weekKey: currentTargetWeekKey,
+                                      locationName,
+                                      monthLabel: monthDisplayLabel(month),
+                                      pdfBase64: doc.output("datauristring"),
+                                    }),
+                                  });
+                                  if (!uploadResponse.ok) {
+                                    const uploadData = await uploadResponse.json().catch(() => ({}));
+                                    alert(uploadData.error || "Chiusura salvata, ma caricamento PDF su Drive non riuscito.");
+                                  }
+                                } catch (err) {
+                                  alert("Chiusura salvata, ma caricamento PDF su Drive non riuscito.");
+                                }
+                              }
                               setWeekCloseModalOpen(false);
                               setBankDeposit("");
                               setWithdrawalsAmt("");
@@ -846,7 +959,8 @@ export function CashActions({
                               locationClose.bank_deposit || 0,
                               locationClose.withdrawals || 0,
                               locationClose.notes || "",
-                              sortedClosings
+                              sortedClosings,
+                              weeklyVaultWithdrawals
                             );
                           }}
                           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#A74758] px-4 text-sm font-black text-white hover:bg-[#8f3c4b]"
@@ -903,7 +1017,8 @@ function generateWeeklyClosePdf(
   bankDeposit: number,
   withdrawals: number,
   notes: string,
-  closings: any[]
+  closings: any[],
+  vaults: any[] = []
 ) {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -954,7 +1069,7 @@ function generateWeeklyClosePdf(
 
   // Table of days
   doc.setFont("helvetica", "bold");
-  doc.text("DETTAGLIO GIORNALIERO DICHIARATO:", 15, 80);
+  doc.text("CHIUSURE CASSA DEL PERIODO:", 15, 80);
 
   // Table header
   doc.setFillColor(240, 240, 240);
@@ -986,6 +1101,46 @@ function generateWeeklyClosePdf(
     doc.line(15, y + 2.5, 195, y + 2.5);
     y += 8;
   });
+
+  if (vaults.length > 0) {
+    y += 7;
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(50, 50, 50);
+    doc.text("TRANSAZIONI / PRELIEVI DEL PERIODO:", 15, y);
+    y += 5;
+
+    doc.setFillColor(250, 247, 249);
+    doc.rect(15, y, 180, 8, "F");
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    doc.text("Data", 18, y + 5.5);
+    doc.text("Motivo", 48, y + 5.5);
+    doc.text("Operatore", 125, y + 5.5);
+    doc.text("Importo", 180, y + 5.5, { align: "right" });
+    y += 13;
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(30, 30, 30);
+    vaults.forEach((vw) => {
+      if (y > 250) {
+        doc.addPage();
+        y = 20;
+      }
+      const rawDate = vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || vw.date || vw.created_at;
+      const dateFormatted = new Date(rawDate).toLocaleDateString("it-IT");
+      const reason = String(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.reason] || vw.reason || "Motivo non indicato");
+      const opName = vw.answers?._signature?.user_name || vw.user?.name || "Operatore";
+      const amount = money(vw.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.amount] || vw.amount);
+
+      doc.text(dateFormatted, 18, y);
+      doc.text(doc.splitTextToSize(reason, 72)[0] || "-", 48, y);
+      doc.text(doc.splitTextToSize(opName, 34)[0] || "-", 125, y);
+      doc.text(`-${amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" })}`, 180, y, { align: "right" });
+      doc.setDrawColor(245, 245, 245);
+      doc.line(15, y + 2.5, 195, y + 2.5);
+      y += 8;
+    });
+  }
 
   // Total block
   y += 5;
@@ -1049,4 +1204,5 @@ function generateWeeklyClosePdf(
 
   const filename = `chiusura_settimanale_${locationName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${weekKey}.pdf`;
   doc.save(filename);
+  return doc;
 }

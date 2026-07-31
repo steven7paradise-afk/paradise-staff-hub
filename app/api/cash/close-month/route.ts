@@ -15,6 +15,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Mese non valido." }, { status: 400 });
   }
 
+  const [year, monthNumber] = month.split("-").map(Number);
+  const monthEnd = new Date(year, monthNumber, 1);
+  const isEarlyClose = new Date() < monthEnd;
+  if (isEarlyClose && body?.confirmEarly !== true) {
+    return NextResponse.json(
+      { error: "Il mese selezionato non è ancora terminato. Conferma esplicitamente per chiuderlo." },
+      { status: 409 }
+    );
+  }
+
   const setting = await prisma.cashMonthClose.upsert({
     where: { month },
     update: {
@@ -36,7 +46,7 @@ export async function POST(request: Request) {
       id: setting.id,
       key: `cash_month_close:${month}`,
       value: {
-    month,
+        month,
         closed_at: setting.closed_at.toISOString(),
         closed_by_id: setting.closed_by_id,
         closed_by_name: setting.closed_by_name,

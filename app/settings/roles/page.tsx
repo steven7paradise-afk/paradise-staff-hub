@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessForUser, type Role } from "@/lib/roles";
+import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, canAccessForUser, normalizeMansionePermissions, normalizeRolePermissions, type Role } from "@/lib/roles";
 import { RolesSettingsClient } from "./roles-settings-client";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,8 @@ export default async function RolesSettingsPage() {
     redirect("/dashboard");
   }
 
-  // Fetch active employees with their locations
-  const users = await prisma.user.findMany({
+  const [users, roleSetting, mansioneSetting] = await Promise.all([
+    prisma.user.findMany({
     where: { active: true },
     select: {
       id: true,
@@ -35,7 +35,6 @@ export default async function RolesSettingsPage() {
       role: true,
       mansione: true,
       photo_url: true,
-      access_list: true,
       location: {
         select: {
           name: true,
@@ -43,7 +42,10 @@ export default async function RolesSettingsPage() {
       },
     },
     orderBy: { name: "asc" },
-  });
+    }),
+    prisma.setting.findUnique({ where: { key: ROLE_PERMISSIONS_SETTING_KEY } }).catch(() => null),
+    prisma.setting.findUnique({ where: { key: MANSIONI_PERMISSIONS_SETTING_KEY } }).catch(() => null),
+  ]);
 
   return (
     <AppShell
@@ -76,6 +78,8 @@ export default async function RolesSettingsPage() {
         <RolesSettingsClient 
           users={users as any} 
           currentUser={session.user as any} 
+          initialRolePermissions={normalizeRolePermissions(roleSetting?.value)}
+          initialMansionePermissions={normalizeMansionePermissions(mansioneSetting?.value)}
         />
       </div>
     </AppShell>

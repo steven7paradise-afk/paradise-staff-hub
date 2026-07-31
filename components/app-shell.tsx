@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
-import { roleLabels, routePermissions, visibleForRole, type Role } from "@/lib/roles";
+import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
 import { normalizeServicePage, servicePages } from "@/lib/service-pages";
 import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
 import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
@@ -123,6 +123,10 @@ function uniqueMenuItemsForAccess(role: Role) {
     ...nav.map((item) => ({ ...item, roles: [role] as Role[] })),
     ...permissionMenuOverrides.map((item) => ({ ...item, roles: [role] as Role[] })),
   ];
+  return dedupeMenuItems(items);
+}
+
+function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   const seen = new Set<string>();
 
   return items.filter((item) => {
@@ -139,6 +143,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const settingsKeys = [
     ASSISTANCE_TABLES_ACCESS_KEY,
     PLANNING_ACCESS_KEY,
+    ROLE_PERMISSIONS_SETTING_KEY,
+    MANSIONI_PERMISSIONS_SETTING_KEY,
     "sidebar_configuration",
   ];
   if (currentRole === "DIPENDENTE" && session?.user?.sedeId) {
@@ -183,6 +189,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   const settingsMap = new Map(settingsList.map((s) => [s.key, s]));
   const sidebarConfigSetting = settingsMap.get("sidebar_configuration") || null;
+  const rolePermissionsSetting = settingsMap.get(ROLE_PERMISSIONS_SETTING_KEY) || null;
+  const mansionePermissionsSetting = settingsMap.get(MANSIONI_PERMISSIONS_SETTING_KEY) || null;
   const planningAccessSetting = settingsMap.get(PLANNING_ACCESS_KEY) || null;
   const tablesAccessSetting = settingsMap.get(ASSISTANCE_TABLES_ACCESS_KEY) || null;
   const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
@@ -242,6 +250,14 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const userHasTablesAccess = canUseAssistanceTables(currentRole, currentUser?.mansione, session?.user?.id, tablesAccess);
   const planningAccess = normalizePlanningAccess(planningAccessSetting?.value);
   const userHasPlanningAccess = canViewPlanning(currentRole, session?.user?.id, planningAccess);
+  const rolePermissionMap = normalizeRolePermissions(rolePermissionsSetting?.value);
+  const mansionePermissionMap = normalizeMansionePermissions(mansionePermissionsSetting?.value);
+  const cleanMansione = currentUser?.mansione?.trim().toLowerCase();
+  const effectivePermissionSet: PermissionSet | null = currentRole === "SUPER_ADMIN"
+    ? null
+    : currentRole !== "ADMIN" && cleanMansione && mansionePermissionMap[cleanMansione]?.view.length > 0
+      ? mansionePermissionMap[cleanMansione]
+      : rolePermissionMap[currentRole];
   const taskNavItem = { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: [currentRole] as Role[], section: "Generale" };
   const tablesNavItem = { href: "/tables", label: "Tabelle", iconName: "Table2", roles: [currentRole] as Role[], section: "Generale" };
   let baseItems = visibleForRole(nav, currentRole)
@@ -292,7 +308,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     return ordered;
   };
 
-  const rawItems = currentRole === "DIPENDENTE"
+  const roleBasedItems = currentRole === "DIPENDENTE"
     ? [
         ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar" && item.href !== "/cash"),
         ...(selectedServiceItem.href === "/tasks" ? [] : [selectedServiceItem]),
@@ -310,8 +326,24 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       ]
     : baseItems;
 
-  const items = rawItems;
-  const sidebarItems = getStructuredMenuItems(items).map((item: any) => ({
+  const permissionCandidates = uniqueMenuItemsForAccess(currentRole);
+  const rawItems = effectivePermissionSet
+    ? [
+        ...permissionCandidates,
+        ...(selectedServiceItem.href === "/tasks" ? [] : [selectedServiceItem]),
+        ...(showFormsLinkSeparately ? [formsLinkItem] : []),
+      ]
+    : roleBasedItems;
+  const allowedRoutes = new Set(effectivePermissionSet?.view ?? []);
+  const items = effectivePermissionSet
+    ? rawItems.filter((item) => {
+        const route = Object.keys(routePermissions)
+          .sort((a, b) => b.length - a.length)
+          .find((candidate) => item.href === candidate || item.href.startsWith(`${candidate}/`));
+        return route ? allowedRoutes.has(route) : true;
+      })
+    : rawItems;
+  const sidebarItems = getStructuredMenuItems(dedupeMenuItems(items)).map((item: any) => ({
     href: item.href,
     label: getSidebarLabel(item.href, item.label),
     iconName: item.iconName,

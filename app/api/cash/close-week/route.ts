@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   const withdrawals = parseFloat(String(body?.withdrawals ?? "0").replace(",", "."));
   const notes = String(body?.notes ?? "").trim();
   const dailyBreakdown = body?.dailyBreakdown ?? [];
+  const transactionBreakdown = Array.isArray(body?.transactionBreakdown) ? body.transactionBreakdown : [];
 
   if (!/^\d{4}-\d{2}-\d{2}(:\d{4}-\d{2}-\d{2})?$/.test(weekKey)) {
     return NextResponse.json({ error: "Settimana o periodo non valido." }, { status: 400 });
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
         withdrawals: isNaN(withdrawals) ? 0 : withdrawals,
         notes,
         daily_breakdown: dailyBreakdown,
+        transaction_breakdown: transactionBreakdown,
         closed_at: new Date().toISOString(),
         closed_by_id: session.user.id,
         closed_by_name: session.user.name ?? "Admin",
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
         withdrawals: isNaN(withdrawals) ? 0 : withdrawals,
         notes,
         daily_breakdown: dailyBreakdown,
+        transaction_breakdown: transactionBreakdown,
         closed_at: new Date().toISOString(),
         closed_by_id: session.user.id,
         closed_by_name: session.user.name ?? "Admin",

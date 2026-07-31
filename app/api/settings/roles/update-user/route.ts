@@ -33,6 +33,9 @@ export async function POST(request: NextRequest) {
 
     const updateData: any = {};
     if (role) {
+      if (session.user.role !== "SUPER_ADMIN") {
+        return NextResponse.json({ error: "Solo Super Admin puo assegnare o modificare i ruoli di sistema." }, { status: 403 });
+      }
       if (!Object.values(UserRole).includes(role)) {
         return NextResponse.json({ error: "Ruolo non valido." }, { status: 400 });
       }
