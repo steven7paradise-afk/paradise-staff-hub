@@ -122,7 +122,55 @@ const ROLE_OPTIONS = [
   { value: "RESPONSABILE", label: "Responsabile" },
   { value: "ADMIN", label: "Admin" }
 ];
-const ACCESS_PRESETS = ["Shopify", "WhatsApp", "Google Calendar", "Phorest", "Treatwell", "Drive Condiviso"];
+const ACCESS_PRESETS = [
+  "/dashboard",
+  "/profile",
+  "/my-shifts",
+  "/tasks",
+  "/schedules",
+  "/orders",
+  "/appointments",
+  "/cash",
+  "/service-forms",
+  "/documents",
+  "/requests",
+  "/malattie",
+  "/notifications",
+  "/social-calendar",
+  "/client-control",
+  "/attendance",
+  "/work-hours",
+  "/cedolini",
+  "/invoices",
+  "/refunds",
+  "/tables",
+  "/foto",
+];
+
+const ACCESS_LABELS: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/profile": "Profilo",
+  "/my-shifts": "I miei turni",
+  "/tasks": "Task",
+  "/schedules": "Planning",
+  "/orders": "Ordini",
+  "/appointments": "Appuntamenti",
+  "/cash": "Cassa & transazioni",
+  "/service-forms": "Moduli operativi",
+  "/documents": "Documenti",
+  "/requests": "Ferie e permessi",
+  "/malattie": "Malattie",
+  "/notifications": "Comunicazioni",
+  "/social-calendar": "Programmazione Social",
+  "/client-control": "Controllo Cliente",
+  "/attendance": "Timbrature",
+  "/work-hours": "Ore staff",
+  "/cedolini": "Cedolini",
+  "/invoices": "Fatture",
+  "/refunds": "Rimborsi",
+  "/tables": "Tabelle",
+  "/foto": "Foto",
+};
 
 const DEFAULT_MANSIONI = [
   "Amministratore",
@@ -840,22 +888,28 @@ export function StaffDirectory({
     const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm));
 
     const PLATFORMS = [
-      { key: "shopify", label: "Shopify", val: "Shopify" },
-      { key: "phorest", label: "Phorest", val: "Phorest" },
       { key: "dashboard", label: "Dashboard", val: "/dashboard" },
+      { key: "profile", label: "Profilo", val: "/profile" },
+      { key: "my-shifts", label: "I miei turni", val: "/my-shifts" },
+      { key: "tasks", label: "Task", val: "/tasks" },
+      { key: "schedules", label: "Planning", val: "/schedules" },
+      { key: "orders", label: "Ordini", val: "/orders" },
       { key: "appointments", label: "Appuntamenti", val: "/appointments" },
-      { key: "report", label: "Report", val: "/cedolini" },
-      { key: "whatsapp", label: "WhatsApp", val: "WhatsApp" },
-      { key: "treatwell", label: "Treatwell", val: "Treatwell" },
-      { key: "schedules", label: "Turni", val: "/schedules" },
+      { key: "cash", label: "Cassa & transazioni", val: "/cash" },
+      { key: "service-forms", label: "Moduli operativi", val: "/service-forms" },
       { key: "documents", label: "Documenti", val: "/documents" },
-      { key: "comunicazioni", label: "Comunicazioni", val: "/social-calendar" },
-      { key: "google-calendar", label: "Google Calendar", val: "Google Calendar" },
-      { key: "drive", label: "Drive Condiviso", val: "Drive Condiviso" },
-      { key: "presenze", label: "Presenze", val: "/attendance" },
-      { key: "ordini", label: "Ordini", val: "/orders" },
-      { key: "notifications", label: "Notifiche", val: "/notifications" },
+      { key: "requests", label: "Ferie e permessi", val: "/requests" },
       { key: "malattie", label: "Malattie", val: "/malattie" },
+      { key: "notifications", label: "Notifiche", val: "/notifications" },
+      { key: "social-calendar", label: "Programmazione Social", val: "/social-calendar" },
+      { key: "client-control", label: "Controllo Cliente", val: "/client-control" },
+      { key: "attendance", label: "Timbrature", val: "/attendance" },
+      { key: "work-hours", label: "Ore staff", val: "/work-hours" },
+      { key: "cedolini", label: "Cedolini", val: "/cedolini" },
+      { key: "invoices", label: "Fatture", val: "/invoices" },
+      { key: "refunds", label: "Rimborsi", val: "/refunds" },
+      { key: "tables", label: "Tabelle", val: "/tables" },
+      { key: "foto", label: "Foto", val: "/foto" },
     ];
 
     const copyPhotoUrl = () => {
@@ -1746,7 +1800,7 @@ export function StaffDirectory({
                           key={access} 
                           className="text-[9px] font-bold bg-[#F7E9EF] text-[#B85B68] dark:bg-neutral-800 dark:text-[#FFA8DD] px-1.5 py-0.5 rounded"
                         >
-                          {access}
+                          {ACCESS_LABELS[access] || access}
                         </span>
                       ))}
                     </div>
@@ -2014,7 +2068,7 @@ export function StaffDirectory({
                             : "bg-white dark:bg-neutral-800 border-black/10 dark:border-white/10 text-neutral-500"
                         )}
                       >
-                        {access}
+                        {ACCESS_LABELS[access] || access}
                       </button>
                     );
                   })}

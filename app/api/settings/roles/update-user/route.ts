@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { UserRole } from "@prisma/client";
+import { normalizeAccessRoutes } from "@/lib/roles";
+
+function normalizeAccessList(value: unknown) {
+  if (value === null) return null;
+  if (Array.isArray(value)) return normalizeAccessRoutes(value);
+  if (value && typeof value === "object") {
+    const raw = value as { view?: unknown; edit?: unknown };
+    return {
+      view: normalizeAccessRoutes(raw.view),
+      edit: normalizeAccessRoutes(raw.edit),
+    };
+  }
+  return value;
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -28,7 +42,7 @@ export async function POST(request: NextRequest) {
       updateData.mansione = mansione;
     }
     if (accessList !== undefined) {
-      updateData.access_list = accessList;
+      updateData.access_list = normalizeAccessList(accessList);
     }
 
     const updatedUser = await prisma.user.update({

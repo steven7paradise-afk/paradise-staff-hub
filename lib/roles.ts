@@ -29,11 +29,13 @@ export const routePermissions: Record<string, Role[]> = {
   "/orders": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/magazzino": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/foto": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/points": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/consulenza-online": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/cash": ["SUPER_ADMIN", "ADMIN"],
   "/invoices": ["SUPER_ADMIN", "ADMIN"],
   "/refunds": ["SUPER_ADMIN", "ADMIN"],
+  "/rimborsi": ["SUPER_ADMIN", "ADMIN"],
   "/client-control": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/recruitment": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/staff": ["SUPER_ADMIN", "ADMIN"],
@@ -41,6 +43,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/notifications": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/profile": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/settings": ["SUPER_ADMIN", "ADMIN"],
+  "/settings/app": ["SUPER_ADMIN", "ADMIN"],
   "/settings/dashboard": ["SUPER_ADMIN", "ADMIN"],
   "/settings/branding": ["SUPER_ADMIN"],
   "/settings/devices": ["SUPER_ADMIN"],
@@ -52,10 +55,89 @@ export const routePermissions: Record<string, Role[]> = {
   "/settings/planning": ["SUPER_ADMIN", "ADMIN"],
   "/settings/services": ["SUPER_ADMIN"],
   "/settings/forms": ["SUPER_ADMIN", "ADMIN"],
+  "/settings/sidebar": ["SUPER_ADMIN", "ADMIN"],
 };
+
+const legacyAccessRouteMap: Record<string, string> = {
+  dashboard: "/dashboard",
+  "i miei turni": "/my-shifts",
+  turni: "/my-shifts",
+  task: "/tasks",
+  documenti: "/documents",
+  planning: "/schedules",
+  schedules: "/schedules",
+  "programmazione social": "/social-calendar",
+  social: "/social-calendar",
+  ordini: "/orders",
+  orders: "/orders",
+  magazzino: "/magazzino",
+  foto: "/foto",
+  appuntamenti: "/appointments",
+  appointments: "/appointments",
+  "consulenza online": "/consulenza-online",
+  cassa: "/cash",
+  cash: "/cash",
+  transazioni: "/cash",
+  "chiusure cassa": "/cash",
+  fatture: "/invoices",
+  invoices: "/invoices",
+  rimborsi: "/refunds",
+  refunds: "/refunds",
+  "controllo cliente": "/client-control",
+  "client control": "/client-control",
+  tabelle: "/tables",
+  "tablet clock": "/tablet-clock",
+  moduli: "/service-forms",
+  "moduli operativi": "/service-forms",
+  "staff paradise": "/staff",
+  staff: "/staff",
+  recruitment: "/recruitment",
+  "talent system": "/recruitment",
+  timbrature: "/attendance",
+  presenze: "/attendance",
+  "ore staff": "/work-hours",
+  "ferie e permessi": "/requests",
+  richieste: "/requests",
+  cedolini: "/cedolini",
+  malattie: "/malattie",
+  team: "/team",
+  comunicazioni: "/notifications",
+  notifiche: "/notifications",
+  profilo: "/profile",
+  profile: "/profile",
+  impostazioni: "/settings",
+};
+
+function normalizeAccessRoute(value: string) {
+  const clean = value.trim();
+  if (!clean) return "";
+  if (routePermissions[clean]) return clean;
+  const lower = clean.toLowerCase();
+  if (routePermissions[`/${lower}`]) return `/${lower}`;
+  return legacyAccessRouteMap[lower] ?? clean;
+}
+
+export function normalizeAccessRoutes(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return Array.from(
+    new Set(
+      values
+        .filter((item): item is string => typeof item === "string")
+        .map(normalizeAccessRoute)
+        .filter(Boolean)
+    )
+  );
+}
+
+function isApiRoute(pathname: string) {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
 
 export function canAccess(pathname: string, role?: Role, mansione?: string, accessList?: any) {
   if (!role) return false;
+
+  if (pathname === "/") return true;
+  if (isApiRoute(pathname)) return true;
 
   // Custom access list check
   if (
@@ -68,9 +150,9 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
   ) {
     let viewRoutes: string[] = [];
     if (Array.isArray(accessList)) {
-      viewRoutes = accessList;
+      viewRoutes = normalizeAccessRoutes(accessList);
     } else if (accessList && typeof accessList === "object" && Array.isArray(accessList.view)) {
-      viewRoutes = accessList.view;
+      viewRoutes = normalizeAccessRoutes(accessList.view);
     }
 
     const matchedRoute = Object.keys(routePermissions)
@@ -80,6 +162,8 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
     if (matchedRoute) {
       return viewRoutes.includes(matchedRoute);
     }
+
+    return false;
   }
 
   // Abilita la pagina appuntamenti per chiunque abbia "assistenza" nella mansione
@@ -100,7 +184,7 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
     .sort(([a], [b]) => b.length - a.length)
     .find(([route]) => pathname === route || pathname.startsWith(`${route}/`));
 
-  return match ? match[1].includes(role) : true;
+  return match ? match[1].includes(role) : false;
 }
 
 export function canEdit(pathname: string, role?: Role, mansione?: string, accessList?: any) {
@@ -111,12 +195,13 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
   // Custom edit list check
   if (accessList && role !== "SUPER_ADMIN") {
     if (accessList && typeof accessList === "object" && Array.isArray(accessList.edit)) {
+      const editRoutes = normalizeAccessRoutes(accessList.edit);
       const matchedRoute = Object.keys(routePermissions)
         .sort((a, b) => b.length - a.length)
         .find((route) => pathname === route || pathname.startsWith(`${route}/`));
       
       if (matchedRoute) {
-        return accessList.edit.includes(matchedRoute);
+        return editRoutes.includes(matchedRoute);
       }
     }
   }

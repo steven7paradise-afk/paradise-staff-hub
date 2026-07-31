@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
-import { roleLabels, routePermissions, visibleForRole, type Role } from "@/lib/roles";
+import { normalizeAccessRoutes, roleLabels, routePermissions, visibleForRole, type Role } from "@/lib/roles";
 import { normalizeServicePage, servicePages } from "@/lib/service-pages";
 import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
 import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
@@ -50,6 +50,7 @@ const nav = [
   { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/points", label: "Punti", iconName: "Award", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
   { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/service-forms", label: "Moduli", iconName: "ClipboardList", roles: ["RESPONSABILE"], section: "Planning & Saloni" },
@@ -72,7 +73,7 @@ const nav = [
 
 const permissionMenuOverrides = [
   { href: "/service-notes", label: "NOTE", iconName: "FilePenLine", section: "Generale" },
-  { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "Planning & Saloni" },
+  { href: "/service-forms", label: "Moduli operativi", iconName: "ReceiptText", section: "Planning & Saloni" },
 ] satisfies { href: string; label: string; iconName: string; section?: string }[];
 
 type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string> };
@@ -215,9 +216,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
     if (rawAccess) {
       if (Array.isArray(rawAccess)) {
-        userAccessList = rawAccess;
+        userAccessList = normalizeAccessRoutes(rawAccess);
       } else if (rawAccess && typeof rawAccess === "object" && Array.isArray(rawAccess.view)) {
-        userAccessList = rawAccess.view;
+        userAccessList = normalizeAccessRoutes(rawAccess.view);
       }
     }
   }

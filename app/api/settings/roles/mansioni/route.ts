@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { normalizeAccessRoutes } from "@/lib/roles";
 
 type MansionePermissionSet = {
   view: string[];
@@ -12,7 +13,7 @@ type MansioniPermissionsMap = Record<string, MansionePermissionSet>;
 function normalizePermissionSet(value: unknown): MansionePermissionSet {
   if (Array.isArray(value)) {
     return {
-      view: value.filter((item): item is string => typeof item === "string"),
+      view: normalizeAccessRoutes(value),
       edit: [],
     };
   }
@@ -20,8 +21,8 @@ function normalizePermissionSet(value: unknown): MansionePermissionSet {
   if (value && typeof value === "object") {
     const raw = value as { view?: unknown; edit?: unknown };
     return {
-      view: Array.isArray(raw.view) ? raw.view.filter((item): item is string => typeof item === "string") : [],
-      edit: Array.isArray(raw.edit) ? raw.edit.filter((item): item is string => typeof item === "string") : [],
+      view: normalizeAccessRoutes(raw.view),
+      edit: normalizeAccessRoutes(raw.edit),
     };
   }
 

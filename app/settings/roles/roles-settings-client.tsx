@@ -41,7 +41,7 @@ type SidebarLayoutSetting =
 
 const DEFAULT_SIDEBAR_LAYOUT: SidebarFolder[] = [
   { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
-  { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/foto", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/tablet-clock", "/settings/forms", "/service-forms"] },
+  { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/magazzino", "/foto", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/points", "/tablet-clock", "/settings/forms", "/service-forms"] },
   { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/cedolini", "/malattie", "/team"] },
   { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
 ];
@@ -98,7 +98,7 @@ function normalizeSidebarLayoutSetting(value: unknown): { default: SidebarFolder
 function normalizePermissionSet(value: unknown): PagePermissionSet {
   if (Array.isArray(value)) {
     return {
-      view: value.filter((item): item is string => typeof item === "string"),
+      view: normalizeAccessRoutes(value),
       edit: [],
     };
   }
@@ -106,8 +106,8 @@ function normalizePermissionSet(value: unknown): PagePermissionSet {
   if (value && typeof value === "object") {
     const raw = value as { view?: unknown; edit?: unknown };
     return {
-      view: Array.isArray(raw.view) ? raw.view.filter((item): item is string => typeof item === "string") : [],
-      edit: Array.isArray(raw.edit) ? raw.edit.filter((item): item is string => typeof item === "string") : [],
+      view: normalizeAccessRoutes(raw.view),
+      edit: normalizeAccessRoutes(raw.edit),
     };
   }
 
@@ -127,7 +127,7 @@ function normalizeMansioniPermissions(value: unknown): MansioniPermissions {
   );
 }
 
-import { routePermissions } from "@/lib/roles";
+import { normalizeAccessRoutes, routePermissions } from "@/lib/roles";
 
 const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
   "/dashboard": { name: "Dashboard Principale", description: "Bacheca iniziale con timbrature e avvisi." },
@@ -145,15 +145,18 @@ const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
   "/cedolini": { name: "Cedolini", description: "Caricamento e gestione dei cedolini HR dei collaboratori." },
   "/malattie": { name: "Malattie", description: "Registro malattie dello staff e verifica certificati medici." },
   "/service-notes": { name: "Note di Servizio", description: "Diario interno delle annotazioni operative." },
-  "/service-forms": { name: "Moduli Operativi", description: "Compilazione dei moduli tecnici dei servizi." },
+  "/service-forms": { name: "Moduli Operativi / Chiusura cassa", description: "Compilazione dei moduli tecnici, inclusa la firma della chiusura cassa da tablet." },
   "/tables": { name: "Tabelle Listini", description: "Visualizzazione tabelle listini e prezzi." },
   "/orders": { name: "Ordini (Kanban)", description: "Pipeline ordini per acquisto extension, conversioni e accessori." },
+  "/magazzino": { name: "Magazzino", description: "Gestione interna prodotti, scansioni e movimenti magazzino." },
   "/foto": { name: "Foto", description: "Caricamento rapido foto ordini su Google Drive con PIN personale." },
+  "/points": { name: "Punti e Performance", description: "Riepilogo personale punti, schede e obiettivi mensili." },
   "/appointments": { name: "Gestione Appuntamenti", description: "Planning e prenotazioni dei clienti." },
   "/consulenza-online": { name: "Consulenza Online", description: "Calendario delle prenotazioni di consulenza online." },
-  "/cash": { name: "Cassa & Chiusure", description: "Chiusure di cassa e monitoraggio cassaforte." },
+  "/cash": { name: "Cassa & Transazioni", description: "Dashboard amministrativa con chiusure, prelievi, cassaforte e movimenti." },
   "/invoices": { name: "Richieste Fatture", description: "Registro richieste ed export per commercialista." },
   "/refunds": { name: "Rimborsi", description: "Gestione note di credito e rimborsi." },
+  "/rimborsi": { name: "Rimborsi (link vecchio)", description: "Redirect compatibile verso la pagina Rimborsi." },
   "/client-control": { name: "Controllo Clienti", description: "Tablet clienti in salone per recensioni e dati." },
   "/recruitment": { name: "HR Recruitment", description: "Candidature e colloqui di assunzione." },
   "/staff": { name: "Organigramma Staff", description: "Mappa visuale delle posizioni e ruoli." },
@@ -161,6 +164,8 @@ const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
   "/notifications": { name: "Centro Notifiche", description: "Storico degli avvisi e delle comunicazioni." },
   "/profile": { name: "Profilo Personale", description: "Dati personali, password e preferenze grafiche." },
   "/settings": { name: "Impostazioni Generali", description: "Pannello principale di configurazione hub." },
+  "/settings/app": { name: "Impostazioni App", description: "Configurazioni generali dell'applicazione." },
+  "/settings/dashboard": { name: "Configura Dashboard", description: "Obiettivi, punti e impostazioni riepilogo dashboard." },
   "/settings/branding": { name: "Brand & Loghi", description: "Personalizzazione loghi, colori e testi dell'app." },
   "/settings/devices": { name: "Configura Timbratrici", description: "Associazione e attivazione tablet salone." },
   "/settings/google-sheet": { name: "Integrazione Fogli Google", description: "Collegamento fogli drive per i dati." },
@@ -170,7 +175,8 @@ const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
   "/settings/tables": { name: "Configura Tabelle Listini", description: "Permessi di scrittura tabelle listini." },
   "/settings/planning": { name: "Configura Planning", description: "Accesso e orari agende appuntamenti." },
   "/settings/services": { name: "Gestione Servizi", description: "Configurazione dei trattamenti e durata." },
-  "/settings/forms": { name: "Gestione Moduli Operativi", description: "Creazione e modifica dei campi dei moduli." }
+  "/settings/forms": { name: "Gestione Moduli Operativi", description: "Creazione e modifica dei campi dei moduli." },
+  "/settings/sidebar": { name: "Configura Sidebar", description: "Organizzazione e visibilità del menu laterale." }
 };
 
 const APP_PAGES_MATRIX = Object.entries(routePermissions).map(([path, viewRoles]) => {
@@ -239,9 +245,11 @@ const ROUTE_GROUPS = [
       "/service-forms",
       "/tables",
       "/orders",
+      "/magazzino",
       "/appointments",
       "/consulenza-online",
       "/profile",
+      "/points",
       "/notifications"
     ]
   },
@@ -268,6 +276,8 @@ const ROUTE_GROUPS = [
     title: "Area Impostazioni & Configurazione",
     routes: [
       "/settings",
+      "/settings/app",
+      "/settings/dashboard",
       "/settings/branding",
       "/settings/devices",
       "/settings/google-sheet",
@@ -277,7 +287,8 @@ const ROUTE_GROUPS = [
       "/settings/tables",
       "/settings/planning",
       "/settings/services",
-      "/settings/forms"
+      "/settings/forms",
+      "/settings/sidebar"
     ]
   }
 ];

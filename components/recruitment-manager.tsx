@@ -88,6 +88,23 @@ const PRESET_PROFESSIONS = [
   "Altro"
 ];
 
+const ONBOARDING_ACCESS_OPTIONS = [
+  { label: "Dashboard", value: "/dashboard" },
+  { label: "Profilo", value: "/profile" },
+  { label: "I miei turni", value: "/my-shifts" },
+  { label: "Task", value: "/tasks" },
+  { label: "Planning", value: "/schedules" },
+  { label: "Ordini", value: "/orders" },
+  { label: "Appuntamenti", value: "/appointments" },
+  { label: "Cassa & transazioni", value: "/cash" },
+  { label: "Moduli operativi", value: "/service-forms" },
+  { label: "Documenti", value: "/documents" },
+  { label: "Ferie e permessi", value: "/requests" },
+  { label: "Malattie", value: "/malattie" },
+  { label: "Comunicazioni", value: "/notifications" },
+  { label: "Controllo Cliente", value: "/client-control" },
+];
+
 export function RecruitmentManager({
   initialCandidates,
   locations,
@@ -1717,13 +1734,13 @@ export function RecruitmentManager({
                                   <div className="space-y-1">
                                     <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
                                     <div className="flex flex-wrap gap-2">
-                                      {["Shopify", "WhatsApp", "Google Calendar", "Phorest", "Treatwell", "Drive Condiviso"].map((access) => {
-                                        const active = onboardingForm.access_list.includes(access);
+                                      {ONBOARDING_ACCESS_OPTIONS.map((access) => {
+                                        const active = onboardingForm.access_list.includes(access.value);
                                         return (
                                           <button
-                                            key={access}
+                                            key={access.value}
                                             type="button"
-                                            onClick={() => toggleAccess(access)}
+                                            onClick={() => toggleAccess(access.value)}
                                             className={cn(
                                               "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95",
                                               active 
@@ -1731,7 +1748,7 @@ export function RecruitmentManager({
                                                 : "bg-white dark:bg-neutral-800 border-black/10 dark:border-white/10 text-neutral-500"
                                             )}
                                           >
-                                            {access}
+                                            {access.label}
                                           </button>
                                         );
                                       })}
