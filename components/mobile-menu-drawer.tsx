@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutGrid, Search, ArrowLeft, Menu } from "lucide-react";
+import { Search, ArrowLeft, Menu } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -80,14 +80,7 @@ export function MobileMenuDrawer({
   };
 
   const sections = getRenderSections();
-  const priorityRoutes = ["/dashboard", "/tasks", "/schedules", "/orders", "/appointments", "/cash", "/client-control", "/staff", "/requests", "/profile"];
-  const quickItems = priorityRoutes
-    .map((href) => items.find((item) => item.href === href))
-    .filter((item): item is { href: string; label: string; iconName: string; section?: string } => Boolean(item));
-  const activeItem = items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-  const visibleQuickItems = activeItem && !quickItems.some((item) => item.href === activeItem.href)
-    ? [activeItem, ...quickItems].slice(0, 9)
-    : quickItems.slice(0, 9);
+  const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <div className="xl:hidden">
@@ -178,78 +171,52 @@ export function MobileMenuDrawer({
 
           {/* Main Navigation links */}
           <div className="no-scrollbar mt-5 flex-1 overflow-y-auto">
-            <div className="mb-4 flex w-full items-center gap-3 rounded-2xl bg-[#2563eb] px-3.5 py-3 text-left text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]">
-              <LayoutGrid className="size-4 shrink-0" />
-              <span className="min-w-0 flex-1">Menu completo</span>
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">{items.length}</span>
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="px-3 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">
-                {searchQuery.trim() ? "Risultati" : "Accesso rapido"}
-              </p>
-              {(searchQuery.trim() ? filteredItems : visibleQuickItems).map((item) => {
-                    const isActive = pathname === item.href;
-                    const displayLabel = getSidebarLabel(item.href, item.label);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setIsOpen(false)}
-                        className={cn(
-                          "ml-2 flex items-center justify-between gap-3.5 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold tracking-tight transition-all duration-250",
-                          isActive
-                            ? "bg-[#2563eb] text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]"
-                            : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white"
-                        )}
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <DynamicIcon name={item.iconName} className={cn("size-4 shrink-0", isActive ? "text-white" : "text-zinc-400")} />
-                          <span className="truncate">{displayLabel}</span>
-                        </div>
-
-                        {item.href === "/notifications" && unreadNotifications > 0 ? (
-                          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black", isActive ? "bg-white text-blue-600" : "bg-[#C66170] text-white")}>
-                            {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                          </span>
-                        ) : null}
-                      </Link>
-                    );
-              })}
-            </div>
-
-            {!searchQuery.trim() ? (
-              <div className="mt-6 space-y-5">
-                {sections.map((section) => (
-                  <div key={section.id}>
-                    <div className="mb-2 flex items-center justify-between px-3">
-                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">{section.title}</p>
-                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[9px] font-black text-zinc-500">{section.items.length}</span>
-                    </div>
-                    <div className="space-y-1">
-                      {section.items.map((item) => {
-                        const isActive = pathname === item.href;
-                        const displayLabel = getSidebarLabel(item.href, item.label);
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setIsOpen(false)}
-                            className={cn(
-                              "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold tracking-tight transition",
-                              isActive ? "bg-[#2563eb] text-white" : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white"
-                            )}
-                          >
-                            <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
-                            <span className="truncate">{displayLabel}</span>
-                          </Link>
-                        );
-                      })}
-                    </div>
+            <div className="space-y-5">
+              {sections.map((section) => (
+                <div key={section.id}>
+                  <div className="mb-2 flex items-center justify-between px-2">
+                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">{section.title}</p>
+                    <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[9px] font-black text-zinc-500">{section.items.length}</span>
                   </div>
-                ))}
-              </div>
-            ) : null}
+                  <div className="space-y-1">
+                    {section.items.map((item) => {
+                      const isActive = isItemActive(item.href);
+                      const displayLabel = getSidebarLabel(item.href, item.label);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setIsOpen(false)}
+                          className={cn(
+                            "flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-semibold tracking-tight transition",
+                            isActive ? "bg-[#2563eb] text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]" : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white"
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className={cn("grid size-7 shrink-0 place-items-center rounded-xl", isActive ? "bg-white/18" : "bg-zinc-800/70")}>
+                              <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
+                            </span>
+                            <span className="truncate">{displayLabel}</span>
+                          </div>
+
+                          {item.href === "/notifications" && unreadNotifications > 0 ? (
+                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black", isActive ? "bg-white text-blue-600" : "bg-[#C66170] text-white")}>
+                              {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                            </span>
+                          ) : null}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {sections.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-zinc-800 px-3 py-4 text-center text-xs font-bold text-zinc-500">
+                  Nessuna pagina trovata.
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {/* Navigation lists directly end here */}
