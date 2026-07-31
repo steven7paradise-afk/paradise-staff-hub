@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Pencil, Plus, Save, X, Clock, Coffee, UserCheck, FileEdit, Search, CalendarDays, LogOut, MapPin, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Field, Select } from "@/components/ui";
+import { deriveAttendanceState } from "@/lib/attendance-state";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Worker = { id: string; name: string; location: string; photoUrl?: string | null };
@@ -129,19 +130,22 @@ export function AttendanceManager({
       return datePart === todayStr;
     });
 
-    // Group logs by worker to find their latest status
-    const latestStatusByEmployee: Record<string, { type: string; timestamp: string }> = {};
-    const sortedLogs = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    for (const log of sortedLogs) {
-      latestStatusByEmployee[log.userId] = { type: log.type, timestamp: log.timestamp };
+    // Group today's logs by worker and derive a strict state from the valid sequence.
+    const logsByEmployee = new Map<string, AttendanceLog[]>();
+    for (const log of todayLogs) {
+      logsByEmployee.set(log.userId, [...(logsByEmployee.get(log.userId) ?? []), log]);
     }
 
-    const activeWorkers = Object.values(latestStatusByEmployee).filter(
-      status => status.type === "ENTRATA" || status.type === "RIENTRO"
+    const states = Array.from(logsByEmployee.values()).map((employeeLogs) =>
+      deriveAttendanceState(employeeLogs as any)
+    );
+
+    const activeWorkers = states.filter(
+      state => state.status === "IN"
     ).length;
 
-    const onBreakWorkers = Object.values(latestStatusByEmployee).filter(
-      status => status.type === "PAUSA"
+    const onBreakWorkers = states.filter(
+      state => state.status === "BREAK"
     ).length;
 
     const manualCorrections = logs.filter(
@@ -162,6 +166,7 @@ export function AttendanceManager({
     const pausaTime = new Date(group.pausa.timestamp).getTime();
     const rientroTime = new Date(group.rientro.timestamp).getTime();
     const durationMs = rientroTime - pausaTime;
+    if (durationMs <= 0) return null;
     const mins = Math.round(durationMs / (1000 * 60));
     return `${mins} min`;
   };
@@ -200,20 +205,22 @@ export function AttendanceManager({
       }
 
       groups[groupKey].allLogs.push(log);
-      groups[groupKey].lastLog = log;
-
-      if (log.type === "ENTRATA") {
-        groups[groupKey].entrata = log;
-      } else if (log.type === "PAUSA") {
-        groups[groupKey].pausa = log;
-      } else if (log.type === "RIENTRO") {
-        groups[groupKey].rientro = log;
-      } else if (log.type === "USCITA") {
-        groups[groupKey].uscita = log;
-      }
     }
 
-    return Object.values(groups).sort((a, b) => {
+    const normalizedGroups = Object.values(groups).map((group) => {
+      const state = deriveAttendanceState(group.allLogs as any);
+      const lastBreak = state.breaks[state.breaks.length - 1];
+      return {
+        ...group,
+        entrata: state.firstEntry as AttendanceLog | undefined,
+        pausa: (lastBreak?.pausa ?? state.activePause) as AttendanceLog | undefined,
+        rientro: lastBreak?.rientro as AttendanceLog | undefined,
+        uscita: state.lastExit as AttendanceLog | undefined,
+        lastLog: state.lastValidLog as AttendanceLog | undefined,
+      };
+    });
+
+    return normalizedGroups.sort((a, b) => {
       const dateDiff = new Date(b.dateStr).getTime() - new Date(a.dateStr).getTime();
       if (dateDiff !== 0) return dateDiff;
       return a.employee.localeCompare(b.employee);
@@ -559,10 +566,12 @@ export function AttendanceManager({
               {filteredGroups.map((group) => {
                 const breakDuration = getBreakDurationForGroup(group);
                 const worker = peopleById.get(group.userId);
-                const isInShift = group.lastLog?.type === "ENTRATA" || group.lastLog?.type === "RIENTRO";
-                const isOnBreak = group.lastLog?.type === "PAUSA";
+                const attendanceState = deriveAttendanceState(group.allLogs as any);
+                const hasInvalidLogs = attendanceState.invalidLogs.length > 0;
+                const isInShift = attendanceState.status === "IN";
+                const isOnBreak = attendanceState.status === "BREAK";
                 const isPresent = isInShift || isOnBreak;
-                const statusLabel = isOnBreak ? "In pausa" : isInShift ? "In turno" : group.lastLog?.type === "USCITA" ? "Turno chiuso" : "Non di turno";
+                const statusLabel = hasInvalidLogs ? "Da controllare" : isOnBreak ? "In pausa" : isInShift ? "In turno" : group.uscita ? "Turno chiuso" : "Non di turno";
                 
                 return (
                   <div key={group.id} className={`relative rounded-[22px] border bg-white p-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:bg-white/5 ${
@@ -591,7 +600,9 @@ export function AttendanceManager({
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <p className="text-[11px] font-black text-paradise-pink">{visibleClockTime(group.entrata)}</p>
                           <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] ${
-                            isOnBreak
+                            hasInvalidLogs
+                              ? "bg-red-50 text-red-700"
+                              : isOnBreak
                               ? "bg-amber-50 text-amber-700"
                               : isInShift
                                 ? "bg-emerald-50 text-emerald-700"
@@ -620,6 +631,11 @@ export function AttendanceManager({
                           {breakDuration ? <span className="text-black/40 dark:text-white/45"> · {breakDuration}</span> : null}
                         </p>
                       </div>
+                      {hasInvalidLogs ? (
+                        <div className="rounded-xl border border-red-100 bg-red-50 px-2.5 py-2 text-[11px] font-black text-red-700">
+                          Sequenza da controllare: {attendanceState.invalidLogs.map((log) => `${typeLabels[log.type] ?? log.type} ${visibleClockTime(log as AttendanceLog)}`).join(", ")}
+                        </div>
+                      ) : null}
                       <div className="flex items-center gap-1.5">
                         <LogOut className="size-3.5 text-black/35 dark:text-white/40" />
                         <p>Uscita: <span className="text-black dark:text-white">{visibleClockTime(group.uscita)}</span></p>

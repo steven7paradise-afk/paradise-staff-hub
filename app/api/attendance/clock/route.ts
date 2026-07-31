@@ -2,18 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { AttendanceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
+import { deriveAttendanceState, permittedAttendanceActions } from "@/lib/attendance-state";
 import { applyExitRounding, applyParadiseEntranceRounding, clockRuleKey, localWeekRange, parseClockRule } from "@/lib/clock-rules";
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
 import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
-
-const permittedNextAction: Record<AttendanceType | "NONE", AttendanceType[]> = {
-  NONE: ["ENTRATA"],
-  ENTRATA: ["PAUSA", "USCITA"],
-  PAUSA: ["RIENTRO", "USCITA"],
-  RIENTRO: ["PAUSA", "USCITA"],
-  USCITA: ["ENTRATA"],
-};
 
 export async function POST(request: NextRequest) {
   const payload = await request.json();
@@ -48,17 +41,27 @@ export async function POST(request: NextRequest) {
 
   const logLocationId = (isOffice && user.sede_id) ? user.sede_id : device.location_id;
   const logLocationName = (isOffice && user.location) ? user.location.name : device.location.name;
+  const actualTimestamp = new Date();
+  const actualLocalDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(actualTimestamp);
+  const actualDateOnly = new Date(`${actualLocalDate}T00:00:00.000Z`);
+  const actualTomorrow = new Date(actualDateOnly);
+  actualTomorrow.setUTCDate(actualTomorrow.getUTCDate() + 1);
 
   const latestLog = await prisma.attendanceLog.findFirst({
     where: { user_id: user.id },
     orderBy: { timestamp: "desc" },
     select: { type: true, timestamp: true },
   });
-  if (!permittedNextAction[latestLog?.type ?? "NONE"].includes(type)) {
+  const todayLogs = await prisma.attendanceLog.findMany({
+    where: { user_id: user.id, date: { gte: actualDateOnly, lt: actualTomorrow } },
+    orderBy: { timestamp: "asc" },
+    select: { type: true, timestamp: true },
+  });
+  const currentState = deriveAttendanceState(todayLogs);
+  const allowedActions = permittedAttendanceActions(currentState.status) as AttendanceType[];
+  if (!allowedActions.includes(type)) {
     return NextResponse.json({ error: "Azione non valida per lo stato attuale del turno" }, { status: 409 });
   }
-
-  const actualTimestamp = new Date();
 
   // Cooldown check (5 seconds)
   if (latestLog) {
@@ -172,8 +175,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Check break limit on RIENTRO and notify admins/superadmins
-  if (type === "RIENTRO" && latestLog?.timestamp) {
-    const breakDurationMs = actualTimestamp.getTime() - latestLog.timestamp.getTime();
+  if (type === "RIENTRO" && currentState.activePause?.timestamp) {
+    const breakDurationMs = actualTimestamp.getTime() - currentState.activePause.timestamp.getTime();
     const breakDurationMins = breakDurationMs / (1000 * 60);
     const breakLimit = rule.breakDurationMinutes;
     if (breakDurationMins > breakLimit) {
@@ -195,8 +198,8 @@ export async function POST(request: NextRequest) {
 
   if (type !== "PAUSA") {
     let finalNote = storedNote;
-    if (type === "RIENTRO" && latestLog?.timestamp) {
-      const breakDurationMs = actualTimestamp.getTime() - latestLog.timestamp.getTime();
+    if (type === "RIENTRO" && currentState.activePause?.timestamp) {
+      const breakDurationMs = actualTimestamp.getTime() - currentState.activePause.timestamp.getTime();
       const breakDurationMins = Math.round(breakDurationMs / (1000 * 60));
       const breakInfo = `Pausa durata: ${breakDurationMins} min`;
       finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;

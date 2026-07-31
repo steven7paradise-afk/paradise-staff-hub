@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { deriveAttendanceState } from "@/lib/attendance-state";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { prisma } from "@/lib/prisma";
 
@@ -33,8 +34,7 @@ export async function GET() {
       attendance_logs: {
         where: { date: { gte: today, lt: tomorrow } },
         select: { type: true, timestamp: true, time: true },
-        orderBy: { timestamp: "desc" },
-        take: 1,
+        orderBy: { timestamp: "asc" },
       },
     },
     orderBy: { name: "asc" },
@@ -42,14 +42,19 @@ export async function GET() {
   const locationIds = Array.from(new Set(workers.map((worker) => worker.sede_id).filter((id): id is string => Boolean(id))));
   const rules = await prisma.setting.findMany({ where: { key: { in: locationIds.map(clockRuleKey) } } });
 
-  return NextResponse.json(workers.map((worker) => ({
-    id: worker.id,
-    name: worker.name,
-    photo_url: worker.photo_url,
-    location: worker.location?.name ?? "Nessun salone",
-    lastLog: worker.attendance_logs[0]
-      ? { ...worker.attendance_logs[0], timestamp: worker.attendance_logs[0].timestamp.toISOString() }
-      : null,
-    breakDurationMinutes: parseClockRule(rules.find((rule) => rule.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes,
-  })));
+  return NextResponse.json(workers.map((worker) => {
+    const state = deriveAttendanceState(worker.attendance_logs);
+    const lastLog = state.lastValidLog;
+    return {
+      id: worker.id,
+      name: worker.name,
+      photo_url: worker.photo_url,
+      location: worker.location?.name ?? "Nessun salone",
+      lastLog: lastLog
+        ? { ...lastLog, timestamp: lastLog.timestamp.toISOString() }
+        : null,
+      breakDurationMinutes: parseClockRule(rules.find((rule) => rule.key === clockRuleKey(worker.sede_id ?? ""))?.value).breakDurationMinutes,
+      invalidLogs: state.invalidLogs.length,
+    };
+  }));
 }
