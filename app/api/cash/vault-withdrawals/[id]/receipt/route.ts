@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { downloadGoogleDriveFile } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 import { downloadPrivateDocument } from "@/lib/supabase-storage";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -22,7 +23,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
   if (!withdrawal?.receipt_path) {
     return NextResponse.json({ error: "Scontrino non trovato" }, { status: 404 });
   }
-  if (session.user.role === "RESPONSABILE" && session.user.sedeId && withdrawal.location_id !== session.user.sedeId && !isDarwin) {
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true },
+  });
+  const hasFullCashAccess = isDarwin || (accessUser ? await canAccessForUser(prisma, "/cash", accessUser) : false);
+
+  if (session.user.role === "RESPONSABILE" && session.user.sedeId && withdrawal.location_id !== session.user.sedeId && !hasFullCashAccess) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

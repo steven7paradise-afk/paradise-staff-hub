@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { cashDateFromInput } from "@/lib/cash-records";
 import { uploadCashReceiptToGoogleDrive } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
 const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 
@@ -27,7 +28,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "La foto dello scontrino è obbligatoria e deve pesare al massimo 10 MB." }, { status: 400 });
   }
 
-  if (session.user.role === "RESPONSABILE" && session.user.sedeId && locationId !== session.user.sedeId && !isDarwin) {
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true },
+  });
+  const hasFullCashAccess = isDarwin || (accessUser ? await canAccessForUser(prisma, "/cash", accessUser) : false);
+
+  if (session.user.role === "RESPONSABILE" && session.user.sedeId && locationId !== session.user.sedeId && !hasFullCashAccess) {
     return NextResponse.json({ error: "Puoi registrare prelievi solo per il tuo salone." }, { status: 403 });
   }
 

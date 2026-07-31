@@ -219,7 +219,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   await ensureCashClosingForm(session.user.id);
 
   const { start, end, todayStart, todayEnd, now } = monthRange(searchParams.month);
-  const isResponsible = role === "RESPONSABILE" && !isDarwin;
+  const isResponsible = false;
   const selectedMonth = monthKey(start);
   const prevMonth = new Date(start);
   prevMonth.setMonth(prevMonth.getMonth() - 1);
@@ -626,6 +626,34 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const orphanResponses = responses.filter((response) => !response.user_location_id);
   const maxTrend = Math.max(...trendMonths.map((month) => Math.abs(month.net)), 1);
+  const monthlyMovements = [
+    ...responses.map((response) => ({
+      id: `closing-${response.id}`,
+      kind: "Chiusura cassa",
+      date: cashAccountingDate(response),
+      locationName: response.user_location_name || response.location?.name || "Sede non indicata",
+      operator: signatureName(response),
+      amount: moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)),
+      amountClass: "text-emerald-700",
+      detail: `Fondo cassa ${formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund)))}`,
+      note: String(answer(response, CASH_CLOSING_FIELD_IDS.notes) || "-"),
+      closing: response,
+      vault: null as any,
+    })),
+    ...vaultWithdrawals.map((response) => ({
+      id: `vault-${response.id}`,
+      kind: "Prelievo cassaforte",
+      date: vaultAccountingDate(response),
+      locationName: response.user_location_name || response.location?.name || "Sede non indicata",
+      operator: signatureName(response),
+      amount: -moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)),
+      amountClass: "text-[#A74758]",
+      detail: String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "Motivo non indicato"),
+      note: String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "-"),
+      closing: null as any,
+      vault: response,
+    })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return (
     <AppShell
@@ -705,6 +733,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               users={users.map((user) => ({ id: user.id, name: user.name, locationId: user.sede_id }))}
               allClosings={closingRecords}
               vaultWithdrawals={vaultWithdrawalRecords}
+              monthWeekCloses={monthWeekCloses.map((setting) => ({ key: setting.key, value: setting.value }))}
               isResponsible={isResponsible}
               userSedeId={session.user.sedeId}
             />
@@ -1069,59 +1098,73 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
         <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-white p-0 overflow-hidden">
           <div className="border-b border-black/5 p-5">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
-            <h2 className="mt-1 text-2xl font-black">Dettaglio firme e chiusure</h2>
+            <h2 className="mt-1 text-2xl font-black">Tutti i movimenti</h2>
+            <p className="mt-1 text-sm text-black/45">Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1180px] text-left text-sm">
               <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
                 <tr>
                   <th className="px-5 py-3">Data</th>
+                  <th className="px-5 py-3">Tipo</th>
                   <th className="px-5 py-3">Sede</th>
-                  <th className="px-5 py-3">Firma</th>
-                  <th className="px-5 py-3 text-right">Prelevato</th>
-                  <th className="px-5 py-3 text-right">Fondo cassa</th>
-                  <th className="px-5 py-3">Controllo</th>
-                  <th className="px-5 py-3">Note</th>
+                  <th className="px-5 py-3">Operatore</th>
+                  <th className="px-5 py-3 text-right">Importo</th>
+                  <th className="px-5 py-3">Dettaglio</th>
                   <th className="px-5 py-3">Azioni rapide</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5">
-                {responses.map((response) => {
-                  const fund = moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund));
-                  const hasFundIssue = Math.abs(fund - 50) > 0.009;
-                  const review = cashReview(response);
+                {monthlyMovements.map((movement) => {
+                  const review = movement.closing ? cashReview(movement.closing) : null;
+                  const receipt = movement.vault
+                    ? answer(movement.vault, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null
+                    : null;
                   return (
-                    <tr key={response.id} className="align-top">
-                      <td className="px-5 py-4 font-bold">{cashDate(response)}</td>
-                      <td className="px-5 py-4">{response.user_location_name || response.location?.name || "Sede non indicata"}</td>
+                    <tr key={movement.id} className="align-top">
+                      <td className="px-5 py-4 font-bold">
+                        {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(movement.date)}
+                      </td>
                       <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
-                          <UserRound className="size-3.5" />
-                          {signatureName(response)}
+                        <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${
+                          movement.closing ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-[#A74758]"
+                        }`}>
+                          {movement.kind}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right font-black">{formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))}</td>
-                      <td className="px-5 py-4 text-right">
-                        <span className={hasFundIssue ? "font-black text-[#A74758]" : "font-black text-emerald-700"}>{formatMoney(fund)}</span>
-                      </td>
+                      <td className="px-5 py-4">{movement.locationName}</td>
                       <td className="px-5 py-4">
-                        <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
-                          {cashReviewLabel(review.status)}
+                        <span className="inline-flex items-center gap-2 rounded-full bg-[#FAF7F9] px-3 py-1 text-xs font-black text-black/70">
+                          <UserRound className="size-3.5 text-[#A74758]" />
+                          {movement.operator}
                         </span>
                       </td>
-                      <td className="max-w-[280px] px-5 py-4 text-xs leading-5 text-black/55">
-                        <p>{String(answer(response, CASH_CLOSING_FIELD_IDS.notes) || "-")}</p>
-                        {review.note ? <p className="mt-2 font-bold text-[#A74758]">Resp: {review.note}</p> : null}
+                      <td className={`px-5 py-4 text-right font-black ${movement.amountClass}`}>
+                        {formatMoney(movement.amount)}
+                      </td>
+                      <td className="max-w-[420px] px-5 py-4 text-xs leading-5 text-black/55">
+                        <p className="font-semibold text-black/65">{movement.detail}</p>
+                        {review ? (
+                          <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
+                            {cashReviewLabel(review.status)}
+                          </span>
+                        ) : null}
+                        {review?.note ? <p className="mt-2 font-bold text-[#A74758]">Resp: {review.note}</p> : null}
+                        {receipt?.url ? (
+                          <a href={receipt.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex font-black text-[#A74758] underline-offset-4 hover:underline">
+                            Vedi foto scontrino
+                          </a>
+                        ) : null}
                       </td>
                       <td className="px-5 py-4">
-                        <CashReviewActions closingId={response.id} initialReview={review} compact />
+                        {movement.closing ? <CashReviewActions closingId={movement.closing.id} initialReview={review!} compact /> : <span className="text-xs font-semibold text-black/35">Registrato</span>}
                       </td>
                     </tr>
                   );
                 })}
-                {responses.length === 0 ? (
+                {monthlyMovements.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-10 text-center text-sm font-semibold text-black/40">Nessuna chiusura cassa nel mese corrente.</td>
+                    <td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-black/40">Nessun movimento nel mese corrente.</td>
                   </tr>
                 ) : null}
               </tbody>

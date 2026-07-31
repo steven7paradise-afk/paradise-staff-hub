@@ -5,12 +5,20 @@ import { AttendanceManager } from "@/components/attendance-manager";
 import { auth } from "@/lib/auth";
 import { closeForgottenShifts } from "@/lib/forgotten-shifts";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser, canEditForUser } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
 export default async function AttendancePage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true, sede_id: true },
+  });
+  if (!currentUser) redirect("/login");
+  const hasFullAttendanceAccess = await canAccessForUser(prisma, "/attendance", currentUser);
+  const canEditAttendance = await canEditForUser(prisma, "/attendance", currentUser);
   await closeForgottenShifts();
   const dateLimit = new Date();
   dateLimit.setMonth(dateLimit.getMonth() - 6);
@@ -41,7 +49,7 @@ export default async function AttendancePage() {
       gte: dateLimit,
     },
     user: currentEmployeeWhere,
-    ...(session.user.role === "RESPONSABILE" ? { location_id: session.user.sedeId } : {}),
+    ...(session.user.role === "RESPONSABILE" && !hasFullAttendanceAccess ? { location_id: session.user.sedeId } : {}),
   };
 
   const [logs, workers] = await Promise.all([
@@ -50,7 +58,7 @@ export default async function AttendancePage() {
       include: { user: true, location: true, device: true },
       orderBy: { timestamp: "desc" },
     }),
-    session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
+    hasFullAttendanceAccess
       ? prisma.user.findMany({ where: { ...currentEmployeeWhere, sede_id: { not: null } }, include: { location: true }, orderBy: { name: "asc" } })
       : Promise.resolve([]),
   ]);
@@ -58,7 +66,7 @@ export default async function AttendancePage() {
   return (
     <AppShell title="Timbrature" subtitle="Registro ufficiale delle presenze salvate dai tablet autorizzati.">
       <AttendanceManager
-        readOnly={session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN"}
+        readOnly={!canEditAttendance}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, location: worker.location?.name ?? "Nessun salone", photoUrl: worker.photo_url }))}
         initialLogs={logs.map((log) => ({
           id: log.id,

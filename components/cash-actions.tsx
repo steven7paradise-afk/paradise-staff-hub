@@ -1,9 +1,9 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, FilePlus2, LockKeyhole, Loader2, Plus, Upload, X } from "lucide-react";
+import { AlertTriangle, CalendarDays, Camera, CheckCircle2, FilePlus2, LockKeyhole, Loader2, Plus, ReceiptText, Upload, WalletCards, X } from "lucide-react";
 import { jsPDF } from "jspdf";
 import { VAULT_WITHDRAWAL_FIELD_IDS } from "@/lib/vault-withdrawal-form";
 
@@ -16,6 +16,11 @@ type CashUser = {
   id: string;
   name: string;
   locationId: string | null;
+};
+
+type MonthWeekCloseSetting = {
+  key: string;
+  value: any;
 };
 
 function todayInputValue() {
@@ -40,6 +45,32 @@ function money(value: unknown) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function parseDate(raw: unknown, fallback?: unknown) {
+  const value = raw || fallback;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00`);
+  }
+  return value ? new Date(value as string) : new Date();
+}
+
+function dateIsInMonth(date: Date, month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) return true;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}` === month;
+}
+
+function formatDay(date: Date) {
+  return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function formatDateTime(value: unknown) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value as string));
+}
+
+function formatCurrency(value: number) {
+  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+}
+
 const fieldClass = "mt-1 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-[#111017] shadow-inner outline-none [color-scheme:light] placeholder:text-black/35 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/15";
 const textAreaClass = "mt-1 min-h-28 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm font-semibold text-[#111017] shadow-inner outline-none [color-scheme:light] placeholder:text-black/35 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/15";
 
@@ -52,6 +83,7 @@ export function CashActions({
   users = [],
   allClosings = [],
   vaultWithdrawals = [],
+  monthWeekCloses = [],
   isResponsible = false,
   userSedeId = null,
 }: {
@@ -63,6 +95,7 @@ export function CashActions({
   users?: CashUser[];
   allClosings?: any[];
   vaultWithdrawals?: any[];
+  monthWeekCloses?: MonthWeekCloseSetting[];
   isResponsible?: boolean;
   userSedeId?: string | null;
 }) {
@@ -87,6 +120,7 @@ export function CashActions({
   const [closingWeek, setClosingWeek] = useState(false);
   const [error, setError] = useState("");
   const [manualError, setManualError] = useState("");
+  const [monthCloseModalOpen, setMonthCloseModalOpen] = useState(false);
 
   const [weekCloseModalOpen, setWeekCloseModalOpen] = useState(false);
   const [selectedWeekCloseLocationId, setSelectedWeekCloseLocationId] = useState("");
@@ -164,6 +198,63 @@ export function CashActions({
   }, [selectedWeekCloseLocationId, customStartDate, customEndDate, vaultWithdrawals]);
 
   const manualUsers = users.filter((user) => !manualLocationId || !user.locationId || user.locationId === manualLocationId);
+  const locationNameById = new Map(locations.map((location) => [location.id, location.name]));
+  const selectedMonthLabel = monthDisplayLabel(month);
+  const monthStillOpen = monthIsStillOpen(month);
+  const monthClosingRows = allClosings
+    .map((closing: any) => {
+      const dateValue = parseDate(closing.answers?.cash_date || closing.date, closing.created_at);
+      return {
+        id: closing.id,
+        date: dateValue,
+        locationName: closing.user_location_name || closing.location?.name || locationNameById.get(closing.user_location_id) || "Sede non indicata",
+        operator: closing.answers?._signature?.user_name || closing.user?.name || "Firma non indicata",
+        amount: money(closing.answers?.cash_withdrawn || closing.withdrawn),
+        fund: money(closing.answers?.cash_fund || closing.fund),
+        notes: String(closing.answers?.cash_notes || closing.notes || ""),
+      };
+    })
+    .filter((closing) => dateIsInMonth(closing.date, month))
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  const monthVaultRows = vaultWithdrawals
+    .map((withdrawal: any) => {
+      const dateValue = parseDate(withdrawal.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.date] || withdrawal.date, withdrawal.created_at);
+      return {
+        id: withdrawal.id,
+        date: dateValue,
+        locationName: withdrawal.user_location_name || withdrawal.location?.name || locationNameById.get(withdrawal.user_location_id) || "Sede non indicata",
+        operator: withdrawal.answers?._signature?.user_name || withdrawal.user?.name || "Operatore",
+        amount: money(withdrawal.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.amount] || withdrawal.amount),
+        reason: String(withdrawal.answers?.[VAULT_WITHDRAWAL_FIELD_IDS.reason] || withdrawal.reason || "Motivo non indicato"),
+      };
+    })
+    .filter((withdrawal) => dateIsInMonth(withdrawal.date, month))
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  const monthWeekCloseRows = monthWeekCloses
+    .map((setting) => {
+      const value = setting.value || {};
+      const keyParts = setting.key.split(":");
+      const locationIdFromKey = keyParts[1] || "";
+      const weekParts = String(value.weekKey || "").split(":");
+      const startDate = weekParts[0] ? parseDate(weekParts[0]) : null;
+      const endDate = weekParts[1] ? parseDate(weekParts[1]) : startDate ? new Date(startDate) : null;
+      if (endDate && !weekParts[1]) endDate.setDate(endDate.getDate() + 6);
+      return {
+        id: setting.key,
+        locationName: value.location_name || locationNameById.get(locationIdFromKey) || "Sede non indicata",
+        period: startDate && endDate ? `${formatDay(startDate)} - ${formatDay(endDate)}` : String(value.weekKey || "-"),
+        closedBy: value.closed_by_name || "Operatore",
+        closedAt: value.closed_at,
+        bankDeposit: money(value.bank_deposit),
+        withdrawals: money(value.withdrawals),
+        notes: String(value.notes || ""),
+      };
+    })
+    .sort((a, b) => new Date(b.closedAt || 0).getTime() - new Date(a.closedAt || 0).getTime());
+  const monthClosingsTotal = monthClosingRows.reduce((sum, row) => sum + row.amount, 0);
+  const monthVaultTotal = monthVaultRows.reduce((sum, row) => sum + row.amount, 0);
+  const monthBankDepositTotal = monthWeekCloseRows.reduce((sum, row) => sum + row.bankDeposit, 0);
+  const monthWeeklyWithdrawalsTotal = monthWeekCloseRows.reduce((sum, row) => sum + row.withdrawals, 0);
 
   async function saveWithdrawal(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -200,12 +291,7 @@ export function CashActions({
   }
 
   async function closeMonth() {
-    const label = monthDisplayLabel(month);
     const confirmEarly = monthIsStillOpen(month);
-    const message = confirmEarly
-      ? `ATTENZIONE: il mese ${label} non è ancora finito. Sei sicuro di voler fare la chiusura mensile adesso?`
-      : `Vuoi chiudere il mese ${label}? Dopo la chiusura resta nello storico e puoi iniziare un nuovo conteggio.`;
-    if (!confirm(message)) return;
     setClosing(true);
     const response = await fetch("/api/cash/close-month", {
       method: "POST",
@@ -218,6 +304,7 @@ export function CashActions({
       alert(data.error || "Errore durante la chiusura mese.");
       return;
     }
+    setMonthCloseModalOpen(false);
     router.refresh();
   }
 
@@ -288,13 +375,157 @@ export function CashActions({
       </button>
       <button
         type="button"
-        onClick={closeMonth}
+        onClick={() => setMonthCloseModalOpen(true)}
         disabled={closing}
         className="w-full sm:w-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-black text-white transition hover:bg-white/15 disabled:opacity-50"
       >
         {monthClosed ? <CheckCircle2 className="size-4 text-emerald-300" /> : closing ? <Loader2 className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}
         {monthClosed ? "Mese chiuso" : "Chiusura mese"}
       </button>
+
+      {monthCloseModalOpen ? (
+        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col rounded-[30px] bg-white text-[#111017] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-black/5 p-5 sm:p-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#A74758]">Controllo mese</p>
+                <h2 className="mt-1 text-2xl font-black sm:text-3xl">Conferma chiusura {selectedMonthLabel}</h2>
+                <p className="mt-1 text-sm text-black/50">Controlla chiusure settimanali, chiusure giornaliere e spese prima di salvare.</p>
+              </div>
+              <button type="button" onClick={() => setMonthCloseModalOpen(false)} className="grid size-10 shrink-0 place-items-center rounded-2xl bg-black/5 text-[#111017]">
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 overflow-y-auto p-5 sm:p-6">
+              {monthStillOpen ? (
+                <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                  <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-black">Il mese non è ancora finito.</p>
+                    <p className="mt-1 text-xs font-semibold">Puoi chiuderlo, ma fallo solo se sei sicura: la chiusura entrerà nello storico mensile.</p>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MonthSummaryCard icon={CalendarDays} label="Chiusure giornaliere" value={monthClosingRows.length.toString()} detail={formatCurrency(monthClosingsTotal)} />
+                <MonthSummaryCard icon={LockKeyhole} label="Chiusure settimanali" value={monthWeekCloseRows.length.toString()} detail={`Banca ${formatCurrency(monthBankDepositTotal)}`} />
+                <MonthSummaryCard icon={WalletCards} label="Spese / prelievi" value={monthVaultRows.length.toString()} detail={`-${formatCurrency(monthVaultTotal)}`} />
+                <MonthSummaryCard icon={ReceiptText} label="Netto controllato" value={formatCurrency(monthClosingsTotal - monthVaultTotal)} detail={`Settimane: ${formatCurrency(monthBankDepositTotal - monthWeeklyWithdrawalsTotal)}`} />
+              </div>
+
+              <MonthSection title="Chiusure settimanali">
+                {monthWeekCloseRows.length === 0 ? (
+                  <EmptyMonthMessage text="Nessuna chiusura settimanale salvata per questo mese." />
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-black/5">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
+                        <tr>
+                          <th className="px-4 py-3">Sede</th>
+                          <th className="px-4 py-3">Periodo</th>
+                          <th className="px-4 py-3">Chiusa da</th>
+                          <th className="px-4 py-3 text-right">Versato banca</th>
+                          <th className="px-4 py-3 text-right">Spese</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black/5">
+                        {monthWeekCloseRows.map((row) => (
+                          <tr key={row.id}>
+                            <td className="px-4 py-3 font-black">{row.locationName}</td>
+                            <td className="px-4 py-3 text-black/60">{row.period}</td>
+                            <td className="px-4 py-3 text-black/60">{row.closedBy}<br /><span className="text-black/35">{formatDateTime(row.closedAt)}</span></td>
+                            <td className="px-4 py-3 text-right font-black text-emerald-700">{formatCurrency(row.bankDeposit)}</td>
+                            <td className="px-4 py-3 text-right font-black text-[#A74758]">-{formatCurrency(row.withdrawals)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </MonthSection>
+
+              <MonthSection title="Chiusure giornaliere">
+                {monthClosingRows.length === 0 ? (
+                  <EmptyMonthMessage text="Nessuna chiusura giornaliera registrata per questo mese." />
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-black/5">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
+                        <tr>
+                          <th className="px-4 py-3">Data</th>
+                          <th className="px-4 py-3">Sede</th>
+                          <th className="px-4 py-3">Operatore</th>
+                          <th className="px-4 py-3 text-right">Dichiarato</th>
+                          <th className="px-4 py-3 text-right">Fondo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black/5">
+                        {monthClosingRows.map((row) => (
+                          <tr key={row.id}>
+                            <td className="px-4 py-3 font-bold capitalize">{formatDay(row.date)}</td>
+                            <td className="px-4 py-3 text-black/60">{row.locationName}</td>
+                            <td className="px-4 py-3 text-black/60">{row.operator}</td>
+                            <td className="px-4 py-3 text-right font-black text-emerald-700">{formatCurrency(row.amount)}</td>
+                            <td className="px-4 py-3 text-right font-black">{formatCurrency(row.fund)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </MonthSection>
+
+              <MonthSection title="Transazioni / spese / prelievi">
+                {monthVaultRows.length === 0 ? (
+                  <EmptyMonthMessage text="Nessuna spesa o prelievo registrato per questo mese." />
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-black/5">
+                    <table className="w-full min-w-[760px] text-left text-xs">
+                      <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
+                        <tr>
+                          <th className="px-4 py-3">Data</th>
+                          <th className="px-4 py-3">Sede</th>
+                          <th className="px-4 py-3">Motivo</th>
+                          <th className="px-4 py-3">Operatore</th>
+                          <th className="px-4 py-3 text-right">Importo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black/5">
+                        {monthVaultRows.map((row) => (
+                          <tr key={row.id}>
+                            <td className="px-4 py-3 font-bold capitalize">{formatDay(row.date)}</td>
+                            <td className="px-4 py-3 text-black/60">{row.locationName}</td>
+                            <td className="px-4 py-3 text-black/65">{row.reason}</td>
+                            <td className="px-4 py-3 text-black/50">{row.operator}</td>
+                            <td className="px-4 py-3 text-right font-black text-[#A74758]">-{formatCurrency(row.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </MonthSection>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-black/5 p-5 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setMonthCloseModalOpen(false)} className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-black/10 bg-white px-5 text-sm font-black text-black">
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={closeMonth}
+                disabled={closing}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#A74758] px-5 text-sm font-black text-white disabled:opacity-50"
+              >
+                {closing ? <Loader2 className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}
+                Conferma chiusura mese
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {open ? (
         <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
@@ -1006,6 +1237,46 @@ export function CashActions({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function MonthSummaryCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: typeof CalendarDays;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-4">
+      <div className="flex items-center gap-2 text-[#A74758]">
+        <Icon className="size-4" />
+        <span className="text-[10px] font-black uppercase tracking-[0.14em]">{label}</span>
+      </div>
+      <p className="mt-3 text-2xl font-black text-[#111017]">{value}</p>
+      <p className="mt-1 text-xs font-bold text-black/45">{detail}</p>
+    </div>
+  );
+}
+
+function MonthSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="text-xs font-black uppercase tracking-[0.18em] text-black/40">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function EmptyMonthMessage({ text }: { text: string }) {
+  return (
+    <p className="rounded-2xl border border-dashed border-black/10 bg-[#FAF7F9] px-4 py-3 text-sm font-semibold text-black/40">
+      {text}
+    </p>
   );
 }
 

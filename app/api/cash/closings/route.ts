@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { cashDateFromInput } from "@/lib/cash-records";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
 const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -24,7 +25,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Salone, lavoratore, data, prelevato e fondo cassa sono obbligatori." }, { status: 400 });
   }
 
-  if (session.user.role === "RESPONSABILE" && session.user.sedeId && locationId !== session.user.sedeId && !isDarwin) {
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true },
+  });
+  const hasFullCashAccess = isDarwin || (accessUser ? await canAccessForUser(prisma, "/cash", accessUser) : false);
+
+  if (session.user.role === "RESPONSABILE" && session.user.sedeId && locationId !== session.user.sedeId && !hasFullCashAccess) {
     return NextResponse.json({ error: "Puoi aggiungere chiusure solo per il tuo salone." }, { status: 403 });
   }
 
@@ -39,7 +46,7 @@ export async function POST(request: Request) {
       where: {
         id: userId,
         active: true,
-        ...(session.user.role === "RESPONSABILE" && session.user.sedeId && !isDarwin ? { sede_id: session.user.sedeId } : {}),
+        ...(session.user.role === "RESPONSABILE" && session.user.sedeId && !hasFullCashAccess ? { sede_id: session.user.sedeId } : {}),
       },
       select: { id: true, name: true, role: true, sede_id: true },
     }),

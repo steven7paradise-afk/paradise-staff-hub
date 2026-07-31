@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
 const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 const allowedStatuses = new Set(["DA_CONTROLLARE", "CORRETTO", "ERRORE"]);
@@ -30,7 +31,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Chiusura non trovata." }, { status: 404 });
   }
 
-  if (session.user.role === "RESPONSABILE" && session.user.sedeId && closing.location_id !== session.user.sedeId && !isDarwin) {
+  const accessUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, mansione: true, access_list: true },
+  });
+  const hasFullCashAccess = isDarwin || (accessUser ? await canAccessForUser(prisma, "/cash", accessUser) : false);
+
+  if (session.user.role === "RESPONSABILE" && session.user.sedeId && closing.location_id !== session.user.sedeId && !hasFullCashAccess) {
     return NextResponse.json({ error: "Puoi controllare solo il tuo salone." }, { status: 403 });
   }
 
