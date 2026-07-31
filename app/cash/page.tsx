@@ -1145,9 +1145,17 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       <td className="max-w-[420px] px-5 py-4 text-xs leading-5 text-black/55">
                         <p className="font-semibold text-black/65">{movement.detail}</p>
                         {review ? (
-                          <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
-                            {cashReviewLabel(review.status)}
-                          </span>
+                          <div className="mt-2 space-y-1">
+                            <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
+                              {cashReviewLabel(review.status)}
+                            </span>
+                            {review.reviewed_by_name ? (
+                              <p className="font-black text-black/55">
+                                Ultimo controllo: {review.reviewed_by_name}
+                                {review.reviewed_at ? ` - ${new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(review.reviewed_at))}` : ""}
+                              </p>
+                            ) : null}
+                          </div>
                         ) : null}
                         {review?.note ? <p className="mt-2 font-bold text-[#A74758]">Resp: {review.note}</p> : null}
                         {receipt?.url ? (

@@ -41,13 +41,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Puoi controllare solo il tuo salone." }, { status: 403 });
   }
 
+  const existingSetting = await prisma.setting.findUnique({
+    where: { key: `cash_closing_review:${closing.id}` },
+    select: { value: true },
+  });
+  const existingValue = (existingSetting?.value && typeof existingSetting.value === "object" ? existingSetting.value : {}) as any;
+  const reviewedAt = new Date().toISOString();
+  const reviewerName = session.user.name ?? "Admin";
   const value = {
+    ...existingValue,
     status,
     note,
     reviewed_by_id: session.user.id,
-    reviewed_by_name: session.user.name ?? "Admin",
-    reviewed_at: new Date().toISOString(),
+    reviewed_by_name: reviewerName,
+    reviewed_at: reviewedAt,
   };
+  const event = {
+    status,
+    note,
+    reviewed_by_id: session.user.id,
+    reviewed_by_name: reviewerName,
+    reviewed_at: reviewedAt,
+  };
+  value.review_events = [...(Array.isArray(existingValue.review_events) ? existingValue.review_events : []), event].slice(-20);
 
   const setting = await prisma.setting.upsert({
     where: { key: `cash_closing_review:${closing.id}` },

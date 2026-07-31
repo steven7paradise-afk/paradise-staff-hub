@@ -48,7 +48,7 @@ export default async function ClientControlPage() {
     ? await prisma.serviceFormResponse.findMany({
         where: {
           form_id: { in: clientControlFormIds },
-          ...(role === "RESPONSABILE" && session.user.sedeId ? { user_location_id: session.user.sedeId } : {}),
+          ...(role === "RESPONSABILE" && !canAccessPage && session.user.sedeId ? { user_location_id: session.user.sedeId } : {}),
         },
         include: {
           user: { select: { id: true, name: true, role: true, photo_url: true } },

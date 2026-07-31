@@ -10,6 +10,12 @@ type CashReview = {
   note?: string;
   reviewed_by_name?: string;
   reviewed_at?: string;
+  review_events?: Array<{
+    status?: string;
+    note?: string;
+    reviewed_by_name?: string;
+    reviewed_at?: string;
+  }>;
 };
 
 const statusOptions = [
@@ -61,33 +67,58 @@ export function CashReviewActions({
     CORRETTO: "Corretto",
     ERRORE: "Errore",
   };
+  const reviewedAtLabel = initialReview?.reviewed_at
+    ? new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(initialReview.reviewed_at))
+    : "";
+  const reviewerName = initialReview?.reviewed_by_name?.trim() || "";
+  const declarationText = reviewerName
+    ? status === "CORRETTO"
+      ? `${reviewerName} dichiara che ha controllato la chiusura giornaliera e che e tutto corretto.`
+      : status === "ERRORE"
+        ? `${reviewerName} ha controllato la chiusura giornaliera e ha segnalato un errore.`
+        : `${reviewerName} ha iniziato il controllo della chiusura giornaliera.`
+    : "Nessun controllo firmato ancora.";
+  const history = Array.isArray(initialReview?.review_events) ? initialReview.review_events.slice(-3).reverse() : [];
 
   if (!isEditing) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-2xl border border-black/5 bg-[#FAF7F9] px-4 py-2 text-xs">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <span className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider",
-            statusColorMap[status as keyof typeof statusColorMap] || statusColorMap.DA_CONTROLLARE
-          )}>
-            {status === "ERRORE" ? <TriangleAlert className="size-2.5" /> : status === "CORRETTO" ? <CheckCircle2 className="size-2.5" /> : null}
-            {statusLabelMap[status as keyof typeof statusLabelMap] || "Da controllare"}
-          </span>
-          {initialReview?.note?.trim() ? (
-            <span className="text-black/60 italic truncate max-w-[200px] sm:max-w-[450px]">
-              - "{initialReview.note}"
-            </span>
-          ) : (
-            <span className="text-black/35 italic">- Nessuna nota di controllo</span>
-          )}
+      <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] px-4 py-3 text-xs">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider",
+                statusColorMap[status as keyof typeof statusColorMap] || statusColorMap.DA_CONTROLLARE
+              )}>
+                {status === "ERRORE" ? <TriangleAlert className="size-2.5" /> : status === "CORRETTO" ? <CheckCircle2 className="size-2.5" /> : null}
+                {statusLabelMap[status as keyof typeof statusLabelMap] || "Da controllare"}
+              </span>
+              {reviewedAtLabel ? <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">{reviewedAtLabel}</span> : null}
+            </div>
+            <p className="mt-2 font-black leading-5 text-black/75">{declarationText}</p>
+            {initialReview?.note?.trim() ? (
+              <p className="mt-1 leading-5 text-black/55">Nota: <span className="italic">"{initialReview.note}"</span></p>
+            ) : (
+              <p className="mt-1 text-black/35 italic">Nessuna nota di controllo.</p>
+            )}
+            {history.length > 1 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {history.slice(1).map((event, index) => (
+                  <span key={`${event.reviewed_at}-${index}`} className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-black/40">
+                    {event.reviewed_by_name || "Utente"}: {statusLabelMap[event.status as keyof typeof statusLabelMap] || event.status || "Controllo"}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="shrink-0 text-[11px] font-black text-black/50 underline transition hover:text-black"
+          >
+            Modifica
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsEditing(true)}
-          className="text-black/50 hover:text-black font-black text-[11px] underline flex items-center gap-1 transition shrink-0"
-        >
-          Modifica
-        </button>
       </div>
     );
   }
@@ -142,7 +173,7 @@ export function CashReviewActions({
       
       <div className="mt-2 flex items-center justify-between gap-2">
         <p className="text-[10px] font-bold text-black/35 truncate max-w-[180px] sm:max-w-[280px]">
-          {initialReview?.reviewed_by_name ? `Ultimo: ${initialReview.reviewed_by_name}` : "Azione rapida chiusura"}
+          {initialReview?.reviewed_by_name ? `Ultimo controllo: ${initialReview.reviewed_by_name}` : "Il salvataggio firma il controllo"}
         </p>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
