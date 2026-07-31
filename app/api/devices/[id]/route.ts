@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (session?.user?.role !== "SUPER_ADMIN") {
+  if (session?.user?.role !== "ZERO") {
     return NextResponse.json({ error: "Solo Super Admin" }, { status: 403 });
   }
   const data = await request.json();
@@ -29,7 +29,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (session?.user?.role !== "SUPER_ADMIN") {
+  if (session?.user?.role !== "ZERO") {
     return NextResponse.json({ error: "Solo Super Admin" }, { status: 403 });
   }
   const { id } = await context.params;

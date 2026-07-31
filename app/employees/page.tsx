@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function EmployeesPage() {
   const [employees, locations] = await Promise.all([
     prisma.user.findMany({
-      where: { role: { not: "SUPER_ADMIN" } },
+      where: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       include: { 
         location: true,
         last_edited_by: {

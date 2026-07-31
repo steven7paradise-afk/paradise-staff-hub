@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getWarehouseState, saveWarehouseState, type WarehouseProduct } from "@/lib/internal-warehouse";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 function slug(value: string) {
   return value

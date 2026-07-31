@@ -64,7 +64,7 @@ export async function closeForgottenShifts(now = new Date()) {
     });
 
     const admins = await prisma.user.findMany({
-      where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+      where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] } },
       select: { id: true, email: true },
     });
     await createNotifications([

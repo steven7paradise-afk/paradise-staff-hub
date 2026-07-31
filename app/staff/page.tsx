@@ -18,7 +18,7 @@ export default async function StaffPage() {
     auth(),
     prisma.user.findMany({
       where: {
-        role: { not: "SUPER_ADMIN" },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       },
       include: {
         location: true,
@@ -47,7 +47,7 @@ export default async function StaffPage() {
     }),
     prisma.user.findMany({
       where: {
-        role: { in: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+        role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
         active: true,
       },
       orderBy: { name: "asc" },

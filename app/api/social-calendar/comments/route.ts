@@ -9,7 +9,7 @@ async function checkAuth(userId: string) {
     select: { role: true, mansione: true }
   });
   return (
-    user?.role === "SUPER_ADMIN" ||
+    user?.role === "ZERO" || user?.role === "SUPER_ADMIN" ||
     user?.role === "ADMIN" ||
     user?.role === "RESPONSABILE" ||
     (user?.mansione && user.mansione.toLowerCase().includes("social"))
@@ -133,7 +133,7 @@ export async function DELETE(request: NextRequest) {
 
     // Only creator of comment or SUPER_ADMIN / ADMIN / RESPONSABILE can delete
     const isOwner = comment.user_id === session.user.id;
-    const isManager = session.user.role === "SUPER_ADMIN" || session.user.role === "ADMIN" || session.user.role === "RESPONSABILE";
+    const isManager = session.user.role === "ZERO" || session.user.role === "SUPER_ADMIN" || session.user.role === "ADMIN" || session.user.role === "RESPONSABILE";
 
     if (!isOwner && !isManager) {
       return NextResponse.json({ error: "Non autorizzato a eliminare questo commento" }, { status: 403 });

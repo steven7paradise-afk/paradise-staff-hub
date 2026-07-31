@@ -44,7 +44,7 @@ function normalizePermissionsMap(value: unknown): MansioniPermissionsMap {
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
+  if (!session?.user?.id || (session.user.role !== "ZERO" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
 
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
+  if (!session?.user?.id || (session.user.role !== "ZERO" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
     return NextResponse.json({ error: "Non autorizzato. Solo gli Admin e Super Admin possono configurare i permessi delle mansioni." }, { status: 403 });
   }
 

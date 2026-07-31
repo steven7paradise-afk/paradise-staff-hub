@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 const allowedStatuses = new Set(["DA_CONTROLLARE", "CORRETTO", "ERRORE"]);
 
 export async function POST(request: Request) {

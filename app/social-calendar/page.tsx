@@ -18,7 +18,7 @@ export default async function SocialCalendarPage() {
   });
 
   const isAllowed =
-    user?.role === "SUPER_ADMIN" ||
+    user?.role === "ZERO" || user?.role === "SUPER_ADMIN" ||
     user?.role === "ADMIN" ||
     user?.role === "RESPONSABILE" ||
     (user?.mansione && user.mansione.toLowerCase().includes("social"));

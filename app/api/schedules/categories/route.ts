@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditForUser } from "@/lib/roles";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     select: { id: true, role: true, mansione: true, access_list: true }
   });
 
-  const isAuthorized = user && (user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
+  const isAuthorized = user && (user.role === "ZERO" || user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
   if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
@@ -77,7 +77,7 @@ export async function PUT(request: NextRequest) {
     select: { id: true, role: true, mansione: true, access_list: true }
   });
 
-  const isAuthorized = user && (user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
+  const isAuthorized = user && (user.role === "ZERO" || user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
   if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }

@@ -1794,7 +1794,7 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                           {(Array.isArray(dbComments) ? dbComments : []).map((c) => {
                             const isManager = c.user_role !== "DIPENDENTE";
                             const dateVal = c.created_at ? new Date(c.created_at) : new Date();
-                            const isAdmin = currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
+                            const isAdmin = currentUser?.role === "ZERO" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
                             const isAuthor = c.user_name === currentUser?.name;
                             const canDelete = canManageAppointmentNotes && (isAdmin || isAuthor);
 

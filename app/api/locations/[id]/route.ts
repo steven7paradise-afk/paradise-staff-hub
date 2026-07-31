@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await auth();

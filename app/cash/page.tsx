@@ -272,7 +272,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       where: {
         date: { gte: selectedDayStart, lt: selectedDayEnd },
         ...(isResponsible ? { location_id: session.user.sedeId ?? undefined } : {}),
-        user: { role: { not: "SUPER_ADMIN" }, active: true },
+        user: { role: { notIn: ["ZERO", "SUPER_ADMIN"] }, active: true },
       },
       include: { user: true, location: true, device: true },
       orderBy: [{ location: { name: "asc" } }, { timestamp: "asc" }],
@@ -280,7 +280,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     prisma.user.findMany({
       where: {
         active: true,
-        role: { not: "SUPER_ADMIN" },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
         ...(isResponsible ? { sede_id: session.user.sedeId ?? undefined } : {}),
       },
       select: { id: true, name: true, sede_id: true },

@@ -53,7 +53,7 @@ export default async function PointsPage() {
   ] = await Promise.all([
     prisma.setting.findUnique({ where: { key: DASHBOARD_SETTINGS_KEY } }).catch(() => null),
     prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }).catch(() => []),
-    prisma.user.findMany({ where: { active: true, role: { not: "SUPER_ADMIN" } }, select: { id: true, name: true } }).catch(() => []),
+    prisma.user.findMany({ where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } }, select: { id: true, name: true } }).catch(() => []),
     prisma.notification.findMany({
       where: { user_id: user.id, type: "COMUNICAZIONE", read: true },
       orderBy: { created_at: "desc" },

@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
     const role = session.user.role;
     const canManageOrders =
-      ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
+      ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
       session.user.id === "cmpo4y9900001jr09bg1dnqxs" ||
       session.user.id === "cmpms4o9h0003l809zof30mni" ||
       !!session.user.email?.toLowerCase().includes("jessica") ||

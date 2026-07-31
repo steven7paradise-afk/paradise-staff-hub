@@ -28,8 +28,8 @@ export async function ensureVaultWithdrawalForm(createdById?: string | null) {
         category: VAULT_WITHDRAWAL_FORM_CATEGORY,
         icon: existing.icon || "CircleDollarSign",
         active: false,
-        allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-        notify_roles: ["SUPER_ADMIN", "ADMIN"],
+        allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+        notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN"],
       },
     });
   }
@@ -41,8 +41,8 @@ export async function ensureVaultWithdrawalForm(createdById?: string | null) {
       category: VAULT_WITHDRAWAL_FORM_CATEGORY,
       icon: "CircleDollarSign",
       active: false,
-      allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-      notify_roles: ["SUPER_ADMIN", "ADMIN"],
+      allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+      notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN"],
       fields: [
         { id: VAULT_WITHDRAWAL_FIELD_IDS.date, label: "DATA PRELIEVO", type: "date", required: true },
         { id: VAULT_WITHDRAWAL_FIELD_IDS.amount, label: "IMPORTO PRELEVATO", type: "money", required: true },

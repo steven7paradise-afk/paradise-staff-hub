@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
-const senderRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const senderRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function POST(request: NextRequest) {
   const session = await auth();

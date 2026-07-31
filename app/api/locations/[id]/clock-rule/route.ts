@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (session?.user?.role !== "SUPER_ADMIN") {
+  if (session?.user?.role !== "ZERO") {
     return NextResponse.json({ error: "Solo Super Admin" }, { status: 403 });
   }
   const { id } = await context.params;

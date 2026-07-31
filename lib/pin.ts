@@ -51,7 +51,7 @@ export async function identifyWorkerByPin(pin: string, _locationId: string, _isO
   const quickMatch = await prisma.user.findFirst({
     where: {
       active: true,
-      role: { not: "SUPER_ADMIN" },
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       pin_lookup: lookup,
     },
     select: { id: true, name: true, photo_url: true, role: true, mansione: true },
@@ -69,7 +69,7 @@ export async function identifyWorkerByPin(pin: string, _locationId: string, _isO
   const candidates = await prisma.user.findMany({
     where: {
       active: true,
-      role: { not: "SUPER_ADMIN" },
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       pin_hash: { not: null },
     },
     select: { id: true, name: true, photo_url: true, role: true, mansione: true, pin_hash: true },

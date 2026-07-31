@@ -33,7 +33,7 @@ type RouteMeta = {
   group: string;
 };
 
-const ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"];
+const ROLES: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"];
 
 const ROUTE_META: Record<string, RouteMeta> = {
   "/dashboard": { name: "Dashboard", description: "Bacheca principale, avvisi e riepilogo operativo.", group: "Base" },
@@ -98,7 +98,7 @@ function routeGroup(path: string) {
 }
 
 function roleTone(role: Role): "pink" | "gold" | "green" | "dark" {
-  if (role === "SUPER_ADMIN") return "dark";
+  if (role === "ZERO" || role === "SUPER_ADMIN") return "dark";
   if (role === "ADMIN") return "pink";
   if (role === "RESPONSABILE") return "gold";
   return "green";
@@ -166,8 +166,9 @@ export function RolesSettingsClient({
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const isAdmin = currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
-  const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
+  const isZero = currentUser.role === "ZERO";
+  const isAdmin = isZero || currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
+  const isSuperAdmin = isZero;
   const allRoutes = useMemo(() => Object.keys(routePermissions), []);
 
   const mansioneNames = useMemo(() => {
@@ -223,7 +224,7 @@ export function RolesSettingsClient({
 
   const savePermissionMaps = async (nextRoles: RolePermissionMap, nextMansioni: MansionePermissionMap) => {
     if (!isSuperAdmin) {
-      showMessage("error", "Solo Super Admin puo modificare la matrice permessi.");
+      showMessage("error", "Solo Zero puo modificare la matrice permessi.");
       return false;
     }
 
@@ -250,7 +251,7 @@ export function RolesSettingsClient({
   };
 
   const handleToggleRolePermission = async (role: Role, path: string, kind: keyof PermissionSet, checked: boolean) => {
-    if (role === "SUPER_ADMIN") return;
+    if (role === "ZERO") return;
     const nextRoles = {
       ...rolePermissions,
       [role]: nextPermissionSet(rolePermissions[role] || emptyPermissionSet(), path, kind, checked),
@@ -297,7 +298,7 @@ export function RolesSettingsClient({
 
   const handleRoleChange = async (userId: string, role: Role) => {
     if (!isSuperAdmin) {
-      showMessage("error", "Solo Super Admin puo modificare i ruoli di sistema.");
+      showMessage("error", "Solo Zero puo modificare i ruoli di sistema.");
       return;
     }
 
@@ -350,7 +351,7 @@ export function RolesSettingsClient({
     <div className="flex flex-wrap gap-1.5">
       {ROLES.map((role) => {
         const checked = rolePermissions[role]?.[kind]?.includes(path) ?? false;
-        const locked = role === "SUPER_ADMIN" || !isSuperAdmin || savingPermissions;
+        const locked = role === "ZERO" || !isSuperAdmin || savingPermissions;
         return (
           <label
             key={`${path}-${kind}-${role}`}
@@ -695,7 +696,7 @@ export function RolesSettingsClient({
                         className="h-11 min-w-[210px] appearance-none rounded-2xl border border-black/10 bg-white px-4 pr-10 text-sm font-black text-slate-900 outline-none transition focus:border-[#C66170] focus:ring-4 focus:ring-pink-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         {ROLES.map((role) => (
-                          <option key={role} value={role} disabled={role === "SUPER_ADMIN" && !isSuperAdmin}>
+                          <option key={role} value={role} disabled={role === "ZERO"}>
                             {roleLabels[role]}
                           </option>
                         ))}

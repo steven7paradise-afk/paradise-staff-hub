@@ -100,7 +100,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Commento non trovato" }, { status: 404 });
     }
 
-    const isAdmin = session.user.role === "SUPER_ADMIN" || session.user.role === "ADMIN";
+    const isAdmin = session.user.role === "ZERO" || session.user.role === "SUPER_ADMIN" || session.user.role === "ADMIN";
     if (!isAdmin && comment.user_name !== session.user.name) {
       return NextResponse.json({ error: "Non autorizzato a eliminare questo commento" }, { status: 403 });
     }

@@ -18,7 +18,7 @@ export async function GET() {
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const where: Prisma.UserWhereInput = {
     active: true,
-    role: { not: "SUPER_ADMIN" },
+    role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     ...(session.user.role === "RESPONSABILE" ? { sede_id: session.user.sedeId ?? undefined } : {}),
   };
 

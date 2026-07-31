@@ -44,7 +44,7 @@ export default async function ServiceFormsToVerifyPage() {
     if (r.user_id === currentUser.id) return false;
 
     // Managers
-    if (role === "SUPER_ADMIN" || role === "ADMIN") return true;
+    if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN") return true;
     if (role === "RESPONSABILE" && r.user?.sede_id === currentUser.sede_id) return true;
 
     // User explicitly nominated

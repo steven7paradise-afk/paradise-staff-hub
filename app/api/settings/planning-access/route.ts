@@ -4,7 +4,7 @@ import { normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-acc
 import { prisma } from "@/lib/prisma";
 
 function canManage(role?: string) {
-  return role === "SUPER_ADMIN" || role === "ADMIN";
+  return role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
 }
 
 export async function GET() {

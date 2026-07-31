@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();

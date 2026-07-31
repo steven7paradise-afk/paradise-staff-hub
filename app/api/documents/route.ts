@@ -4,7 +4,7 @@ import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { uploadEmployeeDocumentToGoogleDrive } from "@/lib/google-drive";
 
-const uploadRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const uploadRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function POST(request: NextRequest) {
   const session = await auth();

@@ -10,7 +10,7 @@ async function checkAuth(userId: string) {
     select: { role: true, mansione: true }
   });
   return (
-    user?.role === "SUPER_ADMIN" ||
+    user?.role === "ZERO" || user?.role === "SUPER_ADMIN" ||
     user?.role === "ADMIN" ||
     user?.role === "RESPONSABILE" ||
     (user?.mansione && user.mansione.toLowerCase().includes("social"))

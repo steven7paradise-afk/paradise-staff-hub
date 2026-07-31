@@ -490,7 +490,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
     if (!editing) return null;
 
     const contracts = buildContractsList(editing.contractStart, editing.contractEnd);
-    const managersList = employees.filter(emp => emp.role === "ADMIN" || emp.role === "RESPONSABILE" || emp.role === "SUPER_ADMIN");
+    const managersList = employees.filter(emp => emp.role === "ZERO" || emp.role === "SUPER_ADMIN" || emp.role === "ADMIN" || emp.role === "RESPONSABILE");
 
     const PLATFORMS = [
       { key: "dashboard", label: "Dashboard", val: "/dashboard" },
@@ -1332,7 +1332,7 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
 
 function EmployeeSection({ title, employees, openEdit, empty, muted = false }: { title: string; employees: Employee[]; openEdit: (employee: Employee) => void; empty?: string; muted?: boolean }) {
   function getRoleBadgeTone(role: Role) {
-    if (role === "SUPER_ADMIN" || role === "ADMIN") return "dark";
+    if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN") return "dark";
     if (role === "RESPONSABILE") return "gold";
     return "pink";
   }

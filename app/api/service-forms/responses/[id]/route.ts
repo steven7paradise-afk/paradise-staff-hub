@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -205,7 +205,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  if (session.user.role !== "SUPER_ADMIN") {
+  if (session.user.role !== "ZERO") {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

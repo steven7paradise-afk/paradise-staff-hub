@@ -38,14 +38,14 @@ export default async function SettingsPage() {
   const role = session.user.role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings", accessUser)
-    : (role === "SUPER_ADMIN" || role === "ADMIN");
+    : (role === "ZERO" || role === "ZERO" || role === "ADMIN");
 
   if (!canAccessPage) {
     redirect("/dashboard");
   }
 
   // Filter settings based on user role
-  const settings = allSettings.filter((s) => !s.superAdminOnly || role === "SUPER_ADMIN");
+  const settings = allSettings.filter((s) => !s.superAdminOnly || role === "ZERO");
 
   return (
     <AppShell title="Impostazioni" subtitle="Configura il sistema, gestisci moduli per lo staff e personalizza il tuo portale.">

@@ -6,7 +6,7 @@ import { getBrandingTheme } from "@/lib/branding";
 
 export default async function BrandingSettingsPage() {
   const session = await auth();
-  if (session?.user?.role !== "SUPER_ADMIN") {
+  if (session?.user?.role !== "ZERO") {
     redirect("/dashboard");
   }
 

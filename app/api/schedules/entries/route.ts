@@ -4,7 +4,7 @@ import { deleteScheduleEventFromGoogleCalendar, syncScheduleEntryToGoogleCalenda
 import { prisma } from "@/lib/prisma";
 import { canEditForUser } from "@/lib/roles";
 
-const planningRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const planningRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function normalizeTime(value: unknown) {
@@ -126,7 +126,7 @@ export async function PUT(request: NextRequest) {
     select: { id: true, role: true, mansione: true, access_list: true }
   });
 
-  const isAuthorized = user && (user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
+  const isAuthorized = user && (user.role === "ZERO" || user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
   if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }

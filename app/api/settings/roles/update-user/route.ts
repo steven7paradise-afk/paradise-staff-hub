@@ -19,8 +19,8 @@ function normalizeAccessList(value: unknown) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || (session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
-    return NextResponse.json({ error: "Non autorizzato. Solo gli Admin e Super Admin possono modificare i ruoli." }, { status: 403 });
+  if (!session?.user?.id || (session.user.role !== "ZERO" && session.user.role !== "SUPER_ADMIN" && session.user.role !== "ADMIN")) {
+    return NextResponse.json({ error: "Non autorizzato. Solo gli Admin possono modificare mansioni e dati ruolo." }, { status: 403 });
   }
 
   try {
@@ -33,11 +33,14 @@ export async function POST(request: NextRequest) {
 
     const updateData: any = {};
     if (role) {
-      if (session.user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Solo Super Admin puo assegnare o modificare i ruoli di sistema." }, { status: 403 });
+      if (session.user.role !== "ZERO") {
+        return NextResponse.json({ error: "Solo Zero puo assegnare o modificare i ruoli di sistema." }, { status: 403 });
       }
       if (!Object.values(UserRole).includes(role)) {
         return NextResponse.json({ error: "Ruolo non valido." }, { status: 400 });
+      }
+      if (role === "ZERO") {
+        return NextResponse.json({ error: "Il ruolo Zero non si assegna dal pannello." }, { status: 403 });
       }
       updateData.role = role;
     }

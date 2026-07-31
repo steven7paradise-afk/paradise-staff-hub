@@ -6,7 +6,7 @@ import { hashTabletToken, newTabletToken } from "@/lib/tablet-auth";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (session?.user?.role !== "SUPER_ADMIN") {
+  if (session?.user?.role !== "ZERO") {
     return NextResponse.json({ error: "Solo Super Admin" }, { status: 403 });
   }
   const data = await request.json();

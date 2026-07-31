@@ -192,7 +192,7 @@ async function main() {
       where: { id: existingCandidatura.id },
       data: {
         active: true,
-        allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+        allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
         fields: candidacyFields,
       },
     });
@@ -204,7 +204,7 @@ async function main() {
         category: "Generale",
         icon: "UserPlus",
         active: true,
-        allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+        allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
         allowed_location_ids: [],
         fields: candidacyFields,
       },

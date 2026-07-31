@@ -32,7 +32,7 @@ function timeRange(entry?: { category: { start_time: string | null; end_time: st
 export default async function MyShiftsPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string; weekOffset?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (!["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(session.user.role)) redirect("/dashboard");
+  if (!["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(session.user.role)) redirect("/dashboard");
 
   const values = await searchParams;
   const today = new Date();

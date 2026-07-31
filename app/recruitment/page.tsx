@@ -17,7 +17,7 @@ export default async function RecruitmentPage() {
     }),
     prisma.user.findMany({
       where: {
-        role: { in: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
+        role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"] },
         active: true,
       },
       orderBy: { name: "asc" },

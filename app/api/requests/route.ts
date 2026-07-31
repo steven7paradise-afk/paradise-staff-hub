@@ -5,7 +5,7 @@ import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { prisma } from "@/lib/prisma";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function dateOnly(value: string) {
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
   if (leaveRequest.status === "PENDING") {
     try {
       const admins = await prisma.user.findMany({
-        where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+        where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] } },
         select: { email: true },
       });
       const template = emailTemplates.leaveRequestReceived(

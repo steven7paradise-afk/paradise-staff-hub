@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 type RouteParams = { params: Promise<{ id: string }> };
 

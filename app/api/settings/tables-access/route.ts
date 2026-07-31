@@ -7,7 +7,7 @@ import {
 } from "@/lib/assistance-tables";
 
 function canManage(role?: string) {
-  return role === "SUPER_ADMIN" || role === "ADMIN";
+  return role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
 }
 
 export async function GET() {

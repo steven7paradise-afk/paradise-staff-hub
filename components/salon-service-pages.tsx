@@ -55,7 +55,7 @@ export function SalonServicePages({
   currentLocationId: string | null;
   initialSettings: ServicePageSetting[];
 }) {
-  const canManage = role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManage = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const [settings, setSettings] = useState<Record<string, { page: number; customName: string; customIcon: string }>>(
     initialSettings.reduce<Record<string, { page: number; customName: string; customIcon: string }>>((accumulator, setting) => {
       accumulator[setting.locationId] = {

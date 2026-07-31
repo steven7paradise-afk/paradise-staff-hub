@@ -31,44 +31,44 @@ function getContrastYIQ(hexcolor: string) {
 
 const nav = [
   // Section: Generale
-  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
-  { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
-  { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
-  { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
+  { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 
   // Section: Planning & Saloni
-  { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
-  { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/foto", label: "Foto", iconName: "Camera", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
-  { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
-  { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
-  { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
-  { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/points", label: "Punti", iconName: "Award", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/schedules", label: "Planning", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/foto", label: "Foto", iconName: "Camera", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/points", label: "Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
-  { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
+  { href: "/settings/forms", label: "Moduli", iconName: "ClipboardList", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/service-forms", label: "Moduli", iconName: "ClipboardList", roles: ["RESPONSABILE"], section: "Planning & Saloni" },
 
   // Section: Gestione Staff
-  { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
-  { href: "/recruitment", label: "Talent System", iconName: "UserPlus", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
-  { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
-  { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
-  { href: "/requests", label: "Ferie e permessi", iconName: "ShieldCheck", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
-  { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
-  { href: "/cedolini", label: "Cedolini", iconName: "FileCheck2", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
-  { href: "/malattie", label: "Malattie", iconName: "Heart", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
-  { href: "/team", label: "Team", iconName: "Users", roles: ["SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
+  { href: "/staff", label: "Staff Paradise", iconName: "Users", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
+  { href: "/recruitment", label: "Talent System", iconName: "UserPlus", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/attendance", label: "Timbrature", iconName: "CalendarCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
+  { href: "/work-hours", label: "Ore staff", iconName: "Calculator", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
+  { href: "/requests", label: "Ferie e permessi", iconName: "ShieldCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
+  { href: "/documents", label: "Documenti", iconName: "FileText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Gestione Staff" },
+  { href: "/cedolini", label: "Cedolini", iconName: "FileCheck2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/malattie", label: "Malattie", iconName: "Heart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/team", label: "Team", iconName: "Users", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
 
   // Section: Impostazioni
-  { href: "/profile", label: "Profilo", iconName: "UserRound", roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Impostazioni" },
-  { href: "/settings", label: "Impostazioni", iconName: "Settings", roles: ["SUPER_ADMIN", "ADMIN"], section: "Impostazioni" },
+  { href: "/profile", label: "Profilo", iconName: "UserRound", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Impostazioni" },
+  { href: "/settings", label: "Impostazioni", iconName: "Settings", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Impostazioni" },
 ] satisfies { href: string; label: string; iconName: string; roles: Role[]; section?: string }[];
 
 const permissionMenuOverrides = [
@@ -104,8 +104,8 @@ function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | nu
       ? raw.targets as Record<string, unknown>
       : {};
     
-    // Ignore mansione layouts for ADMIN / SUPER_ADMIN roles so they always get the full admin/system layout
-    const isSystemAdmin = role === "SUPER_ADMIN" || role === "ADMIN";
+    // Ignore mansione layouts for system roles so they always get the full admin layout.
+    const isSystemAdmin = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
     const cleanMansione = !isSystemAdmin && mansione?.trim().toLowerCase();
     
     const targetLayout = cleanMansione && targets[cleanMansione]
@@ -253,7 +253,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const rolePermissionMap = normalizeRolePermissions(rolePermissionsSetting?.value);
   const mansionePermissionMap = normalizeMansionePermissions(mansionePermissionsSetting?.value);
   const cleanMansione = currentUser?.mansione?.trim().toLowerCase();
-  const effectivePermissionSet: PermissionSet | null = currentRole === "SUPER_ADMIN"
+  const effectivePermissionSet: PermissionSet | null = currentRole === "ZERO"
     ? null
     : currentRole !== "ADMIN" && cleanMansione && mansionePermissionMap[cleanMansione]?.view.length > 0
       ? mansionePermissionMap[cleanMansione]

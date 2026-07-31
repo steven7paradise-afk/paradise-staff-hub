@@ -11,7 +11,7 @@ import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 
 export const dynamic = "force-dynamic";
 
-const allowedRoles = new Set<Role>(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 function normalizeName(value?: string | null) {
   return (value || "")

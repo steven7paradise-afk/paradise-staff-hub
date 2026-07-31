@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
   });
 
   const role = dbUser?.role || session.user.role;
-  if (role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  if (role !== "ZERO" && role !== "SUPER_ADMIN" && role !== "ADMIN") {
     return NextResponse.json({ error: "Permessi insufficienti" }, { status: 403 });
   }
 

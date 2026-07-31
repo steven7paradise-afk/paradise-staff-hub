@@ -394,8 +394,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const employeeView = role === "DIPENDENTE";
-  const canApprove = role === "ADMIN" || role === "SUPER_ADMIN";
-  const canCreateForWorkers = role === "ADMIN" || role === "SUPER_ADMIN";
+  const canApprove = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+  const canCreateForWorkers = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const orderedRequests = [...requests].sort((a, b) => Number(needsSicknessJustification(b)) - Number(needsSicknessJustification(a)));
   const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));

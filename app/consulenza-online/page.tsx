@@ -8,7 +8,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-const allowedRoles = new Set<Role>(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export default async function ConsulenzaOnlinePage() {
   const session = await auth();

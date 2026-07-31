@@ -70,7 +70,7 @@ async function main() {
     .filter((columns) => columns.some((column) => clean(column)));
 
   const admin = await prisma.user.findFirst({
-    where: { role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+    where: { role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] } },
     orderBy: { created_at: "asc" },
     select: { id: true, name: true, role: true, sede_id: true },
   });

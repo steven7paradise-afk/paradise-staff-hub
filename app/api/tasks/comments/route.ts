@@ -4,7 +4,7 @@ import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
-const managerRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 function mentionSlug(name: string) {
   return name
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
   const mentionTags = extractMentionTags(message);
   const mentionedUsers = mentionTags.length > 0
     ? await prisma.user.findMany({
-        where: { active: true, role: { not: "SUPER_ADMIN" } },
+        where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
         select: { id: true, name: true },
       }).then((users) => users.filter((user) => mentionTags.includes(mentionSlug(user.name))))
     : [];
@@ -110,7 +110,7 @@ export async function PATCH(request: NextRequest) {
   const message = String(payload.message ?? "").trim();
   const comment = await prisma.staffTaskComment.findUnique({ where: { id }, include: { task: true } });
   if (!comment) return NextResponse.json({ error: "Commento non trovato." }, { status: 404 });
-  const canEdit = comment.user_id === session.user.id || session.user.role === "SUPER_ADMIN";
+  const canEdit = comment.user_id === session.user.id || session.user.role === "ZERO" || session.user.role === "SUPER_ADMIN";
   if (!canEdit) return NextResponse.json({ error: "Puoi modificare solo i tuoi commenti." }, { status: 403 });
   const files = payload.files !== undefined ? await normalizeTaskCommentFiles(payload.files, comment.task_id) : undefined;
   const updated = await prisma.staffTaskComment.update({ 

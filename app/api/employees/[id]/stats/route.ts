@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calculateClockHours } from "@/lib/work-hours";
 
-const authorizedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const authorizedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 // Helper to extract names from answer
 const namesFromAnswer = (val: any): string[] => {

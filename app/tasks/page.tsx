@@ -20,7 +20,7 @@ export default async function TasksPage() {
   if (!hasTaskAccess(role, currentUser?.mansione, currentUser?.location?.name)) redirect("/dashboard");
 
   const canSeeAllTaskLocations = isTaskOfficeUser(role, currentUser?.mansione, currentUser?.location?.name);
-  const canSeeAllTasks = role === "SUPER_ADMIN" || role === "ADMIN" || canSeeAllTaskLocations;
+  const canSeeAllTasks = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || canSeeAllTaskLocations;
   const taskLocationFilter = canSeeAllTaskLocations ? {} : { location_id: currentUser?.sede_id ?? undefined };
   const workerWhere =
     canSeeAllTaskLocations

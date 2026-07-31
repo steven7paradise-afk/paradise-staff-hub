@@ -9,7 +9,7 @@ function normalized(value?: string | null) {
 }
 
 export function hasTaskAccess(role?: Role | string | null, mansione?: string | null, locationName?: string | null) {
-  if (role === "SUPER_ADMIN" || role === "ADMIN") return true;
+  if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN") return true;
   const job = normalized(mansione);
   const place = normalized(locationName);
   return (
@@ -22,14 +22,14 @@ export function hasTaskAccess(role?: Role | string | null, mansione?: string | n
 }
 
 export function isTaskOfficeUser(role?: Role | string | null, mansione?: string | null, locationName?: string | null) {
-  if (role === "SUPER_ADMIN" || role === "ADMIN") return true;
+  if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN") return true;
   return normalized(mansione).includes("ufficio") || normalized(locationName).includes("ufficio");
 }
 
 export function taskWorkerWhere() {
   return {
     active: true,
-    role: { not: "SUPER_ADMIN" as const },
+    role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     OR: [
       { role: "ADMIN" as const },
       { role: "RESPONSABILE" as const },

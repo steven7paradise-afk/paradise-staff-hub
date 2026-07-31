@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditForUser } from "@/lib/roles";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 async function guard(locationId: string) {
   const session = await auth();
@@ -14,7 +14,7 @@ async function guard(locationId: string) {
     select: { id: true, role: true, mansione: true, access_list: true }
   });
 
-  const isAuthorized = user && (user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
+  const isAuthorized = user && (user.role === "ZERO" || user.role === "SUPER_ADMIN" || user.role === "ADMIN" || await canEditForUser(prisma, "/schedules", user));
   if (!isAuthorized) return { error: "Non autorizzato", status: 403 as const };
 
   return { session };
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       }
     }),
   ]);
-  if (!location || !worker || worker.role === "SUPER_ADMIN") {
+  if (!location || !worker || ["ZERO", "SUPER_ADMIN"].includes(worker.role)) {
     return NextResponse.json({ error: "Lavoratore o salone non valido." }, { status: 400 });
   }
 

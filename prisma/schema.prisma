@@ -9,6 +9,7 @@ datasource db {
 }
 
 enum UserRole {
+  ZERO
   SUPER_ADMIN
   ADMIN
   RESPONSABILE

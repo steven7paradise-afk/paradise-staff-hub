@@ -44,8 +44,8 @@ export function ProfileSettings({
   const [sidebarColorVal, setSidebarColorVal] = useState(sidebarColor ?? "");
   const [themeStatus, setThemeStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const canUseCalendar = role === "SUPER_ADMIN" || role === "ADMIN";
-  const canManagePhoto = role === "SUPER_ADMIN" || role === "ADMIN";
+  const canUseCalendar = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManagePhoto = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
 
   async function uploadPhoto(file?: File) {
     if (!file || !canManagePhoto) return;

@@ -45,7 +45,7 @@ export default async function OrdersPage() {
 
   const role = session.user.role as Role;
   const canManageOrders =
-    ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
+    ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
     session.user.id === "cmpo4y9900001jr09bg1dnqxs" || // Jessinca Inturri (Jessica)
     session.user.id === "cmpms4o9h0003l809zof30mni" || // Biy Darwin Ramirez Castillo (Darwin)
     !!session.user.email?.toLowerCase().includes("jessica") ||

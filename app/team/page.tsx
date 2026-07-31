@@ -195,7 +195,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   const role = session.user.role as Role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/team", accessUser)
-    : ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
+    : ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
 
   if (!canAccessPage) {
     redirect("/dashboard");
@@ -203,8 +203,8 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
 
   const params = await searchParams;
   const where = role === "RESPONSABILE"
-    ? { active: true, sede_id: session.user.sedeId ?? undefined, role: { not: "SUPER_ADMIN" as const } }
-    : { active: true, role: { not: "SUPER_ADMIN" as const } };
+    ? { active: true, sede_id: session.user.sedeId ?? undefined, role: { notIn: ["ZERO", "SUPER_ADMIN"] } }
+    : { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } };
 
   const workers = await prisma.user.findMany({ where, include: { location: true }, orderBy: [{ location: { name: "asc" } }, { name: "asc" }] });
   const selectedId = params?.user ?? workers[0]?.id;

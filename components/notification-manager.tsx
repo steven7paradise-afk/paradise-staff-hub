@@ -99,7 +99,7 @@ export function NotificationManager({
   currentUserId?: string;
   currentUserName?: string;
 }) {
-  const canSend = role === "ADMIN" || role === "SUPER_ADMIN" || role === "RESPONSABILE";
+  const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(role === "RESPONSABILE" ? "location" : "all");

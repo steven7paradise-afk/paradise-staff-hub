@@ -6,7 +6,7 @@ import { uploadEmployeeDocumentToGoogleDrive } from "@/lib/google-drive";
 
 export const dynamic = "force-dynamic";
 
-const managerRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 function isGoogleDriveUrl(value: string | null | undefined) {
   return Boolean(value && /drive\.google\.com|googleusercontent\.com/i.test(value));

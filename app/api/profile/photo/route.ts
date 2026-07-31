@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadProfileImage } from "@/lib/supabase-storage";
 
-const photoManagerRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const photoManagerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 function validImageUrl(value: string) {
   try {

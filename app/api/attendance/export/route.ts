@@ -9,7 +9,7 @@ function csvCell(value: string) {
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.id || !["SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(session.user.role)) {
+  if (!session?.user?.id || !["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(session.user.role)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
   const where: Prisma.AttendanceLogWhereInput | undefined =

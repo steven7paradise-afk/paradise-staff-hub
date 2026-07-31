@@ -83,7 +83,7 @@ export default async function ScheduleCardPage({
     allEmployees = await prisma.user.findMany({
       where: {
         active: true,
-        role: { not: "SUPER_ADMIN" },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
         NOT: {
           OR: [
             {

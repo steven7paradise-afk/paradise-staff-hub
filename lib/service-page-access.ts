@@ -4,7 +4,7 @@ import type { Role } from "@/lib/roles";
 import { normalizeServicePage, type ServicePageNumber } from "@/lib/service-pages";
 
 export async function requireServicePageAccess(role: Role, locationId: string | null | undefined, page: ServicePageNumber, userId?: string) {
-  if (role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE") return;
+  if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE") return;
 
   if (page === 3 && userId) {
     // Check if the user is nominated for notifications

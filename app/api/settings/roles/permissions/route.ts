@@ -9,13 +9,13 @@ import {
 } from "@/lib/roles";
 
 function canManage(role?: string | null) {
-  return role === "SUPER_ADMIN";
+  return role === "ZERO";
 }
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id || !canManage(session.user.role)) {
-    return NextResponse.json({ error: "Non autorizzato. Solo Super Admin puo configurare la matrice permessi." }, { status: 403 });
+    return NextResponse.json({ error: "Non autorizzato. Solo Zero puo configurare la matrice permessi." }, { status: 403 });
   }
 
   const [roleSetting, mansioneSetting] = await Promise.all([
@@ -33,7 +33,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id || !canManage(session.user.role)) {
-    return NextResponse.json({ error: "Non autorizzato. Solo Super Admin puo configurare la matrice permessi." }, { status: 403 });
+    return NextResponse.json({ error: "Non autorizzato. Solo Zero puo configurare la matrice permessi." }, { status: 403 });
   }
 
   try {

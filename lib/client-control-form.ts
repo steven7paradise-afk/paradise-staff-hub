@@ -173,8 +173,8 @@ export async function ensureClientControlForm(createdById?: string | null) {
   if (existing) {
     const roles = existing.allowed_roles as string[] | null;
     const notifyRoles = existing.notify_roles as string[] | null;
-    const expectedRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-    const expectedNotifyRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+    const expectedRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+    const expectedNotifyRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
 
     const alreadyReady =
       existing.category === CLIENT_CONTROL_FORM_CATEGORY &&
@@ -205,8 +205,8 @@ export async function ensureClientControlForm(createdById?: string | null) {
       category: CLIENT_CONTROL_FORM_CATEGORY,
       icon: "FileCheck2",
       active: true,
-      allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-      notify_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+      allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+      notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
       fields: CLIENT_CONTROL_FORM_FIELDS,
       created_by_id: createdById ?? null,
     },

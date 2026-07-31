@@ -106,7 +106,7 @@ export default async function DashboardPage() {
     safe(prisma.user.findMany({
       where: {
         active: true,
-        role: { not: "SUPER_ADMIN" },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
         ...(currentUser.sede_id ? { sede_id: currentUser.sede_id } : {})
       },
       select: { id: true, name: true, photo_url: true }
@@ -122,7 +122,7 @@ export default async function DashboardPage() {
       ? safe(prisma.setting.findUnique({ where: { key: clockRuleKey(currentUser.sede_id) } }), null)
       : Promise.resolve(null),
     safe(prisma.user.findMany({
-      where: { active: true, role: { not: "SUPER_ADMIN" } },
+      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true }
     }), []),

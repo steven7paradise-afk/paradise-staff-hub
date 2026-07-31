@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deletePrivateDocument } from "@/lib/supabase-storage";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function DELETE(
   request: NextRequest,

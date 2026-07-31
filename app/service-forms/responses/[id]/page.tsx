@@ -29,7 +29,7 @@ export default async function ResponseDetailPage({ params }: PageParams) {
 
   // Verify access permissions
   const isOwner = response.user_id === session.user.id;
-  const isManager = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
+  const isManager = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
   
   const notifyUserIds = response.form?.notify_user_ids as string[] | null;
   const notifyRoles = response.form?.notify_roles as string[] | null;

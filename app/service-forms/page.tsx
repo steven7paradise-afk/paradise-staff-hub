@@ -50,7 +50,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore))
     : null;
   const isVerifiedTabletDevice = Boolean(tabletDevice);
-  const isManagementRole = role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  const isManagementRole = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
 

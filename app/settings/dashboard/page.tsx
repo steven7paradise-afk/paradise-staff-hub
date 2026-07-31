@@ -20,15 +20,15 @@ export default async function DashboardSettingsPage() {
   const role = (accessUser?.role || session.user.role) as string;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings/dashboard", accessUser)
-    : (role === "SUPER_ADMIN" || role === "ADMIN");
+    : (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN");
 
-  if (!canAccessPage && role !== "SUPER_ADMIN" && role !== "ADMIN") {
+  if (!canAccessPage && role !== "ZERO" && role !== "SUPER_ADMIN" && role !== "ADMIN") {
     redirect("/dashboard");
   }
 
   const [employees, setting] = await Promise.all([
     prisma.user.findMany({
-      where: { active: true, role: { not: "SUPER_ADMIN" } },
+      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true, photo_url: true }
     }).catch(() => []),

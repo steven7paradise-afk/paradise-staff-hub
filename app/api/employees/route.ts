@@ -6,7 +6,7 @@ import { emailTemplates, sendEmail } from "@/lib/email";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 function apiError(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status });

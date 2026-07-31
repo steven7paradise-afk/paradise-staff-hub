@@ -10,7 +10,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function GET(_request: Request, { params }: RouteParams) {
   const session = await auth();
   const isDarwin = session?.user?.id === "cmpms4o9h0003l809zof30mni" || !!session?.user?.email?.toLowerCase().includes("darwin");
-  if (!session?.user?.id || (!["SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(session.user.role ?? "") && !isDarwin)) {
+  if (!session?.user?.id || (!["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(session.user.role ?? "") && !isDarwin)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 

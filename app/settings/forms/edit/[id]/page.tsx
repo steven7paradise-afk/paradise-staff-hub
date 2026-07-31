@@ -27,7 +27,7 @@ export default async function SettingsFormEditPage(props: {
   const role = session.user.role as Role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings/forms", accessUser)
-    : (role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE");
+    : (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE");
 
   if (!canAccessPage) {
     redirect("/dashboard");

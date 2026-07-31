@@ -9,7 +9,7 @@ export type PlanningAccess = {
 };
 
 export function normalizePlanningAccess(value: unknown): PlanningAccess {
-  const allowedRoles: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+  const allowedRoles: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   const defaultRoles: Role[] = ["RESPONSABILE", "DIPENDENTE"];
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return { roles: defaultRoles, userIds: [], nextMonthVisible: true };
@@ -26,11 +26,11 @@ export function normalizePlanningAccess(value: unknown): PlanningAccess {
 }
 
 export function canViewPlanning(role?: Role | string, userId?: string | null, access?: PlanningAccess) {
-  if (role === "SUPER_ADMIN" || role === "ADMIN") return true;
+  if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN") return true;
   const rules = access ?? normalizePlanningAccess(null);
   return rules.roles.includes(role as Role) || (userId ? rules.userIds.includes(userId) : false);
 }
 
 export function canEditPlanning(role?: Role | string) {
-  return role === "SUPER_ADMIN" || role === "ADMIN";
+  return role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
 }

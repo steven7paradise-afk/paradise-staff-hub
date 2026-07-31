@@ -27,7 +27,7 @@ export default async function AttendancePage() {
   const exEmployeeLabels = ["exdipendenti", "ex dipendente", "ex dipendenti", "ex-dipendente", "ex-dipendenti"];
   const currentEmployeeWhere: Prisma.UserWhereInput = {
     active: true,
-    role: { not: "SUPER_ADMIN" },
+    role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     NOT: [
       {
         mansione: {

@@ -46,7 +46,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
   const role = session.user.role as Role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/invoices", accessUser)
-    : (role === "SUPER_ADMIN" || role === "ADMIN");
+    : (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN");
 
   if (!canAccessPage) {
     redirect("/dashboard");

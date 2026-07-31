@@ -4,7 +4,7 @@ import { cashDateFromInput } from "@/lib/cash-records";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function POST(request: Request) {
   const session = await auth();

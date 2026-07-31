@@ -12,7 +12,7 @@ export default async function MalattiePage(props: {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+  const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
   if (!allowedRoles.has(session.user.role)) {
     redirect("/dashboard");
   }
@@ -58,7 +58,7 @@ export default async function MalattiePage(props: {
   const workers = await prisma.user.findMany({
     where: {
       active: true,
-      role: { not: "SUPER_ADMIN" },
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       ...(session.user.role === "RESPONSABILE" ? { sede_id: session.user.sedeId } : {}),
     },
     select: {

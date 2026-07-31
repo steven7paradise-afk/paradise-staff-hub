@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { signedDocumentUrl } from "@/lib/supabase-storage";
 import { downloadGoogleDriveFile, getGoogleDriveFileId } from "@/lib/google-drive";
 
-const managerRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();

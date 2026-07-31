@@ -35,7 +35,7 @@ export default async function LocationsPage() {
   return (
     <AppShell title="Saloni" subtitle="Schede operative per sede: modifica saloni, orari, contatti, personale attivo e riepiloghi." role={role}>
       <LocationManager
-        canManage={role === "ADMIN" || role === "SUPER_ADMIN"}
+        canManage={role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN"}
         initialLocations={locations.map((location) => ({
           id: location.id,
           name: location.name,

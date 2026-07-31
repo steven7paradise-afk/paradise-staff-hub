@@ -11,7 +11,7 @@ export default async function ServiceSettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
-  if (role !== "SUPER_ADMIN") redirect("/dashboard");
+  if (role !== "ZERO") redirect("/dashboard");
 
   const [locations, serviceSettings] = await Promise.all([
     prisma.location.findMany({ where: { active: true }, orderBy: { name: "asc" } }),

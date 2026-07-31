@@ -98,7 +98,7 @@ export function AdminFormsManager({
   initialTab?: "templates" | "responses" | "upcoming";
   currentUserName?: string;
 }) {
-  const canManage = role === "SUPER_ADMIN" || role === "ADMIN";
+  const canManage = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const [forms, setForms] = useState<FormTemplate[]>(initialForms);
   const candidaturaForm = useMemo(() => forms.find(f => f.name.toUpperCase().includes("CANDIDATURA") && f.active), [forms]);
   const [responses, setResponses] = useState<FormResponse[]>(initialResponses);

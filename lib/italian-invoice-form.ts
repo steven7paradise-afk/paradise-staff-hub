@@ -140,8 +140,8 @@ export async function ensureItalianInvoiceForm(createdById?: string | null) {
   if (existing) {
     const roles = existing.allowed_roles as string[] | null;
     const notifyRoles = existing.notify_roles as string[] | null;
-    const expectedRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-    const expectedNotifyRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+    const expectedRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+    const expectedNotifyRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
     const alreadyReady =
       existing.category === ITALIAN_INVOICE_FORM_CATEGORY &&
       existing.active &&
@@ -171,8 +171,8 @@ export async function ensureItalianInvoiceForm(createdById?: string | null) {
       category: ITALIAN_INVOICE_FORM_CATEGORY,
       icon: "ReceiptText",
       active: true,
-      allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-      notify_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+      allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+      notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
       fields: ITALIAN_INVOICE_FORM_FIELDS,
       created_by_id: createdById ?? null,
     },

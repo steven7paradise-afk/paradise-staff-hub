@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { uploadStaffPhotoToGoogleDrive } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 function safeFileName(value: string) {
   return value
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const user = await prisma.user.findFirst({
-    where: { id, role: { not: "SUPER_ADMIN" } },
+    where: { id, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
     select: { id: true, name: true },
   });
 

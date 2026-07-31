@@ -1,4 +1,4 @@
-export type Role = "SUPER_ADMIN" | "ADMIN" | "RESPONSABILE" | "MAGAZZINO" | "DIPENDENTE";
+export type Role = "ZERO" | "SUPER_ADMIN" | "ADMIN" | "RESPONSABILE" | "MAGAZZINO" | "DIPENDENTE";
 export type PermissionSet = { view: string[]; edit: string[] };
 export type RolePermissionMap = Record<Role, PermissionSet>;
 export type MansionePermissionMap = Record<string, PermissionSet>;
@@ -7,6 +7,7 @@ export const ROLE_PERMISSIONS_SETTING_KEY = "role_permissions";
 export const MANSIONI_PERMISSIONS_SETTING_KEY = "mansioni_permissions";
 
 export const roleLabels: Record<Role, string> = {
+  ZERO: "Zero",
   SUPER_ADMIN: "Super Admin",
   ADMIN: "Admin",
   RESPONSABILE: "Responsabile",
@@ -15,62 +16,62 @@ export const roleLabels: Record<Role, string> = {
 };
 
 export const routePermissions: Record<string, Role[]> = {
-  "/dashboard": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
-  "/my-shifts": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/tasks": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/employees": ["SUPER_ADMIN", "ADMIN"],
-  "/attendance": ["SUPER_ADMIN", "ADMIN"],
-  "/work-hours": ["SUPER_ADMIN", "ADMIN"],
-  "/schedules": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/social-calendar": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/locations": ["SUPER_ADMIN", "ADMIN"],
-  "/tablet-clock": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
-  "/requests": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/documents": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/cedolini": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-  "/malattie": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-  "/service-notes": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/service-forms": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/tables": ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
-  "/orders": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/ordine": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/magazzino": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
-  "/foto": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/points": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/appointments": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-  "/consulenza-online": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-  "/cash": ["SUPER_ADMIN", "ADMIN"],
-  "/invoices": ["SUPER_ADMIN", "ADMIN"],
-  "/refunds": ["SUPER_ADMIN", "ADMIN"],
-  "/rimborsi": ["SUPER_ADMIN", "ADMIN"],
-  "/client-control": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-  "/recruitment": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-  "/staff": ["SUPER_ADMIN", "ADMIN"],
-  "/team": ["SUPER_ADMIN", "ADMIN"],
-  "/notifications": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/profile": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
-  "/settings": ["SUPER_ADMIN", "ADMIN"],
-  "/settings/app": ["SUPER_ADMIN", "ADMIN"],
-  "/settings/dashboard": ["SUPER_ADMIN", "ADMIN"],
-  "/settings/branding": ["SUPER_ADMIN"],
-  "/settings/devices": ["SUPER_ADMIN"],
-  "/settings/google-sheet": ["SUPER_ADMIN"],
-  "/settings/email": ["SUPER_ADMIN"],
-  "/settings/roles": ["SUPER_ADMIN"],
-  "/settings/tasks": ["SUPER_ADMIN"],
-  "/settings/tables": ["SUPER_ADMIN", "ADMIN"],
-  "/settings/planning": ["SUPER_ADMIN", "ADMIN"],
-  "/settings/services": ["SUPER_ADMIN"],
-  "/settings/forms": ["SUPER_ADMIN", "ADMIN"],
-  "/settings/sidebar": ["SUPER_ADMIN", "ADMIN"],
+  "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/work-hours": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/schedules": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/social-calendar": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/locations": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/tablet-clock": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/requests": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/documents": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/cedolini": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/malattie": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/service-notes": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/service-forms": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/tables": ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
+  "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/foto": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/appointments": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/consulenza-online": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/cash": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/invoices": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/refunds": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/rimborsi": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/client-control": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/recruitment": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/staff": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/team": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/notifications": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/profile": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/settings": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/app": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/branding": ["ZERO"],
+  "/settings/devices": ["ZERO"],
+  "/settings/google-sheet": ["ZERO"],
+  "/settings/email": ["ZERO"],
+  "/settings/roles": ["ZERO"],
+  "/settings/tasks": ["ZERO"],
+  "/settings/tables": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/planning": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/services": ["ZERO"],
+  "/settings/forms": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/sidebar": ["ZERO", "SUPER_ADMIN", "ADMIN"],
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
-  if (pathname === "/social-calendar") return ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-  if (pathname === "/orders" || pathname === "/recruitment") return ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
-  if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") return ["SUPER_ADMIN", "ADMIN"];
-  if (pathname.startsWith("/settings")) return ["SUPER_ADMIN"];
-  return ["SUPER_ADMIN", "ADMIN"];
+  if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+  if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
+  if (pathname.startsWith("/settings")) return ["ZERO"];
+  return ["ZERO", "SUPER_ADMIN", "ADMIN"];
 }
 
 const legacyAccessRouteMap: Record<string, string> = {
@@ -162,7 +163,11 @@ export function normalizePermissionSet(value: unknown): PermissionSet {
 export function defaultRolePermissions(): RolePermissionMap {
   const allRoutes = Object.keys(routePermissions);
   return {
-    SUPER_ADMIN: { view: allRoutes, edit: allRoutes },
+    ZERO: { view: allRoutes, edit: allRoutes },
+    SUPER_ADMIN: {
+      view: allRoutes.filter((route) => routePermissions[route]?.includes("SUPER_ADMIN")),
+      edit: allRoutes.filter((route) => defaultEditRolesForPath(route).includes("SUPER_ADMIN")),
+    },
     ADMIN: {
       view: allRoutes.filter((route) => routePermissions[route]?.includes("ADMIN")),
       edit: allRoutes.filter((route) => defaultEditRolesForPath(route).includes("ADMIN")),
@@ -190,10 +195,10 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
 
   const next = { ...defaults };
   (Object.keys(defaults) as Role[]).forEach((role) => {
-    if (role === "SUPER_ADMIN") return;
+    if (role === "ZERO") return;
     if (rawMap[role] !== undefined) next[role] = normalizePermissionSet(rawMap[role]);
   });
-  next.SUPER_ADMIN = defaults.SUPER_ADMIN;
+  next.ZERO = defaults.ZERO;
   return next;
 }
 
@@ -228,7 +233,7 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
 
   if (pathname === "/") return true;
   if (isApiRoute(pathname)) return true;
-  if (role === "SUPER_ADMIN") return Boolean(matchRoute(pathname));
+  if (role === "ZERO") return Boolean(matchRoute(pathname));
 
   const matchedRoute = matchRoute(pathname);
   const permissions = normalizePermissionSet(accessList);
@@ -256,7 +261,7 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
 export function canEdit(pathname: string, role?: Role, mansione?: string, accessList?: any) {
   if (!role) return false;
 
-  if (role === "SUPER_ADMIN") return true;
+  if (role === "ZERO") return true;
   const matchedRoute = matchRoute(pathname);
   const permissions = normalizePermissionSet(accessList);
   if (matchedRoute && hasExplicitPermissionSet(accessList)) {
@@ -294,7 +299,7 @@ export async function getEffectiveAccessList(prisma: any, user: { id: string; ac
 export async function getEffectivePermissionSet(prisma: any, user: { id: string; role?: Role | string; mansione?: string | null }) {
   const role = user.role as Role | undefined;
   if (!role) return undefined;
-  if (role === "SUPER_ADMIN") return defaultRolePermissions().SUPER_ADMIN;
+  if (role === "ZERO") return defaultRolePermissions().ZERO;
 
   const [roleSetting, mansioneSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: ROLE_PERMISSIONS_SETTING_KEY } }).catch(() => null),

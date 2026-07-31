@@ -7,7 +7,7 @@ import {
 } from "@/lib/service-form-visibility";
 
 function canManage(role?: string) {
-  return role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  return role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
 }
 
 export async function GET() {

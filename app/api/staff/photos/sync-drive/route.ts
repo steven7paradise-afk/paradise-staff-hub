@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { findStaffPhotoInGoogleDrive } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function POST() {
   const session = await auth();
@@ -13,7 +13,7 @@ export async function POST() {
 
   const workers = await prisma.user.findMany({
     where: {
-      role: { not: "SUPER_ADMIN" },
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       active: true,
       employee_status: { not: "Ex dipendente" },
     },

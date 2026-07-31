@@ -5,7 +5,7 @@ import { appendAttendanceToGoogleSheet } from "@/lib/google-sheet";
 import { prisma } from "@/lib/prisma";
 import { unlockWorkHourRecord } from "@/lib/work-hour-sync";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { location: true } });
-  if (!user || !user.sede_id || !user.location || user.role === "SUPER_ADMIN") {
+  if (!user || !user.sede_id || !user.location || ["ZERO", "SUPER_ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "Il lavoratore deve essere assegnato a un salone." }, { status: 400 });
   }
 

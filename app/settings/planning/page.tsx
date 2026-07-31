@@ -20,7 +20,7 @@ export default async function PlanningSettingsPage() {
   const role = session.user.role as Role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings/planning", accessUser)
-    : (role === "SUPER_ADMIN" || role === "ADMIN");
+    : (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN");
 
   if (!canAccessPage) redirect("/dashboard");
 
@@ -47,7 +47,7 @@ export default async function PlanningSettingsPage() {
     >
       <PlanningAccessSettings
         initialAccess={normalizePlanningAccess(accessSetting?.value)}
-        canManagePlanningVisibility={role === "SUPER_ADMIN" || role === "ADMIN"}
+        canManagePlanningVisibility={role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN"}
         users={users.map((user) => ({
           id: user.id,
           name: user.name,

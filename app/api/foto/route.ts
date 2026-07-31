@@ -38,8 +38,8 @@ async function ensureFotoForm(createdById?: string | null) {
       category: FOTO_FORM_CATEGORY,
       icon: "Camera",
       active: false,
-      allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-      notify_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+      allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+      notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
       created_by_id: createdById ?? null,
       fields: [
         { id: "orderNumber", label: "Numero ordine", type: "text", required: true },

@@ -53,7 +53,7 @@ export default async function MagazzinoPage() {
   if (!session?.user?.id) redirect("/login");
 
   const role = session.user.role as Role;
-  const canManage = role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  const canManage = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
 
   const [warehouseState, responses] = await Promise.all([
     getWarehouseState(),

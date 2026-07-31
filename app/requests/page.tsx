@@ -26,8 +26,8 @@ export default async function RequestsPage() {
       where: role === "DIPENDENTE"
         ? { id: session.user.id, active: true }
         : role === "RESPONSABILE"
-          ? { sede_id: session.user.sedeId, active: true, role: { not: "SUPER_ADMIN" } }
-          : { active: true, role: { not: "SUPER_ADMIN" } },
+          ? { sede_id: session.user.sedeId, active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } }
+          : { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       include: { location: true },
       orderBy: { name: "asc" },
     }),

@@ -122,7 +122,7 @@ async function resolveCalendarId() {
   const adminWithCalendar = await prisma.user.findFirst({
     where: {
       active: true,
-      role: { in: ["SUPER_ADMIN", "ADMIN"] },
+      role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] },
       google_calendar_sync: true,
       google_calendar_id: { not: null },
     },
@@ -412,7 +412,7 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
   const adminWithCalendar = await prisma.user.findFirst({
     where: {
       active: true,
-      role: { in: ["SUPER_ADMIN", "ADMIN"] },
+      role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] },
       google_calendar_sync: true,
       google_calendar_id: { not: null },
     },
@@ -609,7 +609,7 @@ export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
   const adminWithCalendar = await prisma.user.findFirst({
     where: {
       active: true,
-      role: { in: ["SUPER_ADMIN", "ADMIN"] },
+      role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] },
       google_calendar_sync: true,
       google_calendar_id: { not: null },
     },

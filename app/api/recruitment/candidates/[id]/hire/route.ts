@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
 import { UserRole } from "@prisma/client";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 type RouteParams = { params: Promise<{ id: string }> };
 

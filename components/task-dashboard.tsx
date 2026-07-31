@@ -387,10 +387,10 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
 }
 
 export function TaskDashboard({ role, userId, userName, workers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; workers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
-  const canAssign = canManageTasks || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   
   const currentUserSedeId = workers.find((w) => w.id === userId)?.locationId ?? null;
-  const initialAllowedWorkers = (role === "SUPER_ADMIN" || role === "ADMIN")
+  const initialAllowedWorkers = (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN")
     ? workers
     : currentUserSedeId
       ? workers.filter((w) => w.locationId === currentUserSedeId)

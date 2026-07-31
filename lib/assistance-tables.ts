@@ -47,8 +47,8 @@ export type AssistanceTablesAccess = {
 };
 
 export function normalizeAssistanceTablesAccess(value: unknown): AssistanceTablesAccess {
-  const allowedRoles: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-  const defaultRoles: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  const allowedRoles: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+  const defaultRoles: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {
       roles: defaultRoles,

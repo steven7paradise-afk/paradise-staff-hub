@@ -17,7 +17,7 @@ export default async function WorkHoursPage() {
   const month = now.getMonth();
   const workers = await prisma.user.findMany({
       where: {
-        role: { not: "SUPER_ADMIN" },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
         active: true,
       },
       include: { location: true },

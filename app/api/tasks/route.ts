@@ -4,7 +4,7 @@ import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
 
-const managerRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 async function getAuthorizedTaskUser(userId: string, role: string) {
   const user = await prisma.user.findUnique({

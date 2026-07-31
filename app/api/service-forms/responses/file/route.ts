@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { signedDocumentUrl } from "@/lib/supabase-storage";
 
-const managerRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
   const session = await auth();

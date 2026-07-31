@@ -241,7 +241,7 @@ export function MonthlySchedulePlanner({
       scheduleEntries,
       initialPlannerYear,
       initialPlannerMonth,
-      employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((employee) => employee.id),
+      employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((employee) => employee.id),
       initialLocationId,
       savedExtraWorkers.filter((item) => item.locationId === initialLocationId).map((item) => item.userId),
     ),
@@ -311,7 +311,7 @@ export function MonthlySchedulePlanner({
   const activeCategory = visibleCategories.find((category) => category.id === activeCategoryId);
   const selectedExtraWorkerIds = useMemo(() => extraWorkerIdsByLocation[selectedLocationId] ?? [], [extraWorkerIdsByLocation, selectedLocationId]);
   const activeWorkers = useMemo(() => {
-    const base = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId === selectedLocationId);
+    const base = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role) && employee.locationId === selectedLocationId);
     const plannedExternalIds = new Set(
       scheduleEntries
         .filter((entry) => {
@@ -321,7 +321,7 @@ export function MonthlySchedulePlanner({
         .map((entry) => entry.userId),
     );
     const extraIds = new Set([...selectedExtraWorkerIds, ...plannedExternalIds]);
-    const extra = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId !== selectedLocationId && extraIds.has(employee.id));
+    const extra = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role) && employee.locationId !== selectedLocationId && extraIds.has(employee.id));
     
     const combined = [...base, ...extra];
     return combined.sort((a, b) => {
@@ -336,7 +336,7 @@ export function MonthlySchedulePlanner({
   const availableExternalWorkers = useMemo(
     () =>
       employees
-        .filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId !== selectedLocationId && !activeWorkers.some((worker) => worker.id === employee.id))
+        .filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role) && employee.locationId !== selectedLocationId && !activeWorkers.some((worker) => worker.id === employee.id))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [activeWorkers, employees, selectedLocationId],
   );
@@ -354,13 +354,13 @@ export function MonthlySchedulePlanner({
     }
     setMonth(nextMonth);
     setYear(nextYear);
-    const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
+    const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(scheduleEntries, nextYear, nextMonth, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
   function setScheduleLocation(locationId: string) {
     setSelectedLocationId(locationId);
-    const locationWorkers = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN");
+    const locationWorkers = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role));
     const locationExtraWorkerIds = extraWorkerIdsByLocation[locationId] ?? [];
     setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, locationWorkers.map((worker) => worker.id), locationId, locationExtraWorkerIds));
     const firstCategory = categories.find((category) => !category.locationId || category.locationId === locationId);
@@ -518,7 +518,7 @@ export function MonthlySchedulePlanner({
   }
 
   function workersForLocation(locationId: string) {
-    const base = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId === locationId);
+    const base = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role) && employee.locationId === locationId);
     const extraIds = new Set([
       ...(extraWorkerIdsByLocation[locationId] ?? []),
       ...scheduleEntries
@@ -528,7 +528,7 @@ export function MonthlySchedulePlanner({
         })
         .map((entry) => entry.userId),
     ]);
-    const extra = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN" && employee.locationId !== locationId && extraIds.has(employee.id));
+    const extra = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role) && employee.locationId !== locationId && extraIds.has(employee.id));
     return [...base, ...extra].sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -605,7 +605,7 @@ export function MonthlySchedulePlanner({
       setPlannerMessage(data.error ?? "Lavoratore non aggiunto.");
       return;
     }
-    const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
+    const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, [...selectedExtraWorkerIds, userId]));
     setPlannerMessage("Lavoratore aggiunto al planning del salone.");
   }
@@ -630,7 +630,7 @@ export function MonthlySchedulePlanner({
       return;
     }
     const nextExtraIds = selectedExtraWorkerIds.filter((id) => id !== userId);
-    const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
+    const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, nextExtraIds));
     setPlannerMessage("Lavoratore rimosso dalla lista del salone.");
   }
@@ -683,7 +683,7 @@ export function MonthlySchedulePlanner({
   }
 
   function resetMonth() {
-    const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
+    const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(scheduleEntries, year, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 
@@ -693,7 +693,7 @@ export function MonthlySchedulePlanner({
       return;
     }
     setYear(nextYear);
-    const workerIds = employees.filter((employee) => employee.active && employee.role !== "SUPER_ADMIN").map((worker) => worker.id);
+    const workerIds = employees.filter((employee) => employee.active && !["ZERO", "SUPER_ADMIN"].includes(employee.role)).map((worker) => worker.id);
     setAssignments(createAssignmentsFromEntries(scheduleEntries, nextYear, month, workerIds, selectedLocationId, selectedExtraWorkerIds));
   }
 

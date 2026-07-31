@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await auth();
-  if (!session || session.user.role !== "SUPER_ADMIN") {
+  if (!session || session.user.role !== "ZERO") {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -20,7 +20,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session || session.user.role !== "SUPER_ADMIN") {
+  if (!session || session.user.role !== "ZERO") {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

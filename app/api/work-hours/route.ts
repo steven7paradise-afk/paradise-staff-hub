@@ -54,7 +54,7 @@ function daysBetweenInclusive(startDate: Date, endDate: Date) {
   return days;
 }
 
-const managementRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -73,18 +73,18 @@ export async function GET(request: NextRequest) {
   const [records, logs, scheduleEntries, leaveRequests] = await Promise.all([
     prisma.workHourRecord.findMany({ where: { date: { gte: start, lt: end } } }),
     prisma.attendanceLog.findMany({
-      where: { date: { gte: start, lt: end }, user: { role: { not: "SUPER_ADMIN" } } },
+      where: { date: { gte: start, lt: end }, user: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } } },
       select: { user_id: true, date: true, type: true, timestamp: true },
       orderBy: { timestamp: "asc" },
     }),
     prisma.scheduleEntry.findMany({
-      where: { date: { gte: start, lt: end }, user: { role: { not: "SUPER_ADMIN" } } },
+      where: { date: { gte: start, lt: end }, user: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } } },
       include: { category: true },
     }),
     prisma.leaveRequest.findMany({
       where: {
         status: "APPROVED",
-        user: { role: { not: "SUPER_ADMIN" } },
+        user: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
         start_date: { lt: end },
         end_date: { gte: start },
       },
@@ -190,7 +190,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || user.role === "SUPER_ADMIN") {
+  if (!user || ["ZERO", "SUPER_ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "Lavoratore non valido." }, { status: 404 });
   }
 

@@ -23,7 +23,7 @@ export default async function TablesSettingsPage() {
   const role = session.user.role as Role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings/tables", accessUser)
-    : (role === "SUPER_ADMIN" || role === "ADMIN");
+    : (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN");
 
   if (!canAccessPage) redirect("/dashboard");
 

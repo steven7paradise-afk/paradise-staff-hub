@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
             },
           });
           const roleRecipients = matchedUsers.filter((u) => {
-            if (u.role === "SUPER_ADMIN" || u.role === "ADMIN") return true;
+            if (u.role === "ZERO" || u.role === "SUPER_ADMIN" || u.role === "ADMIN") return true;
             if (!session.user.sedeId) return true;
             return u.sede_id === session.user.sedeId;
           });

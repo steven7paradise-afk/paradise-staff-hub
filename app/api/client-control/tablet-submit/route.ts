@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: staffIds },
         active: true,
-        role: { not: "SUPER_ADMIN" },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       },
       select: {
         id: true,
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
   const submitter = await prisma.user.findFirst({
     where: {
       active: true,
-      role: { in: ["SUPER_ADMIN", "ADMIN"] },
+      role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] },
     },
     orderBy: { created_at: "asc" },
     select: { id: true },

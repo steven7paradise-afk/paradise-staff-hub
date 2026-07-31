@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   const session = await auth();
   const bearer = request.headers.get("authorization");
   const isCron = Boolean(process.env.CRON_SECRET && bearer === `Bearer ${process.env.CRON_SECRET}`);
-  const permittedUser = session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "ADMIN";
+  const permittedUser = session?.user?.role === "ZERO" || session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "ADMIN";
   if (!isCron && !permittedUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   return NextResponse.json(await closeForgottenShifts());
 }

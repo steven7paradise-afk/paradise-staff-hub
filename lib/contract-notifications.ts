@@ -23,7 +23,7 @@ export async function ensureContractExpiryNotifications() {
   if (expiringUsers.length === 0) return;
 
   const recipients = await prisma.user.findMany({
-    where: { active: true, role: { in: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"] } },
+    where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"] } },
     select: { id: true, role: true, sede_id: true },
   });
 

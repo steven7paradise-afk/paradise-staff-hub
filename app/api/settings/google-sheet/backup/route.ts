@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 export async function POST() {
   const session = await auth();
-  if (!session || session.user.role !== "SUPER_ADMIN") {
+  if (!session || session.user.role !== "ZERO") {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

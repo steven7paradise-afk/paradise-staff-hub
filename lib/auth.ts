@@ -74,7 +74,7 @@ export const authConfig = {
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
         token.name = user.name;
@@ -82,6 +82,19 @@ export const authConfig = {
         token.role = (user as { role: Role }).role;
         token.sedeId = (user as { sedeId?: string }).sedeId;
         token.mansione = (user as { mansione?: string }).mansione;
+      } else if (token.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true },
+        }).catch(() => null);
+
+        if (dbUser?.active) {
+          token.name = dbUser.name;
+          token.email = dbUser.email;
+          token.role = dbUser.role as Role;
+          token.sedeId = dbUser.sede_id;
+          token.mansione = dbUser.mansione ?? undefined;
+        }
       }
       return token;
     },

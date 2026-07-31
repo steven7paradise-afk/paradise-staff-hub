@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
   const employees = await prisma.user.findMany({
     where: {
       active: true,
-      role: { not: "SUPER_ADMIN" },
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     },
     orderBy: { name: "asc" },
     select: {

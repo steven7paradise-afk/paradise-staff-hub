@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const allowedRoles = new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export default async function CedoliniPage() {
   const session = await auth();
@@ -23,7 +23,7 @@ export default async function CedoliniPage() {
       orderBy: { created_at: "desc" },
     }),
     prisma.user.findMany({
-      where: { active: true, role: { not: "SUPER_ADMIN" } },
+      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       select: { id: true, name: true, role: true, mansione: true },
       orderBy: { name: "asc" },
     }),

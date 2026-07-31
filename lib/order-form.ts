@@ -28,8 +28,8 @@ export async function ensureOrderForm(createdById?: string | null) {
   if (existing) {
     const roles = existing.allowed_roles as string[] | null;
     const notifyRoles = existing.notify_roles as string[] | null;
-    const expectedRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-    const expectedNotifyRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+    const expectedRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+    const expectedNotifyRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
     const alreadyReady =
       existing.category === ORDER_FORM_CATEGORY &&
       existing.active &&
@@ -44,8 +44,8 @@ export async function ensureOrderForm(createdById?: string | null) {
         category: ORDER_FORM_CATEGORY,
         icon: existing.icon || "ShoppingCart",
         active: true,
-        allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-        notify_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+        allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+        notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
       },
     });
   }
@@ -57,8 +57,8 @@ export async function ensureOrderForm(createdById?: string | null) {
       category: ORDER_FORM_CATEGORY,
       icon: "ShoppingCart",
       active: true,
-      allowed_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-      notify_roles: ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+      allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+      notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
       fields: ORDER_FORM_FIELDS,
       created_by_id: createdById ?? null,
     },

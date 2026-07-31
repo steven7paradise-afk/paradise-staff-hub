@@ -7,7 +7,7 @@ import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule } from "@/lib/schedule-sync";
 
-const approverRoles = new Set(["SUPER_ADMIN", "ADMIN"]);
+const approverRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function PATCH(
   request: NextRequest,

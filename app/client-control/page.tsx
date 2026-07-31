@@ -8,7 +8,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-const allowedRoles = new Set<Role>(["SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export default async function ClientControlPage() {
   const session = await auth();
@@ -62,7 +62,7 @@ export default async function ClientControlPage() {
   const activeStaff = await prisma.user.findMany({
     where: {
       active: true,
-      role: { not: "SUPER_ADMIN" },
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     },
     orderBy: { name: "asc" },
     select: {
