@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { LayoutGrid, Search, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -44,7 +44,7 @@ export function DesktopSidebarNav({
   sidebarConfig,
 }: DesktopSidebarNavProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
   const getSidebarLabel = (href: string, fallback: string) => {
@@ -102,17 +102,14 @@ export function DesktopSidebarNav({
   };
 
   const sections = getRenderSections();
-  const activeSection = sections.find((section) =>
-    section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
-  );
-  const selectedSection = sections.find((section) => section.id === selectedSectionId) || activeSection || sections[0];
-  const isSearching = searchQuery.trim().length > 0;
-
-  useEffect(() => {
-    if (!selectedSectionId && activeSection?.id) {
-      setSelectedSectionId(activeSection.id);
-    }
-  }, [activeSection?.id, selectedSectionId]);
+  const priorityRoutes = ["/dashboard", "/tasks", "/schedules", "/orders", "/appointments", "/cash", "/client-control", "/staff", "/requests", "/profile"];
+  const quickItems = priorityRoutes
+    .map((href) => items.find((item) => item.href === href))
+    .filter((item): item is MenuItem => Boolean(item));
+  const activeItem = items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const visibleQuickItems = activeItem && !quickItems.some((item) => item.href === activeItem.href)
+    ? [activeItem, ...quickItems].slice(0, 9)
+    : quickItems.slice(0, 9);
 
   return (
     <div className="flex flex-col h-full">
@@ -141,49 +138,23 @@ export function DesktopSidebarNav({
         />
       </div>
 
-      {/* 🗺️ Professional two-level navigation */}
+      <button
+        type="button"
+        onClick={() => setMenuOpen(true)}
+        className="sidebar-label mt-4 mx-1 flex items-center gap-3 rounded-2xl bg-[#C66170] px-3.5 py-2.5 text-left text-[13px] font-black text-white shadow-sm transition hover:bg-[#A74758]"
+      >
+        <LayoutGrid className="size-4 shrink-0" />
+        <span className="min-w-0 flex-1">Menu completo</span>
+        <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">{items.length}</span>
+      </button>
+
       <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto">
-        {!isSearching ? (
-          <div className="space-y-1.5 px-1">
-            <p className="sidebar-label px-3 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-35">
-              Menu
-            </p>
-            {sections.map((section) => {
-              const isSelected = selectedSection?.id === section.id;
-              const hasActiveItem = section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => setSelectedSectionId(section.id)}
-                  className={cn(
-                    "group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-[13px] font-black tracking-tight text-[color:var(--sidebar-text)] transition",
-                    isSelected
-                      ? "bg-black/8 opacity-100 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] dark:bg-white/10"
-                      : "opacity-65 hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/5"
-                  )}
-                >
-                  <span className={cn(
-                    "grid size-7 shrink-0 place-items-center rounded-xl text-[10px] font-black",
-                    isSelected || hasActiveItem ? "bg-[#C66170] text-white" : "bg-black/5 text-[color:var(--sidebar-text)] dark:bg-white/10"
-                  )}>
-                    {section.title.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className="sidebar-label min-w-0 flex-1 truncate">{section.title}</span>
-                  <span className="sidebar-label rounded-full bg-black/5 px-2 py-0.5 text-[10px] opacity-70 dark:bg-white/10">{section.items.length}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-
-        <div className="mt-5 space-y-1.5 px-1">
+        <div className="space-y-1.5 px-1">
           <p className="sidebar-label px-3 text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-35">
-            {isSearching ? "Risultati" : selectedSection?.title || "Pagine"}
+            Accesso rapido
           </p>
 
-          {(isSearching ? filteredItems : selectedSection?.items || []).map((item) => {
+          {(searchQuery.trim() ? filteredItems : visibleQuickItems).map((item) => {
               const isActive = pathname === item.href;
               const displayLabel = getSidebarLabel(item.href, item.label);
               
@@ -217,6 +188,61 @@ export function DesktopSidebarNav({
           })}
         </div>
       </nav>
+
+      {menuOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/35 p-6 backdrop-blur-sm" onClick={() => setMenuOpen(false)}>
+          <div
+            className="ml-[260px] flex max-h-[calc(100vh-48px)] max-w-5xl flex-col overflow-hidden rounded-[28px] border border-black/10 bg-white text-slate-950 shadow-2xl dark:bg-[#111827] dark:text-white"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-black/10 px-6 py-5 dark:border-white/10">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#C66170]">Paradise Hub</p>
+                <h2 className="mt-1 text-2xl font-black">Menu completo</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                className="grid size-10 place-items-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-white/10 dark:text-white"
+                aria-label="Chiudi menu completo"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="no-scrollbar grid flex-1 gap-4 overflow-y-auto p-6 md:grid-cols-2 xl:grid-cols-3">
+              {sections.map((section) => (
+                <div key={section.id} className="rounded-3xl border border-black/5 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-black">{section.title}</h3>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-slate-500 dark:bg-black/20 dark:text-white/60">{section.items.length}</span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {section.items.map((item) => {
+                      const displayLabel = getSidebarLabel(item.href, item.label);
+                      const isActive = pathname === item.href;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-bold transition",
+                            isActive ? "bg-[#C66170] text-white" : "text-slate-650 hover:bg-white hover:text-slate-950 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
+                          )}
+                        >
+                          <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
+                          <span className="truncate">{displayLabel}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   FolderPlus, Edit3
 } from "lucide-react";
 import { Card, Button } from "@/components/ui";
+import { routePermissions } from "@/lib/roles";
 
 type SidebarFolder = {
   id: string;
@@ -21,39 +22,61 @@ type BrandingTheme = {
   dark_sidebar_color: string;
 };
 
-// Available system pages matching route permissions
-const ALL_PAGES = [
-  { path: "/dashboard", name: "Dashboard" },
-  { path: "/my-shifts", name: "I miei turni" },
-  { path: "/tasks", name: "Task / Compiti" },
-  { path: "/notifications", name: "Comunicazioni / Bacheca" },
-  { path: "/schedules", name: "Planning Appuntamenti" },
-  { path: "/social-calendar", name: "Programmazione Social" },
-  { path: "/locations", name: "Gestione Saloni" },
-  { path: "/orders", name: "Gestione Ordini" },
-  { path: "/magazzino", name: "Magazzino & Inventario" },
-  { path: "/foto", name: "Carica Foto" },
-  { path: "/appointments", name: "Appuntamenti Live" },
-  { path: "/consulenza-online", name: "Consulenza Online" },
-  { path: "/cash", name: "Chiusura Cassa" },
-  { path: "/invoices", name: "Fatture & Registratore" },
-  { path: "/refunds", name: "Gestione Rimborsi" },
-  { path: "/client-control", name: "Controllo Cliente" },
-  { path: "/tables", name: "Tabelle & Listini" },
-  { path: "/tablet-clock", name: "Tablet Clock" },
-  { path: "/settings/forms", name: "Moduli Operativi" },
-  { path: "/staff", name: "Staff Paradise" },
-  { path: "/recruitment", name: "Talent System" },
-  { path: "/attendance", name: "Timbrature Staff" },
-  { path: "/work-hours", name: "Calcolo Ore" },
-  { path: "/requests", name: "Ferie e Permessi" },
-  { path: "/documents", name: "Documenti & Cedolini" },
-  { path: "/cedolini", name: "Cedolini HR" },
-  { path: "/malattie", name: "Gestione Malattie" },
-  { path: "/team", name: "Team Paradise" },
-  { path: "/profile", name: "Profilo Personale" },
-  { path: "/settings", name: "Impostazioni Sistema" },
-];
+const PAGE_LABELS: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/my-shifts": "I miei turni",
+  "/tasks": "Task",
+  "/employees": "Dipendenti",
+  "/attendance": "Timbrature",
+  "/work-hours": "Ore staff",
+  "/schedules": "Planning",
+  "/social-calendar": "Programmazione Social",
+  "/locations": "Saloni",
+  "/tablet-clock": "Tablet Clock",
+  "/requests": "Ferie e permessi",
+  "/documents": "Documenti",
+  "/cedolini": "Cedolini",
+  "/malattie": "Malattie",
+  "/service-notes": "Note operative",
+  "/service-forms": "Moduli operativi",
+  "/tables": "Tabelle",
+  "/orders": "Ordini",
+  "/ordine": "Scheda ordine diretta",
+  "/magazzino": "Magazzino",
+  "/foto": "Foto",
+  "/points": "Punti",
+  "/appointments": "Appuntamenti",
+  "/consulenza-online": "Consulenza Online",
+  "/cash": "Cassa",
+  "/invoices": "Fatture",
+  "/refunds": "Rimborsi",
+  "/rimborsi": "Rimborsi vecchio link",
+  "/client-control": "Controllo Cliente",
+  "/recruitment": "Talent System",
+  "/staff": "Staff Paradise",
+  "/team": "Team",
+  "/notifications": "Comunicazioni",
+  "/profile": "Profilo",
+  "/settings": "Impostazioni",
+  "/settings/app": "App",
+  "/settings/dashboard": "Dashboard",
+  "/settings/branding": "Brand",
+  "/settings/devices": "Dispositivi",
+  "/settings/google-sheet": "Google Sheet",
+  "/settings/email": "Email",
+  "/settings/roles": "Ruoli e permessi",
+  "/settings/tasks": "Categorie task",
+  "/settings/tables": "Tabelle",
+  "/settings/planning": "Planning",
+  "/settings/services": "Servizi",
+  "/settings/forms": "Moduli",
+  "/settings/sidebar": "Sidebar",
+};
+
+const ALL_PAGES = Object.keys(routePermissions).map((path) => ({
+  path,
+  name: PAGE_LABELS[path] || path.split("/").filter(Boolean).join(" / ") || "Home",
+}));
 
 const PRESETS = [
   { name: "Brand Classico", sidebar: "#FFFFFF", dark: "#1B1A1F" },

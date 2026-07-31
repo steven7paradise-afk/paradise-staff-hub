@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, ArrowLeft, Menu } from "lucide-react";
+import { LayoutGrid, Search, ArrowLeft, Menu } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -32,7 +32,6 @@ export function MobileMenuDrawer({
 }: MobileMenuDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSectionId, setSelectedSectionId] = useState("");
   const pathname = usePathname();
 
   useEffect(() => {
@@ -81,17 +80,14 @@ export function MobileMenuDrawer({
   };
 
   const sections = getRenderSections();
-  const activeSection = sections.find((section) =>
-    section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
-  );
-  const selectedSection = sections.find((section) => section.id === selectedSectionId) || activeSection || sections[0];
-  const isSearching = searchQuery.trim().length > 0;
-
-  useEffect(() => {
-    if (!selectedSectionId && activeSection?.id) {
-      setSelectedSectionId(activeSection.id);
-    }
-  }, [activeSection?.id, selectedSectionId]);
+  const priorityRoutes = ["/dashboard", "/tasks", "/schedules", "/orders", "/appointments", "/cash", "/client-control", "/staff", "/requests", "/profile"];
+  const quickItems = priorityRoutes
+    .map((href) => items.find((item) => item.href === href))
+    .filter((item): item is { href: string; label: string; iconName: string; section?: string } => Boolean(item));
+  const activeItem = items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const visibleQuickItems = activeItem && !quickItems.some((item) => item.href === activeItem.href)
+    ? [activeItem, ...quickItems].slice(0, 9)
+    : quickItems.slice(0, 9);
 
   return (
     <div className="xl:hidden">
@@ -182,41 +178,17 @@ export function MobileMenuDrawer({
 
           {/* Main Navigation links */}
           <div className="no-scrollbar mt-5 flex-1 overflow-y-auto">
-            {!isSearching ? (
-              <div className="space-y-1.5">
-                <p className="px-3 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">Menu</p>
-                {sections.map((section) => {
-                  const isSelected = selectedSection?.id === section.id;
-                  const hasActiveItem = section.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
-                  return (
-                    <button
-                      key={section.id}
-                      type="button"
-                      onClick={() => setSelectedSectionId(section.id)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-[13px] font-black transition",
-                        isSelected ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-white"
-                      )}
-                    >
-                      <span className={cn(
-                        "grid size-7 shrink-0 place-items-center rounded-xl text-[10px] font-black",
-                        isSelected || hasActiveItem ? "bg-[#2563eb] text-white" : "bg-zinc-800 text-zinc-400"
-                      )}>
-                        {section.title.slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">{section.title}</span>
-                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[9px] text-zinc-500">{section.items.length}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+            <div className="mb-4 flex w-full items-center gap-3 rounded-2xl bg-[#2563eb] px-3.5 py-3 text-left text-sm font-black text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]">
+              <LayoutGrid className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">Menu completo</span>
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">{items.length}</span>
+            </div>
 
-            <div className="mt-5 space-y-1.5">
+            <div className="space-y-1.5">
               <p className="px-3 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">
-                {isSearching ? "Risultati" : selectedSection?.title || "Pagine"}
+                {searchQuery.trim() ? "Risultati" : "Accesso rapido"}
               </p>
-              {(isSearching ? filteredItems : selectedSection?.items || []).map((item) => {
+              {(searchQuery.trim() ? filteredItems : visibleQuickItems).map((item) => {
                     const isActive = pathname === item.href;
                     const displayLabel = getSidebarLabel(item.href, item.label);
                     return (
@@ -245,6 +217,39 @@ export function MobileMenuDrawer({
                     );
               })}
             </div>
+
+            {!searchQuery.trim() ? (
+              <div className="mt-6 space-y-5">
+                {sections.map((section) => (
+                  <div key={section.id}>
+                    <div className="mb-2 flex items-center justify-between px-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">{section.title}</p>
+                      <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[9px] font-black text-zinc-500">{section.items.length}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {section.items.map((item) => {
+                        const isActive = pathname === item.href;
+                        const displayLabel = getSidebarLabel(item.href, item.label);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setIsOpen(false)}
+                            className={cn(
+                              "flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold tracking-tight transition",
+                              isActive ? "bg-[#2563eb] text-white" : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white"
+                            )}
+                          >
+                            <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
+                            <span className="truncate">{displayLabel}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {/* Navigation lists directly end here */}
