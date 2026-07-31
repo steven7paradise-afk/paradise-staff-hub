@@ -1,1726 +1,436 @@
 "use client";
 
-import React, { useState, useEffect, useTransition } from "react";
-import { ShieldAlert, ShieldCheck, UserCheck, Users, Settings, Edit, Loader2, Search, FolderPlus, ArrowUp, ArrowDown, Plus, Trash2, Folder, X, Menu, ChevronRight } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Check, ChevronDown, LockKeyhole, Loader2, Search, ShieldCheck, ShieldOff, Users } from "lucide-react";
 import { Badge, Card } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { roleLabels, routePermissions, type Role } from "@/lib/roles";
 
 type UserType = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: Role;
   mansione: string | null;
   photo_url: string | null;
   location: { name: string } | null;
-  access_list: any;
 };
 
 type RolesSettingsClientProps = {
   users: UserType[];
   currentUser: {
     id: string;
-    role: string;
+    role: Role | string;
     name?: string | null;
   };
 };
 
-type PagePermissionSet = {
-  view: string[];
-  edit: string[];
+type RouteMeta = {
+  name: string;
+  description: string;
+  group: string;
 };
 
-type MansioniPermissions = Record<string, PagePermissionSet>;
-type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string> };
-type SidebarLayoutSetting =
-  | SidebarFolder[]
-  | {
-      default?: SidebarFolder[];
-      targets?: Record<string, SidebarFolder[]>;
-    };
+const ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"];
 
-const DEFAULT_SIDEBAR_LAYOUT: SidebarFolder[] = [
-  { id: "sec-generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
-  { id: "sec-planning", title: "Planning & Saloni", routes: ["/schedules", "/social-calendar", "/locations", "/orders", "/magazzino", "/foto", "/appointments", "/cash", "/invoices", "/refunds", "/client-control", "/tables", "/points", "/tablet-clock", "/settings/forms", "/service-forms"] },
-  { id: "sec-staff", title: "Gestione Staff", routes: ["/staff", "/recruitment", "/attendance", "/work-hours", "/requests", "/documents", "/cedolini", "/malattie", "/team"] },
-  { id: "sec-impostazioni", title: "Impostazioni", routes: ["/profile", "/settings"] }
-];
-
-function normalizeSidebarLayout(value: unknown): SidebarFolder[] {
-  if (!Array.isArray(value)) return DEFAULT_SIDEBAR_LAYOUT;
-  const folders = value
-    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown } => Boolean(folder) && typeof folder === "object")
-    .map((folder) => ({
-      id: typeof folder.id === "string" ? folder.id : `folder-${Date.now()}`,
-      title: typeof folder.title === "string" ? folder.title : "Cartella",
-      routes: Array.isArray(folder.routes) ? folder.routes.filter((route): route is string => typeof route === "string") : [],
-      labels: folder && typeof (folder as any).labels === "object" && !Array.isArray((folder as any).labels)
-        ? Object.fromEntries(
-            Object.entries((folder as any).labels).filter(([route, label]) => typeof route === "string" && typeof label === "string")
-          )
-        : {},
-    }));
-
-  return folders.length > 0 ? folders : DEFAULT_SIDEBAR_LAYOUT;
-}
-
-function normalizeSidebarLayoutSetting(value: unknown): { default: SidebarFolder[]; targets: Record<string, SidebarFolder[]> } {
-  if (Array.isArray(value)) {
-    return {
-      default: normalizeSidebarLayout(value),
-      targets: {},
-    };
-  }
-
-  if (value && typeof value === "object") {
-    const raw = value as { default?: unknown; targets?: unknown };
-    const rawTargets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
-      ? raw.targets as Record<string, unknown>
-      : {};
-
-    return {
-      default: normalizeSidebarLayout(raw.default),
-      targets: Object.fromEntries(
-        Object.entries(rawTargets).map(([target, layout]) => [
-          target,
-          normalizeSidebarLayout(layout),
-        ])
-      ),
-    };
-  }
-
-  return {
-    default: DEFAULT_SIDEBAR_LAYOUT,
-    targets: {},
-  };
-}
-
-function normalizePermissionSet(value: unknown): PagePermissionSet {
-  if (Array.isArray(value)) {
-    return {
-      view: normalizeAccessRoutes(value),
-      edit: [],
-    };
-  }
-
-  if (value && typeof value === "object") {
-    const raw = value as { view?: unknown; edit?: unknown };
-    return {
-      view: normalizeAccessRoutes(raw.view),
-      edit: normalizeAccessRoutes(raw.edit),
-    };
-  }
-
-  return { view: [], edit: [] };
-}
-
-function normalizeMansioniPermissions(value: unknown): MansioniPermissions {
-  const rawMap = value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-
-  return Object.fromEntries(
-    Object.entries(rawMap).map(([mansione, permissions]) => [
-      mansione,
-      normalizePermissionSet(permissions),
-    ])
-  );
-}
-
-import { normalizeAccessRoutes, routePermissions } from "@/lib/roles";
-
-const ROUTE_LABELS: Record<string, { name: string; description: string }> = {
-  "/dashboard": { name: "Dashboard Principale", description: "Bacheca iniziale con timbrature e avvisi." },
-  "/my-shifts": { name: "I Miei Turni", description: "Visualizzazione dei propri turni personali." },
-  "/tasks": { name: "Task & Compiti", description: "Lista dei compiti assegnati e commenti." },
-  "/employees": { name: "Gestione Dipendenti", description: "Anagrafica completa e dati dello staff." },
-  "/attendance": { name: "Registro Presenze", description: "Log di entrata/uscita dei dipendenti." },
-  "/work-hours": { name: "Ore Lavorate", description: "Riepilogo ore ordinarie e straordinarie." },
-  "/schedules": { name: "Turni Saloni", description: "Pianificazione oraria settimanale dello staff." },
-  "/social-calendar": { name: "Calendario Social", description: "Pianificazione post e upload foto social." },
-  "/locations": { name: "Gestione Saloni", description: "Anagrafica dei saloni Paradise." },
-  "/tablet-clock": { name: "Timbratrice Tablet", description: "Accesso all'interfaccia timbrature per tablet salone." },
-  "/requests": { name: "Ferie & Permessi", description: "Richieste di congedo e approvazioni." },
-  "/documents": { name: "Documenti Personali", description: "Archivio personale di buste paga, contratti e documenti HR." },
-  "/cedolini": { name: "Cedolini", description: "Caricamento e gestione dei cedolini HR dei collaboratori." },
-  "/malattie": { name: "Malattie", description: "Registro malattie dello staff e verifica certificati medici." },
-  "/service-notes": { name: "Note di Servizio", description: "Diario interno delle annotazioni operative." },
-  "/service-forms": { name: "Moduli Operativi / Chiusura cassa", description: "Compilazione dei moduli tecnici, inclusa la firma della chiusura cassa da tablet." },
-  "/tables": { name: "Tabelle Listini", description: "Visualizzazione tabelle listini e prezzi." },
-  "/orders": { name: "Ordini (Kanban)", description: "Pipeline ordini per acquisto extension, conversioni e accessori." },
-  "/magazzino": { name: "Magazzino", description: "Gestione interna prodotti, scansioni e movimenti magazzino." },
-  "/foto": { name: "Foto", description: "Caricamento rapido foto ordini su Google Drive con PIN personale." },
-  "/points": { name: "Punti e Performance", description: "Riepilogo personale punti, schede e obiettivi mensili." },
-  "/appointments": { name: "Gestione Appuntamenti", description: "Planning e prenotazioni dei clienti." },
-  "/consulenza-online": { name: "Consulenza Online", description: "Calendario delle prenotazioni di consulenza online." },
-  "/cash": { name: "Cassa & Transazioni", description: "Dashboard amministrativa con chiusure, prelievi, cassaforte e movimenti." },
-  "/invoices": { name: "Richieste Fatture", description: "Registro richieste ed export per commercialista." },
-  "/refunds": { name: "Rimborsi", description: "Gestione note di credito e rimborsi." },
-  "/rimborsi": { name: "Rimborsi (link vecchio)", description: "Redirect compatibile verso la pagina Rimborsi." },
-  "/client-control": { name: "Controllo Clienti", description: "Tablet clienti in salone per recensioni e dati." },
-  "/recruitment": { name: "HR Recruitment", description: "Candidature e colloqui di assunzione." },
-  "/staff": { name: "Organigramma Staff", description: "Mappa visuale delle posizioni e ruoli." },
-  "/team": { name: "Elenco Team", description: "Lista dei membri del team Paradise." },
-  "/notifications": { name: "Centro Notifiche", description: "Storico degli avvisi e delle comunicazioni." },
-  "/profile": { name: "Profilo Personale", description: "Dati personali, password e preferenze grafiche." },
-  "/settings": { name: "Impostazioni Generali", description: "Pannello principale di configurazione hub." },
-  "/settings/app": { name: "Impostazioni App", description: "Configurazioni generali dell'applicazione." },
-  "/settings/dashboard": { name: "Configura Dashboard", description: "Obiettivi, punti e impostazioni riepilogo dashboard." },
-  "/settings/branding": { name: "Brand & Loghi", description: "Personalizzazione loghi, colori e testi dell'app." },
-  "/settings/devices": { name: "Configura Timbratrici", description: "Associazione e attivazione tablet salone." },
-  "/settings/google-sheet": { name: "Integrazione Fogli Google", description: "Collegamento fogli drive per i dati." },
-  "/settings/email": { name: "Configura Email", description: "Impostazioni server SMTP per notifiche." },
-  "/settings/roles": { name: "Sicurezza Ruoli & Permessi", description: "Gestione dei ruoli dipendenti e accessi pagine." },
-  "/settings/tasks": { name: "Configura Categorie Task", description: "Impostazione categorie compiti di staff." },
-  "/settings/tables": { name: "Configura Tabelle Listini", description: "Permessi di scrittura tabelle listini." },
-  "/settings/planning": { name: "Configura Planning", description: "Accesso e orari agende appuntamenti." },
-  "/settings/services": { name: "Gestione Servizi", description: "Configurazione dei trattamenti e durata." },
-  "/settings/forms": { name: "Gestione Moduli Operativi", description: "Creazione e modifica dei campi dei moduli." },
-  "/settings/sidebar": { name: "Configura Sidebar", description: "Organizzazione e visibilità del menu laterale." }
+const ROUTE_META: Record<string, RouteMeta> = {
+  "/dashboard": { name: "Dashboard", description: "Bacheca principale, avvisi e riepilogo operativo.", group: "Base" },
+  "/my-shifts": { name: "I miei turni", description: "Turni personali e orari assegnati.", group: "Base" },
+  "/tasks": { name: "Task", description: "Compiti assegnati, commenti, foto e file.", group: "Base" },
+  "/notifications": { name: "Comunicazioni", description: "Notifiche e messaggi interni.", group: "Base" },
+  "/profile": { name: "Profilo", description: "Dati personali, foto, password e impostazioni account.", group: "Base" },
+  "/schedules": { name: "Planning", description: "Turnistica mensile dei saloni.", group: "Planning & Saloni" },
+  "/orders": { name: "Ordini", description: "Kanban ordini, stati, foto e stampa etichette.", group: "Planning & Saloni" },
+  "/ordine": { name: "Scheda ordine diretta", description: "Pagina aperta da barcode o link diretto ordine.", group: "Planning & Saloni" },
+  "/magazzino": { name: "Magazzino", description: "Prodotti, scansioni e movimenti magazzino.", group: "Planning & Saloni" },
+  "/foto": { name: "Foto", description: "Caricamento rapido foto su Drive.", group: "Planning & Saloni" },
+  "/appointments": { name: "Appuntamenti", description: "Prenotazioni clienti e stato appuntamento.", group: "Planning & Saloni" },
+  "/consulenza-online": { name: "Consulenza online", description: "Richieste e appuntamenti consulenze online.", group: "Planning & Saloni" },
+  "/social-calendar": { name: "Programmazione social", description: "Calendario contenuti e pubblicazioni.", group: "Planning & Saloni" },
+  "/locations": { name: "Saloni", description: "Anagrafica sedi e saloni Paradise.", group: "Planning & Saloni" },
+  "/tablet-clock": { name: "Tablet Clock", description: "Interfaccia tablet per timbrature e controllo cliente.", group: "Planning & Saloni" },
+  "/service-forms": { name: "Moduli operativi", description: "Moduli tecnici, chiusura cassa e risposte operative.", group: "Planning & Saloni" },
+  "/tables": { name: "Tabelle", description: "Listini e tabelle operative.", group: "Planning & Saloni" },
+  "/points": { name: "Punti", description: "Punti, obiettivi e performance personali.", group: "Planning & Saloni" },
+  "/staff": { name: "Staff Paradise", description: "Schede dipendenti e dati HR.", group: "Gestione Staff" },
+  "/employees": { name: "Dipendenti", description: "Archivio dipendenti e gestione anagrafica.", group: "Gestione Staff" },
+  "/recruitment": { name: "Talent System", description: "Candidati, colloqui e assunzioni.", group: "Gestione Staff" },
+  "/attendance": { name: "Timbrature", description: "Registro entrate, pause e uscite.", group: "Gestione Staff" },
+  "/work-hours": { name: "Ore staff", description: "Ore lavorate e riepiloghi mensili.", group: "Gestione Staff" },
+  "/requests": { name: "Ferie e permessi", description: "Richieste, approvazioni e motivazioni.", group: "Gestione Staff" },
+  "/documents": { name: "Documenti", description: "Documenti personali e archivio HR.", group: "Gestione Staff" },
+  "/cedolini": { name: "Cedolini", description: "Gestione cedolini collaboratori.", group: "Gestione Staff" },
+  "/malattie": { name: "Malattie", description: "Malattie, giustificativi e certificati.", group: "Gestione Staff" },
+  "/team": { name: "Team", description: "Elenco membri del team.", group: "Gestione Staff" },
+  "/client-control": { name: "Controllo Cliente", description: "Schede cliente, note servizio, foto e trattamenti.", group: "Amministrazione" },
+  "/cash": { name: "Cassa & Transazioni", description: "Cassa, chiusure, prelievi, cassaforte e movimenti.", group: "Amministrazione" },
+  "/invoices": { name: "Fatture", description: "Richieste fattura e dati commercialista.", group: "Amministrazione" },
+  "/refunds": { name: "Rimborsi", description: "Rimborsi e note credito.", group: "Amministrazione" },
+  "/rimborsi": { name: "Rimborsi vecchio link", description: "Compatibilita con il vecchio percorso rimborsi.", group: "Amministrazione" },
+  "/settings": { name: "Impostazioni", description: "Pannello impostazioni generale.", group: "Impostazioni" },
+  "/settings/app": { name: "Impostazioni app", description: "Configurazione generale applicazione.", group: "Impostazioni" },
+  "/settings/dashboard": { name: "Dashboard", description: "Obiettivi, punti e pannelli dashboard.", group: "Impostazioni" },
+  "/settings/branding": { name: "Brand", description: "Logo, colori e identita visiva.", group: "Impostazioni" },
+  "/settings/devices": { name: "Dispositivi", description: "Tablet e dispositivi salone.", group: "Impostazioni" },
+  "/settings/google-sheet": { name: "Google Sheet", description: "Collegamenti con fogli Google.", group: "Impostazioni" },
+  "/settings/email": { name: "Email", description: "Configurazione invio email.", group: "Impostazioni" },
+  "/settings/roles": { name: "Ruoli & permessi", description: "Questa pagina di sicurezza.", group: "Impostazioni" },
+  "/settings/tasks": { name: "Categorie task", description: "Configurazione categorie task.", group: "Impostazioni" },
+  "/settings/tables": { name: "Tabelle", description: "Configurazione tabelle listini.", group: "Impostazioni" },
+  "/settings/planning": { name: "Planning", description: "Visibilita planning e mese successivo.", group: "Impostazioni" },
+  "/settings/services": { name: "Servizi", description: "Trattamenti, durate e servizi.", group: "Impostazioni" },
+  "/settings/forms": { name: "Moduli", description: "Creazione e modifica moduli operativi.", group: "Impostazioni" },
+  "/settings/sidebar": { name: "Sidebar", description: "Organizzazione menu laterale.", group: "Impostazioni" },
 };
 
-const APP_PAGES_MATRIX = Object.entries(routePermissions).map(([path, viewRoles]) => {
-  const meta = ROUTE_LABELS[path] || { 
-    name: path.split("/").filter(Boolean).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(" > "), 
-    description: "Configurazione e modulo di sistema." 
-  };
-  
-  let editRoles = ["SUPER_ADMIN", "ADMIN"];
-  let exceptionsEdit = "";
-  if (path === "/social-calendar") {
-    editRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
-  } else if (path === "/orders") {
-    editRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
-    exceptionsEdit = "Jessinca Inturri, Biy Darwin Ramirez Castillo";
-  } else if (path === "/requests") {
-    exceptionsEdit = "I dipendenti possono creare o annullare le proprie richieste.";
-  } else if (path === "/recruitment") {
-    editRoles = ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
-  } else if (path.startsWith("/settings")) {
-    editRoles = ["SUPER_ADMIN"];
-    if (path === "/settings/tables" || path === "/settings/planning" || path === "/settings/forms") {
-      editRoles = ["SUPER_ADMIN", "ADMIN"];
-    }
-  }
+function getEditRoles(path: string): Role[] {
+  if (path === "/social-calendar") return ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+  if (path === "/orders" || path === "/recruitment") return ["SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  if (path === "/settings/tables" || path === "/settings/planning" || path === "/settings/forms") return ["SUPER_ADMIN", "ADMIN"];
+  if (path.startsWith("/settings")) return ["SUPER_ADMIN"];
+  return ["SUPER_ADMIN", "ADMIN"];
+}
 
-  let exceptions = "Nessuna eccezione";
-  if (path === "/orders") {
-    exceptions = "Tutti i dipendenti (incluse le sarte) vedono tutti gli ordini.";
-  } else if (path === "/foto") {
-    exceptions = "Accesso gestito da Vedi: serve per caricare foto ordini da mobile.";
-  } else if (path === "/schedules") {
-    exceptions = "Tutti i dipendenti possono vedere i turni propri e dei colleghi.";
-  } else if (path === "/requests") {
-    exceptions = "I dipendenti vedono solo le proprie richieste.";
-  } else if (path === "/documents") {
-    exceptions = "I dipendenti vedono solo i propri cedolini.";
-  } else if (path === "/appointments") {
-    exceptions = "I dipendenti con mansione 'assistenza' possono visualizzare.";
-  }
+function routeTitle(path: string) {
+  return ROUTE_META[path]?.name || path.split("/").filter(Boolean).join(" / ") || "Home";
+}
 
-  return {
-    path,
-    name: meta.name,
-    description: meta.description,
-    viewRoles,
-    exceptions,
-    editRoles,
-    exceptionsEdit
-  };
-});
+function routeDescription(path: string) {
+  return ROUTE_META[path]?.description || "Pagina di sistema.";
+}
 
-const ROUTE_GROUPS = [
-  {
-    title: "Area Operativa & Personale",
-    routes: [
-      "/dashboard",
-      "/foto",
-      "/my-shifts",
-      "/tasks",
-      "/schedules",
-      "/social-calendar",
-      "/requests",
-      "/documents",
-      "/service-notes",
-      "/service-forms",
-      "/tables",
-      "/orders",
-      "/magazzino",
-      "/appointments",
-      "/consulenza-online",
-      "/profile",
-      "/points",
-      "/notifications"
-    ]
-  },
-  {
-    title: "Area Amministrazione & Cassa",
-    routes: [
-      "/employees",
-      "/attendance",
-      "/work-hours",
-      "/locations",
-      "/tablet-clock",
-      "/cash",
-      "/invoices",
-      "/refunds",
-      "/client-control",
-      "/recruitment",
-      "/staff",
-      "/team",
-      "/cedolini",
-      "/malattie"
-    ]
-  },
-  {
-    title: "Area Impostazioni & Configurazione",
-    routes: [
-      "/settings",
-      "/settings/app",
-      "/settings/dashboard",
-      "/settings/branding",
-      "/settings/devices",
-      "/settings/google-sheet",
-      "/settings/email",
-      "/settings/roles",
-      "/settings/tasks",
-      "/settings/tables",
-      "/settings/planning",
-      "/settings/services",
-      "/settings/forms",
-      "/settings/sidebar"
-    ]
-  }
-];
+function routeGroup(path: string) {
+  return ROUTE_META[path]?.group || "Altro";
+}
+
+function roleTone(role: Role): "pink" | "gold" | "green" | "dark" {
+  if (role === "SUPER_ADMIN") return "dark";
+  if (role === "ADMIN") return "pink";
+  if (role === "RESPONSABILE") return "gold";
+  return "green";
+}
+
+function employeeInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "P";
+}
 
 export function RolesSettingsClient({ users: initialUsers, currentUser }: RolesSettingsClientProps) {
   const [users, setUsers] = useState(initialUsers);
-  const [activeTab, setActiveTab] = useState<"matrix" | "users" | "mansioni" | "sidebar">("matrix");
+  const [activeTab, setActiveTab] = useState<"matrix" | "staff">("matrix");
+  const [selectedRole, setSelectedRole] = useState<Role | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Track updates
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const [editingMansioneId, setEditingMansioneId] = useState<string | null>(null);
-  const [mansioneInput, setMansioneInput] = useState("");
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
-  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Mansioni state
-  const [mansioni, setMansioni] = useState<MansioniPermissions>({});
-  const [newMansioneName, setNewMansioneName] = useState("");
-  const [expandedMansione, setExpandedMansione] = useState<string | null>(null);
-  const [previewTarget, setPreviewTarget] = useState<string>("DIPENDENTE");
+  const isAdmin = currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
+  const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
 
-  const getPreviewAccessList = (target: string): string[] => {
-    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"].includes(target)) {
-      return APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(target as any)).map(p => p.path);
-    }
-    const mName = target.toLowerCase();
-    return normalizePermissionSet(mansioni[mName]).view;
-  };
-
-  const getPreviewEditAccessList = (target: string): string[] => {
-    if (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"].includes(target)) {
-      return APP_PAGES_MATRIX.filter(p => p.editRoles.includes(target as any)).map(p => p.path);
-    }
-    const mName = target.toLowerCase();
-    return normalizePermissionSet(mansioni[mName]).edit;
-  };
-
-  const isSuperAdmin = currentUser.role === "SUPER_ADMIN" || currentUser.role === "ADMIN";
-
-  const showMessage = (text: string, type: "success" | "error") => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage(null), 4000);
-  };
-
-  // Sidebar custom layout state
-  const [sidebarLayouts, setSidebarLayouts] = useState<{ default: SidebarFolder[]; targets: Record<string, SidebarFolder[]> }>({
-    default: DEFAULT_SIDEBAR_LAYOUT,
-    targets: {},
-  });
-  const [menuLayoutTarget, setMenuLayoutTarget] = useState<string>("default");
-  const [newFolderName, setNewFolderName] = useState("");
-  const sidebarLayout = menuLayoutTarget === "default"
-    ? sidebarLayouts.default
-    : (sidebarLayouts.targets[menuLayoutTarget] || sidebarLayouts.default);
-  const getCustomRouteLabel = (route: string) => {
-    const folder = sidebarLayout.find((item) => item.routes.includes(route));
-    return folder?.labels?.[route] || "";
-  };
-  const getRouteDisplayName = (route: string) => {
-    const custom = getCustomRouteLabel(route);
-    if (custom) return custom;
-    return APP_PAGES_MATRIX.find(p => p.path === route)?.name || route;
-  };
-
-  React.useEffect(() => {
-    // Fetch mansioni
-    fetch("/api/settings/roles/mansioni")
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setMansioni(normalizeMansioniPermissions(data.mansioni));
-        }
-      });
-
-    // Fetch sidebar layout
-    fetch("/api/settings/roles/menu-layout")
-      .then(res => res.json())
-      .then(data => {
-        setSidebarLayouts(normalizeSidebarLayoutSetting(data.success ? data.layout : null));
-      });
+  const pages = useMemo(() => {
+    return Object.entries(routePermissions)
+      .map(([path, viewRoles]) => ({
+        path,
+        name: routeTitle(path),
+        description: routeDescription(path),
+        group: routeGroup(path),
+        viewRoles,
+        editRoles: getEditRoles(path),
+      }))
+      .sort((a, b) => `${a.group}-${a.name}`.localeCompare(`${b.group}-${b.name}`));
   }, []);
 
-  const commitSidebarLayout = (layout: SidebarFolder[]) => {
-    const nextLayouts = menuLayoutTarget === "default"
-      ? { ...sidebarLayouts, default: layout }
-      : { ...sidebarLayouts, targets: { ...sidebarLayouts.targets, [menuLayoutTarget]: layout } };
+  const filteredPages = selectedRole === "ALL"
+    ? pages
+    : pages.filter((page) => page.viewRoles.includes(selectedRole) || page.editRoles.includes(selectedRole));
 
-    setSidebarLayouts(nextLayouts);
-    saveSidebarLayout(nextLayouts);
-  };
+  const roleStats = ROLES.map((role) => ({
+    role,
+    users: users.filter((user) => user.role === role).length,
+    visible: pages.filter((page) => page.viewRoles.includes(role)).length,
+    editable: pages.filter((page) => page.editRoles.includes(role)).length,
+  }));
 
-  const handleMenuTargetChange = (target: string) => {
-    setMenuLayoutTarget(target);
-    if (target !== "default") setPreviewTarget(target);
-  };
-
-  const handleCopyDefaultLayoutToTarget = () => {
-    if (menuLayoutTarget === "default") return;
-    const copied = sidebarLayouts.default.map((folder) => ({
-      ...folder,
-      id: `${folder.id}-${menuLayoutTarget}-${Date.now()}`,
-      routes: [...folder.routes],
-    }));
-    const nextLayouts = {
-      ...sidebarLayouts,
-      targets: {
-        ...sidebarLayouts.targets,
-        [menuLayoutTarget]: copied,
-      },
-    };
-    setSidebarLayouts(nextLayouts);
-    saveSidebarLayout(nextLayouts);
-  };
-
-  const handleResetTargetLayout = () => {
-    if (menuLayoutTarget === "default") return;
-    if (!confirm("Vuoi eliminare l'organizzazione personalizzata per questo ruolo/mansione e usare il menu generale?")) return;
-    const nextTargets = { ...sidebarLayouts.targets };
-    delete nextTargets[menuLayoutTarget];
-    const nextLayouts = { ...sidebarLayouts, targets: nextTargets };
-    setSidebarLayouts(nextLayouts);
-    saveSidebarLayout(nextLayouts);
-  };
-
-  const handleCreateMansione = async () => {
-    const cleanName = newMansioneName.trim().toLowerCase();
-    if (!cleanName) return;
-    if (mansioni[cleanName]) {
-      showMessage("Questa mansione esiste già.", "error");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/settings/roles/mansioni", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", mansioneName: cleanName, accessList: { view: [], edit: [] } })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile creare la mansione.");
-      setMansioni(normalizeMansioniPermissions(data.mansioni));
-      setNewMansioneName("");
-      showMessage(`Mansione "${cleanName}" creata con successo!`, "success");
-    } catch (err: any) {
-      showMessage(err.message || "Errore durante la creazione.", "error");
-    }
-  };
-
-  const handleToggleMansioneAccess = async (mansioneName: string, path: string, kind: "view" | "edit", isChecked: boolean) => {
-    if (!isSuperAdmin) {
-      showMessage("Solo i Super Admin possono modificare i permessi delle mansioni.", "error");
-      return;
-    }
-
-    const nextPermissions = normalizePermissionSet(mansioni[mansioneName]);
-    let newList = [...nextPermissions[kind]];
-    if (isChecked) {
-      if (!newList.includes(path)) newList.push(path);
-    } else {
-      newList = newList.filter(p => p !== path);
-    }
-    nextPermissions[kind] = newList;
-
-    if (kind === "edit" && isChecked && !nextPermissions.view.includes(path)) {
-      nextPermissions.view.push(path);
-    }
-    if (kind === "view" && !isChecked) {
-      nextPermissions.edit = nextPermissions.edit.filter(p => p !== path);
-    }
-
-    try {
-      const res = await fetch("/api/settings/roles/mansioni", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save", mansioneName, accessList: nextPermissions })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile salvare i permessi.");
-      setMansioni(normalizeMansioniPermissions(data.mansioni));
-      showMessage(`Permessi per la mansione "${mansioneName}" aggiornati!`, "success");
-    } catch (err: any) {
-      showMessage(err.message || "Errore durante l'aggiornamento.", "error");
-    }
-  };
-
-  const handleDeleteMansione = async (mansioneName: string) => {
-    if (!isSuperAdmin) {
-      showMessage("Solo i Super Admin possono eliminare le mansioni.", "error");
-      return;
-    }
-
-    if (!confirm(`Sei sicuro di voler eliminare la mansione "${mansioneName}"?`)) return;
-    try {
-      const res = await fetch("/api/settings/roles/mansioni", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", mansioneName })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile eliminare la mansione.");
-      setMansioni(normalizeMansioniPermissions(data.mansioni));
-      showMessage(`Mansione "${mansioneName}" eliminata con successo!`, "success");
-    } catch (err: any) {
-      showMessage(err.message || "Errore durante l'eliminazione.", "error");
-    }
-  };
-
-  const handleCreateFolder = () => {
-    const title = newFolderName.trim();
-    if (!title) return;
-    const id = `folder-${Date.now()}`;
-    const newLayout = [...sidebarLayout, { id, title, routes: [] }];
-    setNewFolderName("");
-    commitSidebarLayout(newLayout);
-  };
-
-  const handleDeleteFolder = (id: string) => {
-    if (!confirm("Sei sicuro di voler eliminare questa cartella? I tasti al suo interno verranno spostati tra le pagine non assegnate.")) return;
-    const newLayout = sidebarLayout.filter(f => f.id !== id);
-    commitSidebarLayout(newLayout);
-  };
-
-  const handleMoveRouteToFolder = (route: string, folderId: string) => {
-    const newLayout = sidebarLayout.map(f => {
-      let routes = f.routes.filter(r => r !== route);
-      if (f.id === folderId) {
-        routes.push(route);
-      }
-      return { ...f, routes };
-    });
-    commitSidebarLayout(newLayout);
-  };
-
-  const handleRemoveRouteFromFolder = (route: string, folderId: string) => {
-    const newLayout = sidebarLayout.map(f => {
-      if (f.id === folderId) {
-        return { ...f, routes: f.routes.filter(r => r !== route) };
-      }
-      return f;
-    });
-    commitSidebarLayout(newLayout);
-  };
-
-  const handleMoveFolder = (index: number, direction: "up" | "down") => {
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= sidebarLayout.length) return;
-    const newLayout = [...sidebarLayout];
-    const temp = newLayout[index];
-    newLayout[index] = newLayout[targetIndex];
-    newLayout[targetIndex] = temp;
-    commitSidebarLayout(newLayout);
-  };
-
-  const handleMoveRouteInFolder = (folderId: string, routeIndex: number, direction: "up" | "down") => {
-    const targetIndex = direction === "up" ? routeIndex - 1 : routeIndex + 1;
-    const folder = sidebarLayout.find(f => f.id === folderId);
-    if (!folder || targetIndex < 0 || targetIndex >= folder.routes.length) return;
-    
-    const newLayout = sidebarLayout.map(f => {
-      if (f.id === folderId) {
-        const newRoutes = [...f.routes];
-        const temp = newRoutes[routeIndex];
-        newRoutes[routeIndex] = newRoutes[targetIndex];
-        newRoutes[targetIndex] = temp;
-        return { ...f, routes: newRoutes };
-      }
-      return f;
-    });
-    commitSidebarLayout(newLayout);
-  };
-
-  const handleRouteLabelChange = (folderId: string, route: string, label: string) => {
-    const newLayout = sidebarLayout.map(f => {
-      if (f.id !== folderId) return f;
-      const nextLabels = { ...(f.labels || {}) };
-      const cleanLabel = label.trim();
-      if (cleanLabel) {
-        nextLabels[route] = cleanLabel;
-      } else {
-        delete nextLabels[route];
-      }
-      return { ...f, labels: nextLabels };
-    });
-    commitSidebarLayout(newLayout);
-  };
-
-  const saveSidebarLayout = async (layout: { default: SidebarFolder[]; targets: Record<string, SidebarFolder[]> }) => {
-    try {
-      const res = await fetch("/api/settings/roles/menu-layout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ layout })
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Impossibile salvare il layout.");
-      }
-      showMessage("Layout del menu salvato con successo!", "success");
-    } catch (err: any) {
-      showMessage(err.message || "Errore durante il salvataggio del layout.", "error");
-    }
-  };
-
-  const handleTogglePageAccess = async (userId: string, path: string, type: "view" | "edit", isChecked: boolean, currentAccess: any) => {
-    if (!isSuperAdmin) {
-      showMessage("Solo i Super Admin possono modificare i permessi delle pagine.", "error");
-      return;
-    }
-
-    const permissions = normalizePermissionSet(currentAccess);
-    let viewList = [...permissions.view];
-    let editList = [...permissions.edit];
-
-    if (type === "view") {
-      if (isChecked) {
-        if (!viewList.includes(path)) viewList.push(path);
-      } else {
-        viewList = viewList.filter(p => p !== path);
-        editList = editList.filter(p => p !== path);
-      }
-    } else if (type === "edit") {
-      if (isChecked) {
-        if (!editList.includes(path)) editList.push(path);
-        if (!viewList.includes(path)) viewList.push(path);
-      } else {
-        editList = editList.filter(p => p !== path);
-      }
-    }
-
-    const payload = { view: viewList, edit: editList };
-
-    setUpdatingUserId(userId);
-    try {
-      const res = await fetch("/api/settings/roles/update-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, accessList: payload }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile aggiornare la lista accessi.");
-
-      setUsers(current =>
-        current.map(u => (u.id === userId ? { ...u, access_list: payload } : u))
-      );
-      showMessage(`Permessi di ${data.user.name} aggiornati con successo!`, "success");
-    } catch (err: any) {
-      console.error(err);
-      showMessage(err.message || "Errore durante l'aggiornamento.", "error");
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const handleResetToDefault = async (userId: string) => {
-    if (!isSuperAdmin) {
-      showMessage("Solo i Super Admin possono modificare i permessi delle pagine.", "error");
-      return;
-    }
-
-    setUpdatingUserId(userId);
-    try {
-      const res = await fetch("/api/settings/roles/update-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, accessList: null }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile ripristinare i permessi.");
-
-      setUsers(current =>
-        current.map(u => (u.id === userId ? { ...u, access_list: null } : u))
-      );
-      showMessage(`Permessi di ${data.user.name} ripristinati al default del ruolo!`, "success");
-    } catch (err: any) {
-      console.error(err);
-      showMessage(err.message || "Errore durante il ripristino.", "error");
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const handleRoleChange = async (userId: string, newRole: string) => {
-    if (!isSuperAdmin) {
-      showMessage("Solo i Super Admin possono modificare i ruoli degli utenti.", "error");
-      return;
-    }
-
-    setUpdatingUserId(userId);
-    try {
-      const res = await fetch("/api/settings/roles/update-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, role: newRole }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile aggiornare il ruolo.");
-
-      setUsers(current =>
-        current.map(u => (u.id === userId ? { ...u, role: newRole } : u))
-      );
-      showMessage(`Ruolo di ${data.user.name} aggiornato a ${newRole}!`, "success");
-    } catch (err: any) {
-      console.error(err);
-      showMessage(err.message || "Errore durante l'aggiornamento.", "error");
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const handleMansioneSave = async (userId: string) => {
-    if (!isSuperAdmin) {
-      showMessage("Solo i Super Admin possono modificare le mansioni.", "error");
-      return;
-    }
-
-    setUpdatingUserId(userId);
-    try {
-      const res = await fetch("/api/settings/roles/update-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, mansione: mansioneInput }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossibile aggiornare la mansione.");
-
-      setUsers(current =>
-        current.map(u => (u.id === userId ? { ...u, mansione: mansioneInput } : u))
-      );
-      setEditingMansioneId(null);
-      showMessage(`Mansione di ${data.user.name} aggiornata a "${mansioneInput}"!`, "success");
-    } catch (err: any) {
-      console.error(err);
-      showMessage(err.message || "Errore durante l'aggiornamento.", "error");
-    } finally {
-      setUpdatingUserId(null);
-    }
-  };
-
-  const filteredUsers = users.filter(u => {
-    const query = searchQuery.toLowerCase();
+  const filteredUsers = users.filter((user) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
     return (
-      u.name.toLowerCase().includes(query) ||
-      u.email.toLowerCase().includes(query) ||
-      (u.mansione || "").toLowerCase().includes(query) ||
-      (u.location?.name || "").toLowerCase().includes(query)
+      user.name.toLowerCase().includes(query) ||
+      user.email.toLowerCase().includes(query) ||
+      roleLabels[user.role].toLowerCase().includes(query) ||
+      (user.mansione || "").toLowerCase().includes(query) ||
+      (user.location?.name || "").toLowerCase().includes(query)
     );
   });
 
+  const groupedPages = filteredPages.reduce<Record<string, typeof filteredPages>>((acc, page) => {
+    if (!acc[page.group]) acc[page.group] = [];
+    acc[page.group].push(page);
+    return acc;
+  }, {});
+
+  const showMessage = (type: "success" | "error", text: string) => {
+    setMessage({ type, text });
+    window.setTimeout(() => setMessage(null), 3500);
+  };
+
+  const handleRoleChange = async (userId: string, role: Role) => {
+    if (!isAdmin) {
+      showMessage("error", "Solo Admin e Super Admin possono modificare i ruoli.");
+      return;
+    }
+
+    if (role === "SUPER_ADMIN" && !isSuperAdmin) {
+      showMessage("error", "Solo un Super Admin puo assegnare il ruolo Super Admin.");
+      return;
+    }
+
+    setUpdatingUserId(userId);
+    try {
+      const res = await fetch("/api/settings/roles/update-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role, accessList: null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Impossibile aggiornare il ruolo.");
+
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === userId ? { ...user, role, access_list: null } as any : user
+        )
+      );
+      showMessage("success", `Ruolo aggiornato: ${data.user.name} ora e ${roleLabels[role]}.`);
+    } catch (err: any) {
+      showMessage("error", err.message || "Errore durante il salvataggio.");
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Toast Alert Box */}
-      {message && (
-        <div
-          className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-2xl px-5 py-4 text-sm font-bold text-white shadow-2xl animate-in fade-in slide-in-from-bottom-5 duration-300 ${
-            message.type === "success" ? "bg-emerald-600 shadow-emerald-600/10" : "bg-rose-600 shadow-rose-600/10"
-          }`}
-        >
-          <ShieldCheck className="size-4 shrink-0" />
-          <span>{message.text}</span>
+      {message ? (
+        <div className={`fixed bottom-5 right-5 z-50 rounded-2xl px-5 py-4 text-sm font-bold text-white shadow-2xl ${
+          message.type === "success" ? "bg-emerald-600" : "bg-rose-600"
+        }`}>
+          {message.text}
         </div>
-      )}
+      ) : null}
 
-      {/* Premium Tab Selector */}
-      <div className="flex items-center gap-2 rounded-2xl bg-slate-100 p-1 w-fit">
-        <button
-          type="button"
-          onClick={() => setActiveTab("matrix")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "matrix" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <Settings className="size-3.5" />
-          Matrice Pagine e Permessi
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("users")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "users" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <Users className="size-3.5" />
-          Gestione Ruoli Staff ({users.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("mansioni")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "mansioni" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <UserCheck className="size-3.5" />
-          Gestione Mansioni ({Object.keys(mansioni).length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("sidebar")}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
-            activeTab === "sidebar" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <Menu className="size-3.5" />
-          Organizzazione Menu
-        </button>
-      </div>
+      <section className="grid gap-4 lg:grid-cols-5">
+        {roleStats.map((stat) => (
+          <button
+            key={stat.role}
+            type="button"
+            onClick={() => {
+              setSelectedRole(stat.role);
+              setActiveTab("matrix");
+            }}
+            className={`rounded-[28px] border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
+              selectedRole === stat.role ? "border-[#C66170] ring-4 ring-pink-100" : "border-black/5"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <Badge tone={roleTone(stat.role)}>{roleLabels[stat.role]}</Badge>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">{stat.users}</span>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Vede</p>
+                <p className="mt-1 text-2xl font-black text-slate-950">{stat.visible}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Modifica</p>
+                <p className="mt-1 text-2xl font-black text-slate-950">{stat.editable}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </section>
 
-      {activeTab === "matrix" && (
-        <Card className="overflow-hidden border-slate-100 p-0 bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead className="border-b border-slate-100 bg-slate-50/75 text-slate-500 font-bold uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">Pagina / Sezione</th>
-                  <th className="px-6 py-4">Descrizione</th>
-                  <th className="px-6 py-4">Visualizzazione Generale</th>
-                  <th className="px-6 py-4">Eccezioni Persone (Lettura)</th>
-                  <th className="px-6 py-4">Modifiche & Scrittura</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {APP_PAGES_MATRIX.map((page) => (
-                  <tr key={page.path} className="hover:bg-slate-50/50 transition">
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="size-4 text-slate-400 shrink-0" />
-                        <div>
-                          <p className="font-bold text-slate-900 text-sm">{page.name}</p>
-                          <p className="font-mono text-[10px] text-slate-400 mt-0.5">{page.path}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-slate-500 max-w-xs leading-normal">
-                      {page.description}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-wrap gap-1">
-                        {page.viewRoles.map((role) => (
-                          <Badge key={role} tone="gold" className="text-[9px] py-0 px-2 font-extrabold uppercase">
-                            {role.replace("_", " ")}
-                          </Badge>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-5 text-slate-500 max-w-[200px] leading-normal italic">
-                      {page.exceptions}
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-wrap gap-1 items-center">
-                        {page.editRoles.map((role) => (
-                          <Badge key={role} tone="pink" className="text-[9px] py-0 px-2 font-extrabold uppercase">
-                            {role.replace("_", " ")}
-                          </Badge>
-                        ))}
-                      </div>
-                      {page.exceptionsEdit && (
-                        <p className="text-[10px] text-slate-400 mt-1.5 italic leading-tight">
-                          Eccez.: {page.exceptionsEdit}
-                        </p>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("matrix")}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+              activeTab === "matrix" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <ShieldCheck className="size-4" />
+            Matrice ruoli
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("staff")}
+            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+              activeTab === "staff" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <Users className="size-4" />
+            Staff e ruoli
+          </button>
+        </div>
+
+        {activeTab === "matrix" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedRole("ALL")}
+              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+                selectedRole === "ALL" ? "bg-black text-white" : "bg-white text-slate-600 ring-1 ring-black/5"
+              }`}
+            >
+              Tutti
+            </button>
+            {ROLES.map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setSelectedRole(role)}
+                className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-wider transition ${
+                  selectedRole === role ? "bg-[#C66170] text-white" : "bg-white text-slate-600 ring-1 ring-black/5"
+                }`}
+              >
+                {roleLabels[role]}
+              </button>
+            ))}
           </div>
-        </Card>
-      )}
-
-      {activeTab === "users" && (
-        <div className="space-y-4">
-          {/* Search bar */}
-          <div className="flex max-w-md items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+        ) : (
+          <div className="flex min-w-[280px] items-center gap-2 rounded-2xl border border-black/5 bg-white px-3 py-2">
             <Search className="size-4 text-slate-400" />
             <input
-              type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca dipendente per nome, mansione, sede..."
-              className="w-full bg-transparent text-xs font-semibold outline-none text-slate-800"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Cerca collaboratore, ruolo o sede..."
+              className="w-full bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
             />
           </div>
+        )}
+      </div>
 
-          <Card className="overflow-hidden border-slate-100 p-0 bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead className="border-b border-slate-100 bg-slate-50/75 text-slate-500 font-bold uppercase tracking-wider">
-                  <tr>
-                    <th className="px-6 py-4">Foto & Nome</th>
-                    <th className="px-6 py-4">Email</th>
-                    <th className="px-6 py-4">Sede Salone</th>
-                    <th className="px-6 py-4">Mansione</th>
-                    <th className="px-6 py-4">Permessi Pagine</th>
-                    <th className="px-6 py-4">Ruolo System</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                  {filteredUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-slate-400 font-bold">
-                        Nessun dipendente trovato.
-                      </td>
-                    </tr>
-                  ) : null}
-                  {filteredUsers.map((user) => {
-                    const isEditingMansione = editingMansioneId === user.id;
-                    const isUpdating = updatingUserId === user.id;
-                    const isExpanded = expandedUserId === user.id;
-                    const hasCustomAccess = user.access_list !== null && user.access_list !== undefined;
-                    const userPermissions = normalizePermissionSet(user.access_list);
-                    const customPagesCount = userPermissions.view.length;
-
-                    return (
-                      <React.Fragment key={user.id}>
-                        <tr className="hover:bg-slate-50/30 transition">
-                          {/* Profile Photo & Name */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              {user.photo_url ? (
-                                <img src={resolveDrivePhotoUrl(user.photo_url)} alt={user.name} className="size-9 rounded-full object-cover border border-slate-100" />
-                              ) : (
-                                <div className="grid size-9 place-items-center rounded-full bg-[#FAF7F9] font-black text-[#C66170] border border-pink-100">
-                                  {(user.name || "S").charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div>
-                                <p className="font-bold text-slate-900 text-sm">{user.name}</p>
-                                <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {user.id.substring(0, 8)}</p>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Email */}
-                          <td className="px-6 py-4 text-slate-600 font-mono">
-                            {user.email}
-                          </td>
-
-                          {/* Sede / Salon */}
-                          <td className="px-6 py-4 text-slate-600 font-bold">
-                            {user.location?.name || <span className="text-slate-400 font-medium italic">Sede centrale</span>}
-                          </td>
-
-                          {/* Mansione (Editable) */}
-                          <td className="px-6 py-4">
-                            {isEditingMansione ? (
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={mansioneInput.toLowerCase()}
-                                  onChange={(e) => setMansioneInput(e.target.value)}
-                                  className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none focus:border-[#A74758] focus:bg-white bg-slate-50 transition"
-                                >
-                                  <option value="">Nessuna</option>
-                                  {Object.keys(mansioni).map((mKey) => (
-                                    <option key={mKey} value={mKey}>
-                                      {mKey.toUpperCase()}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => handleMansioneSave(user.id)}
-                                  disabled={isUpdating}
-                                  className="h-8 rounded-lg bg-emerald-600 text-white px-2.5 font-bold hover:bg-emerald-700 transition"
-                                >
-                                  Salva
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingMansioneId(null)}
-                                  className="h-8 rounded-lg bg-slate-200 text-slate-600 px-2.5 font-bold hover:bg-slate-300 transition"
-                                >
-                                  Annulla
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900 capitalize">
-                                  {user.mansione || <span className="text-slate-400 font-medium italic">Nessuna</span>}
-                                </span>
-                                {isSuperAdmin && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingMansioneId(user.id);
-                                      setMansioneInput(user.mansione || "");
-                                    }}
-                                    className="text-slate-400 hover:text-slate-600 transition"
-                                  >
-                                    <Edit className="size-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Custom Page Permissions Selector Toggle */}
-                          <td className="px-6 py-4">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedUserId(isExpanded ? null : user.id)}
-                              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition ${
-                                hasCustomAccess
-                                  ? "bg-pink-50 border border-pink-200 text-pink-700 hover:bg-pink-100"
-                                  : "bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200"
-                              }`}
-                            >
-                              {hasCustomAccess ? `${customPagesCount} Pagine Abilitate` : "Default (Ruolo)"}
-                            </button>
-                          </td>
-
-                          {/* Role Selector */}
-                          <td className="px-6 py-4">
-                            {isUpdating ? (
-                              <div className="flex items-center gap-1 text-slate-500 font-bold">
-                                <Loader2 className="size-3.5 animate-spin" />
-                                Aggiornamento...
-                              </div>
-                            ) : (
-                              <select
-                                value={user.role}
-                                onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                                disabled={!isSuperAdmin}
-                                className="appearance-none bg-black/5 border border-black/10 text-slate-800 text-xs font-black rounded-xl pl-3 pr-8 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition disabled:opacity-75 disabled:cursor-not-allowed"
-                                style={{
-                                  backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23475569' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
-                                  backgroundPosition: "right 0.5rem center",
-                                  backgroundSize: "0.8rem 0.8rem",
-                                  backgroundRepeat: "no-repeat"
-                                }}
-                              >
-                                <option value="SUPER_ADMIN">Super Admin</option>
-                                <option value="ADMIN">Admin</option>
-                                <option value="RESPONSABILE">Responsabile</option>
-                                <option value="MAGAZZINO">Magazzino</option>
-                                <option value="DIPENDENTE">Dipendente</option>
-                              </select>
-                            )}
-                          </td>
-                        </tr>
-
-                        {/* Accordion content for dynamic page selection */}
-                        {isExpanded && (
-                          <tr className="bg-slate-50/50">
-                            <td colSpan={6} className="px-8 py-6 border-t border-b border-slate-100">
-                              <div className="space-y-4 max-w-4xl">
-                                <div className="flex items-start justify-between gap-4 border-b border-slate-200/60 pb-3">
-                                  <div>
-                                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                                      Personalizza Accesso Pagine per {user.name}
-                                    </h4>
-                                    <p className="text-[11px] text-slate-500 mt-1">
-                                      {hasCustomAccess
-                                        ? "Questo dipendente ha permessi personalizzati. Seleziona esattamente quali pagine può visualizzare."
-                                        : "Attualmente eredita i permessi di default basati sul ruolo di sistema. Attiva la personalizzazione per selezionare le pagine singolarmente."}
-                                    </p>
-                                  </div>
-                                  
-                                  {isSuperAdmin && (
-                                    hasCustomAccess ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleResetToDefault(user.id)}
-                                        className="rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
-                                      >
-                                        Ripristina a Default (Ruolo)
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const defaultPages = APP_PAGES_MATRIX.filter(p => p.viewRoles.includes(user.role)).map(p => p.path);
-                                          const defaultEditPages = APP_PAGES_MATRIX.filter(p => p.editRoles.includes(user.role)).map(p => p.path);
-                                          const defaultPayload = { view: defaultPages, edit: defaultEditPages };
-                                          // Initialize custom access list with their role defaults
-                                          fetch("/api/settings/roles/update-user", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ userId: user.id, accessList: defaultPayload }),
-                                          }).then(async (res) => {
-                                            const data = await res.json();
-                                            if (res.ok) {
-                                              setUsers(curr => curr.map(u => u.id === user.id ? { ...u, access_list: defaultPayload } : u));
-                                              showMessage(`Personalizzazione abilitata per ${data.user.name}!`, "success");
-                                            }
-                                          });
-                                        }}
-                                        className="rounded-lg bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
-                                      >
-                                        Attiva Permessi Personalizzati
-                                      </button>
-                                    )
-                                  )}
-                                </div>
-                                
-                                {hasCustomAccess && (() => {
-                                  const uPermissions = normalizePermissionSet(user.access_list);
-                                  return (
-                                    <div className="space-y-6 pt-2">
-                                      {ROUTE_GROUPS.map((group) => {
-                                        const groupPages = APP_PAGES_MATRIX.filter(p => group.routes.includes(p.path));
-                                        if (groupPages.length === 0) return null;
-
-                                        return (
-                                          <div key={group.title} className="space-y-2.5">
-                                            <h5 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest border-l-2 border-[#C66170] pl-2">
-                                              {group.title}
-                                            </h5>
-                                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                                              {groupPages.map((page) => {
-                                                const canView = uPermissions.view.includes(page.path);
-                                                const canEdit = uPermissions.edit.includes(page.path);
-                                                return (
-                                                  <div
-                                                    key={page.path}
-                                                    className={`rounded-xl border p-3 transition select-none ${
-                                                      canView
-                                                        ? "bg-white border-[#C66170]/30 shadow-sm"
-                                                        : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
-                                                    }`}
-                                                  >
-                                                    <div className="min-w-0">
-                                                      <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
-                                                      <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
-                                                    </div>
-                                                    <div className="mt-3 grid grid-cols-2 gap-2">
-                                                      <label className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-slate-700 cursor-pointer">
-                                                        <input
-                                                          type="checkbox"
-                                                          checked={canView}
-                                                          disabled={!isSuperAdmin}
-                                                          onChange={(e) => handleTogglePageAccess(user.id, page.path, "view", e.target.checked, user.access_list)}
-                                                          className="rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                                        />
-                                                        Vedi
-                                                      </label>
-                                                      <label className="flex items-center gap-2 rounded-lg bg-pink-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-pink-700 cursor-pointer">
-                                                        <input
-                                                          type="checkbox"
-                                                          checked={canEdit}
-                                                          disabled={!isSuperAdmin}
-                                                          onChange={(e) => handleTogglePageAccess(user.id, page.path, "edit", e.target.checked, user.access_list)}
-                                                          className="rounded border-pink-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                                        />
-                                                        Modifica
-                                                      </label>
-                                                    </div>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === "mansioni" && (
-        <div className="space-y-6">
-          {/* Create new mansione container */}
-          {isSuperAdmin && (
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="space-y-1">
-                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Crea Nuova Mansione</h4>
-                <p className="text-[10px] text-slate-500">Aggiungi una mansione per configurarne i permessi e assegnarla allo staff.</p>
+      {activeTab === "matrix" ? (
+        <div className="space-y-5">
+          {Object.entries(groupedPages).map(([group, groupPages]) => (
+            <Card key={group} className="overflow-hidden border-white/80 bg-white p-0">
+              <div className="flex items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#C66170]">Area</p>
+                  <h3 className="mt-1 text-xl font-black text-slate-950">{group}</h3>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{groupPages.length} pagine</span>
               </div>
-              <div className="flex gap-2 min-w-0 max-w-sm ml-auto">
-                <input
-                  type="text"
-                  value={newMansioneName}
-                  onChange={(e) => setNewMansioneName(e.target.value)}
-                  placeholder="Nome mansione (es. sarta)"
-                  className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#A74758] bg-slate-50 transition"
-                />
-                <button
-                  type="button"
-                  onClick={handleCreateMansione}
-                  className="h-9 rounded-lg bg-[#A74758] hover:bg-[#8e3848] text-white px-4 text-xs font-black uppercase tracking-wider transition shrink-0"
-                >
-                  Crea
-                </button>
-              </div>
-            </div>
-          )}
 
-          {/* List of mansioni */}
-          <div className="grid gap-4">
-            {Object.keys(mansioni).length === 0 ? (
-              <Card className="p-8 text-center text-slate-400 font-bold text-xs bg-white border-slate-100">
-                Nessuna mansione registrata. Crea una mansione in alto per iniziare.
-              </Card>
-            ) : null}
-
-            {Object.entries(mansioni).map(([mName, mList]) => {
-              const isMansioneExpanded = expandedMansione === mName;
-              const permissions = normalizePermissionSet(mList);
-              const viewCount = permissions.view.length;
-              const editCount = permissions.edit.length;
-              return (
-                <Card key={mName} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
-                  {/* Header Row */}
-                  <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/20">
-                    <div className="flex items-center gap-2">
-                      <UserCheck className="size-4 text-slate-400 shrink-0" />
-                      <div>
-                        <h3 className="font-black text-slate-950 text-sm uppercase tracking-wider">{mName}</h3>
-                        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                          {viewCount} pagine visibili · {editCount} modificabili
-                        </p>
-                        {(() => {
-                          const assignedEmployees = users.filter(
-                            (u) => (u.mansione || "").trim().toLowerCase() === mName.trim().toLowerCase()
-                          );
-                          if (assignedEmployees.length === 0) return null;
-                          return (
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              <span className="text-[9px] font-extrabold text-slate-400 uppercase mr-1 select-none">Personale:</span>
-                              {assignedEmployees.map((emp) => (
-                                <span key={emp.id} className="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-650">
-                                  {emp.name}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
+              <div className="divide-y divide-black/5">
+                {groupPages.map((page) => (
+                  <div key={page.path} className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(260px,1.2fr)_1fr_1fr] lg:items-center">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black text-slate-950">{page.name}</p>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-500">{page.path}</span>
                       </div>
+                      <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">{page.description}</p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedMansione(isMansioneExpanded ? null : mName)}
-                        className="rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
-                      >
-                        {isMansioneExpanded ? "Chiudi Permessi" : "Gestisci Permessi"}
-                      </button>
-                      {isSuperAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMansione(mName)}
-                          className="rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 text-[10px] uppercase tracking-wider transition"
-                        >
-                          Elimina
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Accordion checkboxes */}
-                  {isMansioneExpanded && (
-                    <div className="p-5 bg-white space-y-6">
-                      {ROUTE_GROUPS.map((group) => {
-                        const groupPages = APP_PAGES_MATRIX.filter(p => group.routes.includes(p.path));
-                        if (groupPages.length === 0) return null;
-
-                        return (
-                          <div key={group.title} className="space-y-2.5">
-                            <h5 className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest border-l-2 border-[#C66170] pl-2">
-                              {group.title}
-                            </h5>
-                            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                              {groupPages.map((page) => {
-                                const canView = permissions.view.includes(page.path);
-                                const canEdit = permissions.edit.includes(page.path);
-                                return (
-                                  <div
-                                    key={page.path}
-                                    className={`rounded-xl border p-3 transition select-none ${
-                                      canView
-                                        ? "bg-white border-[#C66170]/30 shadow-sm"
-                                        : "bg-slate-50/50 border-slate-200 opacity-60 hover:opacity-100"
-                                    }`}
-                                  >
-                                    <div className="min-w-0">
-                                      <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
-                                      <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
-                                    </div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2">
-                                      <label className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-slate-700">
-                                        <input
-                                          type="checkbox"
-                                          checked={canView}
-                                          disabled={!isSuperAdmin}
-                                          onChange={(e) => handleToggleMansioneAccess(mName, page.path, "view", e.target.checked)}
-                                          className="rounded border-slate-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                        />
-                                        Vedi
-                                      </label>
-                                      <label className="flex items-center gap-2 rounded-lg bg-pink-50 px-2.5 py-2 text-[10px] font-black uppercase tracking-wider text-pink-700">
-                                        <input
-                                          type="checkbox"
-                                          checked={canEdit}
-                                          disabled={!isSuperAdmin}
-                                          onChange={(e) => handleToggleMansioneAccess(mName, page.path, "edit", e.target.checked)}
-                                          className="rounded border-pink-300 text-[#C66170] focus:ring-[#C66170] size-3.5 cursor-pointer disabled:cursor-not-allowed"
-                                        />
-                                        Modifica
-                                      </label>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {activeTab === "sidebar" && (
-        <div className="space-y-6">
-          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_auto]">
-            <div className="space-y-1">
-              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Organizza menu per ruolo / mansione</h4>
-              <p className="text-[10px] text-slate-500">
-                Scegli per chi vuoi ordinare cartelle, tasti e testi. La preview a destra mostra esattamente cosa vedrà quel gruppo.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={menuLayoutTarget}
-                onChange={(e) => handleMenuTargetChange(e.target.value)}
-                className="h-9 min-w-[260px] rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none transition focus:border-[#A74758] focus:bg-white"
-              >
-                <option value="default">Menu generale / fallback</option>
-                <optgroup label="Ruoli di Sistema">
-                  <option value="DIPENDENTE">Collaboratore (DIPENDENTE)</option>
-                  <option value="MAGAZZINO">Magazzino (MAGAZZINO)</option>
-                  <option value="RESPONSABILE">Responsabile (RESPONSABILE)</option>
-                  <option value="ADMIN">Amministratore (ADMIN)</option>
-                  <option value="SUPER_ADMIN">Super Admin (SUPER_ADMIN)</option>
-                </optgroup>
-                <optgroup label="Mansioni Registrate">
-                  {Object.keys(mansioni).map(mKey => (
-                    <option key={mKey} value={mKey}>
-                      Mansione: {mKey.toUpperCase()}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-              {menuLayoutTarget !== "default" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleCopyDefaultLayoutToTarget}
-                    className="h-9 rounded-lg bg-slate-100 px-3 text-[10px] font-black uppercase tracking-wider text-slate-700 transition hover:bg-slate-200"
-                  >
-                    Copia menu generale
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetTargetLayout}
-                    className="h-9 rounded-lg bg-rose-50 px-3 text-[10px] font-black uppercase tracking-wider text-rose-700 transition hover:bg-rose-100"
-                  >
-                    Usa generale
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Create new folder container */}
-          {isSuperAdmin && (
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="space-y-1">
-                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Crea Nuova Cartella Menu</h4>
-                <p className="text-[10px] text-slate-500">Raggruppa i pulsanti all'interno di una cartella personalizzata nella barra laterale.</p>
-              </div>
-              <div className="flex gap-2 min-w-0 max-w-sm ml-auto">
-                <input
-                  type="text"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  placeholder="Nome cartella (es. Area Tecnica)"
-                  className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#A74758] bg-slate-50 transition"
-                />
-                <button
-                  type="button"
-                  onClick={handleCreateFolder}
-                  className="h-9 rounded-lg bg-[#A74758] hover:bg-[#8e3848] text-white px-4 text-xs font-black uppercase tracking-wider transition shrink-0"
-                >
-                  Crea Cartella
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Grid showing folders on the left, unassigned routes in the middle, live preview on the right */}
-          <div className="grid gap-6 xl:grid-cols-3">
-            {/* Folders & Unassigned column (span 2) */}
-            <div className="xl:col-span-2 space-y-6">
-              {/* Folders column */}
-              <div className="space-y-4">
-                <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Cartelle e Pulsanti Attivi</h3>
-                {sidebarLayout.length === 0 ? (
-                  <Card className="p-8 text-center text-slate-400 font-bold text-xs bg-white border-slate-100">
-                    Nessuna cartella configurata.
-                  </Card>
-                ) : null}
-
-                {sidebarLayout.map((folder, folderIndex) => {
-                  const unassignedRoutesForFolder = APP_PAGES_MATRIX.filter(p => !new Set(sidebarLayout.flatMap(f => f.routes)).has(p.path));
-                  return (
-                    <Card key={folder.id} className="p-0 overflow-hidden border-slate-100 bg-white shadow-sm">
-                      {/* Folder Header Row */}
-                      <div className="flex items-center justify-between gap-4 p-4 border-b border-slate-100 bg-slate-50/40">
-                        <div className="flex items-center gap-2">
-                          <Folder className="size-4 text-[#A74758] shrink-0" />
-                          <h4 className="font-extrabold text-slate-900 text-xs uppercase tracking-wider">{folder.title}</h4>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            disabled={folderIndex === 0}
-                            onClick={() => handleMoveFolder(folderIndex, "up")}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
-                          >
-                            <ArrowUp className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={folderIndex === sidebarLayout.length - 1}
-                            onClick={() => handleMoveFolder(folderIndex, "down")}
-                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:pointer-events-none transition"
-                          >
-                            <ArrowDown className="size-3.5" />
-                          </button>
-                          {isSuperAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteFolder(folder.id)}
-                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Folder Content / Link List */}
-                      <div className="p-4 space-y-2 bg-white">
-                        {folder.routes.length === 0 ? (
-                          <p className="text-[10px] text-slate-400 italic py-2">
-                            Questa cartella è vuota. Aggiungi pulsanti dal selettore sottostante.
-                          </p>
-                        ) : (
-                          <div className="divide-y divide-slate-100">
-                            {folder.routes.map((routeHref, routeIndex) => {
-                              const pageObj = APP_PAGES_MATRIX.find(p => p.path === routeHref) || { name: routeHref, path: routeHref };
-                              const customLabel = folder.labels?.[routeHref] || "";
-                              return (
-                                <div key={routeHref} className="grid gap-3 py-3 first:pt-0 last:pb-0 sm:grid-cols-[1fr_auto] sm:items-center">
-                                  <div className="min-w-0 space-y-2">
-                                    <p className="font-bold text-slate-800 text-xs">{customLabel || pageObj.name}</p>
-                                    <p className="font-mono text-[9px] text-slate-400 mt-0.5">{pageObj.path}</p>
-                                    {isSuperAdmin && (
-                                      <input
-                                        type="text"
-                                        defaultValue={customLabel}
-                                        placeholder={`Testo tasto: ${pageObj.name}`}
-                                        onBlur={(e) => handleRouteLabelChange(folder.id, routeHref, e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            e.currentTarget.blur();
-                                          }
-                                        }}
-                                        className="h-8 w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-[10px] font-bold text-slate-700 outline-none transition focus:border-[#A74758] focus:bg-white"
-                                      />
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      disabled={routeIndex === 0}
-                                      onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "up")}
-                                      className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
-                                    >
-                                      <ArrowUp className="size-3" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={routeIndex === folder.routes.length - 1}
-                                      onClick={() => handleMoveRouteInFolder(folder.id, routeIndex, "down")}
-                                      className="p-1 rounded-md hover:bg-slate-100 text-slate-600 disabled:opacity-30 disabled:pointer-events-none"
-                                    >
-                                      <ArrowDown className="size-3" />
-                                    </button>
-                                    {isSuperAdmin && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveRouteFromFolder(routeHref, folder.id)}
-                                        className="p-1 rounded-md hover:bg-rose-50 text-rose-600 ml-1"
-                                      >
-                                        <X className="size-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Dropdown to add route */}
-                        {isSuperAdmin && unassignedRoutesForFolder.length > 0 && (
-                          <div className="pt-2 border-t border-slate-50 mt-2">
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  handleMoveRouteToFolder(e.target.value, folder.id);
-                                }
-                              }}
-                              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none bg-slate-50 focus:bg-white text-slate-700 transition w-full"
-                            >
-                              <option value="">+ Aggiungi tasto/pagina...</option>
-                              {unassignedRoutesForFolder.map(page => (
-                                <option key={page.path} value={page.path}>
-                                  {page.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              {/* Unassigned section */}
-              <div className="space-y-4">
-                <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Pagine Non Assegnate</h3>
-                <Card className="p-4 bg-white border-slate-100 shadow-sm space-y-3">
-                  <p className="text-[10px] text-slate-500 leading-normal">
-                    Queste pagine non sono inserite in nessuna cartella. Verranno visualizzate in automatico all'interno di una cartella predefinita "Altre Pagine" in fondo al menu.
-                  </p>
-
-                  {(() => {
-                    const assignedRouteHrefs = new Set(sidebarLayout.flatMap(f => f.routes));
-                    const unassignedList = APP_PAGES_MATRIX.filter(p => !assignedRouteHrefs.has(p.path));
-
-                    if (unassignedList.length === 0) {
-                      return (
-                        <p className="text-xs text-slate-400 font-bold italic py-4 text-center">
-                          Tutte le pagine sono assegnate!
-                        </p>
-                      );
-                    }
-
-                    return (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {unassignedList.map(page => (
-                          <div key={page.path} className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between gap-2">
-                            <div>
-                              <p className="font-bold text-slate-800 text-xs leading-normal">{page.name}</p>
-                              <p className="font-mono text-[9px] text-slate-400 mt-0.5">{page.path}</p>
-                            </div>
-                            
-                            {/* Folder target assign dropdown */}
-                            {isSuperAdmin && sidebarLayout.length > 0 && (
-                              <select
-                                value=""
-                                onChange={(e) => {
-                                  if (e.target.value) {
-                                    handleMoveRouteToFolder(page.path, e.target.value);
-                                  }
-                                }}
-                                className="h-7 rounded-lg border border-slate-200 px-2 text-[10px] font-bold outline-none bg-white text-slate-600 transition w-full"
-                              >
-                                <option value="">Sposta in cartella...</option>
-                                {sidebarLayout.map(f => (
-                                  <option key={f.id} value={f.id}>
-                                    {f.title}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                          </div>
+                    <div>
+                      <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        <Check className="size-3.5" />
+                        Vede
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {page.viewRoles.map((role) => (
+                          <Badge key={role} tone={roleTone(role)}>{roleLabels[role]}</Badge>
                         ))}
                       </div>
-                    );
-                  })()}
-                </Card>
-              </div>
-            </div>
-
-            {/* Live Sidebar Preview Mockup column */}
-            <div className="space-y-4">
-              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider pl-1">Live Sidebar Preview</h3>
-              
-              <Card className="p-4 bg-white border-slate-100 shadow-sm space-y-4">
-                {/* Selector Dropdown */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
-                    Anteprima per Mansione / Ruolo:
-                  </label>
-                  <select
-                    value={previewTarget}
-                    onChange={(e) => {
-                      setPreviewTarget(e.target.value);
-                      setMenuLayoutTarget(e.target.value);
-                    }}
-                    className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold outline-none focus:border-[#A74758] bg-slate-50 focus:bg-white text-slate-700 transition w-full"
-                  >
-                    <optgroup label="Ruoli di Sistema">
-                      <option value="DIPENDENTE">Collaboratore (DIPENDENTE)</option>
-                      <option value="MAGAZZINO">Magazzino (MAGAZZINO)</option>
-                      <option value="RESPONSABILE">Responsabile (RESPONSABILE)</option>
-                      <option value="ADMIN">Amministratore (ADMIN)</option>
-                      <option value="SUPER_ADMIN">Super Admin (SUPER_ADMIN)</option>
-                    </optgroup>
-                    <optgroup label="Mansioni Registrate">
-                      {Object.keys(mansioni).map(mKey => (
-                        <option key={mKey} value={mKey}>
-                          Mansione: {mKey.toUpperCase()}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
-
-                {/* Visual Representation of Sidebar */}
-                <div className="rounded-2xl border border-slate-200 bg-[#0E131F] text-slate-300 p-4 space-y-5 overflow-hidden shadow-inner font-sans max-h-[600px] overflow-y-auto luxury-scroll relative select-none">
-                  {/* Glass indicator of mockup */}
-                  <div className="absolute top-2 right-2 rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-[8px] font-black uppercase text-white/50 tracking-wider">
-                    Mockup Preview
-                  </div>
-
-                  {/* Logo block */}
-                  <div className="flex items-center gap-2 border-b border-white/5 pb-3 pt-1">
-                    <div className="size-7 rounded-full bg-white/10 grid place-items-center text-[10px] font-black text-rose-300">
-                      P
                     </div>
+
                     <div>
-                      <p className="text-[10px] font-bold tracking-[0.15em] text-white uppercase">PARADISE</p>
-                      <p className="text-[8px] text-white/40">Staff Hub</p>
+                      <p className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        <LockKeyhole className="size-3.5" />
+                        Modifica
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {page.editRoles.length > 0 ? page.editRoles.map((role) => (
+                          <Badge key={role} tone={roleTone(role)}>{roleLabels[role]}</Badge>
+                        )) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">
+                            <ShieldOff className="size-3" />
+                            Nessuno
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="overflow-hidden border-white/80 bg-white p-0">
+          <div className="border-b border-black/5 px-5 py-4">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#C66170]">Ruoli staff</p>
+            <h3 className="mt-1 text-xl font-black text-slate-950">Cambia il ruolo, non i permessi singoli</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              I permessi vengono applicati automaticamente dalla matrice ruoli. Quando cambi ruolo, il menu e le pagine si aggiornano da soli.
+            </p>
+          </div>
 
-                  {/* Sidebar list items */}
-                  <div className="space-y-4">
-                    {(() => {
-                      const allowedPages = getPreviewAccessList(previewTarget);
-                      const editablePages = getPreviewEditAccessList(previewTarget);
-
-                      // Helper: filter allowed ones inside each folder
-                      const renderedHrefs = new Set<string>();
-                      const structured = sidebarLayout.map(folder => {
-                        const matched = folder.routes.filter(r => {
-                          const hasView = allowedPages.includes(r);
-                          if (hasView) renderedHrefs.add(r);
-                          return hasView;
-                        });
-                        return { ...folder, matched };
-                      }).filter(f => f.matched.length > 0);
-
-                      // Fallback unassigned list
-                      const unassignedMatched = APP_PAGES_MATRIX.filter(p => allowedPages.includes(p.path) && !renderedHrefs.has(p.path));
-
-                      const displaySections = [
-                        ...structured,
-                        ...(unassignedMatched.length > 0 ? [{ id: "fallback-unassigned", title: "Altre Pagine", matched: unassignedMatched.map(p => p.path) }] : [])
-                      ];
-
-                      if (displaySections.length === 0) {
-                        return (
-                          <div className="py-8 text-center text-[10px] text-slate-500 font-bold italic">
-                            Nessuna pagina visibile per questa configurazione.
-                          </div>
-                        );
-                      }
-
-                      return displaySections.map(sec => (
-                        <div key={sec.id} className="space-y-1">
-                          <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-500 pb-1">
-                            {sec.title}
-                          </p>
-                          <div className="space-y-0.5">
-                            {sec.matched.map(rHref => {
-                              const pageInfo = APP_PAGES_MATRIX.find(p => p.path === rHref) || { name: rHref, path: rHref };
-                              const isEditable = editablePages.includes(rHref);
-                              return (
-                                <div
-                                  key={rHref}
-                                  className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[10px] font-semibold bg-white/5 hover:bg-white/10 text-slate-200 transition"
-                                >
-                                  <span>{getRouteDisplayName(rHref) || pageInfo.name}</span>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <span title="Visibile (Lettura)" className="text-[10px]">👁️</span>
-                                    {isEditable && (
-                                      <span title="Modificabile (Scrittura)" className="text-[10px] text-amber-400">✍️</span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ));
-                    })()}
+          <div className="divide-y divide-black/5">
+            {filteredUsers.map((user) => (
+              <div key={user.id} className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(260px,1fr)_1fr_auto] md:items-center">
+                <div className="flex min-w-0 items-center gap-3">
+                  {user.photo_url ? (
+                    <img src={resolveDrivePhotoUrl(user.photo_url)} alt={user.name} className="size-12 rounded-2xl object-cover ring-1 ring-black/5" />
+                  ) : (
+                    <div className="grid size-12 place-items-center rounded-2xl bg-pink-100 text-sm font-black text-[#C66170] ring-1 ring-pink-200">
+                      {employeeInitials(user.name)}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-slate-950">{user.name}</p>
+                    <p className="truncate text-xs font-semibold text-slate-500">{user.email}</p>
                   </div>
                 </div>
-              </Card>
-            </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge tone={roleTone(user.role)}>{roleLabels[user.role]}</Badge>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-600">{user.location?.name || "Sede non assegnata"}</span>
+                  {user.mansione ? <span className="rounded-full bg-slate-100 px-3 py-1 font-bold text-slate-600">{user.mansione}</span> : null}
+                </div>
+
+                <div className="relative">
+                  {updatingUserId === user.id ? (
+                    <div className="inline-flex h-11 items-center gap-2 rounded-2xl bg-slate-100 px-4 text-sm font-black text-slate-500">
+                      <Loader2 className="size-4 animate-spin" />
+                      Salvo
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={user.role}
+                        disabled={!isAdmin}
+                        onChange={(event) => handleRoleChange(user.id, event.target.value as Role)}
+                        className="h-11 min-w-[210px] appearance-none rounded-2xl border border-black/10 bg-white px-4 pr-10 text-sm font-black text-slate-900 outline-none transition focus:border-[#C66170] focus:ring-4 focus:ring-pink-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        {ROLES.map((role) => (
+                          <option key={role} value={role} disabled={role === "SUPER_ADMIN" && !isSuperAdmin}>
+                            {roleLabels[role]}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

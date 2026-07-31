@@ -9,7 +9,7 @@ import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { monthlyPersonalHours } from "@/lib/personal-hours";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
+import { canAccessForUser, type Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/app/api/settings/dashboard/route";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
@@ -39,6 +39,12 @@ export default async function ProfilePage() {
   if (!session?.user?.id) redirect("/login");
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, include: { location: true } });
   if (!user) redirect("/login");
+  const canAccessPage = await canAccessForUser(prisma, "/profile", {
+    id: user.id,
+    role: user.role,
+    mansione: user.mansione,
+  });
+  if (!canAccessPage) redirect("/dashboard");
   
   const now = new Date();
   const month = now.getMonth();

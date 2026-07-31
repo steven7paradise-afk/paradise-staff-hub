@@ -49,7 +49,6 @@ export const authConfig = {
             email: user.email,
             role: user.role,
             sedeId: user.sede_id,
-            access_list: user.access_list,
           };
         }
 
@@ -70,7 +69,6 @@ export const authConfig = {
           role: user.role,
           sedeId: user.sede_id,
           mansione: user.mansione,
-          access_list: user.access_list,
         };
       },
     }),
@@ -84,7 +82,6 @@ export const authConfig = {
         token.role = (user as { role: Role }).role;
         token.sedeId = (user as { sedeId?: string }).sedeId;
         token.mansione = (user as { mansione?: string }).mansione;
-        token.accessList = (user as any).access_list;
       }
       return token;
     },
@@ -96,7 +93,6 @@ export const authConfig = {
         session.user.role = token.role as Role;
         session.user.sedeId = token.sedeId as string | undefined;
         (session.user as any).mansione = token.mansione as string | undefined;
-        (session.user as any).accessList = token.accessList as string[] | undefined;
       }
       return session;
     },
@@ -110,47 +106,22 @@ export const authConfig = {
       try {
         const dbUser = await prisma.user.findUnique({
           where: { id: auth.user.id },
-          select: { role: true, mansione: true, access_list: true }
+          select: { role: true, mansione: true }
         });
 
         if (!dbUser) return false;
 
-        let finalAccessList: any = undefined;
-
-        if (
-          dbUser.access_list &&
-          (
-            (Array.isArray(dbUser.access_list) && dbUser.access_list.length > 0) ||
-            (!Array.isArray(dbUser.access_list) && typeof dbUser.access_list === "object")
-          )
-        ) {
-          finalAccessList = dbUser.access_list;
-        } else if (dbUser.mansione) {
-          const mansioneSettings = await prisma.setting.findUnique({
-            where: { key: "mansioni_permissions" }
-          });
-          if (mansioneSettings) {
-            const mapping = (mansioneSettings.value as Record<string, any>) || {};
-            const cleanMansione = dbUser.mansione.trim().toLowerCase();
-            if (mapping[cleanMansione]) {
-              finalAccessList = mapping[cleanMansione];
-            }
-          }
-        }
-
         return canAccess(
           pathname, 
           dbUser.role as Role, 
-          dbUser.mansione || undefined,
-          finalAccessList
+          dbUser.mansione || undefined
         );
       } catch (err) {
         console.error("Auth dynamic check error:", err);
         return canAccess(
           pathname, 
           auth?.user?.role as Role | undefined, 
-          (auth?.user as any)?.mansione,
-          (auth?.user as any)?.accessList as string[] | undefined
+          (auth?.user as any)?.mansione
         );
       }
     },

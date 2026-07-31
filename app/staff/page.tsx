@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { StaffDirectory } from "@/components/staff-directory";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { normalizeAccessRoutes } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,11 @@ export default async function StaffPage() {
             managerId: user.manager_id,
             managerName: user.manager?.name ?? "",
             hrNotes: user.hr_notes ?? "",
-            accessList: Array.isArray(user.access_list) ? user.access_list : [],
+            accessList: Array.isArray(user.access_list)
+              ? normalizeAccessRoutes(user.access_list)
+              : user.access_list && typeof user.access_list === "object" && !Array.isArray(user.access_list)
+                ? normalizeAccessRoutes((user.access_list as { view?: unknown }).view)
+                : [],
             iban: user.iban ?? "",
             contractHistory: user.contract_history,
             sicknessStats,

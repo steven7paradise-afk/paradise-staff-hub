@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { EmployeeManager } from "@/components/employee-manager";
 import { prisma } from "@/lib/prisma";
+import { normalizeAccessRoutes } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,11 @@ export default async function EmployeesPage() {
           iban: employee.iban ?? "",
           hrNotes: employee.hr_notes ?? "",
           managerId: employee.manager_id ?? "",
-          accessList: Array.isArray(employee.access_list) ? employee.access_list : [],
+          accessList: Array.isArray(employee.access_list)
+            ? normalizeAccessRoutes(employee.access_list)
+            : employee.access_list && typeof employee.access_list === "object" && !Array.isArray(employee.access_list)
+              ? normalizeAccessRoutes((employee.access_list as { view?: unknown }).view)
+              : [],
           contractHistory: employee.contract_history,
           workforceData: employee.workforce_data && typeof employee.workforce_data === "object" && !Array.isArray(employee.workforce_data) ? employee.workforce_data : {},
           lastEditedByName: employee.last_edited_by?.name ?? null,

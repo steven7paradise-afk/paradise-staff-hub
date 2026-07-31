@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
-import { normalizeAccessRoutes, roleLabels, routePermissions, visibleForRole, type Role } from "@/lib/roles";
+import { roleLabels, routePermissions, visibleForRole, type Role } from "@/lib/roles";
 import { normalizeServicePage, servicePages } from "@/lib/service-pages";
 import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
 import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
@@ -90,7 +90,7 @@ function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
         ? Object.fromEntries(
             Object.entries(folder.labels as Record<string, unknown>)
               .filter(([route, label]) => typeof route === "string" && typeof label === "string")
-          )
+          ) as Record<string, string>
         : {},
     }));
 }
@@ -165,7 +165,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           header_color: true,
           sidebar_color: true,
           mansione: true,
-          access_list: true,
           location: { select: { name: true } },
         },
       }).catch(() => null)
@@ -189,39 +188,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const serviceSetting = currentRole === "DIPENDENTE" && session?.user?.sedeId
     ? settingsMap.get(`service_page:${session.user.sedeId}`) || null
     : null;
-
-  let userAccessList: string[] | undefined = undefined;
-  if (currentUser && currentRole !== "SUPER_ADMIN") {
-    let rawAccess: any = undefined;
-    if (
-      currentUser.access_list &&
-      (
-        (Array.isArray(currentUser.access_list) && currentUser.access_list.length > 0) ||
-        (!Array.isArray(currentUser.access_list) && typeof currentUser.access_list === "object")
-      )
-    ) {
-      rawAccess = currentUser.access_list;
-    } else if (currentUser.mansione) {
-      const mansioneSettings = await prisma.setting.findUnique({
-        where: { key: "mansioni_permissions" }
-      });
-      if (mansioneSettings) {
-        const mapping = (mansioneSettings.value as Record<string, any>) || {};
-        const cleanMansione = currentUser.mansione.trim().toLowerCase();
-        if (mapping[cleanMansione]) {
-          rawAccess = mapping[cleanMansione];
-        }
-      }
-    }
-
-    if (rawAccess) {
-      if (Array.isArray(rawAccess)) {
-        userAccessList = normalizeAccessRoutes(rawAccess);
-      } else if (rawAccess && typeof rawAccess === "object" && Array.isArray(rawAccess.view)) {
-        userAccessList = normalizeAccessRoutes(rawAccess.view);
-      }
-    }
-  }
 
   let servicePageNum = 1;
   let customLabel = "";
@@ -298,21 +264,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     return folder?.labels?.[href] || fallback;
   };
 
-  const filterMenuItems = <T extends { href: string }>(menuList: T[]): T[] => {
-    if (!userAccessList || !Array.isArray(userAccessList) || currentRole === "SUPER_ADMIN") {
-      return menuList;
-    }
-    return menuList.filter((item) => {
-      const matchedRoute = Object.keys(routePermissions)
-        .sort((a, b) => b.length - a.length)
-        .find((route) => item.href === route || item.href.startsWith(`${route}/`));
-      if (matchedRoute) {
-        return userAccessList.includes(matchedRoute);
-      }
-      return true;
-    });
-  };
-
   const getStructuredMenuItems = <T extends { href: string }>(flatList: T[]): T[] => {
     if (!sidebarConfig || !Array.isArray(sidebarConfig) || sidebarConfig.length === 0) {
       return flatList;
@@ -341,15 +292,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     return ordered;
   };
 
-  const hasCustomPageAccess = Boolean(
-    userAccessList &&
-    Array.isArray(userAccessList) &&
-    currentRole !== "SUPER_ADMIN"
-  );
-
-  const rawItems = hasCustomPageAccess
-    ? uniqueMenuItemsForAccess(currentRole)
-    : currentRole === "DIPENDENTE"
+  const rawItems = currentRole === "DIPENDENTE"
     ? [
         ...baseItems.filter((item) => item.href !== "/notifications" && item.href !== "/tasks" && item.href !== "/social-calendar" && item.href !== "/cash"),
         ...(selectedServiceItem.href === "/tasks" ? [] : [selectedServiceItem]),
@@ -367,7 +310,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       ]
     : baseItems;
 
-  const items = filterMenuItems(rawItems);
+  const items = rawItems;
   const sidebarItems = getStructuredMenuItems(items).map((item: any) => ({
     href: item.href,
     label: getSidebarLabel(item.href, item.label),
@@ -440,7 +383,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           <DesktopSidebarNav
             logoUrl={branding.logo_url}
             userName={currentUser?.name ?? session?.user?.name ?? ""}
-            userPhoto={currentUser?.photo_url}
+            userPhoto={currentUser?.photo_url ?? null}
             roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             currentRole={currentRole}
             unreadNotifications={unreadNotifications}

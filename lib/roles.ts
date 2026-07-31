@@ -27,6 +27,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/service-forms": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/ordine": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/magazzino": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/foto": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/points": ["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
@@ -139,33 +140,6 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
   if (pathname === "/") return true;
   if (isApiRoute(pathname)) return true;
 
-  // Custom access list check
-  if (
-    accessList &&
-    role !== "SUPER_ADMIN" &&
-    (
-      (Array.isArray(accessList) && accessList.length > 0) ||
-      (!Array.isArray(accessList) && typeof accessList === "object")
-    )
-  ) {
-    let viewRoutes: string[] = [];
-    if (Array.isArray(accessList)) {
-      viewRoutes = normalizeAccessRoutes(accessList);
-    } else if (accessList && typeof accessList === "object" && Array.isArray(accessList.view)) {
-      viewRoutes = normalizeAccessRoutes(accessList.view);
-    }
-
-    const matchedRoute = Object.keys(routePermissions)
-      .sort((a, b) => b.length - a.length)
-      .find((route) => pathname === route || pathname.startsWith(`${route}/`));
-    
-    if (matchedRoute) {
-      return viewRoutes.includes(matchedRoute);
-    }
-
-    return false;
-  }
-
   // Abilita la pagina appuntamenti per chiunque abbia "assistenza" nella mansione
   if (pathname === "/appointments" || pathname.startsWith("/appointments/")) {
     if (role === "DIPENDENTE" && mansione && mansione.toLowerCase().includes("assistenza")) {
@@ -192,20 +166,6 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
 
   if (role === "SUPER_ADMIN") return true;
 
-  // Custom edit list check
-  if (accessList && role !== "SUPER_ADMIN") {
-    if (accessList && typeof accessList === "object" && Array.isArray(accessList.edit)) {
-      const editRoutes = normalizeAccessRoutes(accessList.edit);
-      const matchedRoute = Object.keys(routePermissions)
-        .sort((a, b) => b.length - a.length)
-        .find((route) => pathname === route || pathname.startsWith(`${route}/`));
-      
-      if (matchedRoute) {
-        return editRoutes.includes(matchedRoute);
-      }
-    }
-  }
-
   // Fallback to default edit rules defined in the matrix
   const isSettings = pathname.startsWith("/settings");
   if (isSettings) {
@@ -231,24 +191,7 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
 }
 
 export async function getEffectiveAccessList(prisma: any, user: { id: string; access_list?: any; mansione?: string | null }) {
-  if (
-    user.access_list &&
-    (
-      (Array.isArray(user.access_list) && user.access_list.length > 0) ||
-      (!Array.isArray(user.access_list) && typeof user.access_list === "object")
-    )
-  ) {
-    return user.access_list;
-  }
-
-  if (!user.mansione) return undefined;
-
-  const mansioneSettings = await prisma.setting.findUnique({
-    where: { key: "mansioni_permissions" }
-  });
-  const mapping = (mansioneSettings?.value as Record<string, any>) || {};
-  const cleanMansione = user.mansione.trim().toLowerCase();
-  return mapping[cleanMansione];
+  return undefined;
 }
 
 export async function canAccessForUser(prisma: any, pathname: string, user: { id: string; role?: Role | string; mansione?: string | null; access_list?: any }) {
