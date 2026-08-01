@@ -7,6 +7,7 @@ import {
   cowlendarIdFromConsultationDescription,
   isOnlineConsultationBooking,
 } from "@/lib/online-consultations";
+import { getGooglePrivateKey } from "@/lib/google-auth";
 
 type LeaveRequestWithUser = LeaveRequest & { user: User };
 type ScheduleEntryForCalendar = ScheduleEntry & {
@@ -20,48 +21,12 @@ const DEFAULT_EXTRA_LEAVE_CALENDAR_IDS = [
   "cd56578ac3f02b555abd38d368d5f4a97aa91cf8ca74995f921baec95a8bada9@group.calendar.google.com",
 ];
 
-function normalizePrivateKey(value?: string | null) {
-  if (!value) return undefined;
-  let key = value.trim();
-
-  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
-    key = key.slice(1, -1);
-  }
-
-  key = key.replace(/\\n/g, "\n");
-
-  if (key.includes("BEGIN PRIVATE KEY")) {
-    return key;
-  }
-
-  try {
-    const decoded = Buffer.from(key, "base64").toString("utf8").trim().replace(/\\n/g, "\n");
-    if (decoded.includes("BEGIN PRIVATE KEY")) {
-      return decoded;
-    }
-  } catch {
-    // Keep the original value so Google can surface a useful auth error.
-  }
-
-  return key;
-}
-
 function getPrivateKey() {
-  if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
-    return normalizePrivateKey(Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8"));
-  }
-
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    try {
-      const parsed = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-      const key = normalizePrivateKey(parsed.private_key);
-      if (key) return key;
-    } catch {
-      // Fall through to GOOGLE_PRIVATE_KEY.
-    }
-  }
-
-  return normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
+  return getGooglePrivateKey({
+    jsonEnvNames: ["GOOGLE_SERVICE_ACCOUNT_JSON"],
+    base64EnvNames: ["GOOGLE_PRIVATE_KEY_BASE64"],
+    keyEnvNames: ["GOOGLE_PRIVATE_KEY"],
+  });
 }
 
 function dateOnly(value: Date) {

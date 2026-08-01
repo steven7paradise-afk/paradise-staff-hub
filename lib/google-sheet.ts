@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
 import { getWarehouseState } from "@/lib/internal-warehouse";
+import { getGooglePrivateKey } from "@/lib/google-auth";
 
 type AttendanceSheetRow = {
   date: string;
@@ -30,16 +31,11 @@ type AppointmentSheetLookupInput = {
 };
 
 function getPrivateKey() {
-  if (process.env.DRIVE_PRIVATE_KEY_BASE64) {
-    return Buffer.from(process.env.DRIVE_PRIVATE_KEY_BASE64, "base64").toString("utf8").replace(/\r/g, "").replace(/\\n/g, "\n");
-  }
-  if (process.env.DRIVE_PRIVATE_KEY) {
-    return process.env.DRIVE_PRIVATE_KEY.replace(/\r/g, "").replace(/\\n/g, "\n");
-  }
-  if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
-    return Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
-  }
-  return process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  return getGooglePrivateKey({
+    jsonEnvNames: ["DRIVE_SERVICE_ACCOUNT_JSON", "GOOGLE_SERVICE_ACCOUNT_JSON"],
+    base64EnvNames: ["DRIVE_PRIVATE_KEY_BASE64", "GOOGLE_PRIVATE_KEY_BASE64"],
+    keyEnvNames: ["DRIVE_PRIVATE_KEY", "GOOGLE_PRIVATE_KEY"],
+  });
 }
 
 function normalizeAppointmentSheetStatus(value?: string | null) {
