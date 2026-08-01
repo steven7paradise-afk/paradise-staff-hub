@@ -34,12 +34,22 @@ export function isOnlineConsultationBooking(booking: CowlendarBooking | Record<s
   const text = collectBookingText(booking);
   if (!text) return false;
 
-  const hasConsultation = text.includes("consulenza") || text.includes("consultation") || text.includes("consulto");
+  const hasConsultation =
+    text.includes("consulenza") ||
+    text.includes("consultation") ||
+    text.includes("consulto") ||
+    text.includes("consulente") ||
+    text.includes("valutazione") ||
+    text.includes("diagnosi");
   const hasOnlineSignal =
     text.includes("online") ||
     text.includes("video") ||
+    text.includes("meet") ||
+    text.includes("teams") ||
     text.includes("zoom") ||
     text.includes("call") ||
+    text.includes("chiamata") ||
+    text.includes("telefonata") ||
     text.includes("telefono") ||
     text.includes("telefonica") ||
     text.includes("whatsapp");
@@ -56,7 +66,7 @@ export function isOnlineConsultationBooking(booking: CowlendarBooking | Record<s
     text.includes("buenos aires") ||
     text.includes("salone");
 
-  return hasConsultation && !inSalonOnly;
+  return (hasConsultation || hasOnlineSignal) && !inSalonOnly;
 }
 
 export function cowlendarBookingToConsultationEvent(booking: CowlendarBooking | Record<string, any>) {

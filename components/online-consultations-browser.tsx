@@ -48,14 +48,23 @@ export function OnlineConsultationsBrowser({
         };
       })
       .filter((evt) => {
-        const titleLower = evt.summary.toLowerCase();
-        const serviceLower = evt.serviceTitle.toLowerCase();
+        const titleLower = `${evt.summary} ${evt.serviceTitle}`.toLowerCase();
         
         // Exclude any in-salon events
-        if (titleLower.includes("salone") || serviceLower.includes("salone")) return false;
+        if (
+          titleLower.includes("salone") ||
+          titleLower.includes("duomo") ||
+          titleLower.includes("buenos aires") ||
+          titleLower.includes("riapplicazione") ||
+          titleLower.includes("applicazione extension") ||
+          titleLower.includes("rimozione") ||
+          titleLower.includes("lavaggio") ||
+          titleLower.includes("piega")
+        ) {
+          return false;
+        }
         
-        // Must be online, or has no description but title has consulenza
-        return titleLower.includes("online") || serviceLower.includes("online") || (!evt.description && titleLower.includes("consulenza"));
+        return true;
       });
   }, [initialEvents]);
 
