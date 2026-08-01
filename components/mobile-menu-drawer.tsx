@@ -122,7 +122,7 @@ export function MobileMenuDrawer({
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[302px] flex-col justify-between border-r border-white/8 bg-[#07101F] p-5 transition-[transform,box-shadow] duration-300 ease-out",
+          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[302px] flex-col justify-between border-r border-white/8 bg-[#07101F] p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out",
           isOpen ? "translate-x-0 shadow-[18px_0_50px_rgba(0,0,0,0.45)]" : "-translate-x-full shadow-none",
         )}
       >

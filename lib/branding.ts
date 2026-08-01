@@ -23,6 +23,7 @@ export type BrandingTheme = {
   sidebar_active_bg_color: string;
   sidebar_active_text_color: string;
   sidebar_active_icon_color: string;
+  sidebar_font_family: string;
   logo_url: string | null;
 };
 
@@ -47,8 +48,14 @@ const fallbackBranding: BrandingTheme = {
   sidebar_active_bg_color: "#FFFFFF",
   sidebar_active_text_color: "#FFFFFF",
   sidebar_active_icon_color: "#FFFFFF",
+  sidebar_font_family: "Manrope",
   logo_url: null,
 };
+
+function sidebarFontStack(font: string) {
+  const clean = ["Inter", "Manrope", "Montserrat"].includes(font) ? font : "Manrope";
+  return `${clean}, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+}
 
 export const getBrandingTheme = unstable_cache(
   async (): Promise<BrandingTheme> => {
@@ -87,6 +94,7 @@ export function brandingCss(theme: BrandingTheme) {
     "--sidebar-active-bg": theme.sidebar_active_bg_color,
     "--sidebar-active-text": theme.sidebar_active_text_color,
     "--sidebar-active-icon": theme.sidebar_active_icon_color,
+    "--sidebar-font": sidebarFontStack(theme.sidebar_font_family),
     "--dark-background": theme.dark_background_color,
     "--dark-sidebar": theme.dark_sidebar_color,
     "--dark-card": theme.dark_card_color,

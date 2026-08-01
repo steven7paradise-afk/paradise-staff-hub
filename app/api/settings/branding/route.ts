@@ -32,6 +32,9 @@ export async function PUT(request: NextRequest) {
     sidebar_active_bg_color: String(payload.sidebar_active_bg_color ?? "#FFFFFF"),
     sidebar_active_text_color: String(payload.sidebar_active_text_color ?? "#FFFFFF"),
     sidebar_active_icon_color: String(payload.sidebar_active_icon_color ?? "#FFFFFF"),
+    sidebar_font_family: ["Inter", "Manrope", "Montserrat"].includes(String(payload.sidebar_font_family ?? ""))
+      ? String(payload.sidebar_font_family)
+      : "Manrope",
     logo_url: payload.logo_url ? String(payload.logo_url) : null,
   };
 

@@ -26,6 +26,12 @@ type ColorField = {
   help: string;
 };
 
+const sidebarFontOptions = [
+  { name: "Manrope", description: "Moderno, morbido e molto pulito." },
+  { name: "Inter", description: "Massima leggibilita, stile gestionale premium." },
+  { name: "Montserrat", description: "Elegante, deciso, piu fashion." },
+] as const;
+
 const lightFields: ColorField[] = [
   { key: "background_color", label: "Sfondo sito", help: "Colore principale delle pagine." },
   { key: "sidebar_color", label: "Sidebar", help: "Menu laterale e header mobile." },
@@ -70,6 +76,7 @@ const defaults: BrandingTheme = {
   sidebar_active_bg_color: "#FFFFFF",
   sidebar_active_text_color: "#FFFFFF",
   sidebar_active_icon_color: "#FFFFFF",
+  sidebar_font_family: "Manrope",
   logo_url: null,
 };
 
@@ -175,6 +182,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     root.style.setProperty("--sidebar-active-bg", nextForm.sidebar_active_bg_color);
     root.style.setProperty("--sidebar-active-text", nextForm.sidebar_active_text_color);
     root.style.setProperty("--sidebar-active-icon", nextForm.sidebar_active_icon_color);
+    root.style.setProperty("--sidebar-font", `${nextForm.sidebar_font_family}, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`);
 
     root.style.setProperty("--light-background", nextForm.background_color);
     root.style.setProperty("--light-sidebar", nextForm.sidebar_color);
@@ -231,6 +239,15 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     setForm((current) => {
       const next = { ...current, logo_url: value.trim() || null };
       window.dispatchEvent(new CustomEvent("branding-change", { detail: next }));
+      return next;
+    });
+  }
+
+  function updateSidebarFont(font: (typeof sidebarFontOptions)[number]["name"]) {
+    setStatus("idle");
+    setForm((current) => {
+      const next = { ...current, sidebar_font_family: font };
+      applyLiveTheme(next, mode);
       return next;
     });
   }
@@ -359,6 +376,36 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
             </button>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">{sidebarGradientFields.map((field) => renderColorField(field, true))}</div>
+
+          <div className="mt-5 rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-white/5">
+            <div>
+              <p className="text-sm font-black text-black dark:text-white">Font sidebar</p>
+              <p className="mt-1 text-xs text-black/45 dark:text-white/45">Cambia solo il carattere del menu laterale e del drawer mobile.</p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {sidebarFontOptions.map((font) => {
+                const selected = form.sidebar_font_family === font.name;
+                return (
+                  <button
+                    key={font.name}
+                    type="button"
+                    onClick={() => updateSidebarFont(font.name)}
+                    className={cn(
+                      "rounded-2xl border p-4 text-left transition active:scale-[0.98]",
+                      selected ? "border-pink-400 bg-pink-50 text-pink-700" : "border-black/10 bg-white text-black/70 hover:border-pink-200 dark:border-white/10 dark:bg-white/5 dark:text-white/70"
+                    )}
+                    style={{ fontFamily: `${font.name}, Inter, sans-serif` }}
+                  >
+                    <span className="block text-xl font-black">{font.name}</span>
+                    <span className="mt-2 block text-xs leading-5 opacity-65">{font.description}</span>
+                    <span className="mt-3 block rounded-xl bg-black/[0.04] px-3 py-2 text-sm font-bold dark:bg-white/10">
+                      Dashboard
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
@@ -431,6 +478,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
             className="rounded-[26px] border border-white/10 p-4 text-[color:var(--dark-sidebar-text)]"
             style={{
               background: `linear-gradient(165deg, ${form.dark_sidebar_color}, #07101F 54%, color-mix(in srgb, ${form.dark_sidebar_color} 78%, ${form.gradient_color} 22%))`,
+              fontFamily: `${form.sidebar_font_family}, Inter, sans-serif`,
             }}
           >
             <div className="flex items-center gap-3 border-b border-white/10 pb-4">

@@ -491,6 +491,7 @@ model BrandingSetting {
   sidebar_active_bg_color String @default("#FFFFFF")
   sidebar_active_text_color String @default("#FFFFFF")
   sidebar_active_icon_color String @default("#FFFFFF")
+  sidebar_font_family String @default("Manrope")
   logo_url         String?
 
   @@map("branding_settings")
