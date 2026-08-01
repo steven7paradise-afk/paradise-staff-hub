@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import type { LeaveRequest, Location, ScheduleCategory, ScheduleEntry, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { cowlendarBookingToConsultationEvent, isOnlineConsultationBooking } from "@/lib/online-consultations";
 
 type LeaveRequestWithUser = LeaveRequest & { user: User };
 type ScheduleEntryForCalendar = ScheduleEntry & {
@@ -854,11 +855,7 @@ export async function syncCowlendarConsultations(bookings: any[]) {
     return { skipped: true, reason: "Google Calendar service account not configured." };
   }
 
-  // Filter for consultations (only online consultations)
-  const consultations = bookings.filter((b) => {
-    const title = (b.serviceTitle || "").toLowerCase();
-    return title.includes("consulenza") && title.includes("online");
-  });
+  const consultations = bookings.filter((booking) => !booking.isCanceled && !booking.is_canceled && isOnlineConsultationBooking(booking));
 
   if (consultations.length === 0) {
     return { skipped: true, reason: "No consultations found in range." };
@@ -906,29 +903,15 @@ export async function syncCowlendarConsultations(bookings: any[]) {
         continue;
       }
 
-      const name = b.customerName || "Cliente";
-      const phone = b.customerPhone || "Non indicato";
-      const order = b.bookingStr || "Non indicato";
-      const service = b.serviceTitle || "Consulenza";
-
-      const start = b.startDate;
-      const end = b.endDate || new Date(new Date(start).getTime() + 30 * 60 * 1000).toISOString();
-
-      const description = [
-        `Servizio: ${service}`,
-        `Cliente: ${name}`,
-        `Telefono: ${phone}`,
-        `Ordine Shopify: ${order}`,
-        `\n[Cowlendar ID: ${bookingId}]`
-      ].join("\n");
+      const event = cowlendarBookingToConsultationEvent(b);
 
       await calendar.events.insert({
         calendarId,
         requestBody: {
-          summary: `Consulenza Online - ${name}`,
-          description,
-          start: { dateTime: start },
-          end: { dateTime: end },
+          summary: event.summary,
+          description: event.description,
+          start: { dateTime: event.startDate, timeZone: "Europe/Rome" },
+          end: { dateTime: event.endDate, timeZone: "Europe/Rome" },
         },
       });
 
@@ -941,4 +924,3 @@ export async function syncCowlendarConsultations(bookings: any[]) {
     return { success: false, error: error.message };
   }
 }
-

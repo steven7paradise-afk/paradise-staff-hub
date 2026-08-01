@@ -5,10 +5,25 @@ import { parseIcal } from "@/lib/ical-parser";
 import { OnlineConsultationsBrowser } from "@/components/online-consultations-browser";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
+import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
+import { syncCowlendarConsultations } from "@/lib/google-calendar";
+import { cowlendarBookingToConsultationEvent, isOnlineConsultationBooking } from "@/lib/online-consultations";
 
 export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+
+function toIsoBoundary(date: Date, endOfDay = false) {
+  const copy = new Date(date);
+  if (endOfDay) copy.setHours(23, 59, 59, 999);
+  else copy.setHours(0, 0, 0, 0);
+  return copy.toISOString();
+}
+
+function cowlendarIdFromDescription(description?: string | null) {
+  const match = String(description || "").match(/\[Cowlendar ID:\s*([^\]\s]+)\]/);
+  return match?.[1] || null;
+}
 
 export default async function ConsulenzaOnlinePage() {
   const session = await auth();
@@ -34,6 +49,7 @@ export default async function ConsulenzaOnlinePage() {
 
   let events: any[] = [];
   let loadError = "";
+  let cowlendarSyncError = "";
 
   const icalUrl = "https://calendar.google.com/calendar/ical/7492abf79691e5602a3b97a1765aefa2e9dab2e862a2add021338adefb197a55%40group.calendar.google.com/private-175e9e6e0af6739193e4a308f2704fcf/basic.ics";
 
@@ -64,6 +80,37 @@ export default async function ConsulenzaOnlinePage() {
     loadError = error.message;
   }
 
+  if (hasCowlendarToken()) {
+    try {
+      const now = new Date();
+      const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 4, 0);
+      const bookings = await getCowlendarBookingsForRange({
+        startDate: toIsoBoundary(rangeStart),
+        endDate: toIsoBoundary(rangeEnd, true),
+        limit: 5000,
+      });
+      const consultations = bookings.filter((booking) => !booking.is_canceled && isOnlineConsultationBooking(booking));
+
+      if (consultations.length > 0) {
+        const syncResult = await syncCowlendarConsultations(consultations);
+        if ((syncResult as any)?.success === false) {
+          cowlendarSyncError = String((syncResult as any).error || "Sincronizzazione CowCalendar non riuscita.");
+        }
+      }
+
+      const existingCowlendarIds = new Set(events.map((event) => cowlendarIdFromDescription(event.description)).filter(Boolean));
+      const directCowlendarEvents = consultations
+        .filter((booking) => !existingCowlendarIds.has(String(booking.id)))
+        .map(cowlendarBookingToConsultationEvent);
+
+      events = [...events, ...directCowlendarEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    } catch (error: any) {
+      console.error("Failed to sync Cowlendar consultations from consulenza-online:", error);
+      cowlendarSyncError = error?.message || "Errore nel caricamento CowCalendar.";
+    }
+  }
+
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
 
   return (
@@ -72,6 +119,11 @@ export default async function ConsulenzaOnlinePage() {
         {loadError && (
           <div className="rounded-[24px] border border-red-100 bg-[#FFF6F7] p-5 text-sm text-[#A15062] shadow-sm">
             Errore nel caricamento del calendario Google: {loadError}
+          </div>
+        )}
+        {cowlendarSyncError && (
+          <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-800 shadow-sm">
+            CowCalendar letto, ma sincronizzazione Google Calendar non completata: {cowlendarSyncError}
           </div>
         )}
         <OnlineConsultationsBrowser 
