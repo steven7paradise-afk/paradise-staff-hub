@@ -147,8 +147,7 @@ export function ClientProfile({
           {/* Left Side: Avatar & Name */}
           <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
             <div className="relative group shrink-0">
-              <div className="absolute -inset-0.5 rounded-full bg-neutral-200 blur-xs opacity-50 transition duration-300" />
-              <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border border-neutral-200 bg-neutral-50 flex items-center justify-center text-4xl font-serif text-neutral-800 shadow-lg">
+              <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border border-neutral-200 bg-neutral-50 flex items-center justify-center text-4xl font-serif text-neutral-800 shadow-sm">
                 {userPhoto ? (
                   <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
                 ) : (

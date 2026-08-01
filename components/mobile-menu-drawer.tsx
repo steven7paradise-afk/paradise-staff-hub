@@ -92,7 +92,7 @@ export function MobileMenuDrawer({
   return (
     <div className="xl:hidden">
       {/* Drawer Open Trigger Button */}
-      <div className="fixed left-0 top-[14px] z-40 flex items-center">
+      <div className="fixed left-0 top-[calc(env(safe-area-inset-top)+14px)] z-40 flex items-center">
         <div className="pointer-events-none fixed bottom-0 left-0 top-0 w-1 bg-[color:var(--user-sidebar-color,var(--sidebar))]" />
 
         <button
@@ -126,18 +126,13 @@ export function MobileMenuDrawer({
           isOpen ? "translate-x-0 shadow-[18px_0_50px_rgba(0,0,0,0.45)]" : "-translate-x-full shadow-none",
         )}
       >
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -left-16 top-16 size-48 rounded-full bg-cyan-500/10 blur-3xl" />
-          <div className="absolute -right-20 bottom-24 size-56 rounded-full bg-blue-600/10 blur-3xl" />
-        </div>
         <div className="flex min-h-0 flex-1 flex-col">
           
           {/* User Identity Header */}
           <div className="relative flex items-center justify-between border-b border-white/10 pb-5">
             <div className="flex items-center gap-3">
               <div className="relative shrink-0">
-                <div className="absolute inset-[-4px] rounded-full bg-cyan-400/80 blur-[7px]" />
-                <div className="relative size-14 overflow-hidden rounded-full border-2 border-cyan-300 bg-zinc-800 shadow-[0_0_22px_rgba(34,211,238,0.55)]">
+                <div className="relative size-14 overflow-hidden rounded-full border border-white/15 bg-zinc-800 shadow-sm">
                   {userPhoto ? (
                     <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full select-none object-cover pointer-events-none" />
                   ) : (
@@ -158,7 +153,7 @@ export function MobileMenuDrawer({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="grid size-10 shrink-0 place-items-center rounded-full text-cyan-300 transition hover:bg-white/8 active:scale-95"
+              className="grid size-10 shrink-0 place-items-center rounded-full text-slate-300 transition hover:bg-white/8 active:scale-95"
               aria-label="Chiudi menu"
             >
               <ArrowLeft className="size-6" />
@@ -175,7 +170,7 @@ export function MobileMenuDrawer({
               placeholder="Cerca pagina..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-white/8 bg-white/[0.045] py-2 pl-12 pr-4 text-base font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/35 focus:bg-white/[0.07]"
+              className="h-12 w-full rounded-2xl border border-white/8 bg-white/[0.045] py-2 pl-12 pr-4 text-base font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.07]"
             />
           </div>
 

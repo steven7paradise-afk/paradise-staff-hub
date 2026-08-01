@@ -61,7 +61,9 @@ export function SidebarFrame({
       <div
         className={cn(
           "relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
-          collapsed ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10" : "xl:w-[280px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10"
+          collapsed
+            ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
+            : "xl:w-[280px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
         )}
       >
         <button

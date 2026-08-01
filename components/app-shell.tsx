@@ -360,13 +360,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       <aside className={cn(
         "z-30 w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
         transparentMobileHeader 
-          ? "absolute top-0 left-0 right-0 bg-transparent shadow-none px-4 py-3" 
-          : "bg-[color:var(--user-header-color,var(--sidebar))] px-4 py-3",
+          ? "absolute top-0 left-0 right-0 bg-transparent shadow-none px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3" 
+          : "bg-[color:var(--user-header-color,var(--sidebar))] px-4 pt-[calc(env(safe-area-inset-top)+10px)] pb-3",
         hideMobileHeader && "hidden xl:flex"
       )}>
         {/* Mobile Header (xl:hidden) */}
         {!hideMobileHeader && (
-          <div className="relative flex xl:hidden items-center justify-between w-full">
+          <div className="relative flex min-h-11 w-full items-center justify-between xl:hidden">
           {/* Hamburger Drawer */}
           <MobileMenuDrawer
             logoUrl={branding.logo_url}
@@ -435,6 +435,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       <main className={cn(
         "w-full min-w-0 max-w-full overflow-x-hidden bg-transparent xl:px-10 xl:py-8", 
         hideMobileHeader ? "px-0 py-0" : "px-4 py-5 sm:px-6",
+        transparentMobileHeader && !hideMobileHeader && "pt-[calc(env(safe-area-inset-top)+72px)] xl:pt-8",
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
         <div className="mb-5 hidden justify-end xl:flex">

@@ -189,8 +189,7 @@ export function ProfileSettings({
           
           <div className="mt-6 flex flex-col sm:flex-row items-center gap-5">
             <div className="relative group select-none">
-              <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-paradise-pink to-paradise-gold opacity-30 blur group-hover:opacity-60 transition duration-500" />
-              <div className="relative grid size-20 place-items-center overflow-hidden rounded-full border-4 border-white dark:border-neutral-800 bg-paradise-nude text-2xl font-extrabold text-paradise-noir shadow-md">
+              <div className="relative grid size-20 place-items-center overflow-hidden rounded-full border border-black/10 bg-paradise-nude text-2xl font-extrabold text-paradise-noir shadow-sm dark:border-white/10 dark:bg-neutral-800 dark:text-white">
                 {image ? <img src={resolveDrivePhotoUrl(image)} alt={name} className="size-full object-cover rounded-full select-none pointer-events-none" /> : name.slice(0, 1).toUpperCase()}
               </div>
             </div>

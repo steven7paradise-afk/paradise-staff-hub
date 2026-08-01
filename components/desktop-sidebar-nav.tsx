@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
 
@@ -43,6 +43,7 @@ export function DesktopSidebarNav({
   sidebarConfig,
 }: DesktopSidebarNavProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const pathname = usePathname();
 
   const getSidebarLabel = (href: string, fallback: string) => {
@@ -101,12 +102,17 @@ export function DesktopSidebarNav({
 
   const sections = getRenderSections();
   const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
+
+  useEffect(() => {
+    setOpenSectionId((current) => current ?? activeSectionId ?? sections[0]?.id ?? null);
+  }, [activeSectionId, sections]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col [--sidebar-icon:#CBD5E1] [--sidebar-text:#F8FAFC]">
       {/* 🌸 BRAND LOGO */}
       <div className="flex items-center gap-3 px-3 py-3 shrink-0 mx-1">
-        <div className="size-10 shrink-0 overflow-hidden rounded-full bg-transparent flex items-center justify-center">
+        <div className="size-10 shrink-0 overflow-hidden rounded-full bg-white/8 flex items-center justify-center ring-1 ring-white/10">
           <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
         </div>
         <div className="sidebar-label text-left min-w-0">
@@ -125,7 +131,7 @@ export function DesktopSidebarNav({
           placeholder="Cerca..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 text-xs font-bold text-[color:var(--sidebar-text)] rounded-xl py-1.5 pl-9 pr-4 focus:outline-none focus:border-black/15 placeholder-zinc-400 dark:placeholder-zinc-500"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.055] py-1.5 pl-9 pr-4 text-xs font-bold text-white outline-none placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.075]"
         />
       </div>
 
@@ -133,49 +139,55 @@ export function DesktopSidebarNav({
         <div className="space-y-5 px-1 pb-4">
           {sections.map((section) => (
             <div key={section.id} className="space-y-1.5">
-              <div className="sidebar-label flex items-center justify-between gap-2 px-3">
+              <button
+                type="button"
+                onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
+                className="sidebar-label flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.055]"
+              >
                 <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
                   {section.title}
                 </p>
-                <span className="rounded-full bg-black/5 px-2 py-0.5 text-[9px] font-black text-[color:var(--sidebar-text)] opacity-45 dark:bg-white/10">
-                  {section.items.length}
-                </span>
-              </div>
+                <ChevronDown className={cn("size-3.5 shrink-0 text-[color:var(--sidebar-text)] opacity-35 transition-transform", openSectionId === section.id && "rotate-180")} />
+              </button>
 
-              {section.items.map((item) => {
-                const isActive = isItemActive(item.href);
-                const displayLabel = getSidebarLabel(item.href, item.label);
+              {openSectionId === section.id || searchQuery.trim() ? (
+                <div className="space-y-1.5">
+                  {section.items.map((item) => {
+                    const isActive = isItemActive(item.href);
+                    const displayLabel = getSidebarLabel(item.href, item.label);
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    title={displayLabel}
-                    className={cn(
-                      "sidebar-nav-link group flex shrink-0 items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 text-[13px] font-bold tracking-tight transition-all duration-200",
-                      isActive
-                        ? "active border-black/5 bg-white/45 text-[color:var(--sidebar-text)] shadow-sm dark:border-white/10 dark:bg-white/12"
-                        : "text-[color:var(--sidebar-text)] opacity-72 hover:bg-white/35 hover:opacity-100 dark:hover:bg-white/8"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "grid size-7 shrink-0 place-items-center rounded-xl transition",
-                        isActive ? "bg-[#C66170] text-white" : "bg-black/5 text-[color:var(--sidebar-icon)] group-hover:bg-black/8 dark:bg-white/8"
-                      )}
-                    >
-                      <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
-                    </span>
-                    <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        title={displayLabel}
+                        className={cn(
+                          "sidebar-nav-link group flex shrink-0 items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 text-[13px] font-bold tracking-tight transition-all duration-200",
+                          isActive
+                            ? "active border-white/12 bg-white/[0.11] text-white shadow-none"
+                            : "text-slate-300 opacity-82 hover:bg-white/[0.065] hover:text-white hover:opacity-100"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "grid size-7 shrink-0 place-items-center rounded-xl transition",
+                            isActive ? "bg-white/[0.12] text-white" : "bg-white/[0.055] text-[color:var(--sidebar-icon)] group-hover:bg-white/[0.08]"
+                          )}
+                        >
+                          <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
+                        </span>
+                        <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
 
-                    {item.href === "/notifications" && unreadNotifications > 0 ? (
-                      <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
-                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                      </span>
-                    ) : null}
-                  </Link>
-                );
-              })}
+                        {item.href === "/notifications" && unreadNotifications > 0 ? (
+                          <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
+                            {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                          </span>
+                        ) : null}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ))}
 
