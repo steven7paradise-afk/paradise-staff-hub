@@ -32,6 +32,7 @@ export function MobileMenuDrawer({
 }: MobileMenuDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -81,6 +82,12 @@ export function MobileMenuDrawer({
 
   const sections = getRenderSections();
   const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setOpenSectionId((current) => current ?? activeSectionId ?? sections[0]?.id ?? null);
+  }, [activeSectionId, isOpen, sections]);
 
   return (
     <div className="xl:hidden">
@@ -91,7 +98,7 @@ export function MobileMenuDrawer({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="relative flex h-10 w-9 items-center justify-center rounded-r-2xl border border-black/5 bg-zinc-900 text-white shadow-soft transition-all duration-200 hover:w-10 active:scale-95"
+          className="relative flex h-10 w-9 items-center justify-center rounded-r-2xl border border-black/5 bg-zinc-900 text-white transition-all duration-200 hover:w-10 active:scale-95"
           aria-label="Apri menu"
         >
           <Menu className="size-5" />
@@ -115,8 +122,8 @@ export function MobileMenuDrawer({
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[302px] flex-col justify-between border-r border-white/8 bg-[#07101F] p-5 shadow-[18px_0_50px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-out",
-          isOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[302px] flex-col justify-between border-r border-white/8 bg-[#07101F] p-5 transition-[transform,box-shadow] duration-300 ease-out",
+          isOpen ? "translate-x-0 shadow-[18px_0_50px_rgba(0,0,0,0.45)]" : "-translate-x-full shadow-none",
         )}
       >
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -177,42 +184,48 @@ export function MobileMenuDrawer({
             <div className="space-y-8 pb-4">
               {sections.map((section) => (
                 <div key={section.id}>
-                  <div className="mb-3 flex items-center justify-between px-3">
+                  <button
+                    type="button"
+                    onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
+                    className="mb-3 flex w-full items-center justify-between rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.04]"
+                  >
                     <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-400/85">{section.title}</p>
-                    <ChevronDown className="size-4 text-slate-500" />
-                  </div>
-                  <div className="space-y-1.5">
-                    {section.items.map((item) => {
-                      const isActive = isItemActive(item.href);
-                      const displayLabel = getSidebarLabel(item.href, item.label);
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setIsOpen(false)}
-                          className={cn(
+                    <ChevronDown className={cn("size-4 text-slate-500 transition-transform", openSectionId === section.id && "rotate-180")} />
+                  </button>
+                  {openSectionId === section.id || searchQuery.trim() ? (
+                    <div className="space-y-1.5">
+                      {section.items.map((item) => {
+                        const isActive = isItemActive(item.href);
+                        const displayLabel = getSidebarLabel(item.href, item.label);
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setIsOpen(false)}
+                            className={cn(
                             "relative flex min-h-14 items-center justify-between gap-3 rounded-3xl px-4 py-3 text-[17px] font-semibold tracking-tight transition",
                             isActive
-                              ? "border border-blue-400/85 bg-blue-500/[0.06] text-white shadow-[0_0_0_1px_rgba(96,165,250,0.2),0_0_22px_rgba(59,130,246,0.5)]"
+                              ? "border border-white/16 bg-white/[0.08] text-white shadow-none"
                               : "text-slate-300 hover:bg-white/[0.055] hover:text-white"
                           )}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", isActive ? "text-blue-300" : "text-slate-400")}>
-                              <DynamicIcon name={item.iconName} className="size-6 shrink-0" />
-                            </span>
-                            <span className="truncate">{displayLabel}</span>
-                          </div>
+                              <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", isActive ? "text-white" : "text-slate-400")}>
+                                <DynamicIcon name={item.iconName} className="size-6 shrink-0" />
+                              </span>
+                              <span className="truncate">{displayLabel}</span>
+                            </div>
 
-                          {item.href === "/notifications" && unreadNotifications > 0 ? (
-                            <span className="grid min-w-7 shrink-0 place-items-center rounded-full bg-red-500 px-2 py-1 text-xs font-black text-white shadow-[0_0_14px_rgba(239,68,68,0.45)]">
-                              {unreadNotifications > 99 ? "99+" : unreadNotifications}
-                            </span>
-                          ) : null}
-                        </Link>
-                      );
-                    })}
-                  </div>
+                            {item.href === "/notifications" && unreadNotifications > 0 ? (
+                              <span className="grid min-w-7 shrink-0 place-items-center rounded-full bg-red-500 px-2 py-1 text-xs font-black text-white shadow-[0_0_14px_rgba(239,68,68,0.45)]">
+                                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                              </span>
+                            ) : null}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               ))}
 
