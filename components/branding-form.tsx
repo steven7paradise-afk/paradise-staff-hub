@@ -166,6 +166,9 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     root.style.setProperty("--primary", nextForm.primary_color);
     root.style.setProperty("--secondary", nextForm.secondary_color);
     root.style.setProperty("--gradient", nextForm.gradient_color);
+    root.style.setProperty("--sidebar-gradient-from", nextForm.dark_sidebar_color);
+    root.style.setProperty("--sidebar-gradient-mid", "#07101F");
+    root.style.setProperty("--sidebar-gradient-to", `color-mix(in srgb, ${nextForm.dark_sidebar_color} 78%, ${nextForm.gradient_color} 22%)`);
 
     root.style.setProperty("--light-background", nextForm.background_color);
     root.style.setProperty("--light-sidebar", nextForm.sidebar_color);
@@ -260,91 +263,122 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     setStatus("error");
   }
 
+  const sidebarGradientFields: ColorField[] = [
+    { key: "dark_sidebar_color", label: "Base menu scura", help: "Parte principale della sidebar desktop." },
+    { key: "gradient_color", label: "Sfumatura menu", help: "Colore che crea profondita nella sidebar." },
+    { key: "dark_sidebar_text_color", label: "Testo menu", help: "Titoli e nomi delle pagine nel menu scuro." },
+    { key: "dark_sidebar_icon_color", label: "Icone menu", help: "Icone della sidebar scura." },
+  ];
+
+  function renderColorField(field: ColorField, compact = false) {
+    return (
+      <label key={field.key} className="rounded-2xl border border-black/10 bg-white p-4 transition hover:border-pink-200 dark:border-white/10 dark:bg-white/5">
+        <span className="flex items-start justify-between gap-3">
+          <span>
+            <span className="block text-sm font-black text-black dark:text-white">{field.label}</span>
+            <span className="mt-1 block text-xs leading-5 text-black/45 dark:text-white/45">{field.help}</span>
+          </span>
+          <span className="rounded-full bg-black/[0.03] px-2 py-1 text-[10px] font-black text-black/45 dark:bg-white/10 dark:text-white/45">
+            {readableColor(String(form[field.key]))}
+          </span>
+        </span>
+        <span className={cn("mt-4 flex items-center gap-3", compact && "mt-3")}>
+          <input
+            className="size-12 shrink-0 cursor-pointer rounded-2xl border border-black/10 bg-white p-1 dark:border-white/10"
+            type="color"
+            value={String(form[field.key])}
+            onChange={(event) => update(field.key, event.target.value)}
+            aria-label={field.label}
+          />
+          <Field value={String(form[field.key])} onChange={(event) => update(field.key, event.target.value)} />
+        </span>
+      </label>
+    );
+  }
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,720px)_minmax(320px,420px)]">
-      <section className="rounded-[30px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-pink-500">Branding</p>
-            <h2 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-[color:var(--text)]">
-              Personalizza il brand <Crown className="size-5 text-pink-500" />
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-black/55 dark:text-white/60">
-              Questa pagina controlla colori reali del sito, sidebar, header mobile, bottoni, dark mode e logo.
-            </p>
+    <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="min-w-0 space-y-5">
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-pink-500">Branding</p>
+              <h2 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-[color:var(--text)]">
+                Personalizza colori e menu <Crown className="size-5 text-pink-500" />
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-black/55 dark:text-white/60">
+                Qui controlli sidebar desktop, menu mobile, bottoni, card, testi e logo. Le modifiche si vedono subito e poi si confermano con Salva.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="soft"
+                onClick={() => {
+                  setForm(defaults);
+                  applyLiveTheme(defaults, mode);
+                  setStatus("idle");
+                }}
+              >
+                <RotateCcw className="size-4" /> Reset
+              </Button>
+              <Button type="button" onClick={save} disabled={status === "saving"} className="bg-pink-500 text-white hover:bg-pink-600">
+                <Save className="size-4" /> {status === "saving" ? "Salvo..." : "Salva modifiche"}
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="soft"
-              onClick={() => {
-                setForm(defaults);
-                applyLiveTheme(defaults, mode);
-                setStatus("idle");
-              }}
-            >
-              <RotateCcw className="size-4" /> Reset
-            </Button>
-            <Button type="button" onClick={save} disabled={status === "saving"} className="bg-pink-500 text-white hover:bg-pink-600">
-              <Save className="size-4" /> {status === "saving" ? "Salvo..." : "Salva"}
-            </Button>
+
+          <div className="mt-5 min-h-6">
+            {status === "saved" ? (
+              <p className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-black text-emerald-700 dark:text-emerald-300">
+                <Check className="size-4" /> Branding salvato.
+              </p>
+            ) : null}
+            {status === "error" ? <p className="text-sm font-black text-red-600">Errore durante il salvataggio. Riprova.</p> : null}
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => changeMode("light")}
-            className={cn(
-              "flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black transition active:scale-[0.98]",
-              mode === "light"
-                ? "border-pink-300 bg-pink-50 text-pink-600 shadow-sm"
-                : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02] dark:border-white/10 dark:bg-white/5 dark:text-white/60",
-            )}
-          >
-            <Sun className="size-4" /> Colori chiari
-          </button>
-          <button
-            type="button"
-            onClick={() => changeMode("dark")}
-            className={cn(
-              "flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black transition active:scale-[0.98]",
-              mode === "dark"
-                ? "border-black bg-[#1F1F1F] text-white shadow-sm dark:border-white/20"
-                : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02] dark:border-white/10 dark:bg-white/5 dark:text-white/60",
-            )}
-          >
-            <Moon className="size-4" /> Colori notte
-          </button>
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-pink-500">Menu laterale</p>
+              <h3 className="mt-1 text-2xl font-black text-[color:var(--text)]">Sidebar desktop sfumata</h3>
+              <p className="mt-1 text-sm text-black/50 dark:text-white/55">Questi colori controllano il menu scuro che vedi su PC.</p>
+            </div>
+            <button type="button" onClick={() => applyPreset(presets[2].values)} className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-xs font-black text-black/65 transition hover:border-pink-300 hover:bg-pink-50 dark:border-white/10 dark:bg-white/5 dark:text-white/70">
+              Applica notte luxury
+            </button>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">{sidebarGradientFields.map((field) => renderColorField(field, true))}</div>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {fields.map((field) => (
-            <label key={field.key} className="rounded-2xl border border-black/10 bg-white p-4 transition hover:border-pink-200 dark:border-white/10 dark:bg-white/5">
-              <span className="flex items-center justify-between gap-3">
-                <span>
-                  <span className="block text-sm font-black text-black dark:text-white">{field.label}</span>
-                  <span className="mt-1 block text-xs text-black/45 dark:text-white/45">{field.help}</span>
-                </span>
-                <span className="rounded-full bg-black/[0.03] px-2 py-1 text-[10px] font-black text-black/45 dark:bg-white/10 dark:text-white/45">
-                  {readableColor(String(form[field.key]))}
-                </span>
-              </span>
-              <span className="mt-4 flex items-center gap-3">
-                <input
-                  className="size-12 shrink-0 cursor-pointer rounded-2xl border border-black/10 bg-white p-1 dark:border-white/10"
-                  type="color"
-                  value={String(form[field.key])}
-                  onChange={(event) => update(field.key, event.target.value)}
-                  aria-label={field.label}
-                />
-                <Field value={String(form[field.key])} onChange={(event) => update(field.key, event.target.value)} />
-              </span>
-            </label>
-          ))}
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-pink-500">Colori sito</p>
+              <h3 className="mt-1 text-2xl font-black text-[color:var(--text)]">{mode === "light" ? "Tema chiaro" : "Tema notte"}</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-2 rounded-2xl border border-black/10 bg-white p-1 dark:border-white/10 dark:bg-white/5">
+              <button
+                type="button"
+                onClick={() => changeMode("light")}
+                className={cn("flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition", mode === "light" ? "bg-pink-50 text-pink-600" : "text-black/50 dark:text-white/55")}
+              >
+                <Sun className="size-4" /> Chiaro
+              </button>
+              <button
+                type="button"
+                onClick={() => changeMode("dark")}
+                className={cn("flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition", mode === "dark" ? "bg-black text-white dark:bg-white dark:text-black" : "text-black/50 dark:text-white/55")}
+              >
+                <Moon className="size-4" /> Notte
+              </button>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">{fields.map((field) => renderColorField(field))}</div>
         </div>
 
-        <div className="mt-6 rounded-3xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-white/5">
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
           <div className="flex items-center gap-2">
             <Palette className="size-4 text-pink-500" />
             <h3 className="font-black">Preset rapidi</h3>
@@ -364,9 +398,9 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           </div>
         </div>
 
-        <div className="mt-6 rounded-3xl border border-dashed border-black/15 bg-black/[0.015] p-4 dark:border-white/10 dark:bg-white/5">
+        <div className="rounded-[28px] border border-dashed border-black/15 bg-[color:var(--card)] p-5 shadow-sm dark:border-white/10">
           <label className="block">
-            <span className="text-sm font-black">Logo URL</span>
+            <span className="text-sm font-black">Logo ufficiale</span>
             <span className="mt-1 block text-xs text-black/45 dark:text-white/45">Usato nella sidebar, header mobile, login e favicon se configurato.</span>
             <span className="mt-4 flex items-center gap-3">
               <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full bg-black text-sm font-black text-white shadow-sm">
@@ -376,77 +410,96 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
             </span>
           </label>
         </div>
-
-        <div className="mt-5 min-h-6">
-          {status === "saved" ? (
-            <p className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-black text-emerald-700 dark:text-emerald-300">
-              <Check className="size-4" /> Branding salvato.
-            </p>
-          ) : null}
-          {status === "error" ? <p className="text-sm font-black text-red-600">Errore durante il salvataggio. Riprova.</p> : null}
-        </div>
       </section>
 
-      <aside className="rounded-[30px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm">
-        <div className="mb-4 flex items-center gap-2">
-          <Smartphone className="size-4 text-pink-500" />
-          <p className="text-sm font-black">Anteprima telefono</p>
-        </div>
-        <div className="mx-auto max-w-[310px] rounded-[38px] bg-white p-3 shadow-2xl shadow-black/15" style={previewStyle}>
-          <div className="rounded-[30px] bg-[color:var(--preview-bg)] p-4 text-[color:var(--preview-text)]">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black">9:41</span>
-              <span className="text-[10px] tracking-widest">●●●</span>
-            </div>
-            <div className="mt-5 rounded-[24px] bg-[color:var(--preview-sidebar)] p-3 text-[color:var(--preview-sidebar-text)]">
-              <div className="flex items-center gap-3">
-                <div className="grid size-12 place-items-center overflow-hidden rounded-full bg-[color:var(--preview-button)] text-sm font-black text-white">
-                  {form.logo_url ? <img src={form.logo_url} alt="" className="size-full object-cover" /> : "P"}
-                </div>
-                <div>
-                  <p className="text-sm font-black uppercase tracking-[0.18em]">Paradise</p>
-                  <p className="text-xs opacity-60">Staff Hub</p>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {["Home", "Task", "Profilo"].map((item, index) => (
-                  <div key={item} className="rounded-2xl bg-white/20 px-2 py-2 text-center text-[10px] font-black">
-                    <span className="mx-auto mb-1 block size-5 rounded-lg bg-[color:var(--preview-sidebar-icon)] text-white">{index + 1}</span>
-                    {item}
-                  </div>
-                ))}
+      <aside className="min-w-0 space-y-5 xl:sticky xl:top-6 xl:self-start">
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <Smartphone className="size-4 text-pink-500" />
+            <p className="text-sm font-black">Anteprima menu desktop</p>
+          </div>
+          <div
+            className="rounded-[26px] border border-white/10 p-4 text-[color:var(--dark-sidebar-text)]"
+            style={{
+              background: `linear-gradient(165deg, ${form.dark_sidebar_color}, #07101F 54%, color-mix(in srgb, ${form.dark_sidebar_color} 78%, ${form.gradient_color} 22%))`,
+            }}
+          >
+            <div className="flex items-center gap-3 border-b border-white/10 pb-4">
+              <span className="grid size-11 place-items-center overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
+                {form.logo_url ? <img src={form.logo_url} alt="" className="size-full object-cover" /> : "P"}
+              </span>
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.18em]">Paradise</p>
+                <p className="text-xs opacity-55">Staff Hub</p>
               </div>
             </div>
-
-            <div className="mt-5">
-              <p className="text-xs font-black uppercase tracking-[0.2em] opacity-45">Paradise Beauty</p>
-              <h3 className="mt-1 text-2xl font-black">Ciao, Steven</h3>
-              <p className="mt-1 text-xs opacity-55">Ecco cosa c'e da fare oggi.</p>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {[
-                ["2", "In corso"],
-                ["1", "Da iniziare"],
-                ["5", "Completate"],
-                ["3", "Avvisi"],
-              ].map(([number, label]) => (
-                <div key={label} className="rounded-2xl bg-[color:var(--preview-card)] p-4 shadow-sm">
-                  <p className="text-2xl font-black">{number}</p>
-                  <p className="mt-1 text-xs opacity-60">{label}</p>
+            <div className="mt-4 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] opacity-55">Principale</p>
+              {["Dashboard", "Comunicazioni", "Profilo"].map((item, index) => (
+                <div key={item} className={cn("flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold", index === 0 ? "border border-white/12 bg-white/[0.11]" : "text-white/75")}>
+                  <span className="grid size-8 place-items-center rounded-xl bg-white/[0.08]" style={{ color: form.dark_sidebar_icon_color }}>
+                    {index + 1}
+                  </span>
+                  {item}
                 </div>
               ))}
             </div>
+          </div>
+        </div>
 
-            <div className="mt-4 rounded-2xl bg-[color:var(--preview-card)] p-4">
-              <div className="flex items-center gap-2">
-                <BadgeCheck className="size-4 text-[color:var(--preview-primary)]" />
-                <p className="font-black">Task principale</p>
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <Smartphone className="size-4 text-pink-500" />
+            <p className="text-sm font-black">Anteprima pagina</p>
+          </div>
+          <div className="mx-auto max-w-[310px] rounded-[38px] bg-white p-3 shadow-2xl shadow-black/15" style={previewStyle}>
+            <div className="rounded-[30px] bg-[color:var(--preview-bg)] p-4 text-[color:var(--preview-text)]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black">9:41</span>
+                <span className="text-[10px] tracking-widest">●●●</span>
               </div>
-              <p className="mt-2 text-sm opacity-65">Controllare prenotazioni serali</p>
-              <button className="mt-4 w-full rounded-2xl bg-[color:var(--preview-button)] py-3 text-sm font-black text-white shadow-sm">
-                Apri task
-              </button>
+              <div className="mt-5 rounded-[24px] bg-[color:var(--preview-sidebar)] p-3 text-[color:var(--preview-sidebar-text)]">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-12 place-items-center overflow-hidden rounded-full bg-[color:var(--preview-button)] text-sm font-black text-white">
+                    {form.logo_url ? <img src={form.logo_url} alt="" className="size-full object-cover" /> : "P"}
+                  </div>
+                  <div>
+                    <p className="text-sm font-black uppercase tracking-[0.18em]">Paradise</p>
+                    <p className="text-xs opacity-60">Staff Hub</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <p className="text-xs font-black uppercase tracking-[0.2em] opacity-45">Paradise Beauty</p>
+                <h3 className="mt-1 text-2xl font-black">Ciao, Steven</h3>
+                <p className="mt-1 text-xs opacity-55">Ecco cosa c'e da fare oggi.</p>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {[
+                  ["2", "In corso"],
+                  ["1", "Da iniziare"],
+                  ["5", "Completate"],
+                  ["3", "Avvisi"],
+                ].map(([number, label]) => (
+                  <div key={label} className="rounded-2xl bg-[color:var(--preview-card)] p-4 shadow-sm">
+                    <p className="text-2xl font-black">{number}</p>
+                    <p className="mt-1 text-xs opacity-60">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-2xl bg-[color:var(--preview-card)] p-4">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck className="size-4 text-[color:var(--preview-primary)]" />
+                  <p className="font-black">Task principale</p>
+                </div>
+                <p className="mt-2 text-sm opacity-65">Controllare prenotazioni serali</p>
+                <button className="mt-4 w-full rounded-2xl bg-[color:var(--preview-button)] py-3 text-sm font-black text-white shadow-sm">
+                  Apri task
+                </button>
+              </div>
             </div>
           </div>
         </div>

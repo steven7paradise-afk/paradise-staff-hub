@@ -109,7 +109,7 @@ export function DesktopSidebarNav({
   }, [activeSectionId, sections]);
 
   return (
-    <div className="flex h-full flex-col [--sidebar-icon:#CBD5E1] [--sidebar-text:#F8FAFC]">
+    <div className="flex h-full flex-col [--sidebar-icon:var(--dark-sidebar-icon)] [--sidebar-text:var(--dark-sidebar-text)]">
       {/* 🌸 BRAND LOGO */}
       <div className="flex items-center gap-3 px-3 py-3 shrink-0 mx-1">
         <div className="size-10 shrink-0 overflow-hidden rounded-full bg-white/8 flex items-center justify-center ring-1 ring-white/10">
