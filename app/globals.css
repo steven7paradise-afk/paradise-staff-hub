@@ -125,15 +125,15 @@ textarea {
   }
 
   .sidebar-collapsed .sidebar-nav-link.active {
-    background: var(--button) !important;
-    color: var(--text) !important;
-    box-shadow: 0 4px 12px rgba(255, 168, 221, 0.35) !important;
+    background: var(--sidebar-active-bg) !important;
+    color: var(--sidebar-active-text) !important;
+    box-shadow: none !important;
   }
 
   .dark .sidebar-collapsed .sidebar-nav-link.active {
-    background: var(--button) !important;
-    color: #1F1F1F !important;
-    box-shadow: 0 4px 12px rgba(244, 163, 196, 0.2) !important;
+    background: var(--sidebar-active-bg) !important;
+    color: var(--sidebar-active-text) !important;
+    box-shadow: none !important;
   }
 
   .sidebar-collapsed .sidebar-logout {

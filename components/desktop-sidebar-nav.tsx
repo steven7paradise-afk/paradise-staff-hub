@@ -164,14 +164,14 @@ export function DesktopSidebarNav({
                         className={cn(
                           "sidebar-nav-link group flex shrink-0 items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 text-[13px] font-bold tracking-tight transition-all duration-200",
                           isActive
-                            ? "active border-white/12 bg-white/[0.11] text-white shadow-none"
-                            : "text-slate-300 opacity-82 hover:bg-white/[0.065] hover:text-white hover:opacity-100"
+                            ? "active border-white/12 bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)] shadow-none"
+                            : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-white/[0.065] hover:opacity-100"
                         )}
                       >
                         <span
                           className={cn(
                             "grid size-7 shrink-0 place-items-center rounded-xl transition",
-                            isActive ? "bg-white/[0.12] text-white" : "bg-white/[0.055] text-[color:var(--sidebar-icon)] group-hover:bg-white/[0.08]"
+                            isActive ? "bg-white/[0.12] text-[color:var(--sidebar-active-icon)]" : "bg-white/[0.055] text-[color:var(--sidebar-icon)] group-hover:bg-white/[0.08]"
                           )}
                         >
                           <DynamicIcon name={item.iconName} className="size-4 shrink-0" />

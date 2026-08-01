@@ -488,6 +488,9 @@ model BrandingSetting {
   sidebar_icon_color    String @default("#1F1F1F")
   dark_sidebar_text_color String @default("#F8F3F6")
   dark_sidebar_icon_color String @default("#F8F3F6")
+  sidebar_active_bg_color String @default("#FFFFFF")
+  sidebar_active_text_color String @default("#FFFFFF")
+  sidebar_active_icon_color String @default("#FFFFFF")
   logo_url         String?
 
   @@map("branding_settings")

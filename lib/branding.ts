@@ -20,6 +20,9 @@ export type BrandingTheme = {
   sidebar_icon_color: string;
   dark_sidebar_text_color: string;
   dark_sidebar_icon_color: string;
+  sidebar_active_bg_color: string;
+  sidebar_active_text_color: string;
+  sidebar_active_icon_color: string;
   logo_url: string | null;
 };
 
@@ -41,6 +44,9 @@ const fallbackBranding: BrandingTheme = {
   sidebar_icon_color: "#1F1F1F",
   dark_sidebar_text_color: "#F8F3F6",
   dark_sidebar_icon_color: "#F8F3F6",
+  sidebar_active_bg_color: "#FFFFFF",
+  sidebar_active_text_color: "#FFFFFF",
+  sidebar_active_icon_color: "#FFFFFF",
   logo_url: null,
 };
 
@@ -78,6 +84,9 @@ export function brandingCss(theme: BrandingTheme) {
     "--sidebar-gradient-from": theme.dark_sidebar_color,
     "--sidebar-gradient-mid": "#07101F",
     "--sidebar-gradient-to": `color-mix(in srgb, ${theme.dark_sidebar_color} 78%, ${theme.gradient_color} 22%)`,
+    "--sidebar-active-bg": theme.sidebar_active_bg_color,
+    "--sidebar-active-text": theme.sidebar_active_text_color,
+    "--sidebar-active-icon": theme.sidebar_active_icon_color,
     "--dark-background": theme.dark_background_color,
     "--dark-sidebar": theme.dark_sidebar_color,
     "--dark-card": theme.dark_card_color,

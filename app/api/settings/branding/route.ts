@@ -29,6 +29,9 @@ export async function PUT(request: NextRequest) {
     sidebar_icon_color: String(payload.sidebar_icon_color ?? "#1F1F1F"),
     dark_sidebar_text_color: String(payload.dark_sidebar_text_color ?? "#F8F3F6"),
     dark_sidebar_icon_color: String(payload.dark_sidebar_icon_color ?? "#F8F3F6"),
+    sidebar_active_bg_color: String(payload.sidebar_active_bg_color ?? "#FFFFFF"),
+    sidebar_active_text_color: String(payload.sidebar_active_text_color ?? "#FFFFFF"),
+    sidebar_active_icon_color: String(payload.sidebar_active_icon_color ?? "#FFFFFF"),
     logo_url: payload.logo_url ? String(payload.logo_url) : null,
   };
 

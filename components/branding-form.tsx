@@ -67,6 +67,9 @@ const defaults: BrandingTheme = {
   sidebar_icon_color: "#1F1F1F",
   dark_sidebar_text_color: "#F8F3F6",
   dark_sidebar_icon_color: "#F8F3F6",
+  sidebar_active_bg_color: "#FFFFFF",
+  sidebar_active_text_color: "#FFFFFF",
+  sidebar_active_icon_color: "#FFFFFF",
   logo_url: null,
 };
 
@@ -169,6 +172,9 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     root.style.setProperty("--sidebar-gradient-from", nextForm.dark_sidebar_color);
     root.style.setProperty("--sidebar-gradient-mid", "#07101F");
     root.style.setProperty("--sidebar-gradient-to", `color-mix(in srgb, ${nextForm.dark_sidebar_color} 78%, ${nextForm.gradient_color} 22%)`);
+    root.style.setProperty("--sidebar-active-bg", nextForm.sidebar_active_bg_color);
+    root.style.setProperty("--sidebar-active-text", nextForm.sidebar_active_text_color);
+    root.style.setProperty("--sidebar-active-icon", nextForm.sidebar_active_icon_color);
 
     root.style.setProperty("--light-background", nextForm.background_color);
     root.style.setProperty("--light-sidebar", nextForm.sidebar_color);
@@ -268,6 +274,9 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     { key: "gradient_color", label: "Sfumatura menu", help: "Colore che crea profondita nella sidebar." },
     { key: "dark_sidebar_text_color", label: "Testo menu", help: "Titoli e nomi delle pagine nel menu scuro." },
     { key: "dark_sidebar_icon_color", label: "Icone menu", help: "Icone della sidebar scura." },
+    { key: "sidebar_active_bg_color", label: "Sfondo selezionato", help: "Colore della pagina attiva nel menu." },
+    { key: "sidebar_active_text_color", label: "Testo selezionato", help: "Colore del testo quando una pagina e selezionata." },
+    { key: "sidebar_active_icon_color", label: "Icona selezionata", help: "Colore dell'icona quando una pagina e selezionata." },
   ];
 
   function renderColorField(field: ColorField, compact = false) {
@@ -436,8 +445,12 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
             <div className="mt-4 space-y-3">
               <p className="text-[10px] font-black uppercase tracking-[0.22em] opacity-55">Principale</p>
               {["Dashboard", "Comunicazioni", "Profilo"].map((item, index) => (
-                <div key={item} className={cn("flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold", index === 0 ? "border border-white/12 bg-white/[0.11]" : "text-white/75")}>
-                  <span className="grid size-8 place-items-center rounded-xl bg-white/[0.08]" style={{ color: form.dark_sidebar_icon_color }}>
+                <div
+                  key={item}
+                  className={cn("flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold", index !== 0 && "opacity-75")}
+                  style={index === 0 ? { backgroundColor: form.sidebar_active_bg_color, color: form.sidebar_active_text_color } : undefined}
+                >
+                  <span className="grid size-8 place-items-center rounded-xl bg-white/[0.08]" style={{ color: index === 0 ? form.sidebar_active_icon_color : form.dark_sidebar_icon_color }}>
                     {index + 1}
                   </span>
                   {item}
