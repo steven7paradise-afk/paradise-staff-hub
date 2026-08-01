@@ -29,6 +29,31 @@ function getPrivateKey() {
   });
 }
 
+function getCalendarServiceAccountCredentials() {
+  const googleEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const googlePrivateKey = getPrivateKey();
+  if (googleEmail && googlePrivateKey) {
+    return { clientEmail: googleEmail, privateKey: googlePrivateKey, source: "GOOGLE" };
+  }
+
+  const driveEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || googleEmail;
+  const drivePrivateKey = getGooglePrivateKey({
+    jsonEnvNames: ["DRIVE_SERVICE_ACCOUNT_JSON"],
+    base64EnvNames: ["DRIVE_PRIVATE_KEY_BASE64"],
+    keyEnvNames: ["DRIVE_PRIVATE_KEY"],
+  });
+
+  if (driveEmail && drivePrivateKey) {
+    return { clientEmail: driveEmail, privateKey: drivePrivateKey, source: "DRIVE" };
+  }
+
+  return {
+    clientEmail: googleEmail || driveEmail,
+    privateKey: googlePrivateKey || drivePrivateKey,
+    source: "MISSING",
+  };
+}
+
 function dateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -146,8 +171,9 @@ async function resolveCalendarId() {
 
 async function getCalendarClient() {
   const calendarId = await resolveCalendarId();
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = getPrivateKey();
+  const credentials = getCalendarServiceAccountCredentials();
+  const clientEmail = credentials.clientEmail;
+  const privateKey = credentials.privateKey;
 
   if (!calendarId || !clientEmail || !privateKey) {
     return {
@@ -413,8 +439,9 @@ export async function syncLeaveRequestToGoogleCalendar(leaveRequestId: string) {
   }
 
   let calendarId = process.env.GOOGLE_CALENDAR_ID || DEFAULT_CALENDAR_ID;
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = getPrivateKey();
+  const credentials = getCalendarServiceAccountCredentials();
+  const clientEmail = credentials.clientEmail;
+  const privateKey = credentials.privateKey;
 
   // Prioritize calendar ID configured in the admin's database settings
   const adminWithCalendar = await prisma.user.findFirst({
@@ -610,8 +637,9 @@ export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
   }
 
   let calendarId = process.env.GOOGLE_CALENDAR_ID || DEFAULT_CALENDAR_ID;
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = getPrivateKey();
+  const credentials = getCalendarServiceAccountCredentials();
+  const clientEmail = credentials.clientEmail;
+  const privateKey = credentials.privateKey;
 
   // Prioritize calendar ID configured in the admin's database settings
   const adminWithCalendar = await prisma.user.findFirst({
@@ -744,8 +772,9 @@ export async function syncCandidateEventsToGoogleCalendar(candidateId: string) {
 const SOCIAL_CALENDAR_ID = "c5ee9c83ef80be6108f6b3008bb9c998cd92cee0c09cdec7b903edbb5573af5b@group.calendar.google.com";
 
 async function getSocialCalendarClient() {
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = getPrivateKey();
+  const credentials = getCalendarServiceAccountCredentials();
+  const clientEmail = credentials.clientEmail;
+  const privateKey = credentials.privateKey;
 
   if (!clientEmail || !privateKey) {
     return {
@@ -855,8 +884,9 @@ export async function deleteSocialPostFromGoogleCalendar(eventId?: string | null
 
 export async function syncCowlendarConsultations(bookings: any[]) {
   const calendarId = "7492abf79691e5602a3b97a1765aefa2e9dab2e862a2add021338adefb197a55@group.calendar.google.com";
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = getPrivateKey();
+  const credentials = getCalendarServiceAccountCredentials();
+  const clientEmail = credentials.clientEmail;
+  const privateKey = credentials.privateKey;
 
   if (!clientEmail || !privateKey) {
     return { skipped: true, reason: "Google Calendar service account not configured." };
@@ -943,8 +973,11 @@ export async function syncCowlendarConsultations(bookings: any[]) {
   } catch (error: any) {
     console.error("Failed to sync Cowlendar consultations:", error);
     const message = String(error?.message || error || "Errore Google Calendar");
+    const statusCode = error?.code || error?.response?.status;
     const friendlyMessage = message.includes("DECODER routines::unsupported")
       ? "chiave Google Calendar non valida: controlla GOOGLE_PRIVATE_KEY o GOOGLE_PRIVATE_KEY_BASE64"
+      : statusCode === 403 || statusCode === 404
+        ? `calendario consulenze non accessibile con le credenziali ${credentials.source}: condividi il calendario Google con il service account corretto`
       : message;
     return { success: false, error: friendlyMessage };
   }

@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 type GooglePrivateKeyOptions = {
   jsonEnvNames?: string[];
   base64EnvNames?: string[];
@@ -56,6 +58,16 @@ export function decodeGooglePrivateKeyBase64(value?: string | null): string | un
   }
 }
 
+export function isUsableGooglePrivateKey(key?: string | null) {
+  if (!key) return false;
+  try {
+    crypto.createPrivateKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getGooglePrivateKey(options: GooglePrivateKeyOptions = {}) {
   const jsonEnvNames = options.jsonEnvNames ?? ["GOOGLE_SERVICE_ACCOUNT_JSON"];
   const base64EnvNames = options.base64EnvNames ?? ["GOOGLE_PRIVATE_KEY_BASE64"];
@@ -63,17 +75,17 @@ export function getGooglePrivateKey(options: GooglePrivateKeyOptions = {}) {
 
   for (const envName of jsonEnvNames) {
     const key = normalizeGooglePrivateKey(process.env[envName]);
-    if (key) return key;
+    if (isUsableGooglePrivateKey(key)) return key;
   }
 
   for (const envName of base64EnvNames) {
     const key = decodeGooglePrivateKeyBase64(process.env[envName]);
-    if (key) return key;
+    if (isUsableGooglePrivateKey(key)) return key;
   }
 
   for (const envName of keyEnvNames) {
     const key = normalizeGooglePrivateKey(process.env[envName]);
-    if (key) return key;
+    if (isUsableGooglePrivateKey(key)) return key;
   }
 
   return undefined;
