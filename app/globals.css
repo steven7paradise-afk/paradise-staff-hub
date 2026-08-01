@@ -40,31 +40,47 @@
   --sidebar-icon: var(--dark-sidebar-icon);
 }
 
-.dark :is(.text-black\/30, .text-black\/35, .text-black\/40, .text-black\/45, .text-black\/50, .text-black\/55, .text-black\/60, .text-black\/65, .text-black\/70) {
-  color: rgba(255, 255, 255, 0.58) !important;
+.dark .app-content-surface {
+  --card: var(--dark-card);
+  --text: var(--dark-text);
+  color: var(--dark-text);
+  background-color: var(--dark-card);
+  color-scheme: dark;
 }
 
-.dark :is(.text-black\/80, .text-black\/90, .text-black) {
+.dark .app-content-surface :is([class~="text-black"], [class~="text-paradise-noir"], [class~="text-black/80"], [class~="text-black/90"]) {
   color: rgba(255, 255, 255, 0.92) !important;
 }
 
-.dark :is(.bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/90) {
+.dark .app-content-surface :is([class~="text-black/25"], [class~="text-black/30"], [class~="text-black/35"], [class~="text-black/40"], [class~="text-black/45"], [class~="text-black/50"], [class~="text-black/55"], [class~="text-black/60"], [class~="text-black/65"], [class~="text-black/70"], [class~="text-black/75"]) {
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.dark .app-content-surface :is([class~="bg-white"], [class~="bg-white/50"], [class~="bg-white/60"], [class~="bg-white/65"], [class~="bg-white/70"], [class~="bg-white/80"], [class~="bg-white/90"], [class~="bg-white/95"], [class*="bg-[#FA"], [class*="bg-[#FB"], [class*="bg-[#F8"], [class*="bg-[#f8"], [class*="bg-[#fb"], [class*="bg-[#faf"], [class*="bg-neutral-50"]) {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dark .app-content-surface :is([class~="border-black/5"], [class~="border-black/10"], [class~="border-black/15"], [class~="border-black/20"]) {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark .app-content-surface :is(input, select, textarea) {
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
   background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-.dark :is(input, select, textarea) {
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.14);
-  background-color: rgba(255, 255, 255, 0.08);
+.dark .app-content-surface :is(input, textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.42) !important;
 }
 
-.dark :is(input, textarea)::placeholder {
-  color: rgba(255, 255, 255, 0.42);
-}
-
-.dark select option {
+.dark .app-content-surface select option {
   color: #111827;
   background: #ffffff;
+}
+
+.dark .app-content-surface ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 * {
