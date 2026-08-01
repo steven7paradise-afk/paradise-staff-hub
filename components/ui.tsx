@@ -4,7 +4,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
   return (
     <div
       className={cn(
-        "min-w-0 rounded-[28px] border border-white/60 bg-white/70 p-6 shadow-luxury backdrop-blur-2xl transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0px_30px_80px_rgba(31,31,31,0.12)] dark:bg-[color:var(--card)]/70 dark:border-white/10 dark:hover:border-white/20",
+        "min-w-0 rounded-[28px] border border-white/60 bg-white/70 p-6 shadow-luxury backdrop-blur-2xl transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-[0px_30px_80px_rgba(31,31,31,0.12)] dark:border-white/10 dark:bg-neutral-950/95 dark:text-white dark:hover:border-white/20",
         className,
       )}
       {...props}
@@ -50,7 +50,7 @@ export function Badge({ children, tone = "pink" }: { children: React.ReactNode; 
 export function Field(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 px-4 text-sm outline-none transition placeholder:text-black/35 focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:bg-white/10 dark:text-white"
+      className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 px-4 text-sm outline-none transition placeholder:text-black/35 focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:border-white/10 dark:bg-white/10 dark:text-white dark:placeholder:text-white/35"
       {...props}
     />
   );
@@ -59,7 +59,7 @@ export function Field(props: React.InputHTMLAttributes<HTMLInputElement>) {
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 px-4 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:bg-white/10 dark:text-white"
+      className="min-h-12 w-full rounded-2xl border border-black/10 bg-white/80 px-4 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 dark:border-white/10 dark:bg-white/10 dark:text-white"
       {...props}
     />
   );

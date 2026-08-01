@@ -40,6 +40,33 @@
   --sidebar-icon: var(--dark-sidebar-icon);
 }
 
+.dark :is(.text-black\/30, .text-black\/35, .text-black\/40, .text-black\/45, .text-black\/50, .text-black\/55, .text-black\/60, .text-black\/65, .text-black\/70) {
+  color: rgba(255, 255, 255, 0.58) !important;
+}
+
+.dark :is(.text-black\/80, .text-black\/90, .text-black) {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.dark :is(.bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/90) {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark :is(input, select, textarea) {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.14);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark :is(input, textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.dark select option {
+  color: #111827;
+  background: #ffffff;
+}
+
 * {
   box-sizing: border-box;
 }
