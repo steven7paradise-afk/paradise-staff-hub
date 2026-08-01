@@ -377,7 +377,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             items={sidebarItems}
             sidebarConfig={sidebarConfig}
             logoutButton={
-              <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/10 text-red-400 hover:bg-red-600 hover:text-white px-4 py-3 text-xs font-black uppercase tracking-wider transition-all duration-200" />
+              <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200" />
             }
           />
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, ArrowLeft, Menu } from "lucide-react";
+import { Search, ArrowLeft, ChevronDown, Menu } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -107,26 +107,30 @@ export function MobileMenuDrawer({
       {/* Overlay backdrop */}
       <div
         className={cn(
-          "fixed inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity duration-300",
+          "fixed inset-0 z-50 bg-black/70 backdrop-blur-[3px] transition-opacity duration-300",
           isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={() => setIsOpen(false)}
       />
 
-      {/* Sliding Drawer Container (Ultra Premium Dark UI matching screenshot) */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[280px] flex-col justify-between border-r border-zinc-800 bg-[#0B121F] p-5 shadow-2xl transition-transform duration-300 ease-out",
+          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[302px] flex-col justify-between border-r border-white/8 bg-[#07101F] p-5 shadow-[18px_0_50px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-out",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -left-16 top-16 size-48 rounded-full bg-cyan-500/10 blur-3xl" />
+          <div className="absolute -right-20 bottom-24 size-56 rounded-full bg-blue-600/10 blur-3xl" />
+        </div>
         <div className="flex min-h-0 flex-1 flex-col">
           
           {/* User Identity Header */}
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+          <div className="relative flex items-center justify-between border-b border-white/10 pb-5">
             <div className="flex items-center gap-3">
               <div className="relative shrink-0">
-                <div className="size-11 overflow-hidden rounded-full border border-zinc-700 bg-zinc-800 shadow-sm">
+                <div className="absolute inset-[-4px] rounded-full bg-cyan-400/80 blur-[7px]" />
+                <div className="relative size-14 overflow-hidden rounded-full border-2 border-cyan-300 bg-zinc-800 shadow-[0_0_22px_rgba(34,211,238,0.55)]">
                   {userPhoto ? (
                     <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full select-none object-cover pointer-events-none" />
                   ) : (
@@ -135,50 +139,49 @@ export function MobileMenuDrawer({
                     </div>
                   )}
                 </div>
-                <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-[#0B121F]" />
+                <span className="absolute bottom-0 right-0 size-4 rounded-full bg-emerald-400 ring-4 ring-[#07101F]" />
               </div>
               
               <div className="min-w-0 text-left">
-                <p className="max-w-[130px] truncate text-xs font-black uppercase tracking-wide text-white leading-tight">{userName}</p>
-                <p className="mt-0.5 text-[9px] font-black uppercase tracking-widest text-zinc-500">{roleLabel}</p>
+                <p className="max-w-[150px] truncate text-sm font-black uppercase leading-tight tracking-[0.16em] text-white">{userName}</p>
+                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{roleLabel}</p>
               </div>
             </div>
 
-            {/* Circular Toggle Close Button */}
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="grid size-8 place-items-center rounded-full bg-[#10b981]/15 hover:bg-[#10b981]/25 text-[#10b981] transition active:scale-95 shrink-0"
+              className="grid size-10 shrink-0 place-items-center rounded-full text-cyan-300 transition hover:bg-white/8 active:scale-95"
               aria-label="Chiudi menu"
             >
-              <ArrowLeft className="size-4" />
+              <ArrowLeft className="size-6" />
             </button>
           </div>
 
           {/* Slate Search Bar */}
-          <div className="relative mt-4">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
-              <Search size={14} />
+          <div className="relative mt-6">
+            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500">
+              <Search size={17} />
             </span>
             <input
               type="text"
               placeholder="Cerca pagina..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#1e293b]/40 border border-zinc-800 text-xs font-bold text-white rounded-xl py-2 pl-9 pr-4 focus:outline-none focus:border-zinc-700 placeholder-zinc-600"
+              className="h-12 w-full rounded-2xl border border-white/8 bg-white/[0.045] py-2 pl-12 pr-4 text-base font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/35 focus:bg-white/[0.07]"
             />
           </div>
 
           {/* Main Navigation links */}
-          <div className="no-scrollbar mt-5 flex-1 overflow-y-auto">
-            <div className="space-y-5">
+          <div className="no-scrollbar mt-7 flex-1 overflow-y-auto">
+            <div className="space-y-8 pb-4">
               {sections.map((section) => (
                 <div key={section.id}>
-                  <div className="mb-2 flex items-center justify-between px-2">
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600">{section.title}</p>
-                    <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[9px] font-black text-zinc-500">{section.items.length}</span>
+                  <div className="mb-3 flex items-center justify-between px-3">
+                    <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-400/85">{section.title}</p>
+                    <ChevronDown className="size-4 text-slate-500" />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {section.items.map((item) => {
                       const isActive = isItemActive(item.href);
                       const displayLabel = getSidebarLabel(item.href, item.label);
@@ -188,19 +191,21 @@ export function MobileMenuDrawer({
                           href={item.href}
                           onClick={() => setIsOpen(false)}
                           className={cn(
-                            "flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-[13px] font-semibold tracking-tight transition",
-                            isActive ? "bg-[#2563eb] text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)]" : "text-zinc-400 hover:bg-zinc-800/40 hover:text-white"
+                            "relative flex min-h-14 items-center justify-between gap-3 rounded-3xl px-4 py-3 text-[17px] font-semibold tracking-tight transition",
+                            isActive
+                              ? "border border-blue-400/85 bg-blue-500/[0.06] text-white shadow-[0_0_0_1px_rgba(96,165,250,0.2),0_0_22px_rgba(59,130,246,0.5)]"
+                              : "text-slate-300 hover:bg-white/[0.055] hover:text-white"
                           )}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className={cn("grid size-7 shrink-0 place-items-center rounded-xl", isActive ? "bg-white/18" : "bg-zinc-800/70")}>
-                              <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
+                            <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", isActive ? "text-blue-300" : "text-slate-400")}>
+                              <DynamicIcon name={item.iconName} className="size-6 shrink-0" />
                             </span>
                             <span className="truncate">{displayLabel}</span>
                           </div>
 
                           {item.href === "/notifications" && unreadNotifications > 0 ? (
-                            <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black", isActive ? "bg-white text-blue-600" : "bg-[#C66170] text-white")}>
+                            <span className="grid min-w-7 shrink-0 place-items-center rounded-full bg-red-500 px-2 py-1 text-xs font-black text-white shadow-[0_0_14px_rgba(239,68,68,0.45)]">
                               {unreadNotifications > 99 ? "99+" : unreadNotifications}
                             </span>
                           ) : null}
@@ -212,7 +217,7 @@ export function MobileMenuDrawer({
               ))}
 
               {sections.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-zinc-800 px-3 py-4 text-center text-xs font-bold text-zinc-500">
+                <div className="rounded-2xl border border-dashed border-white/10 px-3 py-4 text-center text-xs font-bold text-slate-500">
                   Nessuna pagina trovata.
                 </div>
               ) : null}
@@ -222,7 +227,7 @@ export function MobileMenuDrawer({
           {/* Navigation lists directly end here */}
         </div>
 
-        <div className="mt-4 shrink-0 border-t border-zinc-800/80 pt-4">{logoutButton}</div>
+        <div className="relative mt-4 shrink-0 border-t border-white/10 pt-5">{logoutButton}</div>
       </div>
     </div>
   );
