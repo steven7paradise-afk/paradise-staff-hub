@@ -1,6 +1,6 @@
 import type { CowlendarBooking } from "@/lib/cowlendar";
 
-function normalize(value?: string | null) {
+export function normalizeConsultationText(value?: string | null) {
   return (value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -27,7 +27,7 @@ function collectBookingText(booking: CowlendarBooking | Record<string, any>) {
     values.push(...Object.values(booking.form_data).map((value) => String(value || "")));
   }
 
-  return normalize(values.filter(Boolean).join(" "));
+  return normalizeConsultationText(values.filter(Boolean).join(" "));
 }
 
 export function isOnlineConsultationBooking(booking: CowlendarBooking | Record<string, any>) {
@@ -89,4 +89,42 @@ export function cowlendarBookingToConsultationEvent(booking: CowlendarBooking | 
     startDate: new Date(start).toISOString(),
     endDate: new Date(end).toISOString(),
   };
+}
+
+export function cowlendarIdFromConsultationDescription(description?: string | null) {
+  const match = String(description || "").match(/\[Cowlendar ID:\s*([^\]\s]+)\]/);
+  return match?.[1] || null;
+}
+
+function normalizeEventDate(value?: string | Date | null) {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16);
+}
+
+export function consultationEventDedupeKey(event: {
+  summary?: string | null;
+  description?: string | null;
+  startDate?: string | Date | null;
+  endDate?: string | Date | null;
+  start?: { dateTime?: string | null; date?: string | null } | null;
+  end?: { dateTime?: string | null; date?: string | null } | null;
+}) {
+  const description = String(event.description || "");
+  const clientMatch = description.match(/^Cliente:\s*(.+)$/im);
+  const customerName =
+    clientMatch?.[1]?.trim() ||
+    String(event.summary || "")
+      .replace(/^Consulenza\s+Online\s*-\s*/i, "")
+      .trim();
+  const start = event.startDate || event.start?.dateTime || event.start?.date || null;
+  const end = event.endDate || event.end?.dateTime || event.end?.date || null;
+
+  const normalizedCustomer = normalizeConsultationText(customerName);
+  const normalizedStart = normalizeEventDate(start);
+  const normalizedEnd = normalizeEventDate(end);
+
+  if (!normalizedCustomer || !normalizedStart) return "";
+  return [normalizedCustomer, normalizedStart, normalizedEnd].join("|");
 }

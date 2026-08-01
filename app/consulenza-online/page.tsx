@@ -7,7 +7,12 @@ import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { syncCowlendarConsultations } from "@/lib/google-calendar";
-import { cowlendarBookingToConsultationEvent, isOnlineConsultationBooking } from "@/lib/online-consultations";
+import {
+  consultationEventDedupeKey,
+  cowlendarBookingToConsultationEvent,
+  cowlendarIdFromConsultationDescription,
+  isOnlineConsultationBooking,
+} from "@/lib/online-consultations";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +25,25 @@ function toIsoBoundary(date: Date, endOfDay = false) {
   return copy.toISOString();
 }
 
-function cowlendarIdFromDescription(description?: string | null) {
-  const match = String(description || "").match(/\[Cowlendar ID:\s*([^\]\s]+)\]/);
-  return match?.[1] || null;
+function uniqueConsultationEvents(input: any[]) {
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const unique = [];
+
+  for (const event of input) {
+    const cowlendarId = cowlendarIdFromConsultationDescription(event.description);
+    const dedupeKey = consultationEventDedupeKey(event);
+
+    if ((cowlendarId && seenIds.has(cowlendarId)) || (dedupeKey && seenKeys.has(dedupeKey))) {
+      continue;
+    }
+
+    if (cowlendarId) seenIds.add(cowlendarId);
+    if (dedupeKey) seenKeys.add(dedupeKey);
+    unique.push(event);
+  }
+
+  return unique;
 }
 
 export default async function ConsulenzaOnlinePage() {
@@ -68,13 +89,13 @@ export default async function ConsulenzaOnlinePage() {
     const icalText = await res.text();
     const parsed = parseIcal(icalText);
     
-    events = parsed.map((e) => ({
+    events = uniqueConsultationEvents(parsed.map((e) => ({
       uid: e.uid,
       summary: e.summary,
       description: e.description,
       startDate: e.startDate.toISOString(),
       endDate: e.endDate.toISOString(),
-    }));
+    })));
   } catch (error: any) {
     console.error("Failed to load Google Calendar events from iCal:", error);
     loadError = error.message;
@@ -99,12 +120,26 @@ export default async function ConsulenzaOnlinePage() {
         }
       }
 
-      const existingCowlendarIds = new Set(events.map((event) => cowlendarIdFromDescription(event.description)).filter(Boolean));
-      const directCowlendarEvents = consultations
-        .filter((booking) => !existingCowlendarIds.has(String(booking.id)))
-        .map(cowlendarBookingToConsultationEvent);
+      const existingCowlendarIds = new Set(events.map((event) => cowlendarIdFromConsultationDescription(event.description)).filter(Boolean));
+      const existingKeys = new Set(events.map(consultationEventDedupeKey).filter(Boolean));
+      const directCowlendarEvents = [];
 
-      events = [...events, ...directCowlendarEvents].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      for (const booking of consultations) {
+        const event = cowlendarBookingToConsultationEvent(booking);
+        const bookingId = String(booking.id);
+        const eventKey = consultationEventDedupeKey(event);
+
+        if (existingCowlendarIds.has(bookingId) || (eventKey && existingKeys.has(eventKey))) {
+          continue;
+        }
+
+        existingCowlendarIds.add(bookingId);
+        if (eventKey) existingKeys.add(eventKey);
+        directCowlendarEvents.push(event);
+      }
+
+      events = uniqueConsultationEvents([...events, ...directCowlendarEvents])
+        .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     } catch (error: any) {
       console.error("Failed to sync Cowlendar consultations from consulenza-online:", error);
       cowlendarSyncError = error?.message || "Errore nel caricamento CowCalendar.";

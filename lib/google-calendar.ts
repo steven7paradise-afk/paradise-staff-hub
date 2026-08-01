@@ -1,7 +1,12 @@
 import { google } from "googleapis";
 import type { LeaveRequest, Location, ScheduleCategory, ScheduleEntry, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { cowlendarBookingToConsultationEvent, isOnlineConsultationBooking } from "@/lib/online-consultations";
+import {
+  consultationEventDedupeKey,
+  cowlendarBookingToConsultationEvent,
+  cowlendarIdFromConsultationDescription,
+  isOnlineConsultationBooking,
+} from "@/lib/online-consultations";
 
 type LeaveRequestWithUser = LeaveRequest & { user: User };
 type ScheduleEntryForCalendar = ScheduleEntry & {
@@ -15,11 +20,48 @@ const DEFAULT_EXTRA_LEAVE_CALENDAR_IDS = [
   "cd56578ac3f02b555abd38d368d5f4a97aa91cf8ca74995f921baec95a8bada9@group.calendar.google.com",
 ];
 
+function normalizePrivateKey(value?: string | null) {
+  if (!value) return undefined;
+  let key = value.trim();
+
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+
+  key = key.replace(/\\n/g, "\n");
+
+  if (key.includes("BEGIN PRIVATE KEY")) {
+    return key;
+  }
+
+  try {
+    const decoded = Buffer.from(key, "base64").toString("utf8").trim().replace(/\\n/g, "\n");
+    if (decoded.includes("BEGIN PRIVATE KEY")) {
+      return decoded;
+    }
+  } catch {
+    // Keep the original value so Google can surface a useful auth error.
+  }
+
+  return key;
+}
+
 function getPrivateKey() {
   if (process.env.GOOGLE_PRIVATE_KEY_BASE64) {
-    return Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8");
+    return normalizePrivateKey(Buffer.from(process.env.GOOGLE_PRIVATE_KEY_BASE64, "base64").toString("utf8"));
   }
-  return process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const parsed = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+      const key = normalizePrivateKey(parsed.private_key);
+      if (key) return key;
+    } catch {
+      // Fall through to GOOGLE_PRIVATE_KEY.
+    }
+  }
+
+  return normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
 }
 
 function dateOnly(value: Date) {
@@ -870,11 +912,18 @@ export async function syncCowlendarConsultations(bookings: any[]) {
   const calendar = google.calendar({ version: "v3", auth });
 
   try {
-    // Check calendar events from 1 month ago to 3 months in the future to detect duplicates
-    const timeMin = new Date();
-    timeMin.setMonth(timeMin.getMonth() - 1);
-    const timeMax = new Date();
-    timeMax.setMonth(timeMax.getMonth() + 3);
+    const consultationEvents = consultations.map((booking) => ({
+      booking,
+      event: cowlendarBookingToConsultationEvent(booking),
+    }));
+    const eventTimes = consultationEvents
+      .map(({ event }) => new Date(event.startDate).getTime())
+      .filter((time) => Number.isFinite(time));
+
+    const timeMin = eventTimes.length > 0 ? new Date(Math.min(...eventTimes)) : new Date();
+    timeMin.setDate(timeMin.getDate() - 7);
+    const timeMax = eventTimes.length > 0 ? new Date(Math.max(...eventTimes)) : new Date();
+    timeMax.setDate(timeMax.getDate() + 7);
 
     const existingEventsRes = await calendar.events.list({
       calendarId,
@@ -886,24 +935,29 @@ export async function syncCowlendarConsultations(bookings: any[]) {
 
     const existingEvents = existingEventsRes.data.items || [];
     const syncedBookingIds = new Set<string>();
+    const existingEventKeys = new Set<string>();
 
     for (const event of existingEvents) {
-      const desc = event.description || "";
-      const match = desc.match(/\[Cowlendar ID:\s*([^\]\s]+)\]/);
-      if (match && match[1]) {
-        syncedBookingIds.add(match[1]);
-      }
+      const bookingId = cowlendarIdFromConsultationDescription(event.description);
+      if (bookingId) syncedBookingIds.add(bookingId);
+
+      const key = consultationEventDedupeKey({
+        summary: event.summary,
+        description: event.description,
+        start: event.start,
+        end: event.end,
+      });
+      if (key) existingEventKeys.add(key);
     }
 
     let syncedCount = 0;
 
-    for (const b of consultations) {
-      const bookingId = String(b.id);
-      if (syncedBookingIds.has(bookingId)) {
+    for (const { booking, event } of consultationEvents) {
+      const bookingId = String(booking.id);
+      const eventKey = consultationEventDedupeKey(event);
+      if (syncedBookingIds.has(bookingId) || (eventKey && existingEventKeys.has(eventKey))) {
         continue;
       }
-
-      const event = cowlendarBookingToConsultationEvent(b);
 
       await calendar.events.insert({
         calendarId,
@@ -915,12 +969,18 @@ export async function syncCowlendarConsultations(bookings: any[]) {
         },
       });
 
+      syncedBookingIds.add(bookingId);
+      if (eventKey) existingEventKeys.add(eventKey);
       syncedCount++;
     }
 
     return { success: true, syncedCount };
   } catch (error: any) {
     console.error("Failed to sync Cowlendar consultations:", error);
-    return { success: false, error: error.message };
+    const message = String(error?.message || error || "Errore Google Calendar");
+    const friendlyMessage = message.includes("DECODER routines::unsupported")
+      ? "chiave Google Calendar non valida: controlla GOOGLE_PRIVATE_KEY o GOOGLE_PRIVATE_KEY_BASE64"
+      : message;
+    return { success: false, error: friendlyMessage };
   }
 }
