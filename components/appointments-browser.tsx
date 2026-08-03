@@ -1144,6 +1144,152 @@ export function AppointmentsBrowser({
 
   return (
     <div className="min-h-screen bg-white px-3 py-4 sm:px-5 lg:px-6">
+      {clientControlOpen ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5">
+          <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[26px] border border-black/15 bg-[#FAFAFA] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
+            <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-5 sm:px-7">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">Store manager</p>
+                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">Appuntamenti e controllo cliente</h2>
+                <p className="mt-1 text-xs font-semibold text-black/45">Compila il controllo partendo dai dati dell'appuntamento.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClientControlOpen(false)}
+                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:bg-black/[0.02] active:scale-95"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+              <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Sede *</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {clientControlSalons.map((salonName) => (
+                      <button
+                        key={salonName}
+                        type="button"
+                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salonName, staffIds: [] }))}
+                        className={[
+                          "rounded-full border px-3 py-2 text-xs font-black transition",
+                          clientControlForm.salon === salonName
+                            ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
+                            : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
+                        ].join(" ")}
+                      >
+                        {salonName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  {[
+                    ["clientName", "Nome cliente *", "Nome cliente"],
+                    ["email", "Email cliente", "email@esempio.com"],
+                    ["phone", "Telefono cliente", "+39..."],
+                    ["serviceTitle", "Servizio prenotato", "Servizio"],
+                    ["shopifyOrder", "Ordine Shopify", "Numero ordine"],
+                    ["depositPaid", "Acconto pagato (€)", "0.00"],
+                    ["paid", "Pagato (€)", "0.00"],
+                    ["instagramTag", "IG tag", "@cliente"],
+                  ].map(([fieldKey, label, placeholder]) => (
+                    <label key={fieldKey} className="block">
+                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">{label}</span>
+                      <input
+                        value={String((clientControlForm as any)[fieldKey] ?? "")}
+                        readOnly={fieldKey === "serviceTitle"}
+                        onChange={(event) => setClientControlForm((prev) => ({ ...prev, [fieldKey]: event.target.value }))}
+                        className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5] read-only:bg-black/[0.02] read-only:text-black/60"
+                        placeholder={placeholder}
+                      />
+                    </label>
+                  ))}
+                  <label className="block md:col-span-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
+                    <textarea
+                      value={clientControlForm.customNoteText}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, customNoteText: event.target.value }))}
+                      className="mt-1 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
+                      placeholder="Scrivi qui la nota Shopify"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Collaboratrici del salone *</p>
+                  <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
+                    {clientControlLoading ? (
+                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Carico collaboratrici...</p>
+                    ) : filteredClientControlEmployees.length ? (
+                      filteredClientControlEmployees.map((employee) => {
+                        const selected = clientControlForm.staffIds.includes(employee.id);
+                        return (
+                          <button
+                            key={employee.id}
+                            type="button"
+                            onClick={() =>
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                staffIds: selected ? prev.staffIds.filter((id) => id !== employee.id) : [...prev.staffIds, employee.id],
+                              }))
+                            }
+                            className={[
+                              "rounded-xl border px-3 py-2 text-left text-xs font-black transition",
+                              selected ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]" : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
+                            ].join(" ")}
+                          >
+                            {employee.name}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Nessuna collaboratrice trovata per questa sede.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                  {[
+                    ["notes", "Note Shopify"],
+                    ["beforeMedia", "Prima foto/video"],
+                    ["afterMedia", "Dopo foto/video"],
+                    ["products", "Prodotti"],
+                    ["review", "Recensione"],
+                  ].map(([fieldKey, fieldLabel]) => (
+                    <label key={fieldKey} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]">
+                      <input
+                        type="checkbox"
+                        checked={Boolean((clientControlForm as any)[fieldKey])}
+                        onChange={(event) => setClientControlForm((prev) => ({ ...prev, [fieldKey]: event.target.checked }))}
+                        className="size-4 accent-[#E88AC5]"
+                      />
+                      <span>{fieldLabel}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {clientControlMessage ? (
+                  <p className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                    {clientControlMessage.text}
+                  </p>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={submitClientControlForm}
+                  disabled={clientControlSubmitting || clientControlLoading}
+                  className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
+                >
+                  {clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto grid w-full max-w-[1760px] gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
         <main className="min-w-0 space-y-5">
           <section className="rounded-[28px] border border-[#E8D8CF] bg-white/85 p-5 shadow-sm backdrop-blur sm:p-7">
@@ -1441,7 +1587,7 @@ export function AppointmentsBrowser({
               </div>
 
               <div className="space-y-6 p-6">
-                <section>
+      <section>
                   <h3 className="font-serif text-3xl font-semibold text-[#1F1F1F]">{selectedBooking.customerName}</h3>
                   <div className="mt-4 space-y-2 text-sm font-medium text-[#6F625C]">
                     <p className="flex items-center gap-2">
@@ -2039,7 +2185,7 @@ export function AppointmentsBrowser({
         ) : null}
       </section>
 
-      {clientControlOpen ? (
+      {false && clientControlOpen ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5">
           <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[26px] border border-black/15 bg-[#FAFAFA] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
             <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-5 sm:px-7">
