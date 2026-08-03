@@ -672,6 +672,11 @@ export function AppointmentsBrowser({
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare lo stato.");
       }
+
+      const data = await response.json().catch(() => null);
+      if (data?.statusComment && selectedBooking?.id === bookingId) {
+        setDbComments((current) => [...current, data.statusComment]);
+      }
     } catch (error) {
       console.error("Failed to save appointment status:", error);
       setStatusByBooking((current) => {

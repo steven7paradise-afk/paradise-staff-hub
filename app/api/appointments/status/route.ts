@@ -15,6 +15,16 @@ const allowedStatuses = new Set([
   "PAGATO",
 ]);
 
+const statusLabels: Record<CowlendarAppointmentStatus, string> = {
+  PRENOTATO: "Prenotato",
+  NON_PRESENTATO: "Non presentato",
+  INIZIATO: "Iniziato",
+  IN_ATTESA: "In attesa",
+  COMPLETATO: "Completato",
+  ARRIVATO_IN_RITARDO: "Arrivato in ritardo",
+  PAGATO: "Pagato",
+};
+
 function normalizeStatusMap(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>;
@@ -54,12 +64,14 @@ export async function POST(request: NextRequest) {
 
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentMap = normalizeStatusMap(currentSetting?.value);
+    const previousStatus = currentMap[bookingId]?.status;
+    const updatedBy = session.user.name || session.user.email || session.user.id;
     const updatedMap = {
       ...currentMap,
       [bookingId]: {
         status,
         updatedAt: new Date().toISOString(),
-        updatedBy: session.user.name || session.user.email || session.user.id,
+        updatedBy,
       },
     };
 
@@ -69,7 +81,22 @@ export async function POST(request: NextRequest) {
       create: { key: SETTING_KEY, value: updatedMap },
     });
 
-    return NextResponse.json({ success: true, status: updatedMap[bookingId], cowlendarSync });
+    const previousLabel = previousStatus && allowedStatuses.has(previousStatus)
+      ? statusLabels[previousStatus as CowlendarAppointmentStatus]
+      : null;
+    const nextLabel = statusLabels[status as CowlendarAppointmentStatus];
+    const statusComment = await prisma.shopifyOrderComment.create({
+      data: {
+        order_name: bookingId,
+        user_name: updatedBy,
+        user_role: session.user.role ?? "DIPENDENTE",
+        message: previousLabel && previousLabel !== nextLabel
+          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.`
+          : `Stato appuntamento impostato su ${nextLabel}.`,
+      },
+    });
+
+    return NextResponse.json({ success: true, status: updatedMap[bookingId], statusComment, cowlendarSync });
   } catch (error) {
     console.error("Failed to update appointment status:", error);
     return NextResponse.json({ error: "Errore durante il salvataggio dello stato." }, { status: 500 });
