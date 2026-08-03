@@ -111,8 +111,8 @@ export const authConfig = {
     },
     async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
-      if (pathname === "/login") return true;
-      if (pathname === "/appointments/register") return true;
+      if (pathname === "/login" || pathname === "/login/") return true;
+      if (pathname.startsWith("/appointments/register")) return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
 
       // Strict lockdown for Cashier PCs (only appointments, register, service-forms, and associated APIs allowed)
