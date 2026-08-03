@@ -1322,10 +1322,21 @@ export function AppointmentsBrowser({
 
                 <section className="border-t border-[#E8D8CF] pt-5">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Note</p>
-                  <div className="mt-4 rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
-                    <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">
-                      {selectedNotePreview || selectedBooking.notesText?.trim() || shopifyNote?.trim() || "Nessuna nota aggiunta"}
-                    </p>
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">Note Cowlendar</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">
+                        {selectedBooking.notesText?.trim() || cowlendarOrderNote?.trim() || "Nessuna nota presente in Cowlendar."}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#F1DDC9] bg-[#FFF7F2] p-4">
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#B46125]">Note Shopify</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#7C3E14]">
+                        {selectedBooking.bookingStr
+                          ? shopifyNote?.trim() || "Nessuna nota presente su Shopify."
+                          : "Nessun ordine Shopify collegato."}
+                      </p>
+                    </div>
                   </div>
                 </section>
 
