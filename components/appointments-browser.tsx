@@ -874,7 +874,14 @@ export function AppointmentsBrowser({
           : "Salone Buenos Aires",
         clientName: booking.customerName || "",
         email: booking.customerEmail || "",
-        phone: booking.customerPhone || "",
+        phone:
+          booking.customerPhone ||
+          getDetailValue(booking.extraDetails, [
+            "numero telefono",
+            "telefono",
+            "phone",
+          ]) ||
+          "",
         serviceTitle: booking.serviceTitle || "",
         depositPaid:
           booking.priceAmount != null ? String(booking.priceAmount) : "",
@@ -1735,7 +1742,7 @@ export function AppointmentsBrowser({
                     {[
                       ["clientName", "Nome cliente *", "Nome cliente"],
                       ["email", "Email cliente", "email@esempio.com"],
-                      ["phone", "Telefono cliente", "+39..."],
+                      ["phone", "Telefono cliente", ""],
                       ["serviceTitle", "Servizio prenotato", "Servizio"],
                       ["shopifyOrder", "Ordine Shopify", "Numero ordine"],
                       ["depositPaid", "Acconto pagato (€)", "0.00"],
@@ -3293,7 +3300,7 @@ export function AppointmentsBrowser({
                         }))
                       }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
-                      placeholder="+39..."
+                      placeholder=""
                     />
                   </label>
                   <label className="block">
