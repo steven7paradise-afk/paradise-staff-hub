@@ -42,6 +42,8 @@ type BookingTeammate = {
   photoUrl?: string | null;
 };
 
+type TeamOption = BookingTeammate;
+
 type AppointmentRecord = {
   id: string;
   customerName: string;
@@ -407,7 +409,13 @@ function ServiceImage({ title, imageUrl, compact = false }: { title: string; ima
   );
 }
 
-export function AppointmentsBrowser({ initialBookings }: { initialBookings: AppointmentRecord[] }) {
+export function AppointmentsBrowser({
+  initialBookings,
+  corsoTeamOptions,
+}: {
+  initialBookings: AppointmentRecord[];
+  corsoTeamOptions: TeamOption[];
+}) {
   const [view, setView] = useState<ViewMode>("day");
   const [salon, setSalon] = useState<SalonFilter>("tutti");
   const [anchorDate, setAnchorDate] = useState(() => getFirstVisibleBookingDate(initialBookings));
@@ -418,6 +426,10 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
   const [showCanceled, setShowCanceled] = useState(false);
   const [visibleCount, setVisibleCount] = useState(appointmentsPageSize);
   const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
+  const [savingTeamId, setSavingTeamId] = useState<string | null>(null);
+  const [teamByBooking, setTeamByBooking] = useState<Record<string, BookingTeammate[]>>(() =>
+    Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.teammates])),
+  );
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState(() => {
     const today = localDateKey(new Date());
@@ -432,6 +444,10 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
   );
 
   const normalizedSearch = normalizeSearchValue(searchTerm);
+  function getBookingTeam(booking: AppointmentRecord) {
+    return teamByBooking[booking.id] || booking.teammates;
+  }
+
   const activeBookingsCount = initialBookings.filter((booking) => !booking.isCanceled).length;
   const canceledBookingsCount = initialBookings.filter((booking) => booking.isCanceled).length;
   const dateFilterLabel = useMemo(() => {
@@ -470,7 +486,7 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
             ...getDateSearchValues(booking.startDate),
             ...getDateSearchValues(booking.endDate),
             booking.notesText,
-            ...booking.teammates.map((mate) => mate.name),
+            ...getBookingTeam(booking).map((mate) => mate.name),
             ...(booking.extraDetails ?? []).flatMap((item) => [item.label, item.value]),
           ]
             .filter(Boolean)
@@ -482,7 +498,7 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
       : dateScoped;
 
     return [...searched].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-  }, [dateFilter, initialBookings, normalizedSearch, salon, showCanceled]);
+  }, [dateFilter, initialBookings, normalizedSearch, salon, showCanceled, teamByBooking]);
 
   useEffect(() => {
     setVisibleCount(appointmentsPageSize);
@@ -653,7 +669,8 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Non sono riuscito a salvare lo stato.");
       }
     } catch (error) {
       console.error("Failed to save appointment status:", error);
@@ -663,9 +680,46 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
         else delete copy[bookingId];
         return copy;
       });
-      alert("Non sono riuscito a salvare lo stato. Riprova.");
+      alert(error instanceof Error ? error.message : "Non sono riuscito a salvare lo stato. Riprova.");
     } finally {
       setSavingStatusId(null);
+    }
+  }
+
+  async function handleTeamChange(booking: AppointmentRecord, teammateIds: string[]) {
+    const previousTeam = getBookingTeam(booking);
+    const nextTeam = corsoTeamOptions.filter((option) => teammateIds.includes(option.id));
+
+    if (booking.inferredSalon !== "buenos-aires") {
+      alert("Il team si puo modificare solo per gli appuntamenti del salone Corso.");
+      return;
+    }
+
+    if (!nextTeam.length) {
+      alert("Seleziona almeno una collaboratrice del salone Corso.");
+      return;
+    }
+
+    setTeamByBooking((current) => ({ ...current, [booking.id]: nextTeam }));
+    setSavingTeamId(booking.id);
+
+    try {
+      const response = await fetch("/api/appointments/team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: booking.id, teammateIds }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Non sono riuscito a salvare il team.");
+      }
+    } catch (error) {
+      console.error("Failed to save appointment team:", error);
+      setTeamByBooking((current) => ({ ...current, [booking.id]: previousTeam }));
+      alert(error instanceof Error ? error.message : "Non sono riuscito a salvare il team. Riprova.");
+    } finally {
+      setSavingTeamId(null);
     }
   }
 
@@ -792,6 +846,70 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
           ))}
         </select>
         {savingStatusId === booking.id ? <span className="text-[10px] font-bold text-black/35">Salvataggio...</span> : null}
+      </div>
+    );
+  };
+
+  const TeamControl = ({ booking }: { booking: AppointmentRecord }) => {
+    const currentTeam = getBookingTeam(booking);
+    const [draftIds, setDraftIds] = useState(() => currentTeam.map((mate) => mate.id));
+
+    useEffect(() => {
+      setDraftIds(currentTeam.map((mate) => mate.id));
+    }, [booking.id, currentTeam]);
+
+    if (booking.inferredSalon !== "buenos-aires") {
+      return (
+        <p className="mt-3 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3 text-xs font-bold text-black/45">
+          Modifica disponibile solo per il salone Corso.
+        </p>
+      );
+    }
+
+    if (!corsoTeamOptions.length) {
+      return (
+        <p className="mt-3 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3 text-xs font-bold text-black/45">
+          Nessuna collaboratrice Corso trovata in Cowlendar.
+        </p>
+      );
+    }
+
+    return (
+      <div className="mt-4 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3" onClick={(event) => event.stopPropagation()}>
+        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Modifica team Corso</p>
+        <div className="mt-3 grid gap-2">
+          {corsoTeamOptions.map((option) => {
+            const checked = draftIds.includes(option.id);
+            return (
+              <label key={option.id} className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-2 text-sm font-bold text-[#171717]">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={savingTeamId === booking.id}
+                  onChange={(event) => {
+                    setDraftIds((current) =>
+                      event.target.checked
+                        ? [...new Set([...current, option.id])]
+                        : current.filter((id) => id !== option.id),
+                    );
+                  }}
+                  className="size-4 accent-[#C66170]"
+                />
+                <Avatar name={option.name} photoUrl={option.photoUrl} size="size-9" />
+                <span className="min-w-0 truncate">{option.name}</span>
+              </label>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          disabled={savingTeamId === booking.id}
+          onClick={() => handleTeamChange(booking, draftIds)}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#171717] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
+        >
+          {savingTeamId === booking.id ? <Loader2 className="size-4 animate-spin" /> : <UsersRound className="size-4" />}
+          {savingTeamId === booking.id ? "Salvataggio..." : "Salva team"}
+        </button>
       </div>
     );
   };
@@ -1480,7 +1598,7 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
                       <p className="flex items-center gap-1 text-sm font-black text-[#171717]">
                         <UsersRound className="size-4 text-[#C66170]" />
-                        {booking.teammates.map((mate) => mate.name).join(", ") || "Non assegnato"}
+                        {getBookingTeam(booking).map((mate) => mate.name).join(", ") || "Non assegnato"}
                       </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-black/45">
                         <MapPin className="size-3.5" />
@@ -1612,7 +1730,7 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
                       <p className="flex items-center gap-1 text-sm font-black text-[#171717]">
                         <UsersRound className="size-4 text-black/35" />
-                        {booking.teammates.map((mate) => mate.name).join(", ") || "Non assegnato"}
+                        {getBookingTeam(booking).map((mate) => mate.name).join(", ") || "Non assegnato"}
                       </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-black/45">
                         <MapPin className="size-3.5" />
@@ -1917,13 +2035,13 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
-                    {selectedBooking.teammates.length ? (
-                      selectedBooking.teammates.map((mate) => (
+                    {getBookingTeam(selectedBooking!).length ? (
+                      getBookingTeam(selectedBooking!).map((mate) => (
                         <div key={mate.id} className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3">
                           <Avatar name={mate.name} photoUrl={mate.photoUrl} size="size-12" />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-black text-[#171717]">{mate.name}</p>
-                            <p className="text-xs text-black/45">{getSalonLabel(selectedBooking.inferredSalon)}</p>
+                            <p className="text-xs text-black/45">{getSalonLabel(selectedBooking!.inferredSalon)}</p>
                           </div>
                         </div>
                       ))
@@ -1931,6 +2049,7 @@ export function AppointmentsBrowser({ initialBookings }: { initialBookings: Appo
                       <div className="rounded-2xl border border-dashed border-black/10 p-4 text-sm text-black/45">Nessun collaboratore assegnato.</div>
                     )}
                   </div>
+                  <TeamControl booking={selectedBooking!} />
                 </div>
 
                 <div className="rounded-[24px] border border-black/5 bg-white p-4">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 
 const SETTING_KEY = "appointment_status_overrides";
@@ -34,6 +35,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
     }
 
+    let cowlendarSync;
+    try {
+      cowlendarSync = await updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus);
+    } catch (error) {
+      console.error("Failed to sync appointment status with Cowlendar:", error);
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Cowlendar non ha accettato l'aggiornamento dello stato.",
+        },
+        { status: 502 }
+      );
+    }
+
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentMap = normalizeStatusMap(currentSetting?.value);
     const updatedMap = {
@@ -51,7 +68,7 @@ export async function POST(request: NextRequest) {
       create: { key: SETTING_KEY, value: updatedMap },
     });
 
-    return NextResponse.json({ success: true, status: updatedMap[bookingId] });
+    return NextResponse.json({ success: true, status: updatedMap[bookingId], cowlendarSync });
   } catch (error) {
     console.error("Failed to update appointment status:", error);
     return NextResponse.json({ error: "Errore durante il salvataggio dello stato." }, { status: 500 });

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
-import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
+import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
@@ -57,6 +57,11 @@ function getSalonFromText(value?: string | null): "duomo" | "buenos-aires" | "uf
   if (source.includes("buenos aires") || source.includes("corso buenos aires")) return "buenos-aires";
   if (source.includes("ufficio paradise") || source.includes("ufficio")) return "ufficio";
   return "altro";
+}
+
+function isCorsoLocation(value?: string | null) {
+  const source = normalizeName(value);
+  return source.includes("buenos") || source.includes("corso");
 }
 
 function flattenBookingEntries(value: unknown, prefix = ""): Array<{ key: string; value: string }> {
@@ -154,7 +159,7 @@ export default async function AppointmentsPage() {
 
   const localUsers = await prisma.user.findMany({
     where: { active: true },
-    select: { id: true, name: true, photo_url: true },
+    select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
   });
 
   const localUsersByName = new Map(
@@ -165,6 +170,7 @@ export default async function AppointmentsPage() {
 
   let loadError = "";
   let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
+  let services = [] as Awaited<ReturnType<typeof getCowlendarServices>>;
 
   if (hasCowlendarToken()) {
     try {
@@ -172,15 +178,43 @@ export default async function AppointmentsPage() {
       const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 4, 0);
 
-      bookings = await getCowlendarBookingsForRange({
-        startDate: toIsoBoundary(rangeStart),
-        endDate: toIsoBoundary(rangeEnd, true),
-        limit: 5000,
-      });
+      [bookings, services] = await Promise.all([
+        getCowlendarBookingsForRange({
+          startDate: toIsoBoundary(rangeStart),
+          endDate: toIsoBoundary(rangeEnd, true),
+          limit: 5000,
+        }),
+        getCowlendarServices(),
+      ]);
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Errore nel caricamento appuntamenti.";
     }
   }
+
+  const corsoUsersByName = new Map(
+    localUsers
+      .filter((user) => isCorsoLocation(user.location?.name))
+      .map((user) => [normalizeName(user.name), user]),
+  );
+
+  const cowlendarTeamOptionsById = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
+  const cowlendarTeammates = [
+    ...bookings.flatMap((booking) => booking.teammates ?? []),
+    ...services.flatMap((service) => service.teammates ?? []),
+  ];
+
+  for (const mate of cowlendarTeammates) {
+    const name = cleanTeamName(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim());
+    const matchedUser = corsoUsersByName.get(normalizeName(name));
+    if (!mate.id || !name || !matchedUser) continue;
+    cowlendarTeamOptionsById.set(mate.id, {
+      id: mate.id,
+      name,
+      photoUrl: matchedUser.photo_url || mate.thumbnail || null,
+    });
+  }
+
+  const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
   const [shopifyOrderNames, statusSetting, sheetStatusOverrides] = await Promise.all([
     getShopifyOrderNamesBulk(bookings.map((b: any) => b.order_id).filter(Boolean)),
@@ -348,7 +382,7 @@ export default async function AppointmentsPage() {
           </section>
         </div>
       ) : (
-        <AppointmentsBrowser initialBookings={serializedBookings} />
+        <AppointmentsBrowser initialBookings={serializedBookings} corsoTeamOptions={corsoTeamOptions} />
       )}
     </AppShell>
   );

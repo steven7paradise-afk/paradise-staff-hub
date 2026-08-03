@@ -77,6 +77,15 @@ export type CowlendarBooking = {
   [key: string]: unknown;
 };
 
+export type CowlendarAppointmentStatus =
+  | "PRENOTATO"
+  | "NON_PRESENTATO"
+  | "INIZIATO"
+  | "IN_ATTESA"
+  | "COMPLETATO"
+  | "ARRIVATO_IN_RITARDO"
+  | "PAGATO";
+
 interface CacheData<T> {
   timestamp: number;
   data: T;
@@ -166,6 +175,161 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
   }
 
   return response.json() as Promise<CowlendarResponse<T>>;
+}
+
+async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
+  const token = getCowlendarToken();
+  if (!token) {
+    throw new Error("COWLENDAR_API_TOKEN mancante");
+  }
+
+  return fetch(`${COWLENDAR_API_BASE}${pathname}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+}
+
+async function clearCowlendarBookingCaches() {
+  try {
+    await prisma.setting.deleteMany({
+      where: {
+        OR: [
+          { key: { startsWith: "cowlendar_cache_bookings_" } },
+          { key: { startsWith: "cowlendar_cache_range_" } },
+        ],
+      },
+    });
+  } catch (err) {
+    console.error("Error clearing cowlendar booking caches:", err);
+  }
+}
+
+function cowlendarStatusPayloads(status: CowlendarAppointmentStatus): Array<Record<string, string>> {
+  const normalized = status.toLowerCase();
+  const payloads: Array<Record<string, string>> = [
+    { status },
+    { status: normalized },
+  ];
+
+  if (status === "PAGATO") {
+    payloads.push({ financial_status: "PAID" }, { financial_status: "paid" });
+  } else if (status === "PRENOTATO") {
+    payloads.push({ confirmation_status: "CONFIRMED" }, { confirmation_status: "confirmed" });
+  } else {
+    const attendanceMap: Record<Exclude<CowlendarAppointmentStatus, "PAGATO" | "PRENOTATO">, string> = {
+      NON_PRESENTATO: "NO_SHOW",
+      INIZIATO: "INIZIATO",
+      IN_ATTESA: "IN_ATTESA",
+      COMPLETATO: "COMPLETATO",
+      ARRIVATO_IN_RITARDO: "IN_RITARDO",
+    };
+    const attendance = attendanceMap[status];
+    payloads.push({ attendance }, { attendance: attendance.toLowerCase() });
+  }
+
+  return payloads;
+}
+
+export async function updateCowlendarBookingStatus(bookingId: string, status: CowlendarAppointmentStatus) {
+  const id = String(bookingId || "").trim();
+  if (!id) {
+    throw new Error("ID prenotazione Cowlendar mancante");
+  }
+
+  const paths = [`/bookings/${encodeURIComponent(id)}`, `/bookings/${encodeURIComponent(id)}/status`];
+  let lastError = "endpoint non disponibile";
+
+  for (const path of paths) {
+    for (const payload of cowlendarStatusPayloads(status)) {
+      const response = await cowlendarRawFetch(path, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        await clearCowlendarBookingCaches();
+        const text = await response.text();
+        return {
+          ok: true,
+          path,
+          payload,
+          response: text ? tryParseJson(text) : null,
+        };
+      }
+
+      const text = await response.text().catch(() => "");
+      lastError = `Cowlendar ${response.status}${text ? `: ${text}` : ""}`;
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(lastError);
+      }
+    }
+  }
+
+  throw new Error(`Cowlendar non ha accettato l'aggiornamento dello stato (${lastError})`);
+}
+
+export async function updateCowlendarBookingTeam(bookingId: string, teammateIds: string[]) {
+  const id = String(bookingId || "").trim();
+  const ids = [...new Set(teammateIds.map((value) => String(value || "").trim()).filter(Boolean))];
+
+  if (!id) {
+    throw new Error("ID prenotazione Cowlendar mancante");
+  }
+
+  if (!ids.length) {
+    throw new Error("Seleziona almeno una collaboratrice.");
+  }
+
+  const paths = [`/bookings/${encodeURIComponent(id)}`, `/bookings/${encodeURIComponent(id)}/teammates`];
+  const payloads: Array<Record<string, unknown>> = [
+    { teammates: ids },
+    { teammate_ids: ids },
+    { teammateIds: ids },
+    { teammates: ids.map((teammateId) => ({ id: teammateId })) },
+  ];
+  let lastError = "endpoint non disponibile";
+
+  for (const path of paths) {
+    for (const payload of payloads) {
+      const response = await cowlendarRawFetch(path, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        await clearCowlendarBookingCaches();
+        const text = await response.text();
+        return {
+          ok: true,
+          path,
+          payload,
+          response: text ? tryParseJson(text) : null,
+        };
+      }
+
+      const text = await response.text().catch(() => "");
+      lastError = `Cowlendar ${response.status}${text ? `: ${text}` : ""}`;
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(lastError);
+      }
+    }
+  }
+
+  throw new Error(`Cowlendar non ha accettato l'aggiornamento del team (${lastError})`);
+}
+
+function tryParseJson(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 export async function getCowlendarServices() {
