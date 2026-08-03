@@ -1274,15 +1274,22 @@ export function AppointmentsBrowser({
                   const assignedTeam = getBookingTeam(booking);
 
                   return (
-                    <button
+                    <div
                       key={booking.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => {
                         setDetailClosed(false);
                         setSelectedBookingId(booking.id);
                       }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        setDetailClosed(false);
+                        setSelectedBookingId(booking.id);
+                      }}
                       className={[
-                        "grid w-full gap-4 px-5 py-5 text-left transition xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
+                        "grid w-full cursor-pointer gap-4 px-5 py-5 text-left transition xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
                         isSelected ? "bg-[#FFF0F2] shadow-[inset_4px_0_0_#C96363]" : "bg-white hover:bg-[#FFF8F6]",
                       ].join(" ")}
                     >
@@ -1355,16 +1362,9 @@ export function AppointmentsBrowser({
                         </div>
                       </div>
 
-                      <span
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
                         onClick={(event) => {
-                          event.stopPropagation();
-                          void openClientControlForBooking(booking);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter" && event.key !== " ") return;
-                          event.preventDefault();
                           event.stopPropagation();
                           void openClientControlForBooking(booking);
                         }}
@@ -1372,8 +1372,8 @@ export function AppointmentsBrowser({
                         title="Compila controllo cliente"
                       >
                         <ChevronRight className="size-5" />
-                      </span>
-                    </button>
+                      </button>
+                    </div>
                   );
                 })
               ) : (
