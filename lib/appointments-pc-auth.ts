@@ -104,3 +104,18 @@ export async function checkPCAuthorization(cookieToken: string | undefined): Pro
     isPC: true,
   };
 }
+
+export async function verifyOneTimeCode(code: string): Promise<AuthorizedPC> {
+  const setting = await prisma.setting.findUnique({
+    where: { key: "appointments_authorized_pcs" },
+  });
+
+  const currentList = Array.isArray(setting?.value) ? (setting.value as unknown as AuthorizedPC[]) : [];
+  const pc = currentList.find((item) => item.code === code && item.activatedAt === null);
+
+  if (!pc) {
+    throw new Error("Codice di attivazione non valido o già utilizzato.");
+  }
+
+  return pc;
+}
