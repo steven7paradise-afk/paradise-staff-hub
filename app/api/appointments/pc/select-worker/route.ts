@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
   const workerId = typeof body?.workerId === "string" ? body.workerId.trim() : "";
   const salone = normalizeAppointmentSalonSlug(body?.salone);
 
-  if (!workerId || !salone) {
-    return NextResponse.json({ error: "Profilo o salone non valido." }, { status: 400 });
+  if (!workerId) {
+    return NextResponse.json({ error: "Profilo non valido." }, { status: 400 });
   }
 
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());

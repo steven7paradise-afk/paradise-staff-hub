@@ -624,6 +624,7 @@ function PcStaffLockScreen({
   const [activeStaff, setActiveStaff] = useState<ActivePcWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectingWorkerId, setSelectingWorkerId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -670,15 +671,33 @@ function PcStaffLockScreen({
       .slice(0, 2)
       .toUpperCase();
 
+  async function unlockWithWorker(worker: ActivePcWorker) {
+    setSelectingWorkerId(worker.id);
+    setError("");
+    try {
+      const response = await fetch("/api/appointments/pc/select-worker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workerId: worker.id, salone: salon }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
+      onUnlock(worker);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
+      setSelectingWorkerId("");
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#FCE6EF] p-5 text-neutral-900">
       <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-b from-[#F8D7EB] via-[#FDE7F3] to-[#F4C6E6]" />
-      <section className="relative ml-0 flex min-h-[82vh] w-full max-w-7xl flex-col items-center rounded-[28px] border border-white/70 bg-white/92 px-6 py-14 shadow-2xl backdrop-blur md:ml-20 md:px-12">
+      <section className="relative ml-0 flex min-h-[82vh] w-full max-w-7xl flex-col items-center rounded-[28px] border border-white/70 bg-white/95 px-5 py-12 shadow-2xl backdrop-blur md:ml-20 md:px-10 lg:px-14">
         <div className="mx-auto max-w-3xl space-y-4 text-center">
           <div className="mx-auto grid size-16 place-items-center rounded-full bg-[#FADBEA] text-[#F12D83]">
             <LockKeyhole className="size-8" strokeWidth={1.8} />
           </div>
-          <h2 className="text-3xl font-black tracking-normal text-[#171C2A] md:text-4xl">
+          <h2 className="text-3xl font-black leading-tight tracking-normal text-[#171C2A] md:text-4xl">
             Seleziona il tuo profilo per accedere alle prenotazioni
           </h2>
           <p className="text-base font-medium text-[#667085]">
@@ -702,7 +721,7 @@ function PcStaffLockScreen({
             Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
           </div>
         ) : (
-          <div className="mt-14 flex w-full flex-wrap items-start justify-center gap-x-8 gap-y-10 md:gap-x-12">
+          <div className="mt-12 grid w-full max-w-6xl grid-cols-2 gap-x-5 gap-y-9 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {activeStaff.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
@@ -711,15 +730,16 @@ function PcStaffLockScreen({
                 <button
                   key={worker.id}
                   type="button"
-                  onClick={() => onUnlock(worker)}
-                  className="group flex w-36 flex-col items-center text-center transition hover:-translate-y-1 md:w-40"
+                  onClick={() => unlockWithWorker(worker)}
+                  disabled={Boolean(selectingWorkerId)}
+                  className="group flex min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70"
                 >
-                  <div className="relative grid size-32 place-items-center rounded-full border-[5px] border-[#F9C8DF] bg-white p-1 shadow-[0_10px_28px_rgba(241,45,131,0.12)] transition group-hover:border-[#F12D83] md:size-36">
+                  <div className="relative grid aspect-square w-full max-w-36 place-items-center rounded-full border-[5px] border-[#F9C8DF] bg-white p-1 shadow-[0_10px_28px_rgba(241,45,131,0.12)] transition group-hover:border-[#F12D83]">
                     {photoUrl ? (
                       <img
                         src={photoUrl}
                         alt={worker.name}
-                        className="size-full rounded-full object-cover"
+                        className="size-full rounded-full object-cover object-top"
                       />
                     ) : (
                       <div className="grid size-full place-items-center rounded-full bg-[#FCE6EF] font-serif text-3xl font-semibold text-[#F12D83]">
@@ -727,8 +747,13 @@ function PcStaffLockScreen({
                       </div>
                     )}
                     <span className="absolute right-3 top-2 size-4 rounded-full border-2 border-white bg-emerald-400 shadow-2xs" />
+                    {selectingWorkerId === worker.id ? (
+                      <span className="absolute inset-0 grid place-items-center rounded-full bg-white/70">
+                        <Loader2 className="size-7 animate-spin text-[#F12D83]" />
+                      </span>
+                    ) : null}
                   </div>
-                  <p className="mt-4 max-w-full truncate text-lg font-black tracking-normal text-[#F12D83]">
+                  <p className="mt-4 max-w-full break-words text-base font-black leading-tight tracking-normal text-[#F12D83] md:text-lg">
                     {firstName}
                   </p>
                 </button>
