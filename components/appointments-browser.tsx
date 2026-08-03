@@ -561,19 +561,8 @@ export function AppointmentsBrowser({
 
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
-    const [employees, bookingNotes] = await Promise.all([
-      loadClientControlEmployees().catch((error) => {
-        setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Non riesco a caricare il form." });
-        return [] as ClientControlEmployee[];
-      }),
-      fetch(`/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`)
-        .then((response) => response.ok ? response.json() : null)
-        .catch(() => null),
-    ]);
     const salonName = salonNameForBooking(booking);
-    const staffIds = matchEmployeeIdsForBooking(booking, employees);
-
-    setClientControlForm({
+    const baseForm: ClientControlAppointmentForm = {
       salon: clientControlSalons.includes(salonName) ? salonName : "Salone Duomo",
       clientName: booking.customerName || "",
       email: booking.customerEmail || "",
@@ -581,18 +570,39 @@ export function AppointmentsBrowser({
       serviceTitle: booking.serviceTitle || "",
       depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
       paid: "",
-      staffIds,
+      staffIds: matchEmployeeIdsForBooking(booking, clientControlEmployees),
       shopifyOrder: booking.bookingStr ? booking.bookingStr.replace(/^#/, "") : "",
       instagramTag: "",
-      customNoteText: bookingNotes?.shopifyNote || "",
+      customNoteText: "",
       notes: false,
       beforeMedia: false,
       afterMedia: false,
       products: false,
       review: false,
       bookingId: booking.id,
-    });
+    };
+
+    setClientControlForm(baseForm);
     setClientControlOpen(true);
+
+    const [employees, bookingNotes] = await Promise.all([
+      loadClientControlEmployees().catch((error) => {
+        setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Non riesco a caricare le collaboratrici." });
+        return [] as ClientControlEmployee[];
+      }),
+      fetch(`/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`)
+        .then((response) => response.ok ? response.json() : null)
+        .catch(() => null),
+    ]);
+
+    setClientControlForm((current) => {
+      if (current.bookingId !== booking.id) return current;
+      return {
+        ...current,
+        staffIds: current.staffIds.length ? current.staffIds : matchEmployeeIdsForBooking(booking, employees),
+        customNoteText: current.customNoteText || bookingNotes?.shopifyNote || "",
+      };
+    });
   }
 
   async function submitClientControlForm() {
@@ -1364,6 +1374,8 @@ export function AppointmentsBrowser({
 
                       <button
                         type="button"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onTouchStart={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
                           void openClientControlForBooking(booking);
