@@ -29,6 +29,26 @@ function cleanTeamName(value?: string | null) {
     .trim();
 }
 
+function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: string) {
+  const normalizedTeamName = normalizeName(teamName);
+  if (!normalizedTeamName) return null;
+
+  const exact = users.find((user) => normalizeName(user.name) === normalizedTeamName);
+  if (exact) return exact;
+
+  const teamParts = normalizedTeamName.split(" ").filter(Boolean);
+  if (teamParts.length === 1) {
+    const firstNameMatches = users.filter((user) => normalizeName(user.name).split(" ")[0] === teamParts[0]);
+    if (firstNameMatches.length === 1) return firstNameMatches[0];
+  }
+
+  const containsMatches = users.filter((user) => {
+    const userName = normalizeName(user.name);
+    return teamParts.every((part) => userName.split(" ").includes(part));
+  });
+  return containsMatches.length === 1 ? containsMatches[0] : null;
+}
+
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -162,12 +182,6 @@ export default async function AppointmentsPage() {
     select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
   });
 
-  const localUsersByName = new Map(
-    localUsers
-      .filter((user) => normalizeName(user.name))
-      .map((user) => [normalizeName(user.name), user]),
-  );
-
   let loadError = "";
   let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
   let services = [] as Awaited<ReturnType<typeof getCowlendarServices>>;
@@ -191,11 +205,7 @@ export default async function AppointmentsPage() {
     }
   }
 
-  const corsoUsersByName = new Map(
-    localUsers
-      .filter((user) => isCorsoLocation(user.location?.name))
-      .map((user) => [normalizeName(user.name), user]),
-  );
+  const corsoUsers = localUsers.filter((user) => isCorsoLocation(user.location?.name));
 
   const cowlendarTeamOptionsById = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
   const cowlendarTeammates = [
@@ -205,7 +215,7 @@ export default async function AppointmentsPage() {
 
   for (const mate of cowlendarTeammates) {
     const name = cleanTeamName(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim());
-    const matchedUser = corsoUsersByName.get(normalizeName(name));
+    const matchedUser = matchUserByTeamName(corsoUsers, name);
     if (!mate.id || !name || !matchedUser) continue;
     cowlendarTeamOptionsById.set(mate.id, {
       id: mate.id,
@@ -252,7 +262,7 @@ export default async function AppointmentsPage() {
         .map((mate) => {
           const rawName = `${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim();
           const cleanedName = cleanTeamName(rawName);
-          const matchedUser = localUsersByName.get(normalizeName(cleanedName));
+          const matchedUser = matchUserByTeamName(localUsers, cleanedName);
 
           return {
             id: mate.id,
