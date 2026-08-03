@@ -531,6 +531,7 @@ export function AppointmentsBrowser({
 
   const [dbComments, setDbComments] = useState<AppointmentComment[]>([]);
   const [shopifyNote, setShopifyNote] = useState<string | null>(null);
+  const [cowlendarOrderNote, setCowlendarOrderNote] = useState<string | null>(null);
   const [loadingComments, setLoadingComments] = useState(false);
   const [newCommentText, setNewCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -555,6 +556,7 @@ export function AppointmentsBrowser({
     if (!selectedBooking) {
       setDbComments([]);
       setShopifyNote(null);
+      setCowlendarOrderNote(null);
       return;
     }
 
@@ -576,6 +578,7 @@ export function AppointmentsBrowser({
           console.log("Fetched comments data:", data);
           setDbComments(Array.isArray(data.comments) ? data.comments : []);
           setShopifyNote(data.shopifyNote || null);
+          setCowlendarOrderNote(data.cowlendarOrderNote || null);
         } else if (active) {
           console.error("Failed to load comments. Status:", res.status);
           const errBody = await res.text().catch(() => "");
@@ -1838,7 +1841,7 @@ export function AppointmentsBrowser({
                   <div className="rounded-[24px] border border-[#FFE2EC] bg-[#FFF7FA] p-4">
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C66170]">Note Cowlendar</p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#5D4A42]">
-                      {selectedBooking!.notesText?.trim() || "Nessuna nota presente in questo appuntamento."}
+                      {selectedBooking!.notesText?.trim() || cowlendarOrderNote?.trim() || "Nessuna nota presente in questo appuntamento."}
                     </p>
                   </div>
                   <div className="rounded-[24px] border border-[#FFE7D6] bg-[#FFF7F2] p-4">

@@ -370,76 +370,117 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
  * Fetches the current note field of a Shopify order directly.
  * Handles inputs representing either order name (e.g. #22910) or direct order ID.
  */
-export async function getShopifyOrderNoteText(orderName: string): Promise<string | null> {
-  try {
-    const shop = process.env.SHOPIFY_SHOP_DOMAIN;
-    const token = process.env.SHOPIFY_ACCESS_TOKEN;
+async function getShopifyOrderByNameOrId(orderName: string): Promise<any | null> {
+  const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
-    if (!shop || !token) {
-      console.warn("Shopify shop domain or access token not configured.");
-      return null;
-    }
+  if (!shop || !token) {
+    console.warn("Shopify shop domain or access token not configured.");
+    return null;
+  }
 
-    const cleanName = orderName.trim();
-    if (!cleanName) return null;
+  const cleanName = orderName.trim();
+  if (!cleanName) return null;
 
-    let orderId: string | number | null = null;
-
-    // 1. Try direct ID query
-    if (/^\d{12,}$/.test(cleanName.replace("#", ""))) {
-      const directId = cleanName.replace("#", "");
-      const res = await fetch(`https://${shop}/admin/api/2024-04/orders/${directId}.json`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data?.order?.note || null;
-      }
-    }
-
-    // 2. Otherwise search by name
-    let searchQuery = cleanName;
-    if (!searchQuery.startsWith("#") && /^\d+$/.test(searchQuery)) {
-      searchQuery = `#${searchQuery}`;
-    }
-
-    const searchRes = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(searchQuery)}&status=any`, {
+  if (/^\d{12,}$/.test(cleanName.replace("#", ""))) {
+    const directId = cleanName.replace("#", "");
+    const res = await fetch(`https://${shop}/admin/api/2024-04/orders/${directId}.json`, {
       headers: {
         "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
       },
     });
-
-    if (searchRes.ok) {
-      const searchData = await searchRes.json();
-      const orders = searchData?.orders || [];
-      if (orders.length > 0) {
-        return orders[0].note || null;
-      }
-
-      // Try searching without the '#' prefix
-      const nameWithoutHash = searchQuery.replace("#", "");
-      const searchResNoHash = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(nameWithoutHash)}&status=any`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
-        },
-      });
-      if (searchResNoHash.ok) {
-        const searchDataNoHash = await searchResNoHash.json();
-        const ordersNoHash = searchDataNoHash?.orders || [];
-        if (ordersNoHash.length > 0) {
-          return ordersNoHash[0].note || null;
-        }
-      }
+    if (res.ok) {
+      const data = await res.json();
+      return data?.order || null;
     }
+  }
+
+  let searchQuery = cleanName;
+  if (!searchQuery.startsWith("#") && /^\d+$/.test(searchQuery)) {
+    searchQuery = `#${searchQuery}`;
+  }
+
+  const searchRes = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(searchQuery)}&status=any`, {
+    headers: {
+      "X-Shopify-Access-Token": token,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (searchRes.ok) {
+    const searchData = await searchRes.json();
+    const orders = searchData?.orders || [];
+    if (orders.length > 0) return orders[0];
+
+    const nameWithoutHash = searchQuery.replace("#", "");
+    const searchResNoHash = await fetch(`https://${shop}/admin/api/2024-04/orders.json?name=${encodeURIComponent(nameWithoutHash)}&status=any`, {
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      },
+    });
+    if (searchResNoHash.ok) {
+      const searchDataNoHash = await searchResNoHash.json();
+      const ordersNoHash = searchDataNoHash?.orders || [];
+      if (ordersNoHash.length > 0) return ordersNoHash[0];
+    }
+  }
+
+  return null;
+}
+
+export async function getShopifyOrderNoteText(orderName: string): Promise<string | null> {
+  try {
+    const order = await getShopifyOrderByNameOrId(orderName);
+    return order?.note || null;
   } catch (error) {
     console.error("Error in getShopifyOrderNoteText:", error);
   }
   return null;
+}
+
+export async function getShopifyOrderCowlendarText(orderName: string): Promise<string | null> {
+  try {
+    const order = await getShopifyOrderByNameOrId(orderName);
+    if (!order) return null;
+
+    const lines: string[] = [];
+    const tags = String(order.tags || "").toLowerCase();
+    const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+
+    for (const item of lineItems) {
+      const properties = Array.isArray(item.properties) ? item.properties : [];
+      const visibleProperties = properties
+        .map((property: any) => ({
+          name: String(property?.name || "").trim(),
+          value: property?.value,
+        }))
+        .filter((property: { name: string; value: unknown }) =>
+          property.name &&
+          !property.name.startsWith("__") &&
+          property.value !== null &&
+          property.value !== undefined &&
+          String(property.value).trim() !== "",
+        );
+
+      if (!visibleProperties.length) continue;
+      const looksLikeCowlendar =
+        tags.includes("cowlendar") ||
+        properties.some((property: any) => String(property?.name || "").startsWith("__cow_")) ||
+        visibleProperties.some((property: { name: string }) => /data|telefono|staff|consenso|dichiaro|scelta|ripresa/i.test(property.name));
+      if (!looksLikeCowlendar) continue;
+
+      for (const property of visibleProperties) {
+        lines.push(`${property.name}: ${String(property.value)}`);
+      }
+    }
+
+    return [...new Set(lines)].join("\n") || null;
+  } catch (error) {
+    console.error("Error in getShopifyOrderCowlendarText:", error);
+    return null;
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { appendShopifyOrderNote, getShopifyOrderNoteText } from "@/lib/shopify";
+import { appendShopifyOrderNote, getShopifyOrderCowlendarText, getShopifyOrderNoteText } from "@/lib/shopify";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [comments, shopifyNote] = await Promise.all([
+    const [comments, shopifyNote, cowlendarOrderNote] = await Promise.all([
       prisma.shopifyOrderComment.findMany({
         where: {
           OR: [
@@ -29,11 +29,13 @@ export async function GET(request: NextRequest) {
         orderBy: { created_at: "asc" },
       }),
       orderName ? getShopifyOrderNoteText(orderName) : Promise.resolve(null),
+      orderName ? getShopifyOrderCowlendarText(orderName) : Promise.resolve(null),
     ]);
 
     return NextResponse.json({
       comments,
       shopifyNote,
+      cowlendarOrderNote,
     });
   } catch (error) {
     console.error("Failed to fetch appointment comments:", error);
