@@ -1076,10 +1076,11 @@ export function AppointmentsBrowser({
           </section>
 
           <section className="overflow-hidden rounded-[28px] border border-[#E8D8CF] bg-white/90 shadow-sm">
-            <div className="hidden grid-cols-[1.25fr_1.05fr_1.15fr_0.6fr_0.95fr_48px] gap-4 border-b border-[#E8D8CF] bg-[#FFF9F6] px-6 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-[#8D5E49] xl:grid">
+            <div className="hidden grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] gap-4 border-b border-[#E8D8CF] bg-[#FFF9F6] px-6 py-4 text-[12px] font-black uppercase tracking-[0.12em] text-[#8D5E49] xl:grid">
               <span>Appuntamento</span>
               <span>Cliente</span>
               <span>Servizio</span>
+              <span>Collaboratrice</span>
               <span>Prezzo</span>
               <span>Stato</span>
               <span />
@@ -1091,6 +1092,7 @@ export function AppointmentsBrowser({
                   const status = getBookingStatus(booking);
                   const contacts = getCustomerContactLines(booking);
                   const isSelected = selectedBooking?.id === booking.id;
+                  const assignedTeam = getBookingTeam(booking);
 
                   return (
                     <button
@@ -1101,7 +1103,7 @@ export function AppointmentsBrowser({
                         setSelectedBookingId(booking.id);
                       }}
                       className={[
-                        "grid w-full gap-4 px-5 py-5 text-left transition xl:grid-cols-[1.25fr_1.05fr_1.15fr_0.6fr_0.95fr_48px] xl:items-center",
+                        "grid w-full gap-4 px-5 py-5 text-left transition xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
                         isSelected ? "bg-[#FFF0F2] shadow-[inset_4px_0_0_#C96363]" : "bg-white hover:bg-[#FFF8F6]",
                       ].join(" ")}
                     >
@@ -1144,6 +1146,14 @@ export function AppointmentsBrowser({
                             </span>
                           </div>
                         </div>
+                      </div>
+
+                      <div className="min-w-0 rounded-2xl bg-[#FFF9F6] p-3 xl:bg-transparent xl:p-0">
+                        <p className="flex items-center gap-1 truncate text-sm font-semibold text-[#1F1F1F]">
+                          <UsersRound className="size-4 shrink-0 text-[#C95B75]" />
+                          <span className="truncate">{assignedTeam.map((mate) => mate.name).join(", ") || "Non assegnato"}</span>
+                        </p>
+                        <p className="mt-1 truncate text-xs font-medium text-[#7A5B4B]">{getSalonLabel(booking.inferredSalon)}</p>
                       </div>
 
                       <div>
@@ -1244,6 +1254,10 @@ export function AppointmentsBrowser({
                     <p className="flex gap-2">
                       <MapPin className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
                       {getSalonLabel(selectedBooking.inferredSalon)}
+                    </p>
+                    <p className="flex gap-2">
+                      <UsersRound className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
+                      {getBookingTeam(selectedBooking).map((mate) => mate.name).join(", ") || "Non assegnato"}
                     </p>
                   </div>
                 </section>
