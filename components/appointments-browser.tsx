@@ -112,6 +112,8 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
   { value: "ufficio", label: "Ufficio Paradise" },
 ];
 
+const pcLinkManagerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+
 const clientControlSalons = [{ label: "Corso", value: "Salone Buenos Aires" }];
 
 const clientControlNoteSuggestions = [
@@ -1231,6 +1233,9 @@ export function AppointmentsBrowser({
       }
 
       const data = await res.json();
+      if (!data?.link) {
+        throw new Error("Il server non ha restituito un link valido.");
+      }
       setGeneratedLink(data.link);
     } catch (err) {
       console.error(err);
@@ -2133,7 +2138,7 @@ export function AppointmentsBrowser({
                     </span>
                   </div>
 
-                  {!isPC && currentUser?.role && currentUser.role !== "DIPENDENTE" && (
+                  {!isPC && currentUser?.role && pcLinkManagerRoles.has(currentUser.role) && (
                     <button
                       type="button"
                       onClick={() => {
