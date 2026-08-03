@@ -615,8 +615,10 @@ type ActivePcWorker = {
 };
 
 function PcStaffLockScreen({
+  salon,
   onUnlock,
 }: {
+  salon: SalonFilter;
   onUnlock: (worker: ActivePcWorker) => void;
 }) {
   const [activeStaff, setActiveStaff] = useState<ActivePcWorker[]>([]);
@@ -631,7 +633,8 @@ function PcStaffLockScreen({
       setError("");
 
       try {
-        const response = await fetch("/api/appointments/pc/active-staff", {
+        const params = salon !== "tutti" ? `?salone=${encodeURIComponent(salon)}` : "";
+        const response = await fetch(`/api/appointments/pc/active-staff${params}`, {
           cache: "no-store",
         });
         if (!response.ok) {
@@ -656,7 +659,7 @@ function PcStaffLockScreen({
       active = false;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [salon]);
 
   const getInitials = (name: string) =>
     name
@@ -4342,7 +4345,7 @@ export function AppointmentsBrowser({
       ) : null}
 
       {isPC && pcScreenLocked ? (
-        <PcStaffLockScreen onUnlock={handlePcUnlock} />
+        <PcStaffLockScreen salon={salon} onUnlock={handlePcUnlock} />
       ) : null}
 
       <AppointmentSignModal

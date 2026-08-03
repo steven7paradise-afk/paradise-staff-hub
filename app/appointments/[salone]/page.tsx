@@ -21,5 +21,6 @@ export default async function SalonAppointmentsPage({
       ...resolvedSearchParams,
       salone,
     }),
+    forcePcSalon: salone,
   });
 }

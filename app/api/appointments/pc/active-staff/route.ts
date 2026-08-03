@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
+    if (salonSlug) {
+      const forcedLocation = await prisma.location.findFirst({
+        where: {
+          active: true,
+          OR: salonSlug === "buenos-aires"
+            ? [{ name: { contains: "Buenos", mode: "insensitive" } }, { name: { contains: "Corso", mode: "insensitive" } }]
+            : [{ name: { contains: salonSlug, mode: "insensitive" } }],
+        },
+        select: { id: true },
+      });
+      locationId = forcedLocation?.id || locationId;
+    }
+
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
     const today = new Date(`${day}T00:00:00.000Z`);
     const tomorrow = new Date(today);

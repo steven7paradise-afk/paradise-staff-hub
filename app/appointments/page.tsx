@@ -10,7 +10,7 @@ import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 import { syncCowlendarConsultations } from "@/lib/google-calendar";
 import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
-import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 
 export const dynamic = "force-dynamic";
 
@@ -183,8 +183,10 @@ function isCowlendarNoteField(label: string) {
 
 export default async function AppointmentsPage({
   searchParams,
+  forcePcSalon,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  forcePcSalon?: AppointmentSalonSlug;
 }) {
   const session = await auth();
 
@@ -212,6 +214,30 @@ export default async function AppointmentsPage({
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
   const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
+
+  if (forcePcSalon && sessionUser) {
+    const forcedLocation = await prisma.location.findFirst({
+      where: {
+        active: true,
+        OR: forcePcSalon === "buenos-aires"
+          ? [{ name: { contains: "Buenos", mode: "insensitive" } }, { name: { contains: "Corso", mode: "insensitive" } }]
+          : [{ name: { contains: forcePcSalon, mode: "insensitive" } }],
+      },
+      select: { id: true },
+    });
+
+    if (forcedLocation) {
+      isPC = true;
+      pcLocationId = forcedLocation.id;
+      sessionUser = {
+        id: "PC_CASSA",
+        name: "PC Cassa",
+        email: "cassa@paradise.tech",
+        role: "RESPONSABILE",
+        sedeId: forcedLocation.id,
+      } as any;
+    }
+  }
 
   const role = sessionUser.role as Role;
 
