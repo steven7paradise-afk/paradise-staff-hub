@@ -4192,10 +4192,38 @@ export function AppointmentsBrowser({
                   
                   <button
                     type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedLink);
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2000);
+                    onClick={async () => {
+                      let success = false;
+                      if (navigator.clipboard && window.isSecureContext) {
+                        try {
+                          await navigator.clipboard.writeText(generatedLink);
+                          success = true;
+                        } catch (err) {
+                          console.error("Clipboard API failed, using fallback:", err);
+                        }
+                      }
+                      if (!success) {
+                        const textArea = document.createElement("textarea");
+                        textArea.value = generatedLink;
+                        textArea.style.top = "0";
+                        textArea.style.left = "0";
+                        textArea.style.position = "fixed";
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        try {
+                          success = document.execCommand("copy");
+                        } catch (err) {
+                          console.error("Fallback copy failed:", err);
+                        }
+                        document.body.removeChild(textArea);
+                      }
+                      if (success) {
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      } else {
+                        alert("Impossibile copiare automaticamente. Seleziona il testo sopra e copialo manualmente.");
+                      }
                     }}
                     className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition"
                   >
