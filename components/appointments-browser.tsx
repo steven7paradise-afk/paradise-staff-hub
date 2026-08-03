@@ -113,6 +113,7 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
 ];
 
 const pcLinkManagerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const pcLockTimeoutMs = 10 * 60 * 1000;
 
 const clientControlSalons = [{ label: "Corso", value: "Salone Buenos Aires" }];
 
@@ -599,6 +600,151 @@ function ServiceImage({
       className={`grid place-items-center rounded-2xl border border-black/5 bg-[#FFF1F6] text-[#C66170] ${sizeClass}`}
     >
       <CalendarDays className={compact ? "size-5" : "size-8"} />
+    </div>
+  );
+}
+
+type ActivePcWorker = {
+  id: string;
+  name: string;
+  photo_url?: string | null;
+  locationName: string;
+  status: "IN" | "BREAK" | string;
+};
+
+function PcStaffLockScreen({
+  onUnlock,
+}: {
+  onUnlock: (worker: ActivePcWorker) => void;
+}) {
+  const [activeStaff, setActiveStaff] = useState<ActivePcWorker[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadActiveStaff() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch("/api/appointments/pc/active-staff", {
+          cache: "no-store",
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || "Impossibile recuperare lo staff attivo.");
+        }
+        const data = await response.json();
+        if (active) setActiveStaff(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to load active PC staff:", err);
+        if (active) {
+          setError(err instanceof Error ? err.message : "Impossibile caricare il personale attivo.");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadActiveStaff();
+    const interval = window.setInterval(loadActiveStaff, 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .map((part) => part[0])
+      .filter(Boolean)
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#FAF6F5] p-5 text-neutral-900">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#F7DCE3_0,#FAF6F5_42%,#FFFFFF_100%)]" />
+      <section className="relative w-full max-w-5xl space-y-8 rounded-[32px] border border-[#E8D8CF] bg-white/90 p-6 shadow-2xl backdrop-blur md:p-10">
+        <div className="mx-auto max-w-2xl space-y-3 text-center">
+          <div className="mx-auto grid size-14 place-items-center rounded-full border border-[#E8D8CF] bg-[#FAF6F5] font-serif text-lg tracking-widest text-[#4E382C]">
+            P
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#A56A42]">
+            PC Cassa Bloccato
+          </p>
+          <h2 className="font-serif text-3xl font-light uppercase tracking-wide text-neutral-950 md:text-4xl">
+            Seleziona chi sta usando la cassa
+          </h2>
+          <p className="text-sm font-semibold text-neutral-500">
+            Sono visibili solo le persone che risultano timbrate in questo momento.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Loader2 className="size-8 animate-spin text-[#A56A42]" />
+            <span className="mt-4 text-xs font-black uppercase tracking-wider text-neutral-400">
+              Caricamento personale attivo...
+            </span>
+          </div>
+        ) : error ? (
+          <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-red-50 p-5 text-center text-sm font-bold text-red-800">
+            {error}
+          </div>
+        ) : activeStaff.length === 0 ? (
+          <div className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm font-bold text-amber-900">
+            Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {activeStaff.map((worker) => {
+              const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
+              const firstName = worker.name.split(" ")[0] || worker.name;
+              const lastName = worker.name.split(" ").slice(1).join(" ");
+              const statusLabel = worker.status === "BREAK" ? "In pausa" : "In turno";
+
+              return (
+                <button
+                  key={worker.id}
+                  type="button"
+                  onClick={() => onUnlock(worker)}
+                  className="group flex min-h-[178px] flex-col items-center justify-center rounded-2xl border border-neutral-100 bg-white p-4 text-center shadow-2xs transition hover:-translate-y-0.5 hover:border-[#D2B2A3] hover:bg-[#FFF8F4] hover:shadow-md"
+                >
+                  <div className="relative">
+                    {photoUrl ? (
+                      <img
+                        src={photoUrl}
+                        alt={worker.name}
+                        className="size-20 rounded-full border border-neutral-200 object-cover shadow-2xs transition group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="grid size-20 place-items-center rounded-full border border-neutral-200 bg-neutral-100 font-serif text-lg font-semibold text-neutral-600 transition group-hover:scale-105">
+                        {getInitials(worker.name)}
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 right-1 size-4 rounded-full border-2 border-white bg-emerald-500 shadow-2xs" />
+                  </div>
+                  <div className="mt-4 min-w-0 space-y-0.5">
+                    <p className="truncate text-sm font-black uppercase tracking-wide text-neutral-900">
+                      {firstName}
+                    </p>
+                    <p className="truncate text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                      {lastName || "Staff"}
+                    </p>
+                  </div>
+                  <p className="mt-3 rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                    {statusLabel}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -1150,7 +1296,37 @@ export function AppointmentsBrowser({
     name: string;
     role: string;
   } | null>(null);
+  const [pcScreenLocked, setPcScreenLocked] = useState(isPC);
+  const [pcActiveWorker, setPcActiveWorker] = useState<ActivePcWorker | null>(null);
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
+
+  useEffect(() => {
+    if (!isPC) return;
+
+    const lockScreen = () => {
+      setPcScreenLocked(true);
+      setPcActiveWorker(null);
+    };
+
+    let timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
+    const resetTimer = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
+    };
+
+    const events = ["click", "keydown", "mousemove", "touchstart", "scroll"];
+    events.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
+
+    return () => {
+      window.clearTimeout(timeout);
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [isPC, pcActiveWorker?.id]);
+
+  function handlePcUnlock(worker: ActivePcWorker) {
+    setPcActiveWorker(worker);
+    setPcScreenLocked(false);
+  }
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -1324,11 +1500,11 @@ export function AppointmentsBrowser({
     const messageText = newCommentText.trim();
 
     if (isPC) {
-      setPendingAction({
-        type: "comment",
-        payload: { orderName, bookingId, messageText },
-      });
-      setSignModalOpen(true);
+      if (!pcActiveWorker) {
+        setPcScreenLocked(true);
+        return;
+      }
+      executeAddComment(orderName, bookingId, messageText, pcActiveWorker.name);
     } else {
       executeAddComment(orderName, bookingId, messageText);
     }
@@ -1407,11 +1583,11 @@ export function AppointmentsBrowser({
     nextStatus: AppointmentStatusValue,
   ) {
     if (isPC) {
-      setPendingAction({
-        type: "status",
-        payload: { bookingId, nextStatus },
-      });
-      setSignModalOpen(true);
+      if (!pcActiveWorker) {
+        setPcScreenLocked(true);
+        return;
+      }
+      executeStatusChange(bookingId, nextStatus, pcActiveWorker.name);
     } else {
       executeStatusChange(bookingId, nextStatus);
     }
@@ -1474,11 +1650,11 @@ export function AppointmentsBrowser({
     teammateIds: string[],
   ) {
     if (isPC) {
-      setPendingAction({
-        type: "team",
-        payload: { booking, teammateIds },
-      });
-      setSignModalOpen(true);
+      if (!pcActiveWorker) {
+        setPcScreenLocked(true);
+        return;
+      }
+      executeTeamChange(booking, teammateIds, pcActiveWorker.name);
     } else {
       executeTeamChange(booking, teammateIds);
     }
@@ -2136,6 +2312,20 @@ export function AppointmentsBrowser({
                     <span className="rounded-full bg-[#F7E5DC] px-3 py-1 text-sm font-black text-[#9B583D]">
                       {activeBookingsCount}
                     </span>
+                    {isPC && pcActiveWorker ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPcScreenLocked(true);
+                          setPcActiveWorker(null);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 transition hover:bg-emerald-100"
+                        title="Blocca PC cassa"
+                      >
+                        <span className="size-2 rounded-full bg-emerald-500" />
+                        <span>{pcActiveWorker.name}</span>
+                      </button>
+                    ) : null}
                   </div>
 
                   {!isPC && currentUser?.role && pcLinkManagerRoles.has(currentUser.role) && (
@@ -4148,6 +4338,10 @@ export function AppointmentsBrowser({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {isPC && pcScreenLocked ? (
+        <PcStaffLockScreen onUnlock={handlePcUnlock} />
       ) : null}
 
       <AppointmentSignModal
