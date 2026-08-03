@@ -332,13 +332,13 @@ function tryParseJson(value: string) {
   }
 }
 
-export async function getCowlendarServices() {
+export async function getCowlendarServices(forceRefresh = false) {
   const cacheKey = "cowlendar_cache_services";
   const cached = await getCache<CowlendarService[]>(cacheKey);
   const now = Date.now();
   const maxAge = 30 * 60 * 1000; // 30 minutes
 
-  if (cached && now - cached.timestamp < maxAge) {
+  if (!forceRefresh && cached && now - cached.timestamp < maxAge) {
     return cached.data;
   }
 
@@ -356,7 +356,7 @@ export async function getCowlendarServices() {
   }
 }
 
-export async function getCowlendarBookings(limit = 250) {
+export async function getCowlendarBookings(limit = 250, forceRefresh = false) {
   const safeLimit = Math.min(Math.max(Math.trunc(limit || 250), 1), 500);
   const cacheKey = `cowlendar_cache_bookings_${safeLimit}`;
   
@@ -364,7 +364,7 @@ export async function getCowlendarBookings(limit = 250) {
   const now = Date.now();
   const maxAge = 5 * 60 * 1000; // 5 minutes
 
-  if (cached && now - cached.timestamp < maxAge) {
+  if (!forceRefresh && cached && now - cached.timestamp < maxAge) {
     return cached.data;
   }
 
@@ -474,14 +474,21 @@ export async function getCowlendarBookingsForRange({
   startDate,
   endDate,
   limit = 800,
+  forceRefresh = false,
 }: {
   startDate: string;
   endDate: string;
   limit?: number;
+  forceRefresh?: boolean;
 }): Promise<CowlendarBooking[]> {
   const safeLimit = Math.min(Math.max(Math.trunc(limit || 800), 1), 5000);
   const cacheKey = `cowlendar_cache_range_v4_${startDate}_${endDate}_${safeLimit}`;
   
+  if (forceRefresh) {
+    console.log(`Cowlendar range cache bypass: forceRefresh is active for ${cacheKey}`);
+    return fetchAndCacheCowlendarRange(startDate, endDate, safeLimit, cacheKey);
+  }
+
   const cached = await getCache<CowlendarBooking[]>(cacheKey);
   const now = Date.now();
   const maxAge = 5 * 60 * 1000; // 5 minutes

@@ -178,9 +178,16 @@ function isCowlendarNoteField(label: string) {
   ].some((keyword) => normalized.includes(keyword));
 }
 
-export default async function AppointmentsPage() {
+export default async function AppointmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
+
+  const resolvedSearchParams = await searchParams;
+  const forceRefresh = resolvedSearchParams?.refresh === "true";
 
   const role = session.user.role as Role;
 
@@ -218,8 +225,9 @@ export default async function AppointmentsPage() {
           startDate: toIsoBoundary(rangeStart),
           endDate: toIsoBoundary(rangeEnd, true),
           limit: 5000,
+          forceRefresh,
         }),
-        getCowlendarServices(),
+        getCowlendarServices(forceRefresh),
       ]);
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Errore nel caricamento appuntamenti.";

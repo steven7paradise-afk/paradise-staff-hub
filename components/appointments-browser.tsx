@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarCheck,
   CalendarDays,
@@ -22,6 +23,7 @@ import {
   MessageCircle,
   X,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
@@ -605,6 +607,17 @@ export function AppointmentsBrowser({
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("refresh") === "true") {
+      router.replace("/appointments");
+      setIsRefreshing(false);
+    }
+  }, [searchParams, router]);
+
   const [view, setView] = useState<ViewMode>("day");
   const [salon, setSalon] = useState<SalonFilter>("tutti");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -2051,7 +2064,7 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(260px,1fr)_220px_220px_140px]">
+            <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(260px,1fr)_200px_200px_110px_140px]">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#9E8D83]" />
                 <input
@@ -2176,6 +2189,18 @@ export function AppointmentsBrowser({
               >
                 <MoreVertical className="size-4 rotate-90 text-[#A56A42]" />
                 Filtri
+              </button>
+              <button
+                type="button"
+                disabled={isRefreshing}
+                onClick={() => {
+                  setIsRefreshing(true);
+                  router.push("/appointments?refresh=true");
+                }}
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-black text-[#4E382C] hover:bg-[#FFF7F3] transition disabled:opacity-50"
+              >
+                <RefreshCw className={`size-4 text-[#A56A42] ${isRefreshing ? "animate-spin" : ""}`} />
+                <span>{isRefreshing ? "Syncing..." : "Sincronizza"}</span>
               </button>
             </div>
           </section>
