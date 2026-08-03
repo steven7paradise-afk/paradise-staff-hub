@@ -35,20 +35,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
     }
 
-    let cowlendarSync;
+    let cowlendarSync:
+      | Awaited<ReturnType<typeof updateCowlendarBookingStatus>>
+      | { ok: false; error: string }
+      | undefined;
     try {
       cowlendarSync = await updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus);
     } catch (error) {
       console.error("Failed to sync appointment status with Cowlendar:", error);
-      return NextResponse.json(
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Cowlendar non ha accettato l'aggiornamento dello stato.",
-        },
-        { status: 502 }
-      );
+      cowlendarSync = {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Cowlendar non ha accettato l'aggiornamento dello stato.",
+      };
     }
 
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });

@@ -418,7 +418,7 @@ export function AppointmentsBrowser({
 }) {
   const [view, setView] = useState<ViewMode>("day");
   const [salon, setSalon] = useState<SalonFilter>("tutti");
-  const [anchorDate, setAnchorDate] = useState(() => getFirstVisibleBookingDate(initialBookings));
+  const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [detailClosed, setDetailClosed] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -433,7 +433,7 @@ export function AppointmentsBrowser({
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState(() => {
     const today = localDateKey(new Date());
-    return { mode: "all" as AppointmentDateFilterMode, from: today, to: today };
+    return { mode: "today" as AppointmentDateFilterMode, from: today, to: today };
   });
   const [statusByBooking, setStatusByBooking] = useState<Record<string, AppointmentStatusValue>>(() =>
     Object.fromEntries(
