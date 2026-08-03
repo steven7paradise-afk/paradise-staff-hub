@@ -192,21 +192,19 @@ export default async function AppointmentsPage({
   let isPC = false;
   let pcLocationId = "";
 
-  if (!sessionUser) {
-    const cookieStore = await cookies();
-    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
-    const pcAuth = await checkPCAuthorization(pcToken);
-    if (pcAuth) {
-      isPC = true;
-      pcLocationId = pcAuth.locationId;
-      sessionUser = {
-        id: "PC_CASSA",
-        name: pcAuth.name,
-        email: "cassa@paradise.tech",
-        role: "RESPONSABILE",
-        sedeId: pcAuth.locationId,
-      } as any;
-    }
+  const cookieStore = await cookies();
+  const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+  const pcAuth = await checkPCAuthorization(pcToken);
+  if (pcAuth) {
+    isPC = true;
+    pcLocationId = pcAuth.locationId;
+    sessionUser = {
+      id: "PC_CASSA",
+      name: pcAuth.name,
+      email: "cassa@paradise.tech",
+      role: "RESPONSABILE",
+      sedeId: pcAuth.locationId,
+    } as any;
   }
 
   if (!sessionUser) redirect("/login");
