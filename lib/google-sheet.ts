@@ -28,6 +28,7 @@ type AppointmentSheetLookupInput = {
   id: string;
   customerName: string;
   startDate: string;
+  customerPhone?: string | null;
 };
 
 function getPrivateKey() {
@@ -72,8 +73,26 @@ function normalizeSheetText(value?: string | null) {
     .trim();
 }
 
+function normalizePhone(value?: string | null) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("00")) return digits.slice(2);
+  if (digits.startsWith("39")) return digits;
+  if (digits.length === 10 && digits.startsWith("3")) return `39${digits}`;
+  return digits;
+}
+
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function timeKey(value: Date) {
+  return new Intl.DateTimeFormat("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Europe/Rome",
+  }).format(value);
 }
 
 function addDays(value: Date, days: number) {
@@ -123,11 +142,27 @@ function rowMatchesCustomer(row: unknown[], customerName: string) {
   return nameParts.length >= 2 && nameParts.every((part) => rowText.includes(part));
 }
 
+function rowMatchesPhone(row: unknown[], customerPhone?: string | null) {
+  const phone = normalizePhone(customerPhone);
+  if (!phone) return false;
+  return row.some((cell) => normalizePhone(String(cell || "")) === phone);
+}
+
+function rowTimeKeys(row: unknown[]) {
+  return new Set(
+    row
+      .map((cell) => String(cell || "").trim().match(/\b([01]?\d|2[0-3])[:.](\d{2})\b/))
+      .filter((match): match is RegExpMatchArray => Boolean(match))
+      .map((match) => `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`),
+  );
+}
+
 function rowMatchesAppointment(row: unknown[], booking: AppointmentSheetLookupInput) {
   if (row.some((cell) => cellMatchesBookingId(cell, booking.id))) return true;
-  if (!rowMatchesCustomer(row, booking.customerName)) return false;
 
   const appointmentDate = new Date(booking.startDate);
+  const identityMatches = rowMatchesPhone(row, booking.customerPhone) || rowMatchesCustomer(row, booking.customerName);
+  if (!identityMatches) return false;
   if (Number.isNaN(appointmentDate.getTime())) return true;
 
   const expectedKeys = new Set([
@@ -135,8 +170,11 @@ function rowMatchesAppointment(row: unknown[], booking: AppointmentSheetLookupIn
     dateKey(appointmentDate),
   ]);
   const datesInRow = rowDateKeys(row);
-  if (datesInRow.size === 0) return true;
-  return Array.from(expectedKeys).some((key) => datesInRow.has(key));
+  const dateMatches = datesInRow.size === 0 || Array.from(expectedKeys).some((key) => datesInRow.has(key));
+  if (!dateMatches) return false;
+
+  const timesInRow = rowTimeKeys(row);
+  return timesInRow.size === 0 || timesInRow.has(timeKey(appointmentDate));
 }
 
 export async function getAppointmentStatusesFromGoogleSheet(bookings: AppointmentSheetLookupInput[]) {

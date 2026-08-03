@@ -229,6 +229,12 @@ export default async function AppointmentsPage() {
           .join(" ") ||
         booking.booking_str ||
         "",
+      customerPhone:
+        booking.customer?.phone ||
+        booking.form_data?.["Numero telefono"] ||
+        booking.form_data?.phone ||
+        booking.form_data?.telefono ||
+        null,
       startDate: booking.start_date,
     }))),
   ]);
