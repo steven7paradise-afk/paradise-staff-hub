@@ -26,6 +26,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { AppointmentSignModal } from "./appointment-sign-modal";
 
 type ViewMode = "day" | "week" | "month";
 type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
@@ -603,13 +604,35 @@ function ServiceImage({
 export function AppointmentsBrowser({
   initialBookings,
   corsoTeamOptions,
+  isPC = false,
+  pcLocationId = "",
+  locations = [],
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
+  isPC?: boolean;
+  pcLocationId?: string;
+  locations?: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Signature Modal states
+  const [signModalOpen, setSignModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    type: "status" | "team" | "comment";
+    payload: any;
+  } | null>(null);
+
+  // PC Link Generation Modal states
+  const [pcGenModalOpen, setPcGenModalOpen] = useState(false);
+  const [genSedeId, setGenSedeId] = useState("");
+  const [genPcName, setGenPcName] = useState("");
+  const [generatedLink, setGeneratedLink] = useState("");
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("refresh") === "true") {
@@ -1186,22 +1209,81 @@ export function AppointmentsBrowser({
     };
   }, [selectedBooking]);
 
-  async function handleAddComment(e: React.FormEvent) {
+  const handleGeneratePcLink = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBooking || !newCommentText.trim() || submittingComment) return;
+    if (!genSedeId || !genPcName.trim() || generatingLink) return;
 
+    setGeneratingLink(true);
+    setGenError("");
+    setGeneratedLink("");
+    setCopiedLink(false);
+
+    try {
+      const res = await fetch("/api/appointments/pc/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationId: genSedeId, name: genPcName.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Errore durante la generazione del link.");
+      }
+
+      const data = await res.json();
+      setGeneratedLink(data.link);
+    } catch (err) {
+      console.error(err);
+      setGenError(err instanceof Error ? err.message : "Errore durante la generazione.");
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const handleSignConfirm = (workerName: string) => {
+    setSignModalOpen(false);
+    if (!pendingAction) return;
+
+    if (pendingAction.type === "status") {
+      executeStatusChange(
+        pendingAction.payload.bookingId,
+        pendingAction.payload.nextStatus,
+        workerName,
+      );
+    } else if (pendingAction.type === "team") {
+      executeTeamChange(
+        pendingAction.payload.booking,
+        pendingAction.payload.teammateIds,
+        workerName,
+      );
+    } else if (pendingAction.type === "comment") {
+      executeAddComment(
+        pendingAction.payload.orderName,
+        pendingAction.payload.bookingId,
+        pendingAction.payload.messageText,
+        workerName,
+      );
+    }
+
+    setPendingAction(null);
+  };
+
+  async function executeAddComment(
+    orderName: string | null,
+    bookingId: string,
+    messageText: string,
+    signedBy?: string,
+  ) {
     setSubmittingComment(true);
     try {
-      const orderName = selectedBooking.bookingStr;
-      const bookingId = selectedBooking.id;
-
       const res = await fetch("/api/appointments/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderName,
           bookingId,
-          message: newCommentText.trim(),
+          message: messageText,
+          signedBy,
         }),
       });
 
@@ -1225,6 +1307,25 @@ export function AppointmentsBrowser({
       alert("Impossibile salvare il commento.");
     } finally {
       setSubmittingComment(false);
+    }
+  }
+
+  function handleAddComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedBooking || !newCommentText.trim() || submittingComment) return;
+
+    const orderName = selectedBooking.bookingStr;
+    const bookingId = selectedBooking.id;
+    const messageText = newCommentText.trim();
+
+    if (isPC) {
+      setPendingAction({
+        type: "comment",
+        payload: { orderName, bookingId, messageText },
+      });
+      setSignModalOpen(true);
+    } else {
+      executeAddComment(orderName, bookingId, messageText);
     }
   }
 
@@ -1253,9 +1354,10 @@ export function AppointmentsBrowser({
     return statusByBooking[booking.id] || getDefaultAppointmentStatus(booking);
   }
 
-  async function handleStatusChange(
+  async function executeStatusChange(
     bookingId: string,
     nextStatus: AppointmentStatusValue,
+    signedBy?: string,
   ) {
     const previousStatus = statusByBooking[bookingId];
     setStatusByBooking((current) => ({ ...current, [bookingId]: nextStatus }));
@@ -1265,7 +1367,7 @@ export function AppointmentsBrowser({
       const response = await fetch("/api/appointments/status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, status: nextStatus }),
+        body: JSON.stringify({ bookingId, status: nextStatus, signedBy }),
       });
 
       if (!response.ok) {
@@ -1295,9 +1397,25 @@ export function AppointmentsBrowser({
     }
   }
 
-  async function handleTeamChange(
+  function handleStatusChange(
+    bookingId: string,
+    nextStatus: AppointmentStatusValue,
+  ) {
+    if (isPC) {
+      setPendingAction({
+        type: "status",
+        payload: { bookingId, nextStatus },
+      });
+      setSignModalOpen(true);
+    } else {
+      executeStatusChange(bookingId, nextStatus);
+    }
+  }
+
+  async function executeTeamChange(
     booking: AppointmentRecord,
     teammateIds: string[],
+    signedBy?: string,
   ) {
     const previousTeam = getBookingTeam(booking);
     const nextTeam = corsoTeamOptions.filter((option) =>
@@ -1323,7 +1441,7 @@ export function AppointmentsBrowser({
       const response = await fetch("/api/appointments/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking.id, teammateIds }),
+        body: JSON.stringify({ bookingId: booking.id, teammateIds, signedBy }),
       });
 
       if (!response.ok) {
@@ -1343,6 +1461,21 @@ export function AppointmentsBrowser({
       );
     } finally {
       setSavingTeamId(null);
+    }
+  }
+
+  function handleTeamChange(
+    booking: AppointmentRecord,
+    teammateIds: string[],
+  ) {
+    if (isPC) {
+      setPendingAction({
+        type: "team",
+        payload: { booking, teammateIds },
+      });
+      setSignModalOpen(true);
+    } else {
+      executeTeamChange(booking, teammateIds);
     }
   }
 
@@ -1990,13 +2123,33 @@ export function AppointmentsBrowser({
           <section className="rounded-[28px] border border-[#E8D8CF] bg-white/85 p-5 shadow-sm backdrop-blur sm:p-7">
             <div>
               <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="font-serif text-4xl font-semibold tracking-[-0.02em] text-[#1F1F1F] sm:text-5xl">
-                    Prenotazioni
-                  </h1>
-                  <span className="rounded-full bg-[#F7E5DC] px-3 py-1 text-sm font-black text-[#9B583D]">
-                    {activeBookingsCount}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <h1 className="font-serif text-4xl font-semibold tracking-[-0.02em] text-[#1F1F1F] sm:text-5xl">
+                      Prenotazioni
+                    </h1>
+                    <span className="rounded-full bg-[#F7E5DC] px-3 py-1 text-sm font-black text-[#9B583D]">
+                      {activeBookingsCount}
+                    </span>
+                  </div>
+
+                  {!isPC && currentUser?.role && currentUser.role !== "DIPENDENTE" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGenSedeId(locations[0]?.id || "");
+                        setGenPcName("");
+                        setGeneratedLink("");
+                        setGenError("");
+                        setCopiedLink(false);
+                        setPcGenModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wider text-[#4E382C] hover:bg-[#FFF7F3] transition shadow-2xs hover:shadow-xs"
+                    >
+                      <Sparkles size={13} className="text-[#A56A42]" />
+                      <span>Genera Link PC Cassa</span>
+                    </button>
+                  )}
                 </div>
                 <p className="mt-2 text-sm font-medium text-[#7B6B62]">
                   Visualizza tutte le prenotazioni in arrivo
@@ -3991,6 +4144,130 @@ export function AppointmentsBrowser({
           </div>
         </div>
       ) : null}
+
+      <AppointmentSignModal
+        isOpen={signModalOpen}
+        onClose={() => {
+          setSignModalOpen(false);
+          setPendingAction(null);
+        }}
+        onSign={handleSignConfirm}
+        fallbackWorkers={corsoTeamOptions}
+      />
+
+      {pcGenModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white border border-[#E8D8CF] rounded-[32px] max-w-md w-full p-8 shadow-2xl relative space-y-6">
+            
+            <button
+              onClick={() => setPcGenModalOpen(false)}
+              className="absolute right-6 top-6 p-2 rounded-full hover:bg-neutral-100 transition text-neutral-400 hover:text-neutral-800"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="space-y-1.5 text-center">
+              <h2 className="text-xl font-serif font-light tracking-wide uppercase text-neutral-900">
+                Registra PC Cassa
+              </h2>
+              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                Genera un link monouso per configurare un PC di cassa o reception.
+              </p>
+            </div>
+
+            {generatedLink ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold text-center">
+                  Link generato con successo! Copialo e aprilo una sola volta sul PC della cassa.
+                </div>
+                
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={generatedLink}
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    className="w-full text-xs bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-neutral-700 outline-none font-mono"
+                  />
+                  
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(generatedLink);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition"
+                  >
+                    {copiedLink ? "Copiato!" : "Copia Link"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleGeneratePcLink} className="space-y-4">
+                {genError && (
+                  <div className="p-3 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold">
+                    {genError}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
+                    Sede Salone
+                  </label>
+                  <select
+                    value={genSedeId}
+                    onChange={(e) => setGenSedeId(e.target.value)}
+                    required
+                    className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
+                  >
+                    <option value="">Seleziona sede</option>
+                    {locations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
+                    Nome Dispositivo PC
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={genPcName}
+                    onChange={(e) => setGenPcName(e.target.value)}
+                    placeholder="Es: Cassa Buenos Aires"
+                    className="w-full h-12 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={generatingLink || !genSedeId || !genPcName.trim()}
+                  className="w-full py-3.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {generatingLink && <Loader2 className="size-4 animate-spin" />}
+                  <span>{generatingLink ? "Generazione..." : "Genera Link Monouso"}</span>
+                </button>
+              </form>
+            )}
+
+            {!generatedLink && (
+              <button
+                type="button"
+                onClick={() => setPcGenModalOpen(false)}
+                className="w-full py-3 rounded-full border border-neutral-200 hover:border-neutral-400 text-neutral-500 hover:text-neutral-900 text-xs font-black uppercase tracking-wider transition"
+              >
+                Chiudi
+              </button>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

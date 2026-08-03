@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { appendShopifyOrderNote, getShopifyOrderCowlendarText, getShopifyOrderNoteText } from "@/lib/shopify";
+import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  let isAuthorized = Boolean(session?.user?.id);
+
+  if (!isAuthorized) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -45,31 +58,47 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  let isAuthorized = Boolean(session?.user?.id);
+  let sessionUserName = session?.user?.name || session?.user?.email || session?.user?.id || "Staff";
+  let sessionUserRole = session?.user?.role || "DIPENDENTE";
+
+  if (!isAuthorized) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isAuthorized = true;
+      sessionUserName = pcAuth.name;
+      sessionUserRole = "RESPONSABILE";
+    }
+  }
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
   try {
     const body = await request.json();
-    const { orderName, bookingId, message } = body;
+    const { orderName, bookingId, message, signedBy } = body;
 
     if (!message?.trim() || (!orderName && !bookingId)) {
       return NextResponse.json({ error: "Dati incompleti" }, { status: 400 });
     }
 
     const key = orderName || bookingId;
-
+    const authorName = signedBy ? signedBy : sessionUserName;
+    
     const comment = await prisma.shopifyOrderComment.create({
       data: {
         order_name: key,
-        user_name: session.user.name ?? "Staff",
-        user_role: session.user.role ?? "DIPENDENTE",
-        message: message.trim(),
+        user_name: authorName,
+        user_role: sessionUserRole,
+        message: message.trim() + (signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""),
       },
     });
 
     if (orderName) {
-      appendShopifyOrderNote(orderName, session.user.name ?? "Staff", message.trim())
+      appendShopifyOrderNote(orderName, authorName, message.trim() + (signedBy ? ` [Cassa: ${sessionUserName}]` : ""))
         .catch((err) => console.error("Failed to sync comment to Shopify note:", err));
     }
 
@@ -82,7 +111,22 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  let isAuthorized = Boolean(session?.user?.id);
+  let sessionUserName = session?.user?.name || session?.user?.email || session?.user?.id || "Staff";
+  let sessionUserRole = session?.user?.role || "DIPENDENTE";
+
+  if (!isAuthorized) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isAuthorized = true;
+      sessionUserName = pcAuth.name;
+      sessionUserRole = "RESPONSABILE";
+    }
+  }
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -102,8 +146,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Commento non trovato" }, { status: 404 });
     }
 
-    const isAdmin = session.user.role === "ZERO" || session.user.role === "SUPER_ADMIN" || session.user.role === "ADMIN";
-    if (!isAdmin && comment.user_name !== session.user.name) {
+    const isAdmin = sessionUserRole === "ZERO" || sessionUserRole === "SUPER_ADMIN" || sessionUserRole === "ADMIN" || sessionUserRole === "RESPONSABILE";
+    if (!isAdmin && comment.user_name !== sessionUserName) {
       return NextResponse.json({ error: "Non autorizzato a eliminare questo commento" }, { status: 403 });
     }
 

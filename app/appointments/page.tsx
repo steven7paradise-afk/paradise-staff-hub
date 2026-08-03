@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 import { syncCowlendarConsultations } from "@/lib/google-calendar";
 import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
+import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -184,31 +186,61 @@ export default async function AppointmentsPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+
+  let sessionUser = session?.user;
+  let isPC = false;
+  let pcLocationId = "";
+
+  if (!sessionUser) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isPC = true;
+      pcLocationId = pcAuth.locationId;
+      sessionUser = {
+        id: "PC_CASSA",
+        name: pcAuth.name,
+        email: "cassa@paradise.tech",
+        role: "RESPONSABILE",
+        sedeId: pcAuth.locationId,
+      } as any;
+    }
+  }
+
+  if (!sessionUser) redirect("/login");
 
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
 
-  const role = session.user.role as Role;
+  const role = sessionUser.role as Role;
 
-  const accessUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { id: true, role: true, mansione: true, access_list: true },
-  });
+  const accessUser = session?.user
+    ? await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { id: true, role: true, mansione: true, access_list: true },
+      })
+    : null;
 
-  let canView = accessUser
+  let canView = isPC || (accessUser
     ? await canAccessForUser(prisma, "/appointments", accessUser)
-    : allowedRoles.has(role);
-  if (!canView && role === "DIPENDENTE" && accessUser?.mansione && accessUser.mansione.toLowerCase().includes("assistenza")) {
+    : allowedRoles.has(role));
+  if (!isPC && !canView && role === "DIPENDENTE" && accessUser?.mansione && accessUser.mansione.toLowerCase().includes("assistenza")) {
     canView = true;
   }
 
   if (!canView) redirect("/dashboard");
 
-  const localUsers = await prisma.user.findMany({
-    where: { active: true },
-    select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
-  });
+  const [localUsers, locations] = await Promise.all([
+    prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
+    }),
+    prisma.location.findMany({
+      where: { active: true },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   let loadError = "";
   let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
@@ -424,7 +456,13 @@ export default async function AppointmentsPage({
           </section>
         </div>
       ) : (
-        <AppointmentsBrowser initialBookings={serializedBookings} corsoTeamOptions={corsoTeamOptions} />
+        <AppointmentsBrowser
+          initialBookings={serializedBookings}
+          corsoTeamOptions={corsoTeamOptions}
+          isPC={isPC}
+          pcLocationId={pcLocationId}
+          locations={locations}
+        />
       )}
     </AppShell>
   );

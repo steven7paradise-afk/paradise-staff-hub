@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
+import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 
 const SETTING_KEY = "appointment_status_overrides";
 
@@ -32,7 +34,22 @@ function normalizeStatusMap(value: unknown) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  let isAuthorized = Boolean(session?.user?.id);
+  let sessionUserName = session?.user?.name || session?.user?.email || session?.user?.id || "Staff";
+  let sessionUserRole = session?.user?.role || "DIPENDENTE";
+
+  if (!isAuthorized) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isAuthorized = true;
+      sessionUserName = pcAuth.name;
+      sessionUserRole = "RESPONSABILE";
+    }
+  }
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -65,13 +82,15 @@ export async function POST(request: NextRequest) {
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentMap = normalizeStatusMap(currentSetting?.value);
     const previousStatus = currentMap[bookingId]?.status;
-    const updatedBy = session.user.name || session.user.email || session.user.id;
+    const signedBy = String(body?.signedBy || "").trim();
+    const updatedBy = signedBy ? signedBy : sessionUserName;
+
     const updatedMap = {
       ...currentMap,
       [bookingId]: {
         status,
         updatedAt: new Date().toISOString(),
-        updatedBy,
+        updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
       },
     };
 
@@ -89,10 +108,10 @@ export async function POST(request: NextRequest) {
       data: {
         order_name: bookingId,
         user_name: updatedBy,
-        user_role: session.user.role ?? "DIPENDENTE",
+        user_role: sessionUserRole,
         message: previousLabel && previousLabel !== nextLabel
-          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.`
-          : `Stato appuntamento impostato su ${nextLabel}.`,
+          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
+          : `Stato appuntamento impostato su ${nextLabel}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
       },
     });
 
