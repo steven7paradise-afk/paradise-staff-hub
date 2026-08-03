@@ -1762,7 +1762,7 @@ export function AppointmentsBrowser({
                         />
                       </label>
                     ))}
-                    <label className="block md:col-span-2">
+                    <div className="block md:col-span-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
                           Testo nota Shopify
@@ -1858,7 +1858,7 @@ export function AppointmentsBrowser({
                         className="mt-2 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
                         placeholder="Scrivi qui la nota Shopify"
                       />
-                    </label>
+                    </div>
                   </div>
 
                   <div className="mt-5">
