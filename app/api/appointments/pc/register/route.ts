@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { activatePC, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { activatePC, appointmentsPcCookieName, appointmentsPcWorkerCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, appointmentSalonUrl } from "@/lib/appointment-salon-url";
 import { prisma } from "@/lib/prisma";
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       success: true,
       name: result.name,
       locationId: result.locationId,
-      appointmentUrl: appointmentSalonUrl(salonSlug),
+      appointmentUrl: `${appointmentSalonUrl(salonSlug)}?choose=1`,
     });
 
     // Set secure long-lived cookie
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     });
+    response.cookies.delete(appointmentsPcWorkerCookieName);
 
     return response;
   } catch (error) {

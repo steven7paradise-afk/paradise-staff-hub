@@ -2351,14 +2351,14 @@ export function AppointmentsBrowser({
                       <button
                         type="button"
                         onClick={() => {
-                          setPcScreenLocked(true);
-                          setPcActiveWorker(null);
+                          window.location.href = `${appointmentSalonUrl(salon !== "tutti" ? salon : initialSalon !== "tutti" ? initialSalon : null)}?choose=1`;
                         }}
                         className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 transition hover:bg-emerald-100"
-                        title="Blocca PC cassa"
+                        title="Cambia profilo"
                       >
                         <span className="size-2 rounded-full bg-emerald-500" />
                         <span>{pcActiveWorker.name}</span>
+                        <span className="text-emerald-700/70">Cambia</span>
                       </button>
                     ) : null}
                   </div>

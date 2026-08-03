@@ -23,6 +23,7 @@ export default async function SalonAppointmentsPage({
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = await checkPCAuthorization(pcToken);
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
+  const forceProfileChoice = resolvedSearchParams.choose === "1";
 
   if (!pcAuth) {
     return (
@@ -42,7 +43,7 @@ export default async function SalonAppointmentsPage({
     );
   }
 
-  if (!selectedWorker) {
+  if (!selectedWorker || forceProfileChoice) {
     return <AppointmentsKioskEntry salone={salone} />;
   }
 
