@@ -10,6 +10,7 @@ import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 import { syncCowlendarConsultations } from "@/lib/google-calendar";
 import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,7 @@ export default async function AppointmentsPage({
 
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
+  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
 
   const role = sessionUser.role as Role;
 
@@ -241,6 +243,10 @@ export default async function AppointmentsPage({
       select: { id: true, name: true },
     }),
   ]);
+  const pcSalon = isPC
+    ? appointmentSalonSlugFromName(locations.find((location) => location.id === pcLocationId)?.name)
+    : null;
+  const initialSalon = requestedSalon || pcSalon || "tutti";
 
   let loadError = "";
   let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
@@ -461,6 +467,7 @@ export default async function AppointmentsPage({
           corsoTeamOptions={corsoTeamOptions}
           isPC={isPC}
           pcLocationId={pcLocationId}
+          initialSalon={initialSalon}
           locations={locations}
         />
       )}

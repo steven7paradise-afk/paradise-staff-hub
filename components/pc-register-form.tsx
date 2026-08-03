@@ -13,6 +13,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [activatedName, setActivatedName] = useState(initialPcName);
+  const [appointmentUrl, setAppointmentUrl] = useState("/appointments");
 
   const handleActivate = async () => {
     setStatus("loading");
@@ -32,6 +33,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
       }
 
       setActivatedName(data.name || initialPcName);
+      setAppointmentUrl(data.appointmentUrl || "/appointments");
       setStatus("success");
     } catch (err) {
       console.error(err);
@@ -67,7 +69,7 @@ export function PcRegisterForm({ code, initialPcName }: PcRegisterFormProps) {
 
         <div className="pt-4">
           <Link
-            href="/appointments"
+            href={appointmentUrl}
             className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition"
           >
             Accedi all'Agenda

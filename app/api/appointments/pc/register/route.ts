@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { activatePC, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { appointmentSalonSlugFromName, appointmentSalonUrl } from "@/lib/appointment-salon-url";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,11 +14,17 @@ export async function POST(request: NextRequest) {
 
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null;
     const result = await activatePC(code, ip);
+    const location = await prisma.location.findUnique({
+      where: { id: result.locationId },
+      select: { name: true },
+    });
+    const salonSlug = appointmentSalonSlugFromName(location?.name);
 
     const response = NextResponse.json({
       success: true,
       name: result.name,
       locationId: result.locationId,
+      appointmentUrl: appointmentSalonUrl(salonSlug),
     });
 
     // Set secure long-lived cookie

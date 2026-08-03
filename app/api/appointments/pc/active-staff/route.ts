@@ -61,18 +61,9 @@ export async function GET(request: NextRequest) {
           status: state.status,
         };
       })
-      .filter((w) => w.status === "IN" || w.status === "BREAK");
+      .filter((w) => (w.status === "IN" || w.status === "BREAK") && (!locationId || w.sede_id === locationId));
 
-    // Sort: current location workers first, then others
-    if (locationId) {
-      clockedInWorkers.sort((a, b) => {
-        const aIsLocal = a.sede_id === locationId;
-        const bIsLocal = b.sede_id === locationId;
-        if (aIsLocal && !bIsLocal) return -1;
-        if (!aIsLocal && bIsLocal) return 1;
-        return a.name.localeCompare(b.name, "it");
-      });
-    }
+    clockedInWorkers.sort((a, b) => a.name.localeCompare(b.name, "it"));
 
     return NextResponse.json(clockedInWorkers);
   } catch (error) {

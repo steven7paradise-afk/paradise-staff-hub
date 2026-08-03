@@ -23,9 +23,11 @@ import {
   MessageCircle,
   X,
   Loader2,
+  LockKeyhole,
   RefreshCw,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 
 type ViewMode = "day" | "week" | "month";
@@ -666,21 +668,18 @@ function PcStaffLockScreen({
       .toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#FAF6F5] p-5 text-neutral-900">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#F7DCE3_0,#FAF6F5_42%,#FFFFFF_100%)]" />
-      <section className="relative w-full max-w-5xl space-y-8 rounded-[32px] border border-[#E8D8CF] bg-white/90 p-6 shadow-2xl backdrop-blur md:p-10">
-        <div className="mx-auto max-w-2xl space-y-3 text-center">
-          <div className="mx-auto grid size-14 place-items-center rounded-full border border-[#E8D8CF] bg-[#FAF6F5] font-serif text-lg tracking-widest text-[#4E382C]">
-            P
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#FCE6EF] p-5 text-neutral-900">
+      <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-b from-[#F8D7EB] via-[#FDE7F3] to-[#F4C6E6]" />
+      <section className="relative ml-0 flex min-h-[82vh] w-full max-w-7xl flex-col items-center rounded-[28px] border border-white/70 bg-white/92 px-6 py-14 shadow-2xl backdrop-blur md:ml-20 md:px-12">
+        <div className="mx-auto max-w-3xl space-y-4 text-center">
+          <div className="mx-auto grid size-16 place-items-center rounded-full bg-[#FADBEA] text-[#F12D83]">
+            <LockKeyhole className="size-8" strokeWidth={1.8} />
           </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#A56A42]">
-            PC Cassa Bloccato
-          </p>
-          <h2 className="font-serif text-3xl font-light uppercase tracking-wide text-neutral-950 md:text-4xl">
-            Seleziona chi sta usando la cassa
+          <h2 className="text-3xl font-black tracking-normal text-[#171C2A] md:text-4xl">
+            Seleziona il tuo profilo per accedere alle prenotazioni
           </h2>
-          <p className="text-sm font-semibold text-neutral-500">
-            Sono visibili solo le persone che risultano timbrate in questo momento.
+          <p className="text-base font-medium text-[#667085]">
+            Per motivi di sicurezza, devi selezionare il tuo profilo utente per continuare.
           </p>
         </div>
 
@@ -700,44 +699,34 @@ function PcStaffLockScreen({
             Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="mt-14 flex w-full flex-wrap items-start justify-center gap-x-8 gap-y-10 md:gap-x-12">
             {activeStaff.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
-              const lastName = worker.name.split(" ").slice(1).join(" ");
-              const statusLabel = worker.status === "BREAK" ? "In pausa" : "In turno";
 
               return (
                 <button
                   key={worker.id}
                   type="button"
                   onClick={() => onUnlock(worker)}
-                  className="group flex min-h-[178px] flex-col items-center justify-center rounded-2xl border border-neutral-100 bg-white p-4 text-center shadow-2xs transition hover:-translate-y-0.5 hover:border-[#D2B2A3] hover:bg-[#FFF8F4] hover:shadow-md"
+                  className="group flex w-36 flex-col items-center text-center transition hover:-translate-y-1 md:w-40"
                 >
-                  <div className="relative">
+                  <div className="relative grid size-32 place-items-center rounded-full border-[5px] border-[#F9C8DF] bg-white p-1 shadow-[0_10px_28px_rgba(241,45,131,0.12)] transition group-hover:border-[#F12D83] md:size-36">
                     {photoUrl ? (
                       <img
                         src={photoUrl}
                         alt={worker.name}
-                        className="size-20 rounded-full border border-neutral-200 object-cover shadow-2xs transition group-hover:scale-105"
+                        className="size-full rounded-full object-cover"
                       />
                     ) : (
-                      <div className="grid size-20 place-items-center rounded-full border border-neutral-200 bg-neutral-100 font-serif text-lg font-semibold text-neutral-600 transition group-hover:scale-105">
+                      <div className="grid size-full place-items-center rounded-full bg-[#FCE6EF] font-serif text-3xl font-semibold text-[#F12D83]">
                         {getInitials(worker.name)}
                       </div>
                     )}
-                    <span className="absolute bottom-1 right-1 size-4 rounded-full border-2 border-white bg-emerald-500 shadow-2xs" />
+                    <span className="absolute right-3 top-2 size-4 rounded-full border-2 border-white bg-emerald-400 shadow-2xs" />
                   </div>
-                  <div className="mt-4 min-w-0 space-y-0.5">
-                    <p className="truncate text-sm font-black uppercase tracking-wide text-neutral-900">
-                      {firstName}
-                    </p>
-                    <p className="truncate text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                      {lastName || "Staff"}
-                    </p>
-                  </div>
-                  <p className="mt-3 rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-wider text-emerald-700">
-                    {statusLabel}
+                  <p className="mt-4 max-w-full truncate text-lg font-black tracking-normal text-[#F12D83]">
+                    {firstName}
                   </p>
                 </button>
               );
@@ -754,12 +743,14 @@ export function AppointmentsBrowser({
   corsoTeamOptions,
   isPC = false,
   pcLocationId = "",
+  initialSalon = "tutti",
   locations = [],
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
   isPC?: boolean;
   pcLocationId?: string;
+  initialSalon?: SalonFilter;
   locations?: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
@@ -784,13 +775,23 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     if (searchParams.get("refresh") === "true") {
-      router.replace("/appointments");
+      router.replace(appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon));
       setIsRefreshing(false);
     }
   }, [searchParams, router]);
 
+  useEffect(() => {
+    const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
+    setSalon((salonFromUrl || initialSalon) as SalonFilter);
+  }, [initialSalon, searchParams]);
+
+  function updateSalonFilter(nextSalon: SalonFilter) {
+    setSalon(nextSalon);
+    router.replace(appointmentSalonUrl(nextSalon === "tutti" ? null : nextSalon), { scroll: false });
+  }
+
   const [view, setView] = useState<ViewMode>("day");
-  const [salon, setSalon] = useState<SalonFilter>("tutti");
+  const [salon, setSalon] = useState<SalonFilter>(initialSalon);
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
     null,
@@ -2521,7 +2522,7 @@ export function AppointmentsBrowser({
               <select
                 value={salon}
                 onChange={(event) =>
-                  setSalon(event.target.value as SalonFilter)
+                  updateSalonFilter(event.target.value as SalonFilter)
                 }
                 className="h-12 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-bold text-[#4E382C] outline-none focus:border-[#C98B73] focus:ring-2 focus:ring-[#F4D8CF]"
               >
@@ -3016,7 +3017,7 @@ export function AppointmentsBrowser({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setSalon(option.value)}
+                onClick={() => updateSalonFilter(option.value)}
                 className={[
                   "rounded-full border px-4 py-2 text-sm font-bold transition",
                   salon === option.value
