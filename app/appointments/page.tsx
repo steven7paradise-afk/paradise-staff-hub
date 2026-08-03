@@ -209,7 +209,7 @@ export default async function AppointmentsPage({
     } as any;
   }
 
-  if (forcePcSalon) {
+  if (forcePcSalon && pcAuth) {
     const forcedLocation = await prisma.location.findFirst({
       where: {
         active: true,
@@ -238,6 +238,7 @@ export default async function AppointmentsPage({
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
   const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
+  const kioskWorkerName = typeof resolvedSearchParams?.worker === "string" ? resolvedSearchParams.worker.trim() : "";
 
   const role = sessionUser.role as Role;
 
@@ -492,6 +493,7 @@ export default async function AppointmentsPage({
           isPC={isPC}
           pcLocationId={pcLocationId}
           initialSalon={initialSalon}
+          initialPcWorkerName={kioskWorkerName}
           locations={locations}
         />
       )}

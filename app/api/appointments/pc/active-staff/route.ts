@@ -9,6 +9,7 @@ import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
   const session = await auth();
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
@@ -28,7 +29,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
     if (salonSlug) {
       const forcedLocation = await prisma.location.findFirst({
         where: {

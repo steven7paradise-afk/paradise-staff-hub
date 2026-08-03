@@ -747,6 +747,7 @@ export function AppointmentsBrowser({
   isPC = false,
   pcLocationId = "",
   initialSalon = "tutti",
+  initialPcWorkerName = "",
   locations = [],
 }: {
   initialBookings: AppointmentRecord[];
@@ -754,6 +755,7 @@ export function AppointmentsBrowser({
   isPC?: boolean;
   pcLocationId?: string;
   initialSalon?: SalonFilter;
+  initialPcWorkerName?: string;
   locations?: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
@@ -1300,8 +1302,12 @@ export function AppointmentsBrowser({
     name: string;
     role: string;
   } | null>(null);
-  const [pcScreenLocked, setPcScreenLocked] = useState(isPC);
-  const [pcActiveWorker, setPcActiveWorker] = useState<ActivePcWorker | null>(null);
+  const [pcScreenLocked, setPcScreenLocked] = useState(isPC && !initialPcWorkerName);
+  const [pcActiveWorker, setPcActiveWorker] = useState<ActivePcWorker | null>(
+    initialPcWorkerName
+      ? { id: "kiosk-selected-worker", name: initialPcWorkerName, locationName: "", status: "IN" }
+      : null,
+  );
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
 
   useEffect(() => {
