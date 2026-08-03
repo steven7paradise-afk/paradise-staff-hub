@@ -490,7 +490,7 @@ export function AppointmentsBrowser({
   }
 
   function matchEmployeeIdsForBooking(booking: AppointmentRecord, employees: ClientControlEmployee[]) {
-    const clean = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const clean = (value?: string | null) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const bookingSalon = normalizeSalonName(salonNameForBooking(booking));
     const salonEmployees = employees.filter((employee) => {
       const employeeSalon = normalizeSalonName(employee.locationName);
@@ -500,8 +500,10 @@ export function AppointmentsBrowser({
 
     for (const mate of getBookingTeam(booking)) {
       const mateClean = clean(mate.name);
+      if (!mateClean) continue;
       const matched = salonEmployees.find((employee) => {
         const employeeClean = clean(employee.name);
+        if (!employeeClean) return false;
         const firstName = mateClean.split("|")[0] || mateClean;
         return employeeClean.includes(mateClean) || mateClean.includes(employeeClean) || employeeClean.includes(firstName);
       });
@@ -561,29 +563,35 @@ export function AppointmentsBrowser({
 
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
-    const salonName = salonNameForBooking(booking);
-    const baseForm: ClientControlAppointmentForm = {
-      salon: clientControlSalons.includes(salonName) ? salonName : "Salone Duomo",
-      clientName: booking.customerName || "",
-      email: booking.customerEmail || "",
-      phone: booking.customerPhone || "",
-      serviceTitle: booking.serviceTitle || "",
-      depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
-      paid: "",
-      staffIds: matchEmployeeIdsForBooking(booking, clientControlEmployees),
-      shopifyOrder: booking.bookingStr ? booking.bookingStr.replace(/^#/, "") : "",
-      instagramTag: "",
-      customNoteText: "",
-      notes: false,
-      beforeMedia: false,
-      afterMedia: false,
-      products: false,
-      review: false,
-      bookingId: booking.id,
-    };
+    try {
+      const salonName = salonNameForBooking(booking);
+      const baseForm: ClientControlAppointmentForm = {
+        salon: clientControlSalons.includes(salonName) ? salonName : "Salone Duomo",
+        clientName: booking.customerName || "",
+        email: booking.customerEmail || "",
+        phone: booking.customerPhone || "",
+        serviceTitle: booking.serviceTitle || "",
+        depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
+        paid: "",
+        staffIds: matchEmployeeIdsForBooking(booking, clientControlEmployees),
+        shopifyOrder: booking.bookingStr ? booking.bookingStr.replace(/^#/, "") : "",
+        instagramTag: "",
+        customNoteText: "",
+        notes: false,
+        beforeMedia: false,
+        afterMedia: false,
+        products: false,
+        review: false,
+        bookingId: booking.id,
+      };
 
-    setClientControlForm(baseForm);
-    setClientControlOpen(true);
+      setClientControlForm(baseForm);
+      setClientControlOpen(true);
+    } catch (error) {
+      console.error("Failed to open client control form:", error);
+      setClientControlOpen(true);
+      setClientControlMessage({ type: "error", text: "Ho aperto il form, ma alcuni dati appuntamento non sono stati caricati." });
+    }
 
     const [employees, bookingNotes] = await Promise.all([
       loadClientControlEmployees().catch((error) => {
