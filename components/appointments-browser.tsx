@@ -1149,10 +1149,15 @@ export function AppointmentsBrowser({
                       </div>
 
                       <div className="min-w-0 rounded-2xl bg-[#FFF9F6] p-3 xl:bg-transparent xl:p-0">
-                        <p className="flex items-center gap-1 truncate text-sm font-semibold text-[#1F1F1F]">
-                          <UsersRound className="size-4 shrink-0 text-[#C95B75]" />
-                          <span className="truncate">{assignedTeam.map((mate) => mate.name).join(", ") || "Non assegnato"}</span>
-                        </p>
+                        <div className="flex min-w-0 items-center gap-2">
+                          {assignedTeam.slice(0, 2).map((mate) => (
+                            <Avatar key={mate.id} name={mate.name} photoUrl={mate.photoUrl} size="size-8" />
+                          ))}
+                          {!assignedTeam.length ? <UsersRound className="size-4 shrink-0 text-[#C95B75]" /> : null}
+                          <span className="truncate text-sm font-semibold text-[#1F1F1F]">
+                            {assignedTeam.map((mate) => mate.name).join(", ") || "Non assegnato"}
+                          </span>
+                        </div>
                         <p className="mt-1 truncate text-xs font-medium text-[#7A5B4B]">{getSalonLabel(booking.inferredSalon)}</p>
                       </div>
 
@@ -1257,7 +1262,12 @@ export function AppointmentsBrowser({
                     </p>
                     <p className="flex gap-2">
                       <UsersRound className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
-                      {getBookingTeam(selectedBooking).map((mate) => mate.name).join(", ") || "Non assegnato"}
+                      <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
+                        {getBookingTeam(selectedBooking).slice(0, 2).map((mate) => (
+                          <Avatar key={mate.id} name={mate.name} photoUrl={mate.photoUrl} size="size-7" />
+                        ))}
+                        <span>{getBookingTeam(selectedBooking).map((mate) => mate.name).join(", ") || "Non assegnato"}</span>
+                      </span>
                     </p>
                   </div>
                 </section>
