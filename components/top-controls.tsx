@@ -36,12 +36,37 @@ export function TopControls({
   unread,
   name,
   photoUrl,
+  userId,
 }: {
   unread: number;
   name: string;
   photoUrl: string | null;
+  userId?: string;
 }) {
   const [dark, setDark] = useState(false);
+  const [activeWorkers, setActiveWorkers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (userId !== "PC_CASSA") return;
+    
+    async function fetchActiveWorkers() {
+      try {
+        const res = await fetch("/api/appointments/pc/active-staff");
+        if (res.ok) {
+          const data = await res.json();
+          setActiveWorkers(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch active staff in TopControls:", err);
+      }
+    }
+
+    void fetchActiveWorkers();
+    
+    // Poll every 30 seconds to keep active staff updated
+    const interval = setInterval(fetchActiveWorkers, 30000);
+    return () => clearInterval(interval);
+  }, [userId]);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("paradise-theme");
@@ -69,6 +94,38 @@ export function TopControls({
 
   return (
     <div className="flex items-center justify-end gap-3">
+      {userId === "PC_CASSA" && activeWorkers.length > 0 && (
+        <div className="flex items-center gap-2.5 mr-4 border-r border-black/5 dark:border-white/10 pr-4">
+          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 mr-2 hidden sm:inline">
+            Turni staff:
+          </span>
+          <div className="flex items-center -space-x-2.5">
+            {activeWorkers.map((worker) => (
+              <a
+                key={worker.id}
+                href={`/my-shifts?userId=${worker.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Vedi turni di ${worker.name}`}
+                className="relative block size-9 rounded-full ring-2 ring-white hover:ring-[#C66170] dark:ring-neutral-900 transition-all duration-300 hover:scale-110 hover:z-10 overflow-hidden bg-paradise-softPink"
+              >
+                {worker.photo_url ? (
+                  <img
+                    src={resolveDrivePhotoUrl(worker.photo_url)}
+                    alt={worker.name}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <div className="size-full flex items-center justify-center font-bold text-[10px] text-[#C66170]">
+                    {worker.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <span className={`absolute bottom-0 right-0 size-2 rounded-full border border-white dark:border-neutral-900 ${worker.status === "BREAK" ? "bg-amber-500" : "bg-emerald-500"}`} />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
       <Link href="/notifications" className="relative grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15">
         <Bell className="size-5 transition-transform duration-300 hover:rotate-12" />
         {unread > 0 ? (

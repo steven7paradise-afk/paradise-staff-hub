@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -30,12 +32,32 @@ function countsInAnalytics(answers: Record<string, unknown>) {
   return String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] ?? "Da controllare").trim().toLowerCase() !== "errore";
 }
 
-export default async function PointsPage() {
+export default async function PointsPage({ searchParams }: { searchParams: Promise<{ userId?: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  let sessionUser = session?.user;
+  let isPC = false;
+
+  if (!sessionUser) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isPC = true;
+      sessionUser = {
+        id: "PC_CASSA",
+        role: "RESPONSABILE",
+        sedeId: pcAuth.locationId,
+      } as any;
+    }
+  }
+
+  if (!sessionUser) redirect("/login");
+
+  const values = await searchParams;
+  const targetUserId = (sessionUser.id === "PC_CASSA" && values.userId) ? values.userId : sessionUser.id;
 
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: targetUserId },
     include: { location: true },
   });
 

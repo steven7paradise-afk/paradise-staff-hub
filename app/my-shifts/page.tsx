@@ -11,6 +11,8 @@ import { prisma } from "@/lib/prisma";
 import { coerceEmployeeScheduleMonth, isEmployeeScheduleMonthVisible, visibleScheduleMonthsForEmployee } from "@/lib/schedule-visibility";
 import { cn } from "@/lib/utils";
 import { calculateClockHours } from "@/lib/work-hours";
+import { cookies } from "next/headers";
+import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { MonthSelector, CurrentlyAtWork, TodayShiftCountdown, MonthlyWorkCalendar } from "./client-components";
 
 export const dynamic = "force-dynamic";
@@ -29,18 +31,37 @@ function timeRange(entry?: { category: { start_time: string | null; end_time: st
   return `${entry.category.start_time} - ${entry.category.end_time}`;
 }
 
-export default async function MyShiftsPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string; weekOffset?: string }> }) {
+export default async function MyShiftsPage({ searchParams }: { searchParams: Promise<{ month?: string; year?: string; weekOffset?: string; userId?: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  if (!["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(session.user.role)) redirect("/dashboard");
+  let sessionUser = session?.user;
+  let isPC = false;
+
+  if (!sessionUser) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isPC = true;
+      sessionUser = {
+        id: "PC_CASSA",
+        role: "RESPONSABILE",
+        sedeId: pcAuth.locationId,
+      } as any;
+    }
+  }
+
+  if (!sessionUser) redirect("/login");
+  if (!["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(sessionUser.role)) redirect("/dashboard");
 
   const values = await searchParams;
+  const targetUserId = (sessionUser.id === "PC_CASSA" && values.userId) ? values.userId : sessionUser.id;
   const today = new Date();
   const requestedMonth = Number(values.month);
   const requestedYear = Number(values.year);
   const parsedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth - 1 : today.getMonth();
   const parsedYear = Number.isInteger(requestedYear) && requestedYear >= 2020 && requestedYear <= 2100 ? requestedYear : today.getFullYear();
-  const isEmployee = session.user.role === "DIPENDENTE";
+
+  const isEmployee = sessionUser.role === "DIPENDENTE";
   const planningAccessSetting = isEmployee ? await prisma.setting.findUnique({ where: { key: PLANNING_ACCESS_KEY } }) : null;
   const planningAccess = normalizePlanningAccess(planningAccessSetting?.value);
   const employeeAllowedMonths = isEmployee ? visibleScheduleMonthsForEmployee(today, planningAccess.nextMonthVisible) : undefined;
@@ -58,10 +79,10 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   queryEnd.setUTCDate(queryEnd.getUTCDate() + 7);
 
   const [user, schedules, logs, records] = await Promise.all([
-    prisma.user.findUnique({ where: { id: session.user.id }, include: { location: true } }),
-    prisma.scheduleEntry.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } }, include: { category: true }, orderBy: { date: "asc" } }),
-    prisma.attendanceLog.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
-    prisma.workHourRecord.findMany({ where: { user_id: session.user.id, date: { gte: queryStart, lt: queryEnd } } }),
+    prisma.user.findUnique({ where: { id: targetUserId }, include: { location: true } }),
+    prisma.scheduleEntry.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, include: { category: true }, orderBy: { date: "asc" } }),
+    prisma.attendanceLog.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
+    prisma.workHourRecord.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } } }),
   ]);
   
   if (!user) redirect("/login");

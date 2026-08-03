@@ -343,12 +343,15 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         return route ? allowedRoutes.has(route) : true;
       })
     : rawItems;
-  const sidebarItems = getStructuredMenuItems(dedupeMenuItems(items)).map((item: any) => ({
+  let sidebarItems = getStructuredMenuItems(dedupeMenuItems(items)).map((item: any) => ({
     href: item.href,
     label: getSidebarLabel(item.href, item.label),
     iconName: item.iconName,
     section: item.section,
   }));
+  if (session?.user?.id === "PC_CASSA") {
+    sidebarItems = sidebarItems.filter(item => item.href === "/appointments" || item.href === "/service-forms");
+  }
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
     month: "long",
@@ -439,7 +442,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
         <div className="mb-5 hidden justify-end xl:flex">
-          <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null} />
+          <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null} userId={session?.user?.id || ""} />
         </div>
         {!hideHeader ? <header className={cn("mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", hidePageHeaderOnMobile && "hidden sm:flex")}>
           <div>
