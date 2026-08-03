@@ -112,7 +112,21 @@ export const authConfig = {
     async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
       if (pathname === "/login") return true;
+      if (pathname === "/appointments/register") return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
+
+      // Allow access to appointments page and API endpoints if cashier PC token is present.
+      // The page/route handlers themselves will perform secure database validation.
+      if (
+        pathname === "/appointments" || 
+        pathname.startsWith("/api/appointments/comments") ||
+        pathname.startsWith("/api/appointments/status") ||
+        pathname.startsWith("/api/appointments/team") ||
+        pathname.startsWith("/api/appointments/pc/active-staff")
+      ) {
+        const pcToken = request.cookies.get("appointments_pc_token")?.value;
+        if (pcToken) return true;
+      }
       
       if (!auth?.user?.id) return false;
 
