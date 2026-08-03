@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
@@ -30,18 +31,41 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   const fillId = searchParams.fillId;
   const fill = searchParams.fill;
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const role = session.user.role as Role;
-  await requireServicePageAccess(role, session.user.sedeId, 3, session.user.id);
+  let sessionUser = session?.user;
+  let isPC = false;
+  let pcLocationId = "";
+
+  if (!sessionUser) {
+    const cookieStore = await cookies();
+    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+    const pcAuth = await checkPCAuthorization(pcToken);
+    if (pcAuth) {
+      isPC = true;
+      pcLocationId = pcAuth.locationId;
+      sessionUser = {
+        id: "PC_CASSA",
+        name: pcAuth.name,
+        email: "cassa@paradise.tech",
+        role: "RESPONSABILE",
+        sedeId: pcAuth.locationId,
+      } as any;
+    }
+  }
+
+  if (!sessionUser) redirect("/login");
+  const role = sessionUser.role as Role;
+  const targetUserIdForSetup = sessionUser.id === "PC_CASSA" ? "u-super-admin" : sessionUser.id;
+
+  await requireServicePageAccess(role, sessionUser.sedeId, 3, targetUserIdForSetup);
   await Promise.all([
-    ensureOrderForm(session.user.id),
-    ensureCashClosingForm(session.user.id),
-    ensureClientControlForm(session.user.id),
-    ensureItalianInvoiceForm(session.user.id),
-    ensureRefundForm(session.user.id),
+    ensureOrderForm(targetUserIdForSetup),
+    ensureCashClosingForm(targetUserIdForSetup),
+    ensureClientControlForm(targetUserIdForSetup),
+    ensureItalianInvoiceForm(targetUserIdForSetup),
+    ensureRefundForm(targetUserIdForSetup),
   ]);
 
-  const locationId = session.user.sedeId;
+  const locationId = sessionUser.sedeId;
 
   const cookieStore = await cookies();
   const headerStore = await headers();

@@ -115,17 +115,24 @@ export const authConfig = {
       if (pathname === "/appointments/register") return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
 
-      // Allow access to appointments page and API endpoints if cashier PC token is present.
-      // The page/route handlers themselves will perform secure database validation.
-      if (
-        pathname === "/appointments" || 
-        pathname.startsWith("/api/appointments/comments") ||
-        pathname.startsWith("/api/appointments/status") ||
-        pathname.startsWith("/api/appointments/team") ||
-        pathname.startsWith("/api/appointments/pc/active-staff")
-      ) {
-        const pcToken = request.cookies.get("appointments_pc_token")?.value;
-        if (pcToken) return true;
+      // Strict lockdown for Cashier PCs (only appointments, register, service-forms, and associated APIs allowed)
+      const pcToken = request.cookies.get("appointments_pc_token")?.value;
+      if (pcToken) {
+        const isAllowedPage = 
+          pathname === "/appointments" || 
+          pathname.startsWith("/appointments/") ||
+          pathname === "/service-forms" || 
+          pathname.startsWith("/service-forms/");
+          
+        const isAllowedApi = 
+          pathname.startsWith("/api/appointments") || 
+          pathname.startsWith("/api/service-forms") ||
+          pathname.startsWith("/api/auth");
+
+        if (isAllowedPage || isAllowedApi) {
+          return true;
+        }
+        return false;
       }
       
       if (!auth?.user?.id) return false;
