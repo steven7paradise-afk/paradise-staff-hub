@@ -1805,6 +1805,23 @@ export function AppointmentsBrowser({
               <div className="space-y-5">
                 <ServiceImage title={selectedBooking.serviceTitle} imageUrl={selectedBooking.serviceImageUrl} />
 
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[24px] border border-[#FFE2EC] bg-[#FFF7FA] p-4">
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C66170]">Note Cowlendar</p>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#5D4A42]">
+                      {selectedBooking!.notesText?.trim() || "Nessuna nota presente in questo appuntamento."}
+                    </p>
+                  </div>
+                  <div className="rounded-[24px] border border-[#FFE7D6] bg-[#FFF7F2] p-4">
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C67035]">Note Shopify</p>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#7C3E14]">
+                      {selectedBooking!.bookingStr
+                        ? shopifyNote?.trim() || "Nessuna nota presente su Shopify."
+                        : "Nessun ordine Shopify collegato."}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-[24px] border border-black/5 bg-[#FFFCFD] p-4">
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Data e ora</p>
@@ -1876,24 +1893,8 @@ export function AppointmentsBrowser({
                 </div>
 
                 <div className="rounded-[24px] border border-black/5 bg-white p-4">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Note</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Note interne</p>
                   <div className="mt-3 space-y-3">
-                    <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Note ricevute da Cowlendar</p>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium text-[#171717]">
-                        {selectedBooking.notesText?.trim() || "Nessuna nota presente in questo appuntamento."}
-                      </p>
-                    </div>
-
-                    {selectedBooking.bookingStr && (
-                      <div className="rounded-2xl bg-[#FFF7F2] border border-[#FFE7D6] p-3">
-                        <p className="text-xs font-black uppercase tracking-[0.16em] text-[#C67035]">Note presenti su Shopify</p>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium text-[#7C3E14]">
-                          {shopifyNote?.trim() || "Nessuna nota presente su Shopify."}
-                        </p>
-                      </div>
-                    )}
-
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <MessageSquare className="size-4 text-paradise-pink" />
