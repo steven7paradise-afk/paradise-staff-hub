@@ -15,6 +15,7 @@ import {
   Phone,
   Search,
   Send,
+  Sparkles,
   Trash,
   UserRound,
   UsersRound,
@@ -111,12 +112,6 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
 const clientControlSalons = [{ label: "Corso", value: "Salone Buenos Aires" }];
 
 const clientControlNoteSuggestions = [
-  "Fatto (100g)",
-  "Fatto (150g)",
-  "Fatto (200g)",
-  "Fatto (55cm)",
-  "Fatto (65cm)",
-  "Ha fatto colore",
   "Cliente simpatica",
   "Cliente si e trovata bene",
   "Cliente poco collaborativa",
@@ -126,6 +121,15 @@ const clientControlNoteSuggestions = [
   "Cute sensibile",
   "Ha bisogno di consulenza colore",
   "Spiegata manutenzione a casa",
+];
+
+const extensionFormatOptions = [
+  "100g 55cm",
+  "150g 55cm",
+  "200g 55cm",
+  "100g 65cm",
+  "150g 65cm",
+  "200g 65cm",
 ];
 
 const extensionColorOptions = [
@@ -166,7 +170,10 @@ const viewOptions: Array<{ value: ViewMode; label: string }> = [
 
 const appointmentsPageSize = 5;
 
-const appointmentStatusOptions: Array<{ value: AppointmentStatusValue; label: string }> = [
+const appointmentStatusOptions: Array<{
+  value: AppointmentStatusValue;
+  label: string;
+}> = [
   { value: "PRENOTATO", label: "Prenotato" },
   { value: "NON_PRESENTATO", label: "Non presentato" },
   { value: "INIZIATO", label: "Iniziato" },
@@ -176,7 +183,9 @@ const appointmentStatusOptions: Array<{ value: AppointmentStatusValue; label: st
   { value: "PAGATO", label: "Pagato" },
 ];
 
-const appointmentStatusLabels = Object.fromEntries(appointmentStatusOptions.map((option) => [option.value, option.label])) as Record<AppointmentStatusValue, string>;
+const appointmentStatusLabels = Object.fromEntries(
+  appointmentStatusOptions.map((option) => [option.value, option.label]),
+) as Record<AppointmentStatusValue, string>;
 
 const appointmentStatusClasses: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "border-sky-100 bg-sky-50 text-sky-700",
@@ -226,10 +235,22 @@ function getDateSearchValues(value?: string | null) {
   if (Number.isNaN(date.getTime())) return [];
   return [
     localDateKey(date),
-    new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date),
-    new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long", year: "numeric" }).format(date),
-    new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long" }).format(date),
-    new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(date),
+    new Intl.DateTimeFormat("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(date),
+    new Intl.DateTimeFormat("it-IT", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(date),
+    new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long" }).format(
+      date,
+    ),
+    new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(
+      date,
+    ),
     new Intl.DateTimeFormat("it-IT", { month: "long" }).format(date),
     formatDateTime(value),
   ];
@@ -247,8 +268,12 @@ function formatDuration(start?: string | null, end?: string | null) {
   if (!start || !end) return "-";
   const startDate = new Date(start);
   const endDate = new Date(end);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "-";
-  const minutes = Math.max(0, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()))
+    return "-";
+  const minutes = Math.max(
+    0,
+    Math.round((endDate.getTime() - startDate.getTime()) / 60000),
+  );
   return `${minutes} min`;
 }
 
@@ -280,11 +305,18 @@ function compactValue(value?: string | null, max = 96) {
     .replace(/\s+/g, " ")
     .trim();
   if (!cleaned) return "";
-  return cleaned.length > max ? `${cleaned.slice(0, max - 1).trim()}...` : cleaned;
+  return cleaned.length > max
+    ? `${cleaned.slice(0, max - 1).trim()}...`
+    : cleaned;
 }
 
-function getDetailValue(details: AppointmentRecord["extraDetails"], keywords: string[]) {
-  const normalizedKeywords = keywords.map((keyword) => normalizeSearchValue(keyword));
+function getDetailValue(
+  details: AppointmentRecord["extraDetails"],
+  keywords: string[],
+) {
+  const normalizedKeywords = keywords.map((keyword) =>
+    normalizeSearchValue(keyword),
+  );
   return (
     details?.find((item) => {
       const label = normalizeSearchValue(item.label);
@@ -294,12 +326,24 @@ function getDetailValue(details: AppointmentRecord["extraDetails"], keywords: st
 }
 
 function getQuantityLabel(booking: AppointmentRecord) {
-  return compactValue(getDetailValue(booking.extraDetails, ["quantita", "qta", "quantity"]), 18) || "1";
+  return (
+    compactValue(
+      getDetailValue(booking.extraDetails, ["quantita", "qta", "quantity"]),
+      18,
+    ) || "1"
+  );
 }
 
 function getCustomerContactLines(booking: AppointmentRecord) {
-  const phone = booking.customerPhone || getDetailValue(booking.extraDetails, ["numero telefono", "telefono", "phone"]);
-  const email = booking.customerEmail || getDetailValue(booking.extraDetails, ["email"]);
+  const phone =
+    booking.customerPhone ||
+    getDetailValue(booking.extraDetails, [
+      "numero telefono",
+      "telefono",
+      "phone",
+    ]);
+  const email =
+    booking.customerEmail || getDetailValue(booking.extraDetails, ["email"]);
   const answers = (booking.extraDetails ?? [])
     .filter((item) => {
       const label = normalizeSearchValue(item.label);
@@ -314,13 +358,22 @@ function getCustomerContactLines(booking: AppointmentRecord) {
     })
     .slice(0, 3);
 
-  return { phone: compactValue(phone, 30), email: compactValue(email, 34), answers };
+  return {
+    phone: compactValue(phone, 30),
+    email: compactValue(email, 34),
+    answers,
+  };
 }
 
 function getBookingNotePreview(booking: AppointmentRecord) {
   const cowlendarNote = compactValue(booking.notesText, 130);
   if (cowlendarNote) return cowlendarNote;
-  const formNote = getDetailValue(booking.extraDetails, ["note", "nota", "comment", "memo"]);
+  const formNote = getDetailValue(booking.extraDetails, [
+    "note",
+    "nota",
+    "comment",
+    "memo",
+  ]);
   return compactValue(formNote, 130);
 }
 
@@ -338,7 +391,9 @@ function getSalonLabel(value: AppointmentRecord["inferredSalon"]) {
   return "Altro";
 }
 
-function normalizeAppointmentStatus(value?: string | null): AppointmentStatusValue | null {
+function normalizeAppointmentStatus(
+  value?: string | null,
+): AppointmentStatusValue | null {
   const normalized = String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -346,17 +401,27 @@ function normalizeAppointmentStatus(value?: string | null): AppointmentStatusVal
     .replace(/[\s-]+/g, "_")
     .trim();
 
-  if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW") return "NON_PRESENTATO";
-  if (normalized === "ARRIVATO_IN_RITARDO" || normalized === "IN_RITARDO") return "ARRIVATO_IN_RITARDO";
+  if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW")
+    return "NON_PRESENTATO";
+  if (normalized === "ARRIVATO_IN_RITARDO" || normalized === "IN_RITARDO")
+    return "ARRIVATO_IN_RITARDO";
   if (normalized === "IN_ATTESA" || normalized === "ATTESA") return "IN_ATTESA";
   if (normalized === "INIZIATO") return "INIZIATO";
-  if (normalized === "COMPLETATO" || normalized === "COMPLETA") return "COMPLETATO";
+  if (normalized === "COMPLETATO" || normalized === "COMPLETA")
+    return "COMPLETATO";
   if (normalized === "PAGATO" || normalized === "PAID") return "PAGATO";
-  if (normalized === "PRENOTATO" || normalized === "CONFIRMED" || normalized === "CONFERMATO") return "PRENOTATO";
+  if (
+    normalized === "PRENOTATO" ||
+    normalized === "CONFIRMED" ||
+    normalized === "CONFERMATO"
+  )
+    return "PRENOTATO";
   return null;
 }
 
-function getDefaultAppointmentStatus(booking: AppointmentRecord): AppointmentStatusValue {
+function getDefaultAppointmentStatus(
+  booking: AppointmentRecord,
+): AppointmentStatusValue {
   return (
     normalizeAppointmentStatus(booking.localStatus) ||
     normalizeAppointmentStatus(booking.attendance) ||
@@ -397,7 +462,9 @@ function dateFromLocalKey(value?: string | null) {
   return new Date(year, month - 1, day);
 }
 
-function getBookingDateKey(booking: Pick<AppointmentRecord, "startDate" | "dateKey">) {
+function getBookingDateKey(
+  booking: Pick<AppointmentRecord, "startDate" | "dateKey">,
+) {
   if ("dateKey" in booking && booking.dateKey) {
     return booking.dateKey;
   }
@@ -408,8 +475,12 @@ function getBookingDateKey(booking: Pick<AppointmentRecord, "startDate" | "dateK
 function getFirstVisibleBookingDate(bookings: AppointmentRecord[]) {
   const todayKey = localDateKey(new Date());
   const activeBookings = bookings.filter((booking) => !booking.isCanceled);
-  const sorted = [...(activeBookings.length ? activeBookings : bookings)].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-  const upcoming = sorted.find((booking) => getBookingDateKey(booking) >= todayKey) || sorted[0];
+  const sorted = [...(activeBookings.length ? activeBookings : bookings)].sort(
+    (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+  );
+  const upcoming =
+    sorted.find((booking) => getBookingDateKey(booking) >= todayKey) ||
+    sorted[0];
   return dateFromLocalKey(upcoming?.dateKey) || new Date();
 }
 
@@ -427,14 +498,20 @@ function getRangeLabel(view: ViewMode, anchorDate: Date) {
     const start = startOfWeek(anchorDate);
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
-    return `${new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(start)} - ${new Intl.DateTimeFormat("it-IT", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }).format(end)}`;
+    return `${new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short" }).format(start)} - ${new Intl.DateTimeFormat(
+      "it-IT",
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      },
+    ).format(end)}`;
   }
 
-  return new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(anchorDate);
+  return new Intl.DateTimeFormat("it-IT", {
+    month: "long",
+    year: "numeric",
+  }).format(anchorDate);
 }
 
 function getPrevDate(view: ViewMode, date: Date) {
@@ -453,33 +530,69 @@ function getNextDate(view: ViewMode, date: Date) {
   return next;
 }
 
-function Avatar({ name, photoUrl, size = "size-10" }: { name: string; photoUrl?: string | null; size?: string }) {
+function Avatar({
+  name,
+  photoUrl,
+  size = "size-10",
+}: {
+  name: string;
+  photoUrl?: string | null;
+  size?: string;
+}) {
   if (photoUrl) {
     return (
-      <div className={`overflow-hidden rounded-2xl border border-black/5 bg-[#F7DCE3] ${size}`}>
+      <div
+        className={`overflow-hidden rounded-2xl border border-black/5 bg-[#F7DCE3] ${size}`}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="h-full w-full object-cover" />
-      </div>
-    );
-  }
-
-  return <div className={`grid place-items-center rounded-2xl bg-[#F7DCE3] font-black text-[#171717] ${size}`}>{getInitials(name) || "?"}</div>;
-}
-
-function ServiceImage({ title, imageUrl, compact = false }: { title: string; imageUrl?: string | null; compact?: boolean }) {
-  const sizeClass = compact ? "size-12" : "h-36 w-full";
-
-  if (imageUrl) {
-    return (
-      <div className={`overflow-hidden rounded-2xl border border-black/5 bg-[#FFF1F6] ${sizeClass}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
+        <img
+          src={resolveDrivePhotoUrl(photoUrl)}
+          alt={name}
+          className="h-full w-full object-cover"
+        />
       </div>
     );
   }
 
   return (
-    <div className={`grid place-items-center rounded-2xl border border-black/5 bg-[#FFF1F6] text-[#C66170] ${sizeClass}`}>
+    <div
+      className={`grid place-items-center rounded-2xl bg-[#F7DCE3] font-black text-[#171717] ${size}`}
+    >
+      {getInitials(name) || "?"}
+    </div>
+  );
+}
+
+function ServiceImage({
+  title,
+  imageUrl,
+  compact = false,
+}: {
+  title: string;
+  imageUrl?: string | null;
+  compact?: boolean;
+}) {
+  const sizeClass = compact ? "size-12" : "h-36 w-full";
+
+  if (imageUrl) {
+    return (
+      <div
+        className={`overflow-hidden rounded-2xl border border-black/5 bg-[#FFF1F6] ${sizeClass}`}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imageUrl}
+          alt={title}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`grid place-items-center rounded-2xl border border-black/5 bg-[#FFF1F6] text-[#C66170] ${sizeClass}`}
+    >
       <CalendarDays className={compact ? "size-5" : "size-8"} />
     </div>
   );
@@ -495,26 +608,48 @@ export function AppointmentsBrowser({
   const [view, setView] = useState<ViewMode>("day");
   const [salon, setSalon] = useState<SalonFilter>("tutti");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
+    null,
+  );
   const [searchTerm, setSearchTerm] = useState("");
-  const [internalNotes, setInternalNotes] = useState<Record<string, string>>({});
+  const [internalNotes, setInternalNotes] = useState<Record<string, string>>(
+    {},
+  );
   const [showCanceled, setShowCanceled] = useState(false);
   const [visibleCount, setVisibleCount] = useState(appointmentsPageSize);
   const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
   const [savingTeamId, setSavingTeamId] = useState<string | null>(null);
-  const [teamByBooking, setTeamByBooking] = useState<Record<string, BookingTeammate[]>>(() =>
-    Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.teammates])),
+  const [teamByBooking, setTeamByBooking] = useState<
+    Record<string, BookingTeammate[]>
+  >(() =>
+    Object.fromEntries(
+      initialBookings.map((booking) => [booking.id, booking.teammates]),
+    ),
   );
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState(() => {
     const today = localDateKey(new Date());
-    return { mode: "today" as AppointmentDateFilterMode, from: today, to: today };
+    return {
+      mode: "today" as AppointmentDateFilterMode,
+      from: today,
+      to: today,
+    };
   });
-  const [statusByBooking, setStatusByBooking] = useState<Record<string, AppointmentStatusValue>>(() =>
+  const [statusByBooking, setStatusByBooking] = useState<
+    Record<string, AppointmentStatusValue>
+  >(() =>
     Object.fromEntries(
       initialBookings
-        .map((booking) => [booking.id, normalizeAppointmentStatus(booking.localStatus)] as const)
-        .filter((entry): entry is readonly [string, AppointmentStatusValue] => Boolean(entry[1])),
+        .map(
+          (booking) =>
+            [
+              booking.id,
+              normalizeAppointmentStatus(booking.localStatus),
+            ] as const,
+        )
+        .filter((entry): entry is readonly [string, AppointmentStatusValue] =>
+          Boolean(entry[1]),
+        ),
     ),
   );
 
@@ -533,15 +668,26 @@ export function AppointmentsBrowser({
   }
 
   function salonNameForBooking(booking: AppointmentRecord) {
-    return booking.inferredSalon === "buenos-aires" ? "Salone Buenos Aires" : "Salone Duomo";
+    return booking.inferredSalon === "buenos-aires"
+      ? "Salone Buenos Aires"
+      : "Salone Duomo";
   }
 
-  function matchEmployeeIdsForBooking(booking: AppointmentRecord, employees: ClientControlEmployee[]) {
-    const clean = (value?: string | null) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  function matchEmployeeIdsForBooking(
+    booking: AppointmentRecord,
+    employees: ClientControlEmployee[],
+  ) {
+    const clean = (value?: string | null) =>
+      String(value ?? "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
     const bookingSalon = normalizeSalonName(salonNameForBooking(booking));
     const salonEmployees = employees.filter((employee) => {
       const employeeSalon = normalizeSalonName(employee.locationName);
-      return employeeSalon.includes(bookingSalon) || bookingSalon.includes(employeeSalon);
+      return (
+        employeeSalon.includes(bookingSalon) ||
+        bookingSalon.includes(employeeSalon)
+      );
     });
     const ids: string[] = [];
 
@@ -552,7 +698,11 @@ export function AppointmentsBrowser({
         const employeeClean = clean(employee.name);
         if (!employeeClean) return false;
         const firstName = mateClean.split("|")[0] || mateClean;
-        return employeeClean.includes(mateClean) || mateClean.includes(employeeClean) || employeeClean.includes(firstName);
+        return (
+          employeeClean.includes(mateClean) ||
+          mateClean.includes(employeeClean) ||
+          employeeClean.includes(firstName)
+        );
       });
       if (matched && !ids.includes(matched.id)) ids.push(matched.id);
     }
@@ -561,37 +711,47 @@ export function AppointmentsBrowser({
   }
 
   const [clientControlOpen, setClientControlOpen] = useState(false);
-  const [clientControlEmployees, setClientControlEmployees] = useState<ClientControlEmployee[]>([]);
+  const [clientControlEmployees, setClientControlEmployees] = useState<
+    ClientControlEmployee[]
+  >([]);
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
   const [clientControlPolishing, setClientControlPolishing] = useState(false);
-  const [clientControlMessage, setClientControlMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [clientControlMessage, setClientControlMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [selectedExtensionFormat, setSelectedExtensionFormat] = useState("");
   const [selectedExtensionColor, setSelectedExtensionColor] = useState("");
-  const [clientControlForm, setClientControlForm] = useState<ClientControlAppointmentForm>({
-    salon: "Salone Buenos Aires",
-    clientName: "",
-    email: "",
-    phone: "",
-    serviceTitle: "",
-    depositPaid: "",
-    paid: "",
-    staffIds: [],
-    shopifyOrder: "",
-    instagramTag: "",
-    customNoteText: "",
-    notes: false,
-    beforeMedia: false,
-    afterMedia: false,
-    products: false,
-    review: false,
-    bookingId: null,
-  });
+  const [clientControlForm, setClientControlForm] =
+    useState<ClientControlAppointmentForm>({
+      salon: "Salone Buenos Aires",
+      clientName: "",
+      email: "",
+      phone: "",
+      serviceTitle: "",
+      depositPaid: "",
+      paid: "",
+      staffIds: [],
+      shopifyOrder: "",
+      instagramTag: "",
+      customNoteText: "",
+      notes: false,
+      beforeMedia: false,
+      afterMedia: false,
+      products: false,
+      review: false,
+      bookingId: null,
+    });
 
   const filteredClientControlEmployees = useMemo(() => {
     const selectedSalon = normalizeSalonName(clientControlForm.salon);
     return clientControlEmployees.filter((employee) => {
       const employeeSalon = normalizeSalonName(employee.locationName);
-      return employeeSalon.includes(selectedSalon) || selectedSalon.includes(employeeSalon);
+      return (
+        employeeSalon.includes(selectedSalon) ||
+        selectedSalon.includes(employeeSalon)
+      );
     });
   }, [clientControlEmployees, clientControlForm.salon]);
 
@@ -610,24 +770,27 @@ export function AppointmentsBrowser({
 
   function selectedClientControlStaffNames() {
     return clientControlForm.staffIds
-      .map((id) => clientControlEmployees.find((employee) => employee.id === id)?.name)
+      .map(
+        (id) =>
+          clientControlEmployees.find((employee) => employee.id === id)?.name,
+      )
       .filter((name): name is string => Boolean(name));
   }
 
   function hasClientControlNoteContext() {
     return Boolean(
       clientControlForm.customNoteText.trim() ||
-        clientControlForm.clientName.trim() ||
-        clientControlForm.shopifyOrder.trim() ||
-        clientControlForm.serviceTitle.trim() ||
-        clientControlForm.depositPaid ||
-        clientControlForm.paid ||
-        clientControlForm.staffIds.length ||
-        clientControlForm.notes ||
-        clientControlForm.beforeMedia ||
-        clientControlForm.afterMedia ||
-        clientControlForm.products ||
-        clientControlForm.review,
+      clientControlForm.clientName.trim() ||
+      clientControlForm.shopifyOrder.trim() ||
+      clientControlForm.serviceTitle.trim() ||
+      clientControlForm.depositPaid ||
+      clientControlForm.paid ||
+      clientControlForm.staffIds.length ||
+      clientControlForm.notes ||
+      clientControlForm.beforeMedia ||
+      clientControlForm.afterMedia ||
+      clientControlForm.products ||
+      clientControlForm.review,
     );
   }
 
@@ -659,10 +822,21 @@ export function AppointmentsBrowser({
         }),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.note) throw new Error(data?.error || "Non riesco a sistemare la nota.");
-      setClientControlForm((prev) => ({ ...prev, customNoteText: data.note, notes: true }));
+      if (!response.ok || !data?.note)
+        throw new Error(data?.error || "Non riesco a sistemare la nota.");
+      setClientControlForm((prev) => ({
+        ...prev,
+        customNoteText: data.note,
+        notes: true,
+      }));
     } catch (error) {
-      setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Non riesco a sistemare la nota." });
+      setClientControlMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Non riesco a sistemare la nota.",
+      });
     } finally {
       setClientControlPolishing(false);
     }
@@ -672,9 +846,14 @@ export function AppointmentsBrowser({
     if (clientControlEmployees.length) return clientControlEmployees;
     setClientControlLoading(true);
     try {
-      const response = await fetch("/api/client-control/analytics", { cache: "no-store" });
+      const response = await fetch("/api/client-control/analytics", {
+        cache: "no-store",
+      });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Non riesco a caricare le collaboratrici.");
+      if (!response.ok)
+        throw new Error(
+          data?.error || "Non riesco a caricare le collaboratrici.",
+        );
       const employees = Array.isArray(data?.employees) ? data.employees : [];
       setClientControlEmployees(employees);
       return employees as ClientControlEmployee[];
@@ -685,19 +864,25 @@ export function AppointmentsBrowser({
 
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
+    setSelectedExtensionFormat("");
     setSelectedExtensionColor("");
     try {
       const salonName = salonNameForBooking(booking);
       const baseForm: ClientControlAppointmentForm = {
-        salon: clientControlSalons.some((option) => option.value === salonName) ? salonName : "Salone Buenos Aires",
+        salon: clientControlSalons.some((option) => option.value === salonName)
+          ? salonName
+          : "Salone Buenos Aires",
         clientName: booking.customerName || "",
         email: booking.customerEmail || "",
         phone: booking.customerPhone || "",
         serviceTitle: booking.serviceTitle || "",
-        depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
+        depositPaid:
+          booking.priceAmount != null ? String(booking.priceAmount) : "",
         paid: "",
         staffIds: matchEmployeeIdsForBooking(booking, clientControlEmployees),
-        shopifyOrder: booking.bookingStr ? booking.bookingStr.replace(/^#/, "") : "",
+        shopifyOrder: booking.bookingStr
+          ? booking.bookingStr.replace(/^#/, "")
+          : "",
         instagramTag: "",
         customNoteText: "",
         notes: false,
@@ -713,16 +898,27 @@ export function AppointmentsBrowser({
     } catch (error) {
       console.error("Failed to open client control form:", error);
       setClientControlOpen(true);
-      setClientControlMessage({ type: "error", text: "Ho aperto il form, ma alcuni dati appuntamento non sono stati caricati." });
+      setClientControlMessage({
+        type: "error",
+        text: "Ho aperto il form, ma alcuni dati appuntamento non sono stati caricati.",
+      });
     }
 
     const [employees, bookingNotes] = await Promise.all([
       loadClientControlEmployees().catch((error) => {
-        setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Non riesco a caricare le collaboratrici." });
+        setClientControlMessage({
+          type: "error",
+          text:
+            error instanceof Error
+              ? error.message
+              : "Non riesco a caricare le collaboratrici.",
+        });
         return [] as ClientControlEmployee[];
       }),
-      fetch(`/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`)
-        .then((response) => response.ok ? response.json() : null)
+      fetch(
+        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`,
+      )
+        .then((response) => (response.ok ? response.json() : null))
         .catch(() => null),
     ]);
 
@@ -730,16 +926,26 @@ export function AppointmentsBrowser({
       if (current.bookingId !== booking.id) return current;
       return {
         ...current,
-        staffIds: current.staffIds.length ? current.staffIds : matchEmployeeIdsForBooking(booking, employees),
-        customNoteText: current.customNoteText || bookingNotes?.shopifyNote || "",
+        staffIds: current.staffIds.length
+          ? current.staffIds
+          : matchEmployeeIdsForBooking(booking, employees),
+        customNoteText:
+          current.customNoteText || bookingNotes?.shopifyNote || "",
       };
     });
   }
 
   async function submitClientControlForm() {
     setClientControlMessage(null);
-    if (!clientControlForm.salon || !clientControlForm.clientName.trim() || clientControlForm.staffIds.length === 0) {
-      setClientControlMessage({ type: "error", text: "Completa sede, nome cliente e collaboratrice." });
+    if (
+      !clientControlForm.salon ||
+      !clientControlForm.clientName.trim() ||
+      clientControlForm.staffIds.length === 0
+    ) {
+      setClientControlMessage({
+        type: "error",
+        text: "Completa sede, nome cliente e collaboratrice.",
+      });
       return;
     }
 
@@ -751,17 +957,31 @@ export function AppointmentsBrowser({
         body: JSON.stringify(clientControlForm),
       });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error || "Errore durante il salvataggio.");
-      setClientControlMessage({ type: "success", text: "Scheda controllo cliente salvata." });
+      if (!response.ok)
+        throw new Error(data?.error || "Errore durante il salvataggio.");
+      setClientControlMessage({
+        type: "success",
+        text: "Scheda controllo cliente salvata.",
+      });
     } catch (error) {
-      setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Errore durante il salvataggio." });
+      setClientControlMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Errore durante il salvataggio.",
+      });
     } finally {
       setClientControlSubmitting(false);
     }
   }
 
-  const activeBookingsCount = initialBookings.filter((booking) => !booking.isCanceled).length;
-  const canceledBookingsCount = initialBookings.filter((booking) => booking.isCanceled).length;
+  const activeBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled,
+  ).length;
+  const canceledBookingsCount = initialBookings.filter(
+    (booking) => booking.isCanceled,
+  ).length;
   const dateFilterLabel = useMemo(() => {
     if (dateFilter.mode === "all") return "Tutte le date";
     if (dateFilter.mode === "today") return "Oggi";
@@ -772,15 +992,26 @@ export function AppointmentsBrowser({
   }, [dateFilter]);
 
   const filteredBookings = useMemo(() => {
-    const statusScoped = initialBookings.filter((booking) => (showCanceled ? booking.isCanceled : !booking.isCanceled));
-    const base = salon === "tutti" ? statusScoped : statusScoped.filter((booking) => booking.inferredSalon === salon);
+    const statusScoped = initialBookings.filter((booking) =>
+      showCanceled ? booking.isCanceled : !booking.isCanceled,
+    );
+    const base =
+      salon === "tutti"
+        ? statusScoped
+        : statusScoped.filter((booking) => booking.inferredSalon === salon);
     const dateScoped =
       dateFilter.mode === "all"
         ? base
         : base.filter((booking) => {
             const key = getBookingDateKey(booking);
-            const from = dateFilter.from <= dateFilter.to ? dateFilter.from : dateFilter.to;
-            const to = dateFilter.from <= dateFilter.to ? dateFilter.to : dateFilter.from;
+            const from =
+              dateFilter.from <= dateFilter.to
+                ? dateFilter.from
+                : dateFilter.to;
+            const to =
+              dateFilter.from <= dateFilter.to
+                ? dateFilter.to
+                : dateFilter.from;
             return key >= from && key <= to;
           });
     const searched = normalizedSearch
@@ -799,7 +1030,10 @@ export function AppointmentsBrowser({
             ...getDateSearchValues(booking.endDate),
             booking.notesText,
             ...getBookingTeam(booking).map((mate) => mate.name),
-            ...(booking.extraDetails ?? []).flatMap((item) => [item.label, item.value]),
+            ...(booking.extraDetails ?? []).flatMap((item) => [
+              item.label,
+              item.value,
+            ]),
           ]
             .filter(Boolean)
             .map((entry) => normalizeSearchValue(entry))
@@ -809,15 +1043,28 @@ export function AppointmentsBrowser({
         })
       : dateScoped;
 
-    return [...searched].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-  }, [dateFilter, initialBookings, normalizedSearch, salon, showCanceled, teamByBooking]);
+    return [...searched].sort(
+      (a, b) =>
+        new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
+    );
+  }, [
+    dateFilter,
+    initialBookings,
+    normalizedSearch,
+    salon,
+    showCanceled,
+    teamByBooking,
+  ]);
 
   useEffect(() => {
     setVisibleCount(appointmentsPageSize);
   }, [dateFilter, normalizedSearch, salon, showCanceled, view, anchorDate]);
 
   const selectedBooking = useMemo(
-    () => filteredBookings.find((booking) => booking.id === selectedBookingId) || initialBookings.find((booking) => booking.id === selectedBookingId) || null,
+    () =>
+      filteredBookings.find((booking) => booking.id === selectedBookingId) ||
+      initialBookings.find((booking) => booking.id === selectedBookingId) ||
+      null,
     [filteredBookings, initialBookings, selectedBookingId],
   );
 
@@ -826,7 +1073,10 @@ export function AppointmentsBrowser({
       if (selectedBookingId !== null) setSelectedBookingId(null);
       return;
     }
-    if (selectedBookingId && !filteredBookings.some((booking) => booking.id === selectedBookingId)) {
+    if (
+      selectedBookingId &&
+      !filteredBookings.some((booking) => booking.id === selectedBookingId)
+    ) {
       setSelectedBookingId(null);
     }
   }, [filteredBookings, selectedBookingId]);
@@ -842,11 +1092,16 @@ export function AppointmentsBrowser({
 
   const [dbComments, setDbComments] = useState<AppointmentComment[]>([]);
   const [shopifyNote, setShopifyNote] = useState<string | null>(null);
-  const [cowlendarOrderNote, setCowlendarOrderNote] = useState<string | null>(null);
+  const [cowlendarOrderNote, setCowlendarOrderNote] = useState<string | null>(
+    null,
+  );
   const [loadingComments, setLoadingComments] = useState(false);
   const [newCommentText, setNewCommentText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ name: string; role: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    name: string;
+    role: string;
+  } | null>(null);
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
 
   useEffect(() => {
@@ -935,7 +1190,9 @@ export function AppointmentsBrowser({
           const author = comment.user_name ?? "Staff";
           const msg = comment.message ?? "";
           const newBlock = `Staff: ${author}\n${msg}`;
-          return current && current.trim() ? `${current.trim()}\n\n${newBlock}` : newBlock;
+          return current && current.trim()
+            ? `${current.trim()}\n\n${newBlock}`
+            : newBlock;
         });
       } else {
         alert("Errore durante l'aggiunta del commento.");
@@ -949,7 +1206,8 @@ export function AppointmentsBrowser({
   }
 
   async function handleDeleteComment(commentId: string) {
-    if (!window.confirm("Sei sicuro di voler eliminare questo commento?")) return;
+    if (!window.confirm("Sei sicuro di voler eliminare questo commento?"))
+      return;
     try {
       const res = await fetch(`/api/appointments/comments?id=${commentId}`, {
         method: "DELETE",
@@ -966,11 +1224,16 @@ export function AppointmentsBrowser({
     }
   }
 
-  function getBookingStatus(booking: AppointmentRecord): AppointmentStatusValue {
+  function getBookingStatus(
+    booking: AppointmentRecord,
+  ): AppointmentStatusValue {
     return statusByBooking[booking.id] || getDefaultAppointmentStatus(booking);
   }
 
-  async function handleStatusChange(bookingId: string, nextStatus: AppointmentStatusValue) {
+  async function handleStatusChange(
+    bookingId: string,
+    nextStatus: AppointmentStatusValue,
+  ) {
     const previousStatus = statusByBooking[bookingId];
     setStatusByBooking((current) => ({ ...current, [bookingId]: nextStatus }));
     setSavingStatusId(bookingId);
@@ -999,18 +1262,29 @@ export function AppointmentsBrowser({
         else delete copy[bookingId];
         return copy;
       });
-      alert(error instanceof Error ? error.message : "Non sono riuscito a salvare lo stato. Riprova.");
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Non sono riuscito a salvare lo stato. Riprova.",
+      );
     } finally {
       setSavingStatusId(null);
     }
   }
 
-  async function handleTeamChange(booking: AppointmentRecord, teammateIds: string[]) {
+  async function handleTeamChange(
+    booking: AppointmentRecord,
+    teammateIds: string[],
+  ) {
     const previousTeam = getBookingTeam(booking);
-    const nextTeam = corsoTeamOptions.filter((option) => teammateIds.includes(option.id));
+    const nextTeam = corsoTeamOptions.filter((option) =>
+      teammateIds.includes(option.id),
+    );
 
     if (booking.inferredSalon !== "buenos-aires") {
-      alert("Il team si puo modificare solo per gli appuntamenti del salone Corso.");
+      alert(
+        "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
+      );
       return;
     }
 
@@ -1035,8 +1309,15 @@ export function AppointmentsBrowser({
       }
     } catch (error) {
       console.error("Failed to save appointment team:", error);
-      setTeamByBooking((current) => ({ ...current, [booking.id]: previousTeam }));
-      alert(error instanceof Error ? error.message : "Non sono riuscito a salvare il team. Riprova.");
+      setTeamByBooking((current) => ({
+        ...current,
+        [booking.id]: previousTeam,
+      }));
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Non sono riuscito a salvare il team. Riprova.",
+      );
     } finally {
       setSavingTeamId(null);
     }
@@ -1055,7 +1336,10 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("appointments_internal_notes", JSON.stringify(internalNotes));
+      window.localStorage.setItem(
+        "appointments_internal_notes",
+        JSON.stringify(internalNotes),
+      );
     } catch {
       // ignore local storage failures
     }
@@ -1073,15 +1357,27 @@ export function AppointmentsBrowser({
   }, [filteredBookings]);
 
   const monthGrid = useMemo(() => {
-    const firstOfMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+    const firstOfMonth = new Date(
+      anchorDate.getFullYear(),
+      anchorDate.getMonth(),
+      1,
+    );
     const firstWeekday = (firstOfMonth.getDay() + 6) % 7;
-    const daysInMonth = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0).getDate();
+    const daysInMonth = new Date(
+      anchorDate.getFullYear(),
+      anchorDate.getMonth() + 1,
+      0,
+    ).getDate();
     const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
 
     return Array.from({ length: totalCells }, (_, index) => {
       const dayNumber = index - firstWeekday + 1;
       if (dayNumber < 1 || dayNumber > daysInMonth) return null;
-      return new Date(anchorDate.getFullYear(), anchorDate.getMonth(), dayNumber);
+      return new Date(
+        anchorDate.getFullYear(),
+        anchorDate.getMonth(),
+        dayNumber,
+      );
     });
   }, [anchorDate]);
 
@@ -1095,12 +1391,20 @@ export function AppointmentsBrowser({
     [anchorDate],
   );
 
-  const dayBookings = useMemo(() => filteredBookings.filter((booking) => getBookingDateKey(booking) === localDateKey(anchorDate)), [filteredBookings, anchorDate]);
+  const dayBookings = useMemo(
+    () =>
+      filteredBookings.filter(
+        (booking) => getBookingDateKey(booking) === localDateKey(anchorDate),
+      ),
+    [filteredBookings, anchorDate],
+  );
 
   const recentBookings = useMemo(
     () =>
-      [...filteredBookings]
-        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
+      [...filteredBookings].sort(
+        (a, b) =>
+          new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+      ),
     [filteredBookings],
   );
 
@@ -1108,7 +1412,10 @@ export function AppointmentsBrowser({
 
   const detailEntries = useMemo(() => {
     if (!selectedBooking?.extraDetails?.length) {
-      return { formFields: [] as Array<{ label: string; value: string }>, otherFields: [] as Array<{ label: string; value: string }> };
+      return {
+        formFields: [] as Array<{ label: string; value: string }>,
+        otherFields: [] as Array<{ label: string; value: string }>,
+      };
     }
 
     const formFields = selectedBooking.extraDetails.filter((item) => {
@@ -1133,23 +1440,44 @@ export function AppointmentsBrowser({
       );
     });
 
-    const otherFields = selectedBooking.extraDetails.filter((item) => !formFields.includes(item));
+    const otherFields = selectedBooking.extraDetails.filter(
+      (item) => !formFields.includes(item),
+    );
 
     return { formFields, otherFields };
   }, [selectedBooking]);
 
-  const StatusControl = ({ booking, compact = false }: { booking: AppointmentRecord; compact?: boolean }) => {
+  const StatusControl = ({
+    booking,
+    compact = false,
+  }: {
+    booking: AppointmentRecord;
+    compact?: boolean;
+  }) => {
     if (booking.isCanceled) {
-      return <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-black text-red-700">Annullato</span>;
+      return (
+        <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
+          Annullato
+        </span>
+      );
     }
 
     const status = getBookingStatus(booking);
 
     return (
-      <div className="flex flex-col gap-1" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+      <div
+        className="flex flex-col gap-1"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
         <select
           value={status}
-          onChange={(event) => handleStatusChange(booking.id, event.target.value as AppointmentStatusValue)}
+          onChange={(event) =>
+            handleStatusChange(
+              booking.id,
+              event.target.value as AppointmentStatusValue,
+            )
+          }
           disabled={savingStatusId === booking.id}
           className={[
             "rounded-full border px-3 font-black outline-none transition focus:ring-2 focus:ring-[#FBE1EB]",
@@ -1164,14 +1492,20 @@ export function AppointmentsBrowser({
             </option>
           ))}
         </select>
-        {savingStatusId === booking.id ? <span className="text-[10px] font-bold text-black/35">Salvataggio...</span> : null}
+        {savingStatusId === booking.id ? (
+          <span className="text-[10px] font-bold text-black/35">
+            Salvataggio...
+          </span>
+        ) : null}
       </div>
     );
   };
 
   const TeamControl = ({ booking }: { booking: AppointmentRecord }) => {
     const currentTeam = getBookingTeam(booking);
-    const [draftIds, setDraftIds] = useState(() => currentTeam.map((mate) => mate.id));
+    const [draftIds, setDraftIds] = useState(() =>
+      currentTeam.map((mate) => mate.id),
+    );
 
     useEffect(() => {
       setDraftIds(currentTeam.map((mate) => mate.id));
@@ -1194,13 +1528,21 @@ export function AppointmentsBrowser({
     }
 
     return (
-      <div className="mt-4 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3" onClick={(event) => event.stopPropagation()}>
-        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Modifica team Corso</p>
+      <div
+        className="mt-4 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+          Modifica team Corso
+        </p>
         <div className="mt-3 grid gap-2">
           {corsoTeamOptions.map((option) => {
             const checked = draftIds.includes(option.id);
             return (
-              <label key={option.id} className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-2 text-sm font-bold text-[#171717]">
+              <label
+                key={option.id}
+                className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-2 text-sm font-bold text-[#171717]"
+              >
                 <input
                   type="checkbox"
                   checked={checked}
@@ -1214,7 +1556,11 @@ export function AppointmentsBrowser({
                   }}
                   className="size-4 accent-[#C66170]"
                 />
-                <Avatar name={option.name} photoUrl={option.photoUrl} size="size-9" />
+                <Avatar
+                  name={option.name}
+                  photoUrl={option.photoUrl}
+                  size="size-9"
+                />
                 <span className="min-w-0 truncate">{option.name}</span>
               </label>
             );
@@ -1226,54 +1572,104 @@ export function AppointmentsBrowser({
           onClick={() => handleTeamChange(booking, draftIds)}
           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#171717] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
         >
-          {savingTeamId === booking.id ? <Loader2 className="size-4 animate-spin" /> : <UsersRound className="size-4" />}
+          {savingTeamId === booking.id ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <UsersRound className="size-4" />
+          )}
           {savingTeamId === booking.id ? "Salvataggio..." : "Salva team"}
         </button>
       </div>
     );
   };
 
-  const WhatsAppSheetNote = ({ booking, compact = false, always = false }: { booking: AppointmentRecord; compact?: boolean; always?: boolean }) => {
-    const message = booking.sheetNote || (booking.sheetMatched ? "Conferma trovata, cella J vuota" : "Non trovato nel foglio conferme");
+  const WhatsAppSheetNote = ({
+    booking,
+    compact = false,
+    always = false,
+  }: {
+    booking: AppointmentRecord;
+    compact?: boolean;
+    always?: boolean;
+  }) => {
+    const message =
+      booking.sheetNote ||
+      (booking.sheetMatched
+        ? "Conferma trovata, cella J vuota"
+        : "Non trovato nel foglio conferme");
     if (!always && !booking.sheetNote) return null;
     const found = Boolean(booking.sheetMatched || booking.sheetNote);
     return (
       <div
         className={[
           "inline-flex max-w-full items-start gap-2 rounded-2xl border",
-          found ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800",
+          found
+            ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+            : "border-amber-100 bg-amber-50 text-amber-800",
           compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
         ].join(" ")}
         title={message}
       >
-        <MessageCircle className={compact ? "mt-0.5 size-3.5 shrink-0" : "mt-0.5 size-4 shrink-0"} />
+        <MessageCircle
+          className={
+            compact ? "mt-0.5 size-3.5 shrink-0" : "mt-0.5 size-4 shrink-0"
+          }
+        />
         <span className="min-w-0">
           <span className="font-black">WhatsApp</span>
-          <span className="ml-1 font-semibold">{compact ? compactValue(message, 42) : message}</span>
+          <span className="ml-1 font-semibold">
+            {compact ? compactValue(message, 42) : message}
+          </span>
         </span>
       </div>
     );
   };
 
   const tableBookings = filteredBookings.slice(0, visibleCount);
-  const prenotateCount = initialBookings.filter((booking) => !booking.isCanceled).length;
-  const inArrivoCount = initialBookings.filter((booking) => !booking.isCanceled && new Date(booking.startDate).getTime() >= Date.now()).length;
-  const prePaymentCount = initialBookings.filter((booking) => normalizeSearchValue(booking.financialStatus).includes("paid") || normalizeSearchValue(booking.serviceTitle).includes("acconto")).length;
-  const waitListCount = initialBookings.filter((booking) => normalizeSearchValue(booking.bookingType).includes("wait") || normalizeSearchValue(booking.notesText).includes("lista d attesa")).length;
-  const selectedStatus = selectedBooking ? getBookingStatus(selectedBooking) : "PRENOTATO";
-  const selectedContacts = selectedBooking ? getCustomerContactLines(selectedBooking) : null;
-  const selectedNotePreview = selectedBooking ? getBookingNotePreview(selectedBooking) : "";
+  const prenotateCount = initialBookings.filter(
+    (booking) => !booking.isCanceled,
+  ).length;
+  const inArrivoCount = initialBookings.filter(
+    (booking) =>
+      !booking.isCanceled &&
+      new Date(booking.startDate).getTime() >= Date.now(),
+  ).length;
+  const prePaymentCount = initialBookings.filter(
+    (booking) =>
+      normalizeSearchValue(booking.financialStatus).includes("paid") ||
+      normalizeSearchValue(booking.serviceTitle).includes("acconto"),
+  ).length;
+  const waitListCount = initialBookings.filter(
+    (booking) =>
+      normalizeSearchValue(booking.bookingType).includes("wait") ||
+      normalizeSearchValue(booking.notesText).includes("lista d attesa"),
+  ).length;
+  const selectedStatus = selectedBooking
+    ? getBookingStatus(selectedBooking)
+    : "PRENOTATO";
+  const selectedContacts = selectedBooking
+    ? getCustomerContactLines(selectedBooking)
+    : null;
+  const selectedNotePreview = selectedBooking
+    ? getBookingNotePreview(selectedBooking)
+    : "";
 
   return (
     <div className="min-h-screen bg-white px-3 py-4 sm:px-5 lg:px-6">
       {clientControlOpen ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5">
-          <div className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[26px] border border-black/15 bg-[#FAFAFA] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
-            <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-5 sm:px-7">
+          <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-[24px] border border-black/15 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
+            <div className="flex items-start justify-between gap-4 border-b border-black/10 bg-white px-5 py-5 sm:px-7">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">Store manager</p>
-                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">Appuntamenti e controllo cliente</h2>
-                <p className="mt-1 text-xs font-semibold text-black/45">Compila il controllo partendo dai dati dell'appuntamento.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">
+                  Store manager
+                </p>
+                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">
+                  Appuntamenti e controllo cliente
+                </h2>
+                <p className="mt-1 text-xs font-semibold text-black/45">
+                  Compila il controllo partendo dai dati dell'appuntamento.
+                </p>
               </div>
               <button
                 type="button"
@@ -1284,173 +1680,280 @@ export function AppointmentsBrowser({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
-              <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Sede *</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {clientControlSalons.map((salon) => (
-                      <button
-                        key={salon.value}
-                        type="button"
-                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salon.value, staffIds: [] }))}
-                        className={[
-                          "rounded-full border px-3 py-2 text-xs font-black transition",
-                          clientControlForm.salon === salon.value
-                            ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
-                            : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
-                        ].join(" ")}
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#F8F4F1] p-4 sm:p-6">
+              <div className="space-y-5">
+                <section className="rounded-[20px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                        Sede *
+                      </p>
+                      <p className="mt-1 text-sm font-black text-[#2B211C]">
+                        Controllo cliente e nota Shopify
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {clientControlSalons.map((salon) => (
+                        <button
+                          key={salon.value}
+                          type="button"
+                          onClick={() =>
+                            setClientControlForm((prev) => ({
+                              ...prev,
+                              salon: salon.value,
+                              staffIds: [],
+                            }))
+                          }
+                          className={[
+                            "rounded-full border px-3 py-2 text-xs font-black transition",
+                            clientControlForm.salon === salon.value
+                              ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
+                              : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
+                          ].join(" ")}
+                        >
+                          {salon.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[20px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Dati appuntamento
+                    </p>
+                    <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[10px] font-black text-black/45">
+                      Shopify + controllo cliente
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {[
+                      ["clientName", "Nome cliente *", "Nome cliente"],
+                      ["email", "Email cliente", "email@esempio.com"],
+                      ["phone", "Telefono cliente", "+39..."],
+                      ["serviceTitle", "Servizio prenotato", "Servizio"],
+                      ["shopifyOrder", "Ordine Shopify", "Numero ordine"],
+                      ["depositPaid", "Acconto pagato (€)", "0.00"],
+                      ["paid", "Pagato (€)", "0.00"],
+                      ["instagramTag", "IG tag", "@cliente"],
+                    ].map(([fieldKey, label, placeholder]) => (
+                      <label key={fieldKey} className="block">
+                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                          {label}
+                        </span>
+                        <input
+                          value={String(
+                            (clientControlForm as any)[fieldKey] ?? "",
+                          )}
+                          readOnly={fieldKey === "serviceTitle"}
+                          onChange={(event) =>
+                            setClientControlForm((prev) => ({
+                              ...prev,
+                              [fieldKey]: event.target.value,
+                            }))
+                          }
+                          className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5] read-only:bg-black/[0.02] read-only:text-black/60"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                    ))}
+                    <label className="block md:col-span-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                          Testo nota Shopify
+                        </span>
+                        <button
+                          type="button"
+                          onClick={polishClientControlNote}
+                          disabled={
+                            !hasClientControlNoteContext() ||
+                            clientControlPolishing
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-full bg-[#E88AC5] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white shadow-sm shadow-pink-200 transition active:scale-95 disabled:opacity-45"
+                        >
+                          <Sparkles className="size-3.5" />
+                          {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
+                        </button>
+                      </div>
+                      <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">
+                          Suggerimenti
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {clientControlNoteSuggestions.map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              onClick={() =>
+                                appendClientControlNote(suggestion)
+                              }
+                              className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-[11px] font-black text-[#B83D7F] transition active:scale-95"
+                            >
+                              + {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          <label className="block">
+                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                              Formato extension
+                            </span>
+                            <select
+                              value={selectedExtensionFormat}
+                              onChange={(event) => {
+                                const format = event.target.value;
+                                setSelectedExtensionFormat(format);
+                                if (format)
+                                  appendClientControlNote(`Fatto ${format}`);
+                              }}
+                              className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-sm font-bold text-[#5D4A42] outline-none focus:border-[#E88AC5]"
+                            >
+                              <option value="">Seleziona formato</option>
+                              {extensionFormatOptions.map((format) => (
+                                <option key={format} value={format}>
+                                  {format}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                              Colore collection
+                            </span>
+                            <select
+                              value={selectedExtensionColor}
+                              onChange={(event) => {
+                                const color = event.target.value;
+                                setSelectedExtensionColor(color);
+                                if (color)
+                                  appendClientControlNote(
+                                    `Ha fatto colore ${color}`,
+                                  );
+                              }}
+                              className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-sm font-bold text-[#5D4A42] outline-none focus:border-[#E88AC5]"
+                            >
+                              <option value="">Seleziona colore</option>
+                              {extensionColorOptions.map((color) => (
+                                <option key={color} value={color}>
+                                  {color}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                      <textarea
+                        value={clientControlForm.customNoteText}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            customNoteText: event.target.value,
+                          }))
+                        }
+                        className="mt-2 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
+                        placeholder="Scrivi qui la nota Shopify"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-5">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Collaboratrici del salone *
+                    </p>
+                    <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
+                      {clientControlLoading ? (
+                        <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">
+                          Carico collaboratrici...
+                        </p>
+                      ) : filteredClientControlEmployees.length ? (
+                        filteredClientControlEmployees.map((employee) => {
+                          const selected = clientControlForm.staffIds.includes(
+                            employee.id,
+                          );
+                          return (
+                            <button
+                              key={employee.id}
+                              type="button"
+                              onClick={() =>
+                                setClientControlForm((prev) => ({
+                                  ...prev,
+                                  staffIds: selected
+                                    ? prev.staffIds.filter(
+                                        (id) => id !== employee.id,
+                                      )
+                                    : [...prev.staffIds, employee.id],
+                                }))
+                              }
+                              className={[
+                                "rounded-xl border px-3 py-2 text-left text-xs font-black transition",
+                                selected
+                                  ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
+                                  : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
+                              ].join(" ")}
+                            >
+                              {employee.name}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">
+                          Nessuna collaboratrice trovata per questa sede.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                    {[
+                      ["notes", "Note Shopify"],
+                      ["beforeMedia", "Prima foto/video"],
+                      ["afterMedia", "Dopo foto/video"],
+                      ["products", "Prodotti"],
+                      ["review", "Recensione"],
+                    ].map(([fieldKey, fieldLabel]) => (
+                      <label
+                        key={fieldKey}
+                        className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]"
                       >
-                        {salon.label}
-                      </button>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(
+                            (clientControlForm as any)[fieldKey],
+                          )}
+                          onChange={(event) =>
+                            setClientControlForm((prev) => ({
+                              ...prev,
+                              [fieldKey]: event.target.checked,
+                            }))
+                          }
+                          className="size-4 accent-[#E88AC5]"
+                        />
+                        <span>{fieldLabel}</span>
+                      </label>
                     ))}
                   </div>
-                </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-2">
-                  {[
-                    ["clientName", "Nome cliente *", "Nome cliente"],
-                    ["email", "Email cliente", "email@esempio.com"],
-                    ["phone", "Telefono cliente", "+39..."],
-                    ["serviceTitle", "Servizio prenotato", "Servizio"],
-                    ["shopifyOrder", "Ordine Shopify", "Numero ordine"],
-                    ["depositPaid", "Acconto pagato (€)", "0.00"],
-                    ["paid", "Pagato (€)", "0.00"],
-                    ["instagramTag", "IG tag", "@cliente"],
-                  ].map(([fieldKey, label, placeholder]) => (
-                    <label key={fieldKey} className="block">
-                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">{label}</span>
-                      <input
-                        value={String((clientControlForm as any)[fieldKey] ?? "")}
-                        readOnly={fieldKey === "serviceTitle"}
-                        onChange={(event) => setClientControlForm((prev) => ({ ...prev, [fieldKey]: event.target.value }))}
-                        className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5] read-only:bg-black/[0.02] read-only:text-black/60"
-                        placeholder={placeholder}
-                      />
-                    </label>
-                  ))}
-                  <label className="block md:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
-                      <button
-                        type="button"
-                        onClick={polishClientControlNote}
-                        disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                        className="rounded-full bg-[#FCE5F3] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition active:scale-95 disabled:opacity-45"
-                      >
-                        {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
-                      </button>
-                    </div>
-                    <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3">
-                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">Suggerimenti</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {clientControlNoteSuggestions.map((suggestion) => (
-                          <button
-                            key={suggestion}
-                            type="button"
-                            onClick={() => appendClientControlNote(suggestion)}
-                            className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-[11px] font-black text-[#B83D7F] transition active:scale-95"
-                          >
-                            + {suggestion}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Colore collection</span>
-                        <select
-                          value={selectedExtensionColor}
-                          onChange={(event) => {
-                            const color = event.target.value;
-                            setSelectedExtensionColor(color);
-                            if (color) appendClientControlNote(`Ha fatto colore ${color}`);
-                          }}
-                          className="h-11 rounded-2xl border border-[#F3B5D4] bg-white px-3 text-sm font-bold text-[#5D4A42] outline-none focus:border-[#E88AC5]"
-                        >
-                          <option value="">Seleziona colore</option>
-                          {extensionColorOptions.map((color) => (
-                            <option key={color} value={color}>
-                              {color}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <textarea
-                      value={clientControlForm.customNoteText}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, customNoteText: event.target.value }))}
-                      className="mt-2 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
-                      placeholder="Scrivi qui la nota Shopify"
-                    />
-                  </label>
-                </div>
+                  {clientControlMessage ? (
+                    <p
+                      className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                    >
+                      {clientControlMessage.text}
+                    </p>
+                  ) : null}
 
-                <div className="mt-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Collaboratrici del salone *</p>
-                  <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
-                    {clientControlLoading ? (
-                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Carico collaboratrici...</p>
-                    ) : filteredClientControlEmployees.length ? (
-                      filteredClientControlEmployees.map((employee) => {
-                        const selected = clientControlForm.staffIds.includes(employee.id);
-                        return (
-                          <button
-                            key={employee.id}
-                            type="button"
-                            onClick={() =>
-                              setClientControlForm((prev) => ({
-                                ...prev,
-                                staffIds: selected ? prev.staffIds.filter((id) => id !== employee.id) : [...prev.staffIds, employee.id],
-                              }))
-                            }
-                            className={[
-                              "rounded-xl border px-3 py-2 text-left text-xs font-black transition",
-                              selected ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]" : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
-                            ].join(" ")}
-                          >
-                            {employee.name}
-                          </button>
-                        );
-                      })
-                    ) : (
-                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Nessuna collaboratrice trovata per questa sede.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                  {[
-                    ["notes", "Note Shopify"],
-                    ["beforeMedia", "Prima foto/video"],
-                    ["afterMedia", "Dopo foto/video"],
-                    ["products", "Prodotti"],
-                    ["review", "Recensione"],
-                  ].map(([fieldKey, fieldLabel]) => (
-                    <label key={fieldKey} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]">
-                      <input
-                        type="checkbox"
-                        checked={Boolean((clientControlForm as any)[fieldKey])}
-                        onChange={(event) => setClientControlForm((prev) => ({ ...prev, [fieldKey]: event.target.checked }))}
-                        className="size-4 accent-[#E88AC5]"
-                      />
-                      <span>{fieldLabel}</span>
-                    </label>
-                  ))}
-                </div>
-
-                {clientControlMessage ? (
-                  <p className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                    {clientControlMessage.text}
-                  </p>
-                ) : null}
-
-                <button
-                  type="button"
-                  onClick={submitClientControlForm}
-                  disabled={clientControlSubmitting || clientControlLoading}
-                  className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
-                >
-                  {clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}
-                </button>
+                  <button
+                    type="button"
+                    onClick={submitClientControlForm}
+                    disabled={clientControlSubmitting || clientControlLoading}
+                    className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
+                  >
+                    {clientControlSubmitting
+                      ? "Salvataggio..."
+                      : "Salva appuntamento"}
+                  </button>
+                </section>
               </div>
             </div>
           </div>
@@ -1459,7 +1962,9 @@ export function AppointmentsBrowser({
       <div
         className={[
           "mx-auto grid w-full max-w-[1760px] gap-5",
-          selectedBooking ? "xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
+          selectedBooking
+            ? "xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]"
+            : "grid-cols-1",
         ].join(" ")}
       >
         <main className="min-w-0 space-y-5">
@@ -1467,22 +1972,58 @@ export function AppointmentsBrowser({
             <div>
               <div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="font-serif text-4xl font-semibold tracking-[-0.02em] text-[#1F1F1F] sm:text-5xl">Prenotazioni</h1>
-                  <span className="rounded-full bg-[#F7E5DC] px-3 py-1 text-sm font-black text-[#9B583D]">{activeBookingsCount}</span>
+                  <h1 className="font-serif text-4xl font-semibold tracking-[-0.02em] text-[#1F1F1F] sm:text-5xl">
+                    Prenotazioni
+                  </h1>
+                  <span className="rounded-full bg-[#F7E5DC] px-3 py-1 text-sm font-black text-[#9B583D]">
+                    {activeBookingsCount}
+                  </span>
                 </div>
-                <p className="mt-2 text-sm font-medium text-[#7B6B62]">Visualizza tutte le prenotazioni in arrivo</p>
+                <p className="mt-2 text-sm font-medium text-[#7B6B62]">
+                  Visualizza tutte le prenotazioni in arrivo
+                </p>
               </div>
             </div>
 
             <div className="mt-7 overflow-x-auto rounded-[18px] border border-[#E8D8CF] bg-[#FFFDFC] p-2">
               <div className="flex min-w-max gap-2">
                 {[
-                  { label: "Tutte", count: initialBookings.length, active: !showCanceled, onClick: () => setShowCanceled(false) },
-                  { label: "Prenotate", count: prenotateCount, active: !showCanceled, onClick: () => setShowCanceled(false) },
-                  { label: "In arrivo", count: inArrivoCount, active: false, onClick: () => setShowCanceled(false) },
-                  { label: "Annullate", count: canceledBookingsCount, active: showCanceled, onClick: () => setShowCanceled(true) },
-                  { label: "Pre-pagamento", count: prePaymentCount, active: false, onClick: () => setShowCanceled(false) },
-                  { label: "Lista d'attesa", count: waitListCount, active: false, onClick: () => setShowCanceled(false) },
+                  {
+                    label: "Tutte",
+                    count: initialBookings.length,
+                    active: !showCanceled,
+                    onClick: () => setShowCanceled(false),
+                  },
+                  {
+                    label: "Prenotate",
+                    count: prenotateCount,
+                    active: !showCanceled,
+                    onClick: () => setShowCanceled(false),
+                  },
+                  {
+                    label: "In arrivo",
+                    count: inArrivoCount,
+                    active: false,
+                    onClick: () => setShowCanceled(false),
+                  },
+                  {
+                    label: "Annullate",
+                    count: canceledBookingsCount,
+                    active: showCanceled,
+                    onClick: () => setShowCanceled(true),
+                  },
+                  {
+                    label: "Pre-pagamento",
+                    count: prePaymentCount,
+                    active: false,
+                    onClick: () => setShowCanceled(false),
+                  },
+                  {
+                    label: "Lista d'attesa",
+                    count: waitListCount,
+                    active: false,
+                    onClick: () => setShowCanceled(false),
+                  },
                 ].map((tab) => (
                   <button
                     key={tab.label}
@@ -1490,11 +2031,15 @@ export function AppointmentsBrowser({
                     onClick={tab.onClick}
                     className={[
                       "inline-flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-black transition",
-                      tab.active ? "bg-[#FFF1F0] text-[#9F4D46] shadow-sm ring-1 ring-[#F1D1CA]" : "text-[#4E382C] hover:bg-[#FFF7F3]",
+                      tab.active
+                        ? "bg-[#FFF1F0] text-[#9F4D46] shadow-sm ring-1 ring-[#F1D1CA]"
+                        : "text-[#4E382C] hover:bg-[#FFF7F3]",
                     ].join(" ")}
                   >
                     {tab.label}
-                    <span className="rounded-full border border-[#E8D8CF] bg-white px-2.5 py-0.5 text-xs text-[#4E382C]">{tab.count}</span>
+                    <span className="rounded-full border border-[#E8D8CF] bg-white px-2.5 py-0.5 text-xs text-[#4E382C]">
+                      {tab.count}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1526,20 +2071,41 @@ export function AppointmentsBrowser({
                   <div className="absolute left-0 right-0 top-14 z-30 rounded-2xl border border-[#E8D8CF] bg-white p-3 shadow-xl">
                     <div className="grid gap-2">
                       {[
-                        { label: "Tutte le date", mode: "all" as AppointmentDateFilterMode, from: dateFilter.from, to: dateFilter.to },
-                        { label: "Oggi", mode: "today" as AppointmentDateFilterMode, from: localDateKey(new Date()), to: localDateKey(new Date()) },
-                        { label: "Domani", mode: "tomorrow" as AppointmentDateFilterMode, from: localDateKey(addDays(new Date(), 1)), to: localDateKey(addDays(new Date(), 1)) },
+                        {
+                          label: "Tutte le date",
+                          mode: "all" as AppointmentDateFilterMode,
+                          from: dateFilter.from,
+                          to: dateFilter.to,
+                        },
+                        {
+                          label: "Oggi",
+                          mode: "today" as AppointmentDateFilterMode,
+                          from: localDateKey(new Date()),
+                          to: localDateKey(new Date()),
+                        },
+                        {
+                          label: "Domani",
+                          mode: "tomorrow" as AppointmentDateFilterMode,
+                          from: localDateKey(addDays(new Date(), 1)),
+                          to: localDateKey(addDays(new Date(), 1)),
+                        },
                       ].map((option) => (
                         <button
                           key={option.mode}
                           type="button"
                           onClick={() => {
-                            setDateFilter({ mode: option.mode, from: option.from, to: option.to });
+                            setDateFilter({
+                              mode: option.mode,
+                              from: option.from,
+                              to: option.to,
+                            });
                             setIsDatePickerOpen(false);
                           }}
                           className={[
                             "rounded-xl px-3 py-2 text-left text-sm font-black transition",
-                            dateFilter.mode === option.mode ? "bg-[#FFF1F6] text-[#B9476D]" : "text-[#4E382C] hover:bg-[#FFF7F3]",
+                            dateFilter.mode === option.mode
+                              ? "bg-[#FFF1F6] text-[#B9476D]"
+                              : "text-[#4E382C] hover:bg-[#FFF7F3]",
                           ].join(" ")}
                         >
                           {option.label}
@@ -1547,17 +2113,31 @@ export function AppointmentsBrowser({
                       ))}
                     </div>
                     <div className="mt-3 grid gap-2 border-t border-[#E8D8CF] pt-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8D5E49]">Da giorno a giorno</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#8D5E49]">
+                        Da giorno a giorno
+                      </p>
                       <input
                         type="date"
                         value={dateFilter.from}
-                        onChange={(event) => setDateFilter((current) => ({ ...current, mode: "custom", from: event.target.value }))}
+                        onChange={(event) =>
+                          setDateFilter((current) => ({
+                            ...current,
+                            mode: "custom",
+                            from: event.target.value,
+                          }))
+                        }
                         className="h-11 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
                       />
                       <input
                         type="date"
                         value={dateFilter.to}
-                        onChange={(event) => setDateFilter((current) => ({ ...current, mode: "custom", to: event.target.value }))}
+                        onChange={(event) =>
+                          setDateFilter((current) => ({
+                            ...current,
+                            mode: "custom",
+                            to: event.target.value,
+                          }))
+                        }
                         className="h-11 rounded-xl border border-[#E8D8CF] bg-white px-3 text-sm font-bold text-[#4E382C] outline-none"
                       />
                       <button
@@ -1573,7 +2153,9 @@ export function AppointmentsBrowser({
               </div>
               <select
                 value={salon}
-                onChange={(event) => setSalon(event.target.value as SalonFilter)}
+                onChange={(event) =>
+                  setSalon(event.target.value as SalonFilter)
+                }
                 className="h-12 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-bold text-[#4E382C] outline-none focus:border-[#C98B73] focus:ring-2 focus:ring-[#F4D8CF]"
               >
                 {salonOptions.map((option) => (
@@ -1582,7 +2164,10 @@ export function AppointmentsBrowser({
                   </option>
                 ))}
               </select>
-              <button type="button" className="flex h-12 items-center justify-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-black text-[#4E382C]">
+              <button
+                type="button"
+                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-black text-[#4E382C]"
+              >
                 <MoreVertical className="size-4 rotate-90 text-[#A56A42]" />
                 Filtri
               </button>
@@ -1623,7 +2208,9 @@ export function AppointmentsBrowser({
                       }}
                       className={[
                         "grid w-full cursor-pointer gap-4 px-5 py-5 text-left transition xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
-                        isSelected ? "bg-[#FFF0F2] shadow-[inset_4px_0_0_#C96363]" : "bg-white hover:bg-[#FFF8F6]",
+                        isSelected
+                          ? "bg-[#FFF0F2] shadow-[inset_4px_0_0_#C96363]"
+                          : "bg-white hover:bg-[#FFF8F6]",
                       ].join(" ")}
                     >
                       <div className="flex gap-3">
@@ -1631,9 +2218,12 @@ export function AppointmentsBrowser({
                           <CalendarDays className="size-5" />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#38271F]">{formatDate(booking.startDate)}</p>
+                          <p className="text-sm font-semibold text-[#38271F]">
+                            {formatDate(booking.startDate)}
+                          </p>
                           <p className="mt-1 text-sm font-semibold text-[#38271F]">
-                            {formatTime(booking.startDate)} - {formatTime(booking.endDate)}
+                            {formatTime(booking.startDate)} -{" "}
+                            {formatTime(booking.endDate)}
                           </p>
                           <p className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase text-[#7A5B4B]">
                             <MapPin className="size-3.5" />
@@ -1643,7 +2233,9 @@ export function AppointmentsBrowser({
                       </div>
 
                       <div className="min-w-0 space-y-1">
-                        <p className="truncate text-sm font-semibold text-[#1F1F1F]">{booking.customerName}</p>
+                        <p className="truncate text-sm font-semibold text-[#1F1F1F]">
+                          {booking.customerName}
+                        </p>
                         <p className="flex items-center gap-1 truncate text-xs font-medium text-[#6F625C]">
                           <Phone className="size-3.5 text-[#A56A42]" />
                           {contacts.phone || "Nessun telefono"}
@@ -1656,12 +2248,23 @@ export function AppointmentsBrowser({
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-3">
-                          <ServiceImage title={booking.serviceTitle} imageUrl={booking.serviceImageUrl} compact />
+                          <ServiceImage
+                            title={booking.serviceTitle}
+                            imageUrl={booking.serviceImageUrl}
+                            compact
+                          />
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold uppercase text-[#1F1F1F]">{booking.serviceTitle}</p>
-                            <p className="mt-1 truncate text-xs font-medium text-[#6F625C]">{booking.bookingType || "Regular booking"}</p>
+                            <p className="truncate text-sm font-semibold uppercase text-[#1F1F1F]">
+                              {booking.serviceTitle}
+                            </p>
+                            <p className="mt-1 truncate text-xs font-medium text-[#6F625C]">
+                              {booking.bookingType || "Regular booking"}
+                            </p>
                             <span className="mt-2 inline-flex rounded-lg border border-[#E8D8CF] bg-[#FFF9F6] px-2 py-1 text-xs font-bold text-[#7A5B4B]">
-                              {formatDuration(booking.startDate, booking.endDate)}
+                              {formatDuration(
+                                booking.startDate,
+                                booking.endDate,
+                              )}
                             </span>
                           </div>
                         </div>
@@ -1670,26 +2273,50 @@ export function AppointmentsBrowser({
                       <div className="min-w-0 rounded-2xl bg-[#FFF9F6] p-3 xl:bg-transparent xl:p-0">
                         <div className="flex min-w-0 items-center gap-2">
                           {assignedTeam.slice(0, 2).map((mate) => (
-                            <Avatar key={mate.id} name={mate.name} photoUrl={mate.photoUrl} size="size-8" />
+                            <Avatar
+                              key={mate.id}
+                              name={mate.name}
+                              photoUrl={mate.photoUrl}
+                              size="size-8"
+                            />
                           ))}
-                          {!assignedTeam.length ? <UsersRound className="size-4 shrink-0 text-[#C95B75]" /> : null}
+                          {!assignedTeam.length ? (
+                            <UsersRound className="size-4 shrink-0 text-[#C95B75]" />
+                          ) : null}
                           <span className="truncate text-sm font-semibold text-[#1F1F1F]">
-                            {assignedTeam.map((mate) => mate.name).join(", ") || "Non assegnato"}
+                            {assignedTeam.map((mate) => mate.name).join(", ") ||
+                              "Non assegnato"}
                           </span>
                         </div>
-                        <p className="mt-1 truncate text-xs font-medium text-[#7A5B4B]">{getSalonLabel(booking.inferredSalon)}</p>
+                        <p className="mt-1 truncate text-xs font-medium text-[#7A5B4B]">
+                          {getSalonLabel(booking.inferredSalon)}
+                        </p>
                       </div>
 
                       <div>
-                        <p className="text-sm font-semibold text-[#1F1F1F]">{formatMoney(booking.priceAmount, booking.priceCurrency)}</p>
-                        <p className="mt-1 text-xs font-medium text-[#6F625C]">Qta: {getQuantityLabel(booking)}</p>
+                        <p className="text-sm font-semibold text-[#1F1F1F]">
+                          {formatMoney(
+                            booking.priceAmount,
+                            booking.priceCurrency,
+                          )}
+                        </p>
+                        <p className="mt-1 text-xs font-medium text-[#6F625C]">
+                          Qta: {getQuantityLabel(booking)}
+                        </p>
                       </div>
 
-                      <div className="space-y-2" onClick={(event) => event.stopPropagation()}>
+                      <div
+                        className="space-y-2"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <StatusControl booking={booking} compact />
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${booking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
-                            {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                          <span
+                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${booking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}
+                          >
+                            {booking.isCanceled
+                              ? "Annullato"
+                              : appointmentStatusLabels[status]}
                           </span>
                           <WhatsAppSheetNote booking={booking} compact />
                         </div>
@@ -1711,7 +2338,9 @@ export function AppointmentsBrowser({
                   );
                 })
               ) : (
-                <div className="p-8 text-sm font-semibold text-[#8A7266]">Nessun appuntamento disponibile con questi filtri.</div>
+                <div className="p-8 text-sm font-semibold text-[#8A7266]">
+                  Nessun appuntamento disponibile con questi filtri.
+                </div>
               )}
             </div>
 
@@ -1719,7 +2348,9 @@ export function AppointmentsBrowser({
               <div className="border-t border-[#E8D8CF] p-5">
                 <button
                   type="button"
-                  onClick={() => setVisibleCount((current) => current + appointmentsPageSize)}
+                  onClick={() =>
+                    setVisibleCount((current) => current + appointmentsPageSize)
+                  }
                   className="w-full rounded-2xl border border-[#E8D8CF] bg-white px-4 py-3 text-sm font-black text-[#4E382C] transition hover:bg-[#FFF7F3]"
                 >
                   Carica altri 5
@@ -1734,10 +2365,16 @@ export function AppointmentsBrowser({
             <div>
               <div className="flex items-start justify-between border-b border-[#E8D8CF] p-6">
                 <div>
-                  <h2 className="font-serif text-2xl font-semibold text-[#1F1F1F]">Dettaglio prenotazione</h2>
+                  <h2 className="font-serif text-2xl font-semibold text-[#1F1F1F]">
+                    Dettaglio prenotazione
+                  </h2>
                   <div className="mt-5 flex flex-wrap items-center gap-2">
-                    <span className={`inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}>
-                      {selectedBooking.isCanceled ? "Annullato" : appointmentStatusLabels[selectedStatus]}
+                    <span
+                      className={`inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}
+                    >
+                      {selectedBooking.isCanceled
+                        ? "Annullato"
+                        : appointmentStatusLabels[selectedStatus]}
                     </span>
                     <WhatsAppSheetNote booking={selectedBooking} compact />
                   </div>
@@ -1755,8 +2392,10 @@ export function AppointmentsBrowser({
               </div>
 
               <div className="space-y-6 p-6">
-      <section>
-                  <h3 className="font-serif text-3xl font-semibold text-[#1F1F1F]">{selectedBooking.customerName}</h3>
+                <section>
+                  <h3 className="font-serif text-3xl font-semibold text-[#1F1F1F]">
+                    {selectedBooking.customerName}
+                  </h3>
                   <div className="mt-4 space-y-2 text-sm font-medium text-[#6F625C]">
                     <p className="flex items-center gap-2">
                       <Phone className="size-4 text-[#A56A42]" />
@@ -1785,7 +2424,9 @@ export function AppointmentsBrowser({
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Appuntamento</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">
+                    Appuntamento
+                  </p>
                   <div className="mt-4 space-y-3 text-sm font-medium text-[#3A2A23]">
                     <p className="flex gap-2">
                       <CalendarDays className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
@@ -1793,7 +2434,13 @@ export function AppointmentsBrowser({
                     </p>
                     <p className="flex gap-2">
                       <Clock3 className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
-                      {formatTime(selectedBooking.startDate)} - {formatTime(selectedBooking.endDate)} ({formatDuration(selectedBooking.startDate, selectedBooking.endDate)})
+                      {formatTime(selectedBooking.startDate)} -{" "}
+                      {formatTime(selectedBooking.endDate)} (
+                      {formatDuration(
+                        selectedBooking.startDate,
+                        selectedBooking.endDate,
+                      )}
+                      )
                     </p>
                     <p className="flex gap-2">
                       <MapPin className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
@@ -1802,37 +2449,71 @@ export function AppointmentsBrowser({
                     <p className="flex gap-2">
                       <UsersRound className="mt-0.5 size-4 shrink-0 text-[#A56A42]" />
                       <span className="inline-flex min-w-0 flex-wrap items-center gap-2">
-                        {getBookingTeam(selectedBooking).slice(0, 2).map((mate) => (
-                          <Avatar key={mate.id} name={mate.name} photoUrl={mate.photoUrl} size="size-7" />
-                        ))}
-                        <span>{getBookingTeam(selectedBooking).map((mate) => mate.name).join(", ") || "Non assegnato"}</span>
+                        {getBookingTeam(selectedBooking)
+                          .slice(0, 2)
+                          .map((mate) => (
+                            <Avatar
+                              key={mate.id}
+                              name={mate.name}
+                              photoUrl={mate.photoUrl}
+                              size="size-7"
+                            />
+                          ))}
+                        <span>
+                          {getBookingTeam(selectedBooking)
+                            .map((mate) => mate.name)
+                            .join(", ") || "Non assegnato"}
+                        </span>
                       </span>
                     </p>
                   </div>
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Servizio</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">
+                    Servizio
+                  </p>
                   <div className="mt-4 flex gap-3">
-                    <ServiceImage title={selectedBooking.serviceTitle} imageUrl={selectedBooking.serviceImageUrl} compact />
+                    <ServiceImage
+                      title={selectedBooking.serviceTitle}
+                      imageUrl={selectedBooking.serviceImageUrl}
+                      compact
+                    />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold uppercase text-[#1F1F1F]">{selectedBooking.serviceTitle}</p>
-                      <p className="mt-1 text-sm font-medium text-[#6F625C]">{selectedBooking.bookingType || "Regular booking"}</p>
-                      {selectedBooking.bookingStr ? <p className="mt-2 text-xs font-semibold text-[#A56A42]">Ordine {formatOrderCode(selectedBooking.bookingStr)}</p> : null}
+                      <p className="text-sm font-semibold uppercase text-[#1F1F1F]">
+                        {selectedBooking.serviceTitle}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-[#6F625C]">
+                        {selectedBooking.bookingType || "Regular booking"}
+                      </p>
+                      {selectedBooking.bookingStr ? (
+                        <p className="mt-2 text-xs font-semibold text-[#A56A42]">
+                          Ordine {formatOrderCode(selectedBooking.bookingStr)}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Prezzo</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">
+                    Prezzo
+                  </p>
                   <div className="mt-4 flex items-center justify-between text-sm">
                     <span className="font-medium text-[#6F625C]">Totale</span>
-                    <span className="font-semibold text-[#1F1F1F]">{formatMoney(selectedBooking.priceAmount, selectedBooking.priceCurrency)}</span>
+                    <span className="font-semibold text-[#1F1F1F]">
+                      {formatMoney(
+                        selectedBooking.priceAmount,
+                        selectedBooking.priceCurrency,
+                      )}
+                    </span>
                   </div>
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Stato</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">
+                    Stato
+                  </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <StatusControl booking={selectedBooking} />
                     <WhatsAppSheetNote booking={selectedBooking} />
@@ -1840,31 +2521,46 @@ export function AppointmentsBrowser({
                   {selectedBooking.statusUpdatedBy ? (
                     <p className="mt-3 text-xs font-medium text-[#8A7266]">
                       Ultima modifica: {selectedBooking.statusUpdatedBy}
-                      {selectedBooking.statusUpdatedAt ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}` : ""}
+                      {selectedBooking.statusUpdatedAt
+                        ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}`
+                        : ""}
                     </p>
                   ) : null}
                   {selectedBooking.sheetNote ? (
                     <div className="mt-4 rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">Nota conferma</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">{selectedBooking.sheetNote}</p>
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">
+                        Nota conferma
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">
+                        {selectedBooking.sheetNote}
+                      </p>
                     </div>
                   ) : null}
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Note</p>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">
+                    Note
+                  </p>
                   <div className="mt-4 grid gap-3">
                     <div className="rounded-2xl border border-[#F0D9D3] bg-[#FFF6F7] p-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">Note Cowlendar</p>
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#A15062]">
+                        Note Cowlendar
+                      </p>
                       <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#5D4A42]">
-                        {selectedBooking.notesText?.trim() || cowlendarOrderNote?.trim() || "Nessuna nota presente in Cowlendar."}
+                        {selectedBooking.notesText?.trim() ||
+                          cowlendarOrderNote?.trim() ||
+                          "Nessuna nota presente in Cowlendar."}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-[#F1DDC9] bg-[#FFF7F2] p-4">
-                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#B46125]">Note Shopify</p>
+                      <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#B46125]">
+                        Note Shopify
+                      </p>
                       <p className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-[#7C3E14]">
                         {selectedBooking.bookingStr
-                          ? shopifyNote?.trim() || "Nessuna nota presente su Shopify."
+                          ? shopifyNote?.trim() ||
+                            "Nessuna nota presente su Shopify."
                           : "Nessun ordine Shopify collegato."}
                       </p>
                     </div>
@@ -1873,18 +2569,26 @@ export function AppointmentsBrowser({
 
                 {selectedContacts?.answers.length ? (
                   <section className="border-t border-[#E8D8CF] pt-5">
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">Risposte cliente</p>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8D5E49]">
+                      Risposte cliente
+                    </p>
                     <div className="mt-4 space-y-3">
                       {selectedContacts.answers.map((item, index) => (
-                        <div key={`${selectedBooking.id}-side-answer-${index}`} className="rounded-2xl border border-[#E8D8CF] bg-[#FFFDFC] p-3">
-                          <p className="text-xs font-black uppercase tracking-[0.12em] text-[#8D5E49]">{item.label}</p>
-                          <p className="mt-1 text-sm font-medium text-[#3A2A23]">{item.value}</p>
+                        <div
+                          key={`${selectedBooking.id}-side-answer-${index}`}
+                          className="rounded-2xl border border-[#E8D8CF] bg-[#FFFDFC] p-3"
+                        >
+                          <p className="text-xs font-black uppercase tracking-[0.12em] text-[#8D5E49]">
+                            {item.label}
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-[#3A2A23]">
+                            {item.value}
+                          </p>
                         </div>
                       ))}
                     </div>
                   </section>
                 ) : null}
-
               </div>
             </div>
           </aside>
@@ -1902,22 +2606,28 @@ export function AppointmentsBrowser({
             onClick={() => setShowCanceled(false)}
             className={[
               "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-black transition",
-              !showCanceled ? "border-[#171717] bg-[#171717] text-white" : "border-black/8 bg-white text-black/55 hover:border-black/20 hover:text-black",
+              !showCanceled
+                ? "border-[#171717] bg-[#171717] text-white"
+                : "border-black/8 bg-white text-black/55 hover:border-black/20 hover:text-black",
             ].join(" ")}
           >
             <CalendarCheck className="size-4" />
-            Prenotazioni <span className="ml-2 opacity-70">{activeBookingsCount}</span>
+            Prenotazioni{" "}
+            <span className="ml-2 opacity-70">{activeBookingsCount}</span>
           </button>
           <button
             type="button"
             onClick={() => setShowCanceled(true)}
             className={[
               "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-black transition",
-              showCanceled ? "border-red-200 bg-red-50 text-red-700" : "border-black/8 bg-white text-black/55 hover:border-red-200 hover:text-red-700",
+              showCanceled
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-black/8 bg-white text-black/55 hover:border-red-200 hover:text-red-700",
             ].join(" ")}
           >
             <X className="size-4" />
-            Annullato <span className="ml-2 opacity-70">{canceledBookingsCount}</span>
+            Annullato{" "}
+            <span className="ml-2 opacity-70">{canceledBookingsCount}</span>
           </button>
         </div>
 
@@ -1961,17 +2671,29 @@ export function AppointmentsBrowser({
 
         <div className="mt-5 flex flex-col gap-4 border-t border-black/5 pt-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-2 self-start rounded-full border border-black/5 bg-[#FCFCFC] p-1">
-            <button type="button" onClick={() => setAnchorDate(getPrevDate(view, anchorDate))} className="grid size-10 place-items-center rounded-full text-black/60 transition hover:bg-white hover:text-black">
+            <button
+              type="button"
+              onClick={() => setAnchorDate(getPrevDate(view, anchorDate))}
+              className="grid size-10 place-items-center rounded-full text-black/60 transition hover:bg-white hover:text-black"
+            >
               <ChevronLeft className="size-4" />
             </button>
-            <div className="min-w-[180px] px-3 text-center text-sm font-black capitalize text-[#171717]">{getRangeLabel(view, anchorDate)}</div>
-            <button type="button" onClick={() => setAnchorDate(getNextDate(view, anchorDate))} className="grid size-10 place-items-center rounded-full text-black/60 transition hover:bg-white hover:text-black">
+            <div className="min-w-[180px] px-3 text-center text-sm font-black capitalize text-[#171717]">
+              {getRangeLabel(view, anchorDate)}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAnchorDate(getNextDate(view, anchorDate))}
+              className="grid size-10 place-items-center rounded-full text-black/60 transition hover:bg-white hover:text-black"
+            >
               <ChevronRight className="size-4" />
             </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-black/45">
-            <span className="rounded-full bg-[#FFF1F5] px-3 py-1 font-bold text-[#C66170]">{filteredBookings.length} appuntamenti</span>
+            <span className="rounded-full bg-[#FFF1F5] px-3 py-1 font-bold text-[#C66170]">
+              {filteredBookings.length} appuntamenti
+            </span>
             <span>Nome + ora nel calendario, dettaglio completo al click.</span>
           </div>
         </div>
@@ -1997,7 +2719,10 @@ export function AppointmentsBrowser({
             <div className="min-w-[980px]">
               <div className="grid grid-cols-7 rounded-t-[22px] border border-black/5 bg-[#FFF8FA]">
                 {weekDays.map((day) => (
-                  <div key={day} className="border-r border-black/5 px-4 py-3 text-center text-[11px] font-black uppercase tracking-[0.16em] text-black/45 last:border-r-0">
+                  <div
+                    key={day}
+                    className="border-r border-black/5 px-4 py-3 text-center text-[11px] font-black uppercase tracking-[0.16em] text-black/45 last:border-r-0"
+                  >
                     {day}
                   </div>
                 ))}
@@ -2006,17 +2731,34 @@ export function AppointmentsBrowser({
               <div className="grid grid-cols-7 border-x border-b border-black/5">
                 {monthGrid.map((date, index) => {
                   if (!date) {
-                    return <div key={`empty-${index}`} className="min-h-[188px] border-r border-b border-black/5 bg-black/[0.02] p-3 last:border-r-0" />;
+                    return (
+                      <div
+                        key={`empty-${index}`}
+                        className="min-h-[188px] border-r border-b border-black/5 bg-black/[0.02] p-3 last:border-r-0"
+                      />
+                    );
                   }
 
                   const items = bookingsByDay.get(localDateKey(date)) ?? [];
-                  const isToday = localDateKey(date) === localDateKey(new Date());
+                  const isToday =
+                    localDateKey(date) === localDateKey(new Date());
 
                   return (
-                    <div key={date.toISOString()} className="min-h-[188px] border-r border-b border-black/5 bg-white p-3 last:border-r-0">
+                    <div
+                      key={date.toISOString()}
+                      className="min-h-[188px] border-r border-b border-black/5 bg-white p-3 last:border-r-0"
+                    >
                       <div className="mb-3 flex items-center justify-between">
-                        <span className={`grid size-8 place-items-center rounded-full text-sm font-black ${isToday ? "bg-[#F4A9C6] text-white" : "text-[#171717]"}`}>{date.getDate()}</span>
-                        {items.length ? <span className="rounded-full bg-[#FFF1F5] px-2 py-1 text-[10px] font-black text-[#C66170]">{items.length}</span> : null}
+                        <span
+                          className={`grid size-8 place-items-center rounded-full text-sm font-black ${isToday ? "bg-[#F4A9C6] text-white" : "text-[#171717]"}`}
+                        >
+                          {date.getDate()}
+                        </span>
+                        {items.length ? (
+                          <span className="rounded-full bg-[#FFF1F5] px-2 py-1 text-[10px] font-black text-[#C66170]">
+                            {items.length}
+                          </span>
+                        ) : null}
                       </div>
 
                       <div className="space-y-2">
@@ -2028,8 +2770,15 @@ export function AppointmentsBrowser({
                             className="w-full rounded-[16px] border border-[#F0DCE3] bg-[#FFF9FB] px-2.5 py-2 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF1F6]"
                             title={`${booking.customerName}${booking.bookingStr ? ` - Ordine ${formatOrderCode(booking.bookingStr)}` : ""}`}
                           >
-                            <p className="truncate text-[11px] font-black text-[#171717]">{formatTime(booking.startDate)} · {booking.customerName}</p>
-                            {booking.bookingStr ? <p className="mt-1 truncate text-[10px] font-bold text-[#C66170]">Ordine {formatOrderCode(booking.bookingStr)}</p> : null}
+                            <p className="truncate text-[11px] font-black text-[#171717]">
+                              {formatTime(booking.startDate)} ·{" "}
+                              {booking.customerName}
+                            </p>
+                            {booking.bookingStr ? (
+                              <p className="mt-1 truncate text-[10px] font-bold text-[#C66170]">
+                                Ordine {formatOrderCode(booking.bookingStr)}
+                              </p>
+                            ) : null}
                           </button>
                         ))}
                         {items.length > 4 ? (
@@ -2058,9 +2807,16 @@ export function AppointmentsBrowser({
             {weekGrid.map((date) => {
               const items = bookingsByDay.get(localDateKey(date)) ?? [];
               return (
-                <div key={date.toISOString()} className="rounded-[22px] border border-black/5 bg-[#FFFCFD] p-4">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/45">{weekDays[(date.getDay() + 6) % 7]}</p>
-                  <p className="mt-1 text-lg font-black text-[#171717]">{date.getDate()}</p>
+                <div
+                  key={date.toISOString()}
+                  className="rounded-[22px] border border-black/5 bg-[#FFFCFD] p-4"
+                >
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/45">
+                    {weekDays[(date.getDay() + 6) % 7]}
+                  </p>
+                  <p className="mt-1 text-lg font-black text-[#171717]">
+                    {date.getDate()}
+                  </p>
                   <div className="mt-4 space-y-2">
                     {items.length ? (
                       items.map((booking) => (
@@ -2070,11 +2826,16 @@ export function AppointmentsBrowser({
                           onClick={() => setSelectedBookingId(booking.id)}
                           className="w-full rounded-[16px] border border-[#F0DCE3] bg-white px-3 py-2 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF8FB]"
                         >
-                          <p className="truncate text-xs font-black text-[#171717]">{formatTime(booking.startDate)} · {booking.customerName}</p>
+                          <p className="truncate text-xs font-black text-[#171717]">
+                            {formatTime(booking.startDate)} ·{" "}
+                            {booking.customerName}
+                          </p>
                         </button>
                       ))
                     ) : (
-                      <p className="text-xs text-black/35">Nessun appuntamento.</p>
+                      <p className="text-xs text-black/35">
+                        Nessun appuntamento.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -2087,11 +2848,18 @@ export function AppointmentsBrowser({
           <div className="space-y-3">
             {!dayBookings.length ? (
               <div className="rounded-[22px] border border-dashed border-[#F1D7DD] bg-[#FFF8FB] p-4 text-sm font-bold text-[#A15062]">
-                Nessun appuntamento nel giorno selezionato. Ti mostro i primi appuntamenti disponibili con questi filtri.
+                Nessun appuntamento nel giorno selezionato. Ti mostro i primi
+                appuntamenti disponibili con questi filtri.
               </div>
             ) : null}
-            {(dayBookings.length ? dayBookings : recentBookings.slice(0, appointmentsPageSize)).length ? (
-              (dayBookings.length ? dayBookings : recentBookings.slice(0, appointmentsPageSize)).map((booking) => {
+            {(dayBookings.length
+              ? dayBookings
+              : recentBookings.slice(0, appointmentsPageSize)
+            ).length ? (
+              (dayBookings.length
+                ? dayBookings
+                : recentBookings.slice(0, appointmentsPageSize)
+              ).map((booking) => {
                 const customerLines = getCustomerContactLines(booking);
                 const notePreview = getBookingNotePreview(booking);
                 const status = getBookingStatus(booking);
@@ -2103,26 +2871,40 @@ export function AppointmentsBrowser({
                     tabIndex={0}
                     onClick={() => setSelectedBookingId(booking.id)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") setSelectedBookingId(booking.id);
+                      if (event.key === "Enter" || event.key === " ")
+                        setSelectedBookingId(booking.id);
                     }}
                     className="grid w-full gap-4 rounded-[22px] border border-black/5 bg-[#FFFDFD] px-4 py-4 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF8FB] lg:grid-cols-[2fr_0.75fr_1.35fr_1.15fr_0.95fr] lg:items-center"
                   >
                     <div className="flex min-w-0 gap-4">
                       <div className="shrink-0">
-                        <ServiceImage title={booking.serviceTitle} imageUrl={booking.serviceImageUrl} compact />
+                        <ServiceImage
+                          title={booking.serviceTitle}
+                          imageUrl={booking.serviceImageUrl}
+                          compact
+                        />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-lg font-black text-[#171717]">{booking.customerName}</p>
+                        <p className="truncate text-lg font-black text-[#171717]">
+                          {booking.customerName}
+                        </p>
                         <p className="mt-1 truncate text-sm font-black uppercase text-[#C66170]">
-                          {formatTime(booking.startDate)} · {booking.serviceTitle}
+                          {formatTime(booking.startDate)} ·{" "}
+                          {booking.serviceTitle}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold text-black/50">
                           <span className="inline-flex items-center gap-1">
                             <CalendarDays className="size-3.5 text-[#C66170]" />
                             {formatDateTime(booking.startDate)}
                           </span>
-                          {booking.bookingStr ? <span>Ordine {formatOrderCode(booking.bookingStr)}</span> : null}
-                          <span>{booking.bookingType || "Regular booking"}</span>
+                          {booking.bookingStr ? (
+                            <span>
+                              Ordine {formatOrderCode(booking.bookingStr)}
+                            </span>
+                          ) : null}
+                          <span>
+                            {booking.bookingType || "Regular booking"}
+                          </span>
                         </div>
                         {notePreview ? (
                           <p className="mt-2 line-clamp-2 rounded-xl bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#9C4F62]">
@@ -2136,9 +2918,14 @@ export function AppointmentsBrowser({
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
                       <p className="flex items-center gap-1 text-sm font-black text-[#171717]">
                         <CreditCard className="size-4 text-[#C66170]" />
-                        {formatMoney(booking.priceAmount, booking.priceCurrency)}
+                        {formatMoney(
+                          booking.priceAmount,
+                          booking.priceCurrency,
+                        )}
                       </p>
-                      <p className="mt-1 text-xs font-bold text-black/45">Qta: {getQuantityLabel(booking)}</p>
+                      <p className="mt-1 text-xs font-bold text-black/45">
+                        Qta: {getQuantityLabel(booking)}
+                      </p>
                     </div>
 
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
@@ -2148,14 +2935,21 @@ export function AppointmentsBrowser({
                       </p>
                       <p className="mt-1 flex items-center gap-1 truncate text-xs font-bold text-black/50">
                         <Phone className="size-3.5 text-black/35" />
-                        <span className="truncate">{customerLines.phone || "Nessun telefono"}</span>
+                        <span className="truncate">
+                          {customerLines.phone || "Nessun telefono"}
+                        </span>
                       </p>
                       <p className="mt-1 flex items-center gap-1 truncate text-xs font-bold text-black/50">
                         <Mail className="size-3.5 text-black/35" />
-                        <span className="truncate">{customerLines.email || "Email non disponibile"}</span>
+                        <span className="truncate">
+                          {customerLines.email || "Email non disponibile"}
+                        </span>
                       </p>
                       {customerLines.answers.slice(0, 2).map((item, index) => (
-                        <p key={`${booking.id}-day-answer-${index}`} className="mt-1 line-clamp-1 text-xs font-bold text-black/45">
+                        <p
+                          key={`${booking.id}-day-answer-${index}`}
+                          className="mt-1 line-clamp-1 text-xs font-bold text-black/45"
+                        >
                           {item.label}: {compactValue(item.value, 44)}
                         </p>
                       ))}
@@ -2164,7 +2958,9 @@ export function AppointmentsBrowser({
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
                       <p className="flex items-center gap-1 text-sm font-black text-[#171717]">
                         <UsersRound className="size-4 text-[#C66170]" />
-                        {getBookingTeam(booking).map((mate) => mate.name).join(", ") || "Non assegnato"}
+                        {getBookingTeam(booking)
+                          .map((mate) => mate.name)
+                          .join(", ") || "Non assegnato"}
                       </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-black/45">
                         <MapPin className="size-3.5" />
@@ -2175,7 +2971,9 @@ export function AppointmentsBrowser({
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                       <StatusControl booking={booking} compact />
                       {!booking.isCanceled ? (
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}
+                        >
                           {appointmentStatusLabels[status]}
                         </span>
                       ) : null}
@@ -2184,7 +2982,9 @@ export function AppointmentsBrowser({
                 );
               })
             ) : (
-              <div className="rounded-[22px] border border-dashed border-black/10 bg-[#FFFCFD] p-5 text-sm font-bold text-black/45">Nessun appuntamento disponibile.</div>
+              <div className="rounded-[22px] border border-dashed border-black/10 bg-[#FFFCFD] p-5 text-sm font-bold text-black/45">
+                Nessun appuntamento disponibile.
+              </div>
             )}
           </div>
         ) : null}
@@ -2197,12 +2997,17 @@ export function AppointmentsBrowser({
               <CalendarCheck className="size-5" />
             </span>
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#C66170]">{showCanceled ? "Annullati" : "Prenotazioni"}</p>
-              <h3 className="mt-1 text-2xl font-black text-[#171717]">Lista appuntamenti</h3>
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#C66170]">
+                {showCanceled ? "Annullati" : "Prenotazioni"}
+              </p>
+              <h3 className="mt-1 text-2xl font-black text-[#171717]">
+                Lista appuntamenti
+              </h3>
             </div>
           </div>
           <span className="rounded-full bg-[#F7F7F7] px-3 py-1 text-xs font-black text-black/55">
-            {Math.min(visibleCount, recentBookings.length)} di {recentBookings.length}
+            {Math.min(visibleCount, recentBookings.length)} di{" "}
+            {recentBookings.length}
           </span>
         </div>
 
@@ -2229,23 +3034,36 @@ export function AppointmentsBrowser({
                     tabIndex={0}
                     onClick={() => setSelectedBookingId(booking.id)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") setSelectedBookingId(booking.id);
+                      if (event.key === "Enter" || event.key === " ")
+                        setSelectedBookingId(booking.id);
                     }}
                     className="grid w-full gap-4 px-5 py-5 text-left transition hover:bg-[#FFF8FB] lg:grid-cols-[2.1fr_0.8fr_1.35fr_1.25fr_1fr_40px] lg:items-center"
                   >
                     <div className="flex min-w-0 gap-4">
                       <div className="shrink-0">
-                        <ServiceImage title={booking.serviceTitle} imageUrl={booking.serviceImageUrl} compact />
+                        <ServiceImage
+                          title={booking.serviceTitle}
+                          imageUrl={booking.serviceImageUrl}
+                          compact
+                        />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-black uppercase text-[#171717]">{booking.serviceTitle}</p>
-                        <p className="mt-1 truncate text-sm font-bold text-black/55">{booking.bookingType || "Regular booking"}</p>
+                        <p className="truncate text-sm font-black uppercase text-[#171717]">
+                          {booking.serviceTitle}
+                        </p>
+                        <p className="mt-1 truncate text-sm font-bold text-black/55">
+                          {booking.bookingType || "Regular booking"}
+                        </p>
                         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold text-black/50">
                           <span className="inline-flex items-center gap-1">
                             <CalendarDays className="size-3.5" />
                             {formatDateTime(booking.startDate)}
                           </span>
-                          {booking.bookingStr ? <span>Ordine {formatOrderCode(booking.bookingStr)}</span> : null}
+                          {booking.bookingStr ? (
+                            <span>
+                              Ordine {formatOrderCode(booking.bookingStr)}
+                            </span>
+                          ) : null}
                         </div>
                         {notePreview ? (
                           <p className="mt-2 line-clamp-2 rounded-xl bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#9C4F62]">
@@ -2259,9 +3077,14 @@ export function AppointmentsBrowser({
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
                       <p className="flex items-center gap-1 text-sm font-black text-[#171717]">
                         <CreditCard className="size-4 text-black/35" />
-                        {formatMoney(booking.priceAmount, booking.priceCurrency)}
+                        {formatMoney(
+                          booking.priceAmount,
+                          booking.priceCurrency,
+                        )}
                       </p>
-                      <p className="mt-1 text-xs font-bold text-black/45">Qta: {getQuantityLabel(booking)}</p>
+                      <p className="mt-1 text-xs font-bold text-black/45">
+                        Qta: {getQuantityLabel(booking)}
+                      </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
                         <CalendarCheck className="size-3.5" />
                         Prenotato
@@ -2276,15 +3099,24 @@ export function AppointmentsBrowser({
                       <div className="mt-2 space-y-1 text-xs font-bold text-black/50">
                         <p className="flex items-center gap-1">
                           <Phone className="size-3.5 text-black/35" />
-                          <span className="truncate">{customerLines.phone || "Nessun telefono"}</span>
+                          <span className="truncate">
+                            {customerLines.phone || "Nessun telefono"}
+                          </span>
                         </p>
                         <p className="flex items-center gap-1">
                           <Mail className="size-3.5 text-black/35" />
-                          <span className="truncate">{customerLines.email || "Email non disponibile"}</span>
+                          <span className="truncate">
+                            {customerLines.email || "Email non disponibile"}
+                          </span>
                         </p>
                         {customerLines.answers.map((item, index) => (
-                          <p key={`${booking.id}-answer-${index}`} className="flex items-start gap-1">
-                            <span className="mt-1 grid size-3.5 shrink-0 place-items-center rounded-full border border-black/10 text-[9px] text-black/45">i</span>
+                          <p
+                            key={`${booking.id}-answer-${index}`}
+                            className="flex items-start gap-1"
+                          >
+                            <span className="mt-1 grid size-3.5 shrink-0 place-items-center rounded-full border border-black/10 text-[9px] text-black/45">
+                              i
+                            </span>
                             <span className="line-clamp-1">
                               {item.label}: {compactValue(item.value, 46)}
                             </span>
@@ -2296,7 +3128,9 @@ export function AppointmentsBrowser({
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 lg:bg-transparent lg:p-0">
                       <p className="flex items-center gap-1 text-sm font-black text-[#171717]">
                         <UsersRound className="size-4 text-black/35" />
-                        {getBookingTeam(booking).map((mate) => mate.name).join(", ") || "Non assegnato"}
+                        {getBookingTeam(booking)
+                          .map((mate) => mate.name)
+                          .join(", ") || "Non assegnato"}
                       </p>
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-black/45">
                         <MapPin className="size-3.5" />
@@ -2307,7 +3141,9 @@ export function AppointmentsBrowser({
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusControl booking={booking} compact />
                       {!booking.isCanceled ? (
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}
+                        >
                           {appointmentStatusLabels[status]}
                         </span>
                       ) : null}
@@ -2329,14 +3165,18 @@ export function AppointmentsBrowser({
               })}
             </div>
           ) : (
-            <div className="p-5 text-sm font-bold text-black/45">Nessun appuntamento disponibile.</div>
+            <div className="p-5 text-sm font-bold text-black/45">
+              Nessun appuntamento disponibile.
+            </div>
           )}
         </div>
         {recentBookings.length > visibleRecentBookings.length ? (
           <div className="border-t border-black/5 p-5">
             <button
               type="button"
-              onClick={() => setVisibleCount((current) => current + appointmentsPageSize)}
+              onClick={() =>
+                setVisibleCount((current) => current + appointmentsPageSize)
+              }
               className="w-full rounded-[18px] border border-black/8 bg-white px-4 py-3 text-sm font-black text-[#171717] transition hover:border-[#F1A7C3] hover:bg-[#FFF8FB]"
             >
               Carica altri 5
@@ -2350,12 +3190,22 @@ export function AppointmentsBrowser({
           <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[26px] border border-black/15 bg-[#FAFAFA] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
             <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-5 sm:px-7">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">Store manager</p>
-                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">Appuntamenti e controllo cliente</h2>
-                <p className="mt-1 text-xs font-semibold text-black/45">Compila il controllo partendo dai dati dell'appuntamento.</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">
+                  Store manager
+                </p>
+                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">
+                  Appuntamenti e controllo cliente
+                </h2>
+                <p className="mt-1 text-xs font-semibold text-black/45">
+                  Compila il controllo partendo dai dati dell'appuntamento.
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-[#171717] px-4 py-2 text-xs font-black text-white">Crea appuntamento</span>
-                  <span className="rounded-full bg-black/5 px-4 py-2 text-xs font-black text-black/45">Analytics</span>
+                  <span className="rounded-full bg-[#171717] px-4 py-2 text-xs font-black text-white">
+                    Crea appuntamento
+                  </span>
+                  <span className="rounded-full bg-black/5 px-4 py-2 text-xs font-black text-black/45">
+                    Analytics
+                  </span>
                 </div>
               </div>
               <button
@@ -2370,13 +3220,21 @@ export function AppointmentsBrowser({
             <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
               <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Sede *</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                    Sede *
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {clientControlSalons.map((salon) => (
                       <button
                         key={salon.value}
                         type="button"
-                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salon.value, staffIds: [] }))}
+                        onClick={() =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            salon: salon.value,
+                            staffIds: [],
+                          }))
+                        }
                         className={[
                           "rounded-full border px-3 py-2 text-xs font-black transition",
                           clientControlForm.salon === salon.value
@@ -2392,34 +3250,57 @@ export function AppointmentsBrowser({
 
                 <div className="mt-5 grid gap-3 md:grid-cols-2">
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Nome cliente *</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Nome cliente *
+                    </span>
                     <input
                       value={clientControlForm.clientName}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, clientName: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          clientName: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="Nome cliente"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Email cliente</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Email cliente
+                    </span>
                     <input
                       value={clientControlForm.email}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, email: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          email: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="email@esempio.com"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Telefono cliente</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Telefono cliente
+                    </span>
                     <input
                       value={clientControlForm.phone}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, phone: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          phone: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="+39..."
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Servizio prenotato</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Servizio prenotato
+                    </span>
                     <input
                       value={clientControlForm.serviceTitle}
                       readOnly
@@ -2428,48 +3309,83 @@ export function AppointmentsBrowser({
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Ordine Shopify</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Ordine Shopify
+                    </span>
                     <input
                       value={clientControlForm.shopifyOrder}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, shopifyOrder: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          shopifyOrder: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="Numero ordine"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Acconto pagato (€)</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Acconto pagato (€)
+                    </span>
                     <input
                       inputMode="decimal"
                       value={clientControlForm.depositPaid}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, depositPaid: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          depositPaid: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="0.00"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Pagato (€)</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Pagato (€)
+                    </span>
                     <input
                       inputMode="decimal"
                       value={clientControlForm.paid}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, paid: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          paid: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="0.00"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">IG tag</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      IG tag
+                    </span>
                     <input
                       value={clientControlForm.instagramTag}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, instagramTag: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          instagramTag: event.target.value,
+                        }))
+                      }
                       className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
                       placeholder="@cliente"
                     />
                   </label>
                   <label className="block md:col-span-2">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Testo nota Shopify
+                    </span>
                     <textarea
                       value={clientControlForm.customNoteText}
-                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, customNoteText: event.target.value }))}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          customNoteText: event.target.value,
+                        }))
+                      }
                       className="mt-1 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
                       placeholder="Scrivi qui la nota Shopify"
                     />
@@ -2477,13 +3393,19 @@ export function AppointmentsBrowser({
                 </div>
 
                 <div className="mt-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Collaboratrici del salone *</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                    Collaboratrici del salone *
+                  </p>
                   <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
                     {clientControlLoading ? (
-                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Carico collaboratrici...</p>
+                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">
+                        Carico collaboratrici...
+                      </p>
                     ) : filteredClientControlEmployees.length ? (
                       filteredClientControlEmployees.map((employee) => {
-                        const selected = clientControlForm.staffIds.includes(employee.id);
+                        const selected = clientControlForm.staffIds.includes(
+                          employee.id,
+                        );
                         return (
                           <button
                             key={employee.id}
@@ -2491,12 +3413,18 @@ export function AppointmentsBrowser({
                             onClick={() =>
                               setClientControlForm((prev) => ({
                                 ...prev,
-                                staffIds: selected ? prev.staffIds.filter((id) => id !== employee.id) : [...prev.staffIds, employee.id],
+                                staffIds: selected
+                                  ? prev.staffIds.filter(
+                                      (id) => id !== employee.id,
+                                    )
+                                  : [...prev.staffIds, employee.id],
                               }))
                             }
                             className={[
                               "rounded-xl border px-3 py-2 text-left text-xs font-black transition",
-                              selected ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]" : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
+                              selected
+                                ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
+                                : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
                             ].join(" ")}
                           >
                             {employee.name}
@@ -2504,7 +3432,9 @@ export function AppointmentsBrowser({
                         );
                       })
                     ) : (
-                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Nessuna collaboratrice trovata per questa sede.</p>
+                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">
+                        Nessuna collaboratrice trovata per questa sede.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -2517,11 +3447,19 @@ export function AppointmentsBrowser({
                     ["products", "Prodotti"],
                     ["review", "Recensione"],
                   ].map(([fieldKey, fieldLabel]) => (
-                    <label key={fieldKey} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]">
+                    <label
+                      key={fieldKey}
+                      className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]"
+                    >
                       <input
                         type="checkbox"
                         checked={Boolean((clientControlForm as any)[fieldKey])}
-                        onChange={(event) => setClientControlForm((prev) => ({ ...prev, [fieldKey]: event.target.checked }))}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            [fieldKey]: event.target.checked,
+                          }))
+                        }
                         className="size-4 accent-[#E88AC5]"
                       />
                       <span>{fieldLabel}</span>
@@ -2530,7 +3468,9 @@ export function AppointmentsBrowser({
                 </div>
 
                 {clientControlMessage ? (
-                  <p className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                  <p
+                    className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                  >
                     {clientControlMessage.text}
                   </p>
                 ) : null}
@@ -2541,7 +3481,9 @@ export function AppointmentsBrowser({
                   disabled={clientControlSubmitting || clientControlLoading}
                   className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
                 >
-                  {clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}
+                  {clientControlSubmitting
+                    ? "Salvataggio..."
+                    : "Salva appuntamento"}
                 </button>
               </div>
             </div>
@@ -2554,9 +3496,15 @@ export function AppointmentsBrowser({
           <div className="mx-auto flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-black/5 px-5 py-5">
               <div className="min-w-0">
-                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#C66170]">Dettaglio appuntamento</p>
-                <h3 className="mt-2 text-3xl font-black text-[#171717]">{selectedBooking.customerName}</h3>
-                <p className="mt-2 text-sm text-black/55">{selectedBooking.serviceTitle}</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#C66170]">
+                  Dettaglio appuntamento
+                </p>
+                <h3 className="mt-2 text-3xl font-black text-[#171717]">
+                  {selectedBooking.customerName}
+                </h3>
+                <p className="mt-2 text-sm text-black/55">
+                  {selectedBooking.serviceTitle}
+                </p>
                 <div className="mt-3">
                   <WhatsAppSheetNote booking={selectedBooking} always />
                 </div>
@@ -2566,27 +3514,41 @@ export function AppointmentsBrowser({
                   </p>
                 ) : null}
               </div>
-              <button type="button" onClick={() => setSelectedBookingId(null)} className="grid size-12 place-items-center rounded-full border border-black/5 bg-white text-black/60 transition hover:text-black">
+              <button
+                type="button"
+                onClick={() => setSelectedBookingId(null)}
+                className="grid size-12 place-items-center rounded-full border border-black/5 bg-white text-black/60 transition hover:text-black"
+              >
                 <X className="size-5" />
               </button>
             </div>
 
             <div className="grid flex-1 gap-6 overflow-auto p-5 lg:grid-cols-[1.15fr_0.85fr] min-h-0">
               <div className="space-y-5">
-                <ServiceImage title={selectedBooking.serviceTitle} imageUrl={selectedBooking.serviceImageUrl} />
+                <ServiceImage
+                  title={selectedBooking.serviceTitle}
+                  imageUrl={selectedBooking.serviceImageUrl}
+                />
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-[24px] border border-[#FFE2EC] bg-[#FFF7FA] p-4">
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C66170]">Note Cowlendar</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C66170]">
+                      Note Cowlendar
+                    </p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#5D4A42]">
-                      {selectedBooking!.notesText?.trim() || cowlendarOrderNote?.trim() || "Nessuna nota presente in questo appuntamento."}
+                      {selectedBooking!.notesText?.trim() ||
+                        cowlendarOrderNote?.trim() ||
+                        "Nessuna nota presente in questo appuntamento."}
                     </p>
                   </div>
                   <div className="rounded-[24px] border border-[#FFE7D6] bg-[#FFF7F2] p-4">
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C67035]">Note Shopify</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#C67035]">
+                      Note Shopify
+                    </p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#7C3E14]">
                       {selectedBooking!.bookingStr
-                        ? shopifyNote?.trim() || "Nessuna nota presente su Shopify."
+                        ? shopifyNote?.trim() ||
+                          "Nessuna nota presente su Shopify."
                         : "Nessun ordine Shopify collegato."}
                     </p>
                   </div>
@@ -2594,13 +3556,23 @@ export function AppointmentsBrowser({
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="rounded-[24px] border border-black/5 bg-[#FFFCFD] p-4">
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Data e ora</p>
-                    <p className="mt-2 text-lg font-black text-[#171717]">{formatDateTime(selectedBooking.startDate)}</p>
-                    <p className="mt-1 text-sm text-black/55">Fine: {formatDateTime(selectedBooking.endDate)}</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                      Data e ora
+                    </p>
+                    <p className="mt-2 text-lg font-black text-[#171717]">
+                      {formatDateTime(selectedBooking.startDate)}
+                    </p>
+                    <p className="mt-1 text-sm text-black/55">
+                      Fine: {formatDateTime(selectedBooking.endDate)}
+                    </p>
                   </div>
                   <div className="rounded-[24px] border border-black/5 bg-[#FFFCFD] p-4">
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Salone / stato</p>
-                    <p className="mt-2 text-lg font-black text-[#171717]">{getSalonLabel(selectedBooking.inferredSalon)}</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                      Salone / stato
+                    </p>
+                    <p className="mt-2 text-lg font-black text-[#171717]">
+                      {getSalonLabel(selectedBooking.inferredSalon)}
+                    </p>
                     <div className="mt-3">
                       <StatusControl booking={selectedBooking} />
                     </div>
@@ -2610,60 +3582,103 @@ export function AppointmentsBrowser({
                     {selectedBooking.statusUpdatedBy ? (
                       <p className="mt-2 text-xs font-bold text-black/40">
                         Ultima modifica: {selectedBooking.statusUpdatedBy}
-                        {selectedBooking.statusUpdatedAt ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}` : ""}
+                        {selectedBooking.statusUpdatedAt
+                          ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}`
+                          : ""}
                       </p>
                     ) : null}
                     {selectedBooking.sheetNote ? (
                       <div className="mt-3 rounded-2xl border border-black/5 bg-[#FFF6F7] p-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">Nota conferma</p>
-                        <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#5D4A42]">{selectedBooking.sheetNote}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">
+                          Nota conferma
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#5D4A42]">
+                          {selectedBooking.sheetNote}
+                        </p>
                       </div>
                     ) : null}
                   </div>
                 </div>
 
                 <div className="rounded-[24px] border border-black/5 bg-white p-4">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Cliente</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                    Cliente
+                  </p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Nome</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{selectedBooking.customerName}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Nome
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {selectedBooking.customerName}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Telefono</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{selectedBooking.customerPhone || "-"}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Telefono
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {selectedBooking.customerPhone || "-"}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 sm:col-span-2">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Email</p>
-                      <p className="mt-2 break-all text-sm font-bold text-[#171717]">{selectedBooking.customerEmail || "-"}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Email
+                      </p>
+                      <p className="mt-2 break-all text-sm font-bold text-[#171717]">
+                        {selectedBooking.customerEmail || "-"}
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-[24px] border border-black/5 bg-white p-4">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Dettagli prenotazione</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                    Dettagli prenotazione
+                  </p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Servizio</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{selectedBooking.serviceTitle}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Servizio
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {selectedBooking.serviceTitle}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Importo</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{formatMoney(selectedBooking.priceAmount, selectedBooking.priceCurrency)}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Importo
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {formatMoney(
+                          selectedBooking.priceAmount,
+                          selectedBooking.priceCurrency,
+                        )}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Tipo booking</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{selectedBooking.bookingType || "-"}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Tipo booking
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {selectedBooking.bookingType || "-"}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Ordine Shopify</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{formatOrderCode(selectedBooking.bookingStr)}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Ordine Shopify
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {formatOrderCode(selectedBooking.bookingStr)}
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="rounded-[24px] border border-black/5 bg-white p-4">
-                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Note interne</p>
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                    Note interne
+                  </p>
                   <div className="mt-3 space-y-3">
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
                       <div className="flex items-center gap-2 mb-2">
@@ -2680,62 +3695,81 @@ export function AppointmentsBrowser({
                         </div>
                       ) : (
                         <div className="space-y-3 max-h-60 overflow-y-auto pr-1 mb-4">
-                          {(Array.isArray(dbComments) ? dbComments : []).map((c) => {
-                            const isManager = c.user_role !== "DIPENDENTE";
-                            const dateVal = c.created_at ? new Date(c.created_at) : new Date();
-                            const isAdmin = currentUser?.role === "ZERO" || currentUser?.role === "SUPER_ADMIN" || currentUser?.role === "ADMIN";
-                            const isAuthor = c.user_name === currentUser?.name;
-                            const canDelete = canManageAppointmentNotes && (isAdmin || isAuthor);
+                          {(Array.isArray(dbComments) ? dbComments : []).map(
+                            (c) => {
+                              const isManager = c.user_role !== "DIPENDENTE";
+                              const dateVal = c.created_at
+                                ? new Date(c.created_at)
+                                : new Date();
+                              const isAdmin =
+                                currentUser?.role === "ZERO" ||
+                                currentUser?.role === "SUPER_ADMIN" ||
+                                currentUser?.role === "ADMIN";
+                              const isAuthor =
+                                c.user_name === currentUser?.name;
+                              const canDelete =
+                                canManageAppointmentNotes &&
+                                (isAdmin || isAuthor);
 
-                            return (
-                              <div
-                                key={c.id}
-                                className={`rounded-2xl p-3 text-xs leading-relaxed max-w-[85%] ${
-                                  isManager 
-                                    ? "bg-paradise-softPink border border-paradise-pink/15 mr-auto text-left" 
-                                    : "bg-black/5 border border-black/5 ml-auto text-left"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-3 mb-1">
-                                  <div className="flex items-center gap-1 min-w-0">
-                                    <span className="font-bold text-black truncate">
-                                      {c.user_name} ({isManager ? "Direzione" : "Staff"})
+                              return (
+                                <div
+                                  key={c.id}
+                                  className={`rounded-2xl p-3 text-xs leading-relaxed max-w-[85%] ${
+                                    isManager
+                                      ? "bg-paradise-softPink border border-paradise-pink/15 mr-auto text-left"
+                                      : "bg-black/5 border border-black/5 ml-auto text-left"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-3 mb-1">
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      <span className="font-bold text-black truncate">
+                                        {c.user_name} (
+                                        {isManager ? "Direzione" : "Staff"})
+                                      </span>
+                                      {canDelete && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleDeleteComment(c.id)
+                                          }
+                                          className="p-1 text-black/30 hover:text-red-600 transition shrink-0"
+                                          title="Elimina commento"
+                                        >
+                                          <Trash className="size-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] text-black/40 shrink-0">
+                                      {dateVal.toLocaleString("it-IT", {
+                                        day: "numeric",
+                                        month: "short",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
                                     </span>
-                                    {canDelete && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteComment(c.id)}
-                                        className="p-1 text-black/30 hover:text-red-600 transition shrink-0"
-                                        title="Elimina commento"
-                                      >
-                                        <Trash className="size-3" />
-                                      </button>
-                                    )}
                                   </div>
-                                  <span className="text-[10px] text-black/40 shrink-0">
-                                    {dateVal.toLocaleString("it-IT", {
-                                      day: "numeric",
-                                      month: "short",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </span>
+                                  <p className="text-black/85 whitespace-pre-line">
+                                    {c.message}
+                                  </p>
                                 </div>
-                                <p className="text-black/85 whitespace-pre-line">{c.message}</p>
-                              </div>
-                            );
-                          })}
+                              );
+                            },
+                          )}
 
                           {(!dbComments || dbComments.length === 0) && (
                             <p className="text-xs text-black/45 italic py-2">
-                              Nessun commento condiviso. Scrivi una nota o risposta qui sotto.
+                              Nessun commento condiviso. Scrivi una nota o
+                              risposta qui sotto.
                             </p>
                           )}
                         </div>
                       )}
 
                       {canManageAppointmentNotes ? (
-                        <form onSubmit={handleAddComment} className="flex gap-2">
+                        <form
+                          onSubmit={handleAddComment}
+                          className="flex gap-2"
+                        >
                           <input
                             type="text"
                             value={newCommentText}
@@ -2746,7 +3780,9 @@ export function AppointmentsBrowser({
                           />
                           <button
                             type="submit"
-                            disabled={submittingComment || !newCommentText.trim()}
+                            disabled={
+                              submittingComment || !newCommentText.trim()
+                            }
                             className="grid size-9 place-items-center rounded-xl bg-paradise-pink text-white hover:scale-105 active:scale-95 transition disabled:opacity-40"
                           >
                             {submittingComment ? (
@@ -2763,14 +3799,23 @@ export function AppointmentsBrowser({
 
                 {selectedBooking.extraDetails?.length ? (
                   <div className="rounded-[24px] border border-black/5 bg-white p-4">
-                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Dati modulo Cowlendar</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                      Dati modulo Cowlendar
+                    </p>
                     <div className="mt-3 space-y-4">
                       {detailEntries.formFields.length ? (
                         <div className="grid gap-3 sm:grid-cols-2">
                           {detailEntries.formFields.map((item, index) => (
-                            <div key={`${item.label}-${index}`} className="rounded-2xl bg-[#FAFAFA] p-3">
-                              <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">{item.label}</p>
-                              <p className="mt-2 whitespace-pre-wrap break-words text-sm font-bold text-[#171717]">{item.value}</p>
+                            <div
+                              key={`${item.label}-${index}`}
+                              className="rounded-2xl bg-[#FAFAFA] p-3"
+                            >
+                              <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                                {item.label}
+                              </p>
+                              <p className="mt-2 whitespace-pre-wrap break-words text-sm font-bold text-[#171717]">
+                                {item.value}
+                              </p>
                             </div>
                           ))}
                         </div>
@@ -2778,12 +3823,21 @@ export function AppointmentsBrowser({
 
                       {detailEntries.otherFields.length ? (
                         <details className="rounded-2xl border border-black/5 bg-[#FCFCFC] p-3">
-                          <summary className="cursor-pointer text-sm font-black text-[#171717]">Altri dettagli tecnici</summary>
+                          <summary className="cursor-pointer text-sm font-black text-[#171717]">
+                            Altri dettagli tecnici
+                          </summary>
                           <div className="mt-3 grid gap-3 sm:grid-cols-2">
                             {detailEntries.otherFields.map((item, index) => (
-                              <div key={`${item.label}-${index}`} className="rounded-2xl bg-white p-3">
-                                <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">{item.label}</p>
-                                <p className="mt-2 whitespace-pre-wrap break-words text-sm font-bold text-[#171717]">{item.value}</p>
+                              <div
+                                key={`${item.label}-${index}`}
+                                className="rounded-2xl bg-white p-3"
+                              >
+                                <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                                  {item.label}
+                                </p>
+                                <p className="mt-2 whitespace-pre-wrap break-words text-sm font-bold text-[#171717]">
+                                  {item.value}
+                                </p>
                               </div>
                             ))}
                           </div>
@@ -2801,23 +3855,40 @@ export function AppointmentsBrowser({
                       <UsersRound className="size-5" />
                     </span>
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Collaboratori</p>
-                      <h4 className="text-lg font-black text-[#171717]">Assegnati a questo appuntamento</h4>
+                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                        Collaboratori
+                      </p>
+                      <h4 className="text-lg font-black text-[#171717]">
+                        Assegnati a questo appuntamento
+                      </h4>
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
                     {getBookingTeam(selectedBooking!).length ? (
                       getBookingTeam(selectedBooking!).map((mate) => (
-                        <div key={mate.id} className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3">
-                          <Avatar name={mate.name} photoUrl={mate.photoUrl} size="size-12" />
+                        <div
+                          key={mate.id}
+                          className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3"
+                        >
+                          <Avatar
+                            name={mate.name}
+                            photoUrl={mate.photoUrl}
+                            size="size-12"
+                          />
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-black text-[#171717]">{mate.name}</p>
-                            <p className="text-xs text-black/45">{getSalonLabel(selectedBooking!.inferredSalon)}</p>
+                            <p className="truncate text-sm font-black text-[#171717]">
+                              {mate.name}
+                            </p>
+                            <p className="text-xs text-black/45">
+                              {getSalonLabel(selectedBooking!.inferredSalon)}
+                            </p>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="rounded-2xl border border-dashed border-black/10 p-4 text-sm text-black/45">Nessun collaboratore assegnato.</div>
+                      <div className="rounded-2xl border border-dashed border-black/10 p-4 text-sm text-black/45">
+                        Nessun collaboratore assegnato.
+                      </div>
                     )}
                   </div>
                   <TeamControl booking={selectedBooking!} />
@@ -2829,18 +3900,30 @@ export function AppointmentsBrowser({
                       <CalendarDays className="size-5" />
                     </span>
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Tracciamento</p>
-                      <h4 className="text-lg font-black text-[#171717]">Creazione e aggiornamento</h4>
+                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                        Tracciamento
+                      </p>
+                      <h4 className="text-lg font-black text-[#171717]">
+                        Creazione e aggiornamento
+                      </h4>
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Creato</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{formatDateTime(selectedBooking.createdAt)}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Creato
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {formatDateTime(selectedBooking.createdAt)}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">Aggiornato</p>
-                      <p className="mt-2 text-sm font-bold text-[#171717]">{formatDateTime(selectedBooking.updatedAt)}</p>
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40">
+                        Aggiornato
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-[#171717]">
+                        {formatDateTime(selectedBooking.updatedAt)}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -2851,18 +3934,28 @@ export function AppointmentsBrowser({
                       <Clock3 className="size-5" />
                     </span>
                     <div>
-                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">Contatti rapidi</p>
-                      <h4 className="text-lg font-black text-[#171717]">Informazioni utili</h4>
+                      <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
+                        Contatti rapidi
+                      </p>
+                      <h4 className="text-lg font-black text-[#171717]">
+                        Informazioni utili
+                      </h4>
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
                     <div className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3 text-sm text-[#171717]">
                       <Mail className="size-4 text-[#C66170]" />
-                      <span className="break-all">{selectedBooking.customerEmail || "Email non disponibile"}</span>
+                      <span className="break-all">
+                        {selectedBooking.customerEmail ||
+                          "Email non disponibile"}
+                      </span>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3 text-sm text-[#171717]">
                       <Phone className="size-4 text-[#C66170]" />
-                      <span>{selectedBooking.customerPhone || "Telefono non disponibile"}</span>
+                      <span>
+                        {selectedBooking.customerPhone ||
+                          "Telefono non disponibile"}
+                      </span>
                     </div>
                   </div>
                 </div>
