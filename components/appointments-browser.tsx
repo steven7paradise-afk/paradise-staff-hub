@@ -108,7 +108,55 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
   { value: "ufficio", label: "Ufficio Paradise" },
 ];
 
-const clientControlSalons = ["Salone Duomo", "Salone Buenos Aires"];
+const clientControlSalons = [{ label: "Corso", value: "Salone Buenos Aires" }];
+
+const clientControlNoteSuggestions = [
+  "Fatto (100g)",
+  "Fatto (150g)",
+  "Fatto (200g)",
+  "Fatto (55cm)",
+  "Fatto (65cm)",
+  "Ha fatto colore",
+  "Cliente simpatica",
+  "Cliente si e trovata bene",
+  "Cliente poco collaborativa",
+  "Cliente arrivata in ritardo",
+  "Capelli molto sottili",
+  "Capelli poco curati",
+  "Cute sensibile",
+  "Ha bisogno di consulenza colore",
+  "Spiegata manutenzione a casa",
+];
+
+const extensionColorOptions = [
+  "1 - CAMY - NERO",
+  "2 - ALY - CASTANO SCURO",
+  "3 - GINY - CASTANO FONDENTE",
+  "4 - ROXY - CASTANO",
+  "4.A - ROXY - CASTANO",
+  "4.B - ROXY - CASTANO",
+  "5 - NOEMY - NOCCIOLA",
+  "5.B - NOEMY - NOCCIOLA",
+  "6 - FRANCY - CASTANO CHIARO",
+  "6.B - FRANCY - CASTANO CHIARO",
+  "7 - KARY - CARAMELLO",
+  "8 MICHY - TOFFE MESCIATO",
+  "8.A - MICHY - TOFFE MESCIATO",
+  "8.B - MICHY - TOFFE MESCIATO",
+  "9 - VERONICA - CASTANO & MIELE",
+  "9.A - VERONICA - CASTANO & MIELE",
+  "10 - GABY - BIONDO MIELE SFUMATO",
+  "10.A - GABY - BIONDO MIELE SFUMATO",
+  "10.B - GABY - BIONDO MIELE SFUMATO",
+  "11 - EMY - BIONDO CENERE",
+  "11.A - EMY - BIONDO CENERE",
+  "12 - LISY - BIONDO RAMATO",
+  "12.A - LISY - BIONDO RAMATO",
+  "13 - LOLY - BIONDO & MIELE",
+  "14 - PAMY - BIONDO MESCIATO",
+  "14.A - PAMY - BIONDO MESCIATO",
+  "15 - LEIDY - BIONDO NOCCIOLA",
+];
 
 const viewOptions: Array<{ value: ViewMode; label: string }> = [
   { value: "day", label: "Giorno" },
@@ -518,8 +566,9 @@ export function AppointmentsBrowser({
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [selectedExtensionColor, setSelectedExtensionColor] = useState("");
   const [clientControlForm, setClientControlForm] = useState<ClientControlAppointmentForm>({
-    salon: "Salone Duomo",
+    salon: "Salone Buenos Aires",
     clientName: "",
     email: "",
     phone: "",
@@ -546,6 +595,19 @@ export function AppointmentsBrowser({
     });
   }, [clientControlEmployees, clientControlForm.salon]);
 
+  function appendClientControlNote(text: string) {
+    const value = text.trim();
+    if (!value) return;
+    setClientControlForm((prev) => {
+      const current = prev.customNoteText.trim();
+      return {
+        ...prev,
+        customNoteText: current ? `${current}\n${value}` : value,
+        notes: true,
+      };
+    });
+  }
+
   async function loadClientControlEmployees() {
     if (clientControlEmployees.length) return clientControlEmployees;
     setClientControlLoading(true);
@@ -563,10 +625,11 @@ export function AppointmentsBrowser({
 
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
+    setSelectedExtensionColor("");
     try {
       const salonName = salonNameForBooking(booking);
       const baseForm: ClientControlAppointmentForm = {
-        salon: clientControlSalons.includes(salonName) ? salonName : "Salone Duomo",
+        salon: clientControlSalons.some((option) => option.value === salonName) ? salonName : "Salone Buenos Aires",
         clientName: booking.customerName || "",
         email: booking.customerEmail || "",
         phone: booking.customerPhone || "",
@@ -1167,19 +1230,19 @@ export function AppointmentsBrowser({
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Sede *</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {clientControlSalons.map((salonName) => (
+                    {clientControlSalons.map((salon) => (
                       <button
-                        key={salonName}
+                        key={salon.value}
                         type="button"
-                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salonName, staffIds: [] }))}
+                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salon.value, staffIds: [] }))}
                         className={[
                           "rounded-full border px-3 py-2 text-xs font-black transition",
-                          clientControlForm.salon === salonName
+                          clientControlForm.salon === salon.value
                             ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
                             : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
                         ].join(" ")}
                       >
-                        {salonName}
+                        {salon.label}
                       </button>
                     ))}
                   </div>
@@ -1209,10 +1272,44 @@ export function AppointmentsBrowser({
                   ))}
                   <label className="block md:col-span-2">
                     <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
+                    <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">Suggerimenti</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {clientControlNoteSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            type="button"
+                            onClick={() => appendClientControlNote(suggestion)}
+                            className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-[11px] font-black text-[#B83D7F] transition active:scale-95"
+                          >
+                            + {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
+                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Colore collection</span>
+                        <select
+                          value={selectedExtensionColor}
+                          onChange={(event) => {
+                            const color = event.target.value;
+                            setSelectedExtensionColor(color);
+                            if (color) appendClientControlNote(`Ha fatto colore ${color}`);
+                          }}
+                          className="h-11 rounded-2xl border border-[#F3B5D4] bg-white px-3 text-sm font-bold text-[#5D4A42] outline-none focus:border-[#E88AC5]"
+                        >
+                          <option value="">Seleziona colore</option>
+                          {extensionColorOptions.map((color) => (
+                            <option key={color} value={color}>
+                              {color}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                     <textarea
                       value={clientControlForm.customNoteText}
                       onChange={(event) => setClientControlForm((prev) => ({ ...prev, customNoteText: event.target.value }))}
-                      className="mt-1 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
+                      className="mt-2 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
                       placeholder="Scrivi qui la nota Shopify"
                     />
                   </label>
@@ -2212,19 +2309,19 @@ export function AppointmentsBrowser({
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Sede *</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {clientControlSalons.map((salonName) => (
+                    {clientControlSalons.map((salon) => (
                       <button
-                        key={salonName}
+                        key={salon.value}
                         type="button"
-                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salonName, staffIds: [] }))}
+                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salon.value, staffIds: [] }))}
                         className={[
                           "rounded-full border px-3 py-2 text-xs font-black transition",
-                          clientControlForm.salon === salonName
+                          clientControlForm.salon === salon.value
                             ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
                             : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
                         ].join(" ")}
                       >
-                        {salonName}
+                        {salon.label}
                       </button>
                     ))}
                   </div>
