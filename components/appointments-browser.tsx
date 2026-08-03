@@ -930,7 +930,7 @@ export function AppointmentsBrowser({
         <MessageCircle className={compact ? "mt-0.5 size-3.5 shrink-0" : "mt-0.5 size-4 shrink-0"} />
         <span className="min-w-0">
           <span className="font-black">WhatsApp</span>
-          {!compact ? <span className="ml-1 font-semibold">{message}</span> : null}
+          <span className="ml-1 font-semibold">{compact ? compactValue(message, 42) : message}</span>
         </span>
       </div>
     );

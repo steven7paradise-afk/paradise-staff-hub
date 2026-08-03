@@ -57,6 +57,18 @@ function normalizeAppointmentSheetStatus(value?: string | null) {
   return APPOINTMENT_STATUS_VALUES.has(normalized) ? normalized : null;
 }
 
+function confirmationSheetNote(row: unknown[], booking: AppointmentSheetLookupInput, status?: string | null) {
+  const existingNote = String(row[9] || "").trim();
+  if (existingNote) return existingNote;
+  if (!status) return "";
+
+  const rawStatus = normalizeSheetText(String(row[7] || ""));
+  const customerName = String(row[2] || "").trim() || booking.customerName;
+  if (rawStatus.includes("conferm")) return `Confermato da ${customerName}`;
+  if (status === "PRENOTATO") return `Conferma richiesta ricevuta da ${customerName}`;
+  return "";
+}
+
 function cellMatchesBookingId(cell: unknown, bookingId: string) {
   const value = String(cell || "").trim();
   if (!value) return false;
@@ -229,12 +241,12 @@ export async function getAppointmentStatusesFromGoogleSheet(bookings: Appointmen
 
     for (const row of rows.slice(1)) {
       const status = normalizeAppointmentSheetStatus(row[7]);
-      const sheetNote = String(row[9] || "").trim();
-      if (!status && !sheetNote) continue;
+      if (!status && !String(row[9] || "").trim()) continue;
 
       for (const booking of lookupBookings) {
         if (statuses[booking.id]) continue;
         if (rowMatchesAppointment(row, booking)) {
+          const sheetNote = confirmationSheetNote(row, booking, status);
           statuses[booking.id] = {
             ...(status ? { status } : {}),
             ...(sheetNote ? { sheetNote } : {}),
