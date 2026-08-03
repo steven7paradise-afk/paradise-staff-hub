@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "./prisma";
 
 export const appointmentsPcCookieName = "appointments_pc_token";
 

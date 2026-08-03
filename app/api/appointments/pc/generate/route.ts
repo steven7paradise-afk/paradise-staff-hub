@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { generateOneTimeCode } from "@/lib/appointments-pc-auth";
 
 export async function POST(request: NextRequest) {
@@ -8,7 +9,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  const role = session.user.role;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+
+  if (!dbUser) {
+    return NextResponse.json({ error: "Utente non trovato" }, { status: 404 });
+  }
+
+  const role = dbUser.role;
   const isAuthorized = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   if (!isAuthorized) {
     return NextResponse.json({ error: "Privilegi insufficienti" }, { status: 403 });
