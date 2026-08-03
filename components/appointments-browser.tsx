@@ -879,7 +879,10 @@ export function AppointmentsBrowser({
         depositPaid:
           booking.priceAmount != null ? String(booking.priceAmount) : "",
         paid: "",
-        staffIds: matchEmployeeIdsForBooking(booking, clientControlEmployees),
+        staffIds: matchEmployeeIdsForBooking(
+          booking,
+          clientControlEmployees,
+        ).slice(0, 1),
         shopifyOrder: booking.bookingStr
           ? booking.bookingStr.replace(/^#/, "")
           : "",
@@ -927,8 +930,8 @@ export function AppointmentsBrowser({
       return {
         ...current,
         staffIds: current.staffIds.length
-          ? current.staffIds
-          : matchEmployeeIdsForBooking(booking, employees),
+          ? current.staffIds.slice(0, 1)
+          : matchEmployeeIdsForBooking(booking, employees).slice(0, 1),
         customNoteText:
           current.customNoteText || bookingNotes?.shopifyNote || "",
       };
@@ -1860,7 +1863,7 @@ export function AppointmentsBrowser({
 
                   <div className="mt-5">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      Collaboratrici del salone *
+                      Collaboratrice del salone *
                     </p>
                     <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
                       {clientControlLoading ? (
@@ -1879,11 +1882,7 @@ export function AppointmentsBrowser({
                               onClick={() =>
                                 setClientControlForm((prev) => ({
                                   ...prev,
-                                  staffIds: selected
-                                    ? prev.staffIds.filter(
-                                        (id) => id !== employee.id,
-                                      )
-                                    : [...prev.staffIds, employee.id],
+                                  staffIds: selected ? [] : [employee.id],
                                 }))
                               }
                               className={[
@@ -3394,7 +3393,7 @@ export function AppointmentsBrowser({
 
                 <div className="mt-5">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                    Collaboratrici del salone *
+                    Collaboratrice del salone *
                   </p>
                   <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
                     {clientControlLoading ? (
@@ -3413,11 +3412,7 @@ export function AppointmentsBrowser({
                             onClick={() =>
                               setClientControlForm((prev) => ({
                                 ...prev,
-                                staffIds: selected
-                                  ? prev.staffIds.filter(
-                                      (id) => id !== employee.id,
-                                    )
-                                  : [...prev.staffIds, employee.id],
+                                staffIds: selected ? [] : [employee.id],
                               }))
                             }
                             className={[
