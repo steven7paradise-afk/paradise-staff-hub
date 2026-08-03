@@ -1382,12 +1382,11 @@ export function AppointmentsBrowser({
 
                       <button
                         type="button"
-                        onMouseDown={(event) => event.stopPropagation()}
-                        onTouchStart={(event) => event.stopPropagation()}
-                        onClick={(event) => {
+                        onPointerDown={(event) => {
                           event.stopPropagation();
                           void openClientControlForBooking(booking);
                         }}
+                        onClick={(event) => event.stopPropagation()}
                         className="grid size-10 place-items-center rounded-xl border border-[#E8D8CF] bg-white text-[#8D5E49] transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] hover:text-[#B83D7F]"
                         title="Compila controllo cliente"
                       >
@@ -1457,6 +1456,18 @@ export function AppointmentsBrowser({
                   <div className="mt-4">
                     <WhatsAppSheetNote booking={selectedBooking} always />
                   </div>
+                  <button
+                    type="button"
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      void openClientControlForBooking(selectedBooking);
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#E88AC5] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#D96DB1] active:scale-[0.99]"
+                  >
+                    <ChevronRight className="size-4" />
+                    Compila controllo cliente
+                  </button>
                 </section>
 
                 <section className="border-t border-[#E8D8CF] pt-5">
