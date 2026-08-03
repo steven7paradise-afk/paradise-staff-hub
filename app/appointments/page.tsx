@@ -209,13 +209,7 @@ export default async function AppointmentsPage({
     } as any;
   }
 
-  if (!sessionUser) redirect("/login");
-
-  const resolvedSearchParams = await searchParams;
-  const forceRefresh = resolvedSearchParams?.refresh === "true";
-  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
-
-  if (forcePcSalon && sessionUser) {
+  if (forcePcSalon) {
     const forcedLocation = await prisma.location.findFirst({
       where: {
         active: true,
@@ -238,6 +232,12 @@ export default async function AppointmentsPage({
       } as any;
     }
   }
+
+  if (!sessionUser) redirect("/login");
+
+  const resolvedSearchParams = await searchParams;
+  const forceRefresh = resolvedSearchParams?.refresh === "true";
+  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
 
   const role = sessionUser.role as Role;
 
