@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import AppointmentsPage from "../page";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
-import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ export default async function SalonAppointmentsPage({
   const cookieStore = await cookies();
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = await checkPCAuthorization(pcToken);
+  const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
 
   if (!pcAuth) {
     return (
@@ -41,7 +42,7 @@ export default async function SalonAppointmentsPage({
     );
   }
 
-  if (resolvedSearchParams.unlocked !== "1") {
+  if (!selectedWorker) {
     return <AppointmentsKioskEntry salone={salone} />;
   }
 
@@ -49,6 +50,8 @@ export default async function SalonAppointmentsPage({
     searchParams: Promise.resolve({
       ...resolvedSearchParams,
       salone,
+      unlocked: "1",
+      worker: decodeURIComponent(selectedWorker),
     }),
     forcePcSalon: salone,
   });

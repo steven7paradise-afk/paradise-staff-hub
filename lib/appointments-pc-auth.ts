@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
 
 export const appointmentsPcCookieName = "appointments_pc_token";
+export const appointmentsPcWorkerCookieName = "appointments_pc_worker";
+export const appointmentsPcWorkerCookieMaxAgeSeconds = 10 * 60;
 
 export interface AuthorizedPC {
   code: string;

@@ -26,6 +26,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectingWorkerId, setSelectingWorkerId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -56,9 +57,22 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
     };
   }, [salone]);
 
-  function enter(worker: ActiveWorker) {
-    const params = new URLSearchParams({ unlocked: "1", worker: worker.name });
-    window.location.href = `${appointmentSalonUrl(salone)}?${params.toString()}`;
+  async function enter(worker: ActiveWorker) {
+    setSelectingWorkerId(worker.id);
+    setError("");
+    try {
+      const response = await fetch("/api/appointments/pc/select-worker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workerId: worker.id, salone }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
+      window.location.href = data?.appointmentUrl || appointmentSalonUrl(salone);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
+      setSelectingWorkerId("");
+    }
   }
 
   return (
@@ -103,6 +117,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                   key={worker.id}
                   type="button"
                   onClick={() => enter(worker)}
+                  disabled={Boolean(selectingWorkerId)}
                   className="group flex w-36 flex-col items-center text-center transition hover:-translate-y-1 md:w-40"
                 >
                   <div className="relative grid size-32 place-items-center rounded-full border-[5px] border-[#F9C8DF] bg-white p-1 shadow-[0_10px_28px_rgba(241,45,131,0.12)] transition group-hover:border-[#F12D83] md:size-36">
@@ -114,6 +129,11 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                       </div>
                     )}
                     <span className="absolute right-3 top-2 size-4 rounded-full border-2 border-white bg-emerald-400 shadow-2xs" />
+                    {selectingWorkerId === worker.id ? (
+                      <span className="absolute inset-0 grid place-items-center rounded-full bg-white/70">
+                        <Loader2 className="size-7 animate-spin text-[#F12D83]" />
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-4 max-w-full truncate text-lg font-black tracking-normal text-[#F12D83]">
                     {firstName}
