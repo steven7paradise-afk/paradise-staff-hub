@@ -446,7 +446,6 @@ export async function getShopifyOrderCowlendarText(orderName: string): Promise<s
     if (!order) return null;
 
     const noteLines: string[] = [];
-    const detailLines: string[] = [];
     const tags = String(order.tags || "").toLowerCase();
     const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
     const noteLabelPattern = /(^|\s)(note|nota|memo|comment|commento|messaggio|message|richiesta|indicazione|istruzione|dettaglio|descrizione)(\s|$)/i;
@@ -477,14 +476,11 @@ export async function getShopifyOrderCowlendarText(orderName: string): Promise<s
         const value = String(property.value).trim();
         if (noteLabelPattern.test(property.name)) {
           noteLines.push(`Nota prenotazione: ${value}`);
-        } else {
-          detailLines.push(`${property.name}: ${value}`);
         }
       }
     }
 
-    const lines = [...noteLines, ...detailLines];
-    return [...new Set(lines)].join("\n") || null;
+    return [...new Set(noteLines)].join("\n") || null;
   } catch (error) {
     console.error("Error in getShopifyOrderCowlendarText:", error);
     return null;
