@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS, ensureClientControlForm } from "@/lib/client-control-form";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
@@ -33,13 +34,15 @@ function sameSalon(a?: string | null, b?: string | null) {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await auth();
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
   const tabletDevice = requestedDevice
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
     : null;
+  const canSubmitFromDashboard = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(String(session?.user?.role ?? ""));
 
-  if (!tabletDevice) {
+  if (!tabletDevice && !canSubmitFromDashboard) {
     return NextResponse.json({ error: "Tablet non autorizzato" }, { status: 401 });
   }
 
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
   } | null;
 
   const isFinito = !!body?.isFinito;
-  const salonName = textValue(body?.salon || tabletDevice.location?.name);
+  const salonName = textValue(body?.salon || tabletDevice?.location?.name);
   const clientName = textValue(body?.clientName);
   const staffIds = Array.isArray(body?.staffIds) ? body!.staffIds.filter(Boolean) : [];
 
@@ -81,7 +84,12 @@ export async function POST(request: NextRequest) {
   const location =
     await prisma.location.findFirst({ where: { name: salonName, active: true } }) ??
     await prisma.location.findFirst({ where: { active: true, name: { contains: salonName.replace(/^Salone\s+/i, ""), mode: "insensitive" } } }) ??
-    tabletDevice.location;
+    tabletDevice?.location ??
+    await prisma.location.findFirst({ where: { active: true }, orderBy: { name: "asc" } });
+
+  if (!location) {
+    return NextResponse.json({ error: "Sede non trovata." }, { status: 400 });
+  }
 
   let staffForSalon: any[] = [];
   if (!isFinito) {
@@ -108,14 +116,16 @@ export async function POST(request: NextRequest) {
 
   const staffNames = staffForSalon.map((s) => s.name);
 
-  const submitter = await prisma.user.findFirst({
-    where: {
-      active: true,
-      role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] },
-    },
-    orderBy: { created_at: "asc" },
-    select: { id: true },
-  });
+  const submitter = session?.user?.id
+    ? { id: session.user.id }
+    : await prisma.user.findFirst({
+        where: {
+          active: true,
+          role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] },
+        },
+        orderBy: { created_at: "asc" },
+        select: { id: true },
+      });
 
   if (!submitter) {
     return NextResponse.json({ error: "Nessun admin disponibile per registrare il modulo tablet." }, { status: 400 });

@@ -44,6 +44,32 @@ type BookingTeammate = {
 
 type TeamOption = BookingTeammate;
 
+type ClientControlEmployee = {
+  id: string;
+  name: string;
+  locationName?: string | null;
+};
+
+type ClientControlAppointmentForm = {
+  salon: string;
+  clientName: string;
+  email: string;
+  phone: string;
+  serviceTitle: string;
+  depositPaid: string;
+  paid: string;
+  staffIds: string[];
+  shopifyOrder: string;
+  instagramTag: string;
+  customNoteText: string;
+  notes: boolean;
+  beforeMedia: boolean;
+  afterMedia: boolean;
+  products: boolean;
+  review: boolean;
+  bookingId?: string | null;
+};
+
 type AppointmentRecord = {
   id: string;
   customerName: string;
@@ -81,6 +107,8 @@ const salonOptions: Array<{ value: SalonFilter; label: string }> = [
   { value: "buenos-aires", label: "Buenos Aires" },
   { value: "ufficio", label: "Ufficio Paradise" },
 ];
+
+const clientControlSalons = ["Salone Duomo", "Salone Buenos Aires"];
 
 const viewOptions: Array<{ value: ViewMode; label: string }> = [
   { value: "day", label: "Giorno" },
@@ -446,6 +474,149 @@ export function AppointmentsBrowser({
   const normalizedSearch = normalizeSearchValue(searchTerm);
   function getBookingTeam(booking: AppointmentRecord) {
     return teamByBooking[booking.id] || booking.teammates;
+  }
+
+  function normalizeSalonName(value?: string | null) {
+    return String(value ?? "")
+      .toLowerCase()
+      .replace(/^salone\s+/, "")
+      .replace(/^corso\s+/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function salonNameForBooking(booking: AppointmentRecord) {
+    return booking.inferredSalon === "buenos-aires" ? "Salone Buenos Aires" : "Salone Duomo";
+  }
+
+  function matchEmployeeIdsForBooking(booking: AppointmentRecord, employees: ClientControlEmployee[]) {
+    const clean = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const bookingSalon = normalizeSalonName(salonNameForBooking(booking));
+    const salonEmployees = employees.filter((employee) => {
+      const employeeSalon = normalizeSalonName(employee.locationName);
+      return employeeSalon.includes(bookingSalon) || bookingSalon.includes(employeeSalon);
+    });
+    const ids: string[] = [];
+
+    for (const mate of getBookingTeam(booking)) {
+      const mateClean = clean(mate.name);
+      const matched = salonEmployees.find((employee) => {
+        const employeeClean = clean(employee.name);
+        const firstName = mateClean.split("|")[0] || mateClean;
+        return employeeClean.includes(mateClean) || mateClean.includes(employeeClean) || employeeClean.includes(firstName);
+      });
+      if (matched && !ids.includes(matched.id)) ids.push(matched.id);
+    }
+
+    return ids;
+  }
+
+  const [clientControlOpen, setClientControlOpen] = useState(false);
+  const [clientControlEmployees, setClientControlEmployees] = useState<ClientControlEmployee[]>([]);
+  const [clientControlLoading, setClientControlLoading] = useState(false);
+  const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
+  const [clientControlMessage, setClientControlMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [clientControlForm, setClientControlForm] = useState<ClientControlAppointmentForm>({
+    salon: "Salone Duomo",
+    clientName: "",
+    email: "",
+    phone: "",
+    serviceTitle: "",
+    depositPaid: "",
+    paid: "",
+    staffIds: [],
+    shopifyOrder: "",
+    instagramTag: "",
+    customNoteText: "",
+    notes: false,
+    beforeMedia: false,
+    afterMedia: false,
+    products: false,
+    review: false,
+    bookingId: null,
+  });
+
+  const filteredClientControlEmployees = useMemo(() => {
+    const selectedSalon = normalizeSalonName(clientControlForm.salon);
+    return clientControlEmployees.filter((employee) => {
+      const employeeSalon = normalizeSalonName(employee.locationName);
+      return employeeSalon.includes(selectedSalon) || selectedSalon.includes(employeeSalon);
+    });
+  }, [clientControlEmployees, clientControlForm.salon]);
+
+  async function loadClientControlEmployees() {
+    if (clientControlEmployees.length) return clientControlEmployees;
+    setClientControlLoading(true);
+    try {
+      const response = await fetch("/api/client-control/analytics", { cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Non riesco a caricare le collaboratrici.");
+      const employees = Array.isArray(data?.employees) ? data.employees : [];
+      setClientControlEmployees(employees);
+      return employees as ClientControlEmployee[];
+    } finally {
+      setClientControlLoading(false);
+    }
+  }
+
+  async function openClientControlForBooking(booking: AppointmentRecord) {
+    setClientControlMessage(null);
+    const [employees, bookingNotes] = await Promise.all([
+      loadClientControlEmployees().catch((error) => {
+        setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Non riesco a caricare il form." });
+        return [] as ClientControlEmployee[];
+      }),
+      fetch(`/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`)
+        .then((response) => response.ok ? response.json() : null)
+        .catch(() => null),
+    ]);
+    const salonName = salonNameForBooking(booking);
+    const staffIds = matchEmployeeIdsForBooking(booking, employees);
+
+    setClientControlForm({
+      salon: clientControlSalons.includes(salonName) ? salonName : "Salone Duomo",
+      clientName: booking.customerName || "",
+      email: booking.customerEmail || "",
+      phone: booking.customerPhone || "",
+      serviceTitle: booking.serviceTitle || "",
+      depositPaid: booking.priceAmount != null ? String(booking.priceAmount) : "",
+      paid: "",
+      staffIds,
+      shopifyOrder: booking.bookingStr ? booking.bookingStr.replace(/^#/, "") : "",
+      instagramTag: "",
+      customNoteText: bookingNotes?.shopifyNote || "",
+      notes: false,
+      beforeMedia: false,
+      afterMedia: false,
+      products: false,
+      review: false,
+      bookingId: booking.id,
+    });
+    setClientControlOpen(true);
+  }
+
+  async function submitClientControlForm() {
+    setClientControlMessage(null);
+    if (!clientControlForm.salon || !clientControlForm.clientName.trim() || clientControlForm.staffIds.length === 0) {
+      setClientControlMessage({ type: "error", text: "Completa sede, nome cliente e collaboratrice." });
+      return;
+    }
+
+    setClientControlSubmitting(true);
+    try {
+      const response = await fetch("/api/client-control/tablet-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clientControlForm),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Errore durante il salvataggio.");
+      setClientControlMessage({ type: "success", text: "Scheda controllo cliente salvata." });
+    } catch (error) {
+      setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Errore durante il salvataggio." });
+    } finally {
+      setClientControlSubmitting(false);
+    }
   }
 
   const activeBookingsCount = initialBookings.filter((booking) => !booking.isCanceled).length;
@@ -1184,7 +1355,22 @@ export function AppointmentsBrowser({
                         </div>
                       </div>
 
-                      <span className="grid size-10 place-items-center rounded-xl border border-[#E8D8CF] bg-white text-[#8D5E49]">
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void openClientControlForBooking(booking);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void openClientControlForBooking(booking);
+                        }}
+                        className="grid size-10 place-items-center rounded-xl border border-[#E8D8CF] bg-white text-[#8D5E49] transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] hover:text-[#B83D7F]"
+                        title="Compila controllo cliente"
+                      >
                         <ChevronRight className="size-5" />
                       </span>
                     </button>
@@ -1821,6 +2007,210 @@ export function AppointmentsBrowser({
           </div>
         ) : null}
       </section>
+
+      {clientControlOpen ? (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5">
+          <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-[26px] border border-black/15 bg-[#FAFAFA] shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
+            <div className="flex items-start justify-between gap-4 border-b border-black/10 px-5 py-5 sm:px-7">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">Store manager</p>
+                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">Appuntamenti e controllo cliente</h2>
+                <p className="mt-1 text-xs font-semibold text-black/45">Compila il controllo partendo dai dati dell'appuntamento.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-[#171717] px-4 py-2 text-xs font-black text-white">Crea appuntamento</span>
+                  <span className="rounded-full bg-black/5 px-4 py-2 text-xs font-black text-black/45">Analytics</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClientControlOpen(false)}
+                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:bg-black/[0.02] active:scale-95"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
+              <div className="rounded-[26px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Sede *</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {clientControlSalons.map((salonName) => (
+                      <button
+                        key={salonName}
+                        type="button"
+                        onClick={() => setClientControlForm((prev) => ({ ...prev, salon: salonName, staffIds: [] }))}
+                        className={[
+                          "rounded-full border px-3 py-2 text-xs font-black transition",
+                          clientControlForm.salon === salonName
+                            ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
+                            : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
+                        ].join(" ")}
+                      >
+                        {salonName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Nome cliente *</span>
+                    <input
+                      value={clientControlForm.clientName}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, clientName: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="Nome cliente"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Email cliente</span>
+                    <input
+                      value={clientControlForm.email}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, email: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="email@esempio.com"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Telefono cliente</span>
+                    <input
+                      value={clientControlForm.phone}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, phone: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="+39..."
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Servizio prenotato</span>
+                    <input
+                      value={clientControlForm.serviceTitle}
+                      readOnly
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 bg-black/[0.02] px-4 text-sm font-bold text-black/60 outline-none"
+                      placeholder="Servizio"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Ordine Shopify</span>
+                    <input
+                      value={clientControlForm.shopifyOrder}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, shopifyOrder: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="Numero ordine"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Acconto pagato (€)</span>
+                    <input
+                      inputMode="decimal"
+                      value={clientControlForm.depositPaid}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, depositPaid: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="0.00"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Pagato (€)</span>
+                    <input
+                      inputMode="decimal"
+                      value={clientControlForm.paid}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, paid: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="0.00"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">IG tag</span>
+                    <input
+                      value={clientControlForm.instagramTag}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, instagramTag: event.target.value }))}
+                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
+                      placeholder="@cliente"
+                    />
+                  </label>
+                  <label className="block md:col-span-2">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
+                    <textarea
+                      value={clientControlForm.customNoteText}
+                      onChange={(event) => setClientControlForm((prev) => ({ ...prev, customNoteText: event.target.value }))}
+                      className="mt-1 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
+                      placeholder="Scrivi qui la nota Shopify"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Collaboratrici del salone *</p>
+                  <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
+                    {clientControlLoading ? (
+                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Carico collaboratrici...</p>
+                    ) : filteredClientControlEmployees.length ? (
+                      filteredClientControlEmployees.map((employee) => {
+                        const selected = clientControlForm.staffIds.includes(employee.id);
+                        return (
+                          <button
+                            key={employee.id}
+                            type="button"
+                            onClick={() =>
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                staffIds: selected ? prev.staffIds.filter((id) => id !== employee.id) : [...prev.staffIds, employee.id],
+                              }))
+                            }
+                            className={[
+                              "rounded-xl border px-3 py-2 text-left text-xs font-black transition",
+                              selected ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]" : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
+                            ].join(" ")}
+                          >
+                            {employee.name}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">Nessuna collaboratrice trovata per questa sede.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                  {[
+                    ["notes", "Note Shopify"],
+                    ["beforeMedia", "Prima foto/video"],
+                    ["afterMedia", "Dopo foto/video"],
+                    ["products", "Prodotti"],
+                    ["review", "Recensione"],
+                  ].map(([fieldKey, fieldLabel]) => (
+                    <label key={fieldKey} className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]">
+                      <input
+                        type="checkbox"
+                        checked={Boolean((clientControlForm as any)[fieldKey])}
+                        onChange={(event) => setClientControlForm((prev) => ({ ...prev, [fieldKey]: event.target.checked }))}
+                        className="size-4 accent-[#E88AC5]"
+                      />
+                      <span>{fieldLabel}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {clientControlMessage ? (
+                  <p className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                    {clientControlMessage.text}
+                  </p>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={submitClientControlForm}
+                  disabled={clientControlSubmitting || clientControlLoading}
+                  className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
+                >
+                  {clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedBooking ? (
         <div className="fixed inset-0 z-[90] bg-black/45 p-4 backdrop-blur-sm">
