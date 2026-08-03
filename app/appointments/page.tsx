@@ -157,6 +157,27 @@ function prettifyBookingLabel(value: string) {
     .trim();
 }
 
+function isCowlendarNoteField(label: string) {
+  const normalized = normalizeName(label);
+  return [
+    "note",
+    "nota",
+    "memo",
+    "comment",
+    "commento",
+    "messaggio",
+    "message",
+    "osservazione",
+    "osservazioni",
+    "richiesta",
+    "richieste",
+    "preferenza",
+    "preferenze",
+    "indicazione",
+    "indicazioni",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
 export default async function AppointmentsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -317,11 +338,8 @@ export default async function AppointmentsPage() {
         booking.internal_note,
         booking.customer_note,
         ...extraDetails
-          .filter((item) => {
-            const label = normalizeName(item.label);
-            return label.includes("note") || label.includes("memo") || label.includes("comment");
-          })
-          .map((item) => item.value),
+          .filter((item) => isCowlendarNoteField(item.label))
+          .map((item) => `${item.label}: ${item.value}`),
       ]
         .flatMap((value) => (Array.isArray(value) ? value : [value]))
         .map((value) => String(value || "").trim())
