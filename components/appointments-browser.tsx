@@ -496,7 +496,6 @@ export function AppointmentsBrowser({
   const [salon, setSalon] = useState<SalonFilter>("tutti");
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
-  const [detailClosed, setDetailClosed] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [internalNotes, setInternalNotes] = useState<Record<string, string>>({});
   const [showCanceled, setShowCanceled] = useState(false);
@@ -565,6 +564,7 @@ export function AppointmentsBrowser({
   const [clientControlEmployees, setClientControlEmployees] = useState<ClientControlEmployee[]>([]);
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
+  const [clientControlPolishing, setClientControlPolishing] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedExtensionColor, setSelectedExtensionColor] = useState("");
   const [clientControlForm, setClientControlForm] = useState<ClientControlAppointmentForm>({
@@ -606,6 +606,66 @@ export function AppointmentsBrowser({
         notes: true,
       };
     });
+  }
+
+  function selectedClientControlStaffNames() {
+    return clientControlForm.staffIds
+      .map((id) => clientControlEmployees.find((employee) => employee.id === id)?.name)
+      .filter((name): name is string => Boolean(name));
+  }
+
+  function hasClientControlNoteContext() {
+    return Boolean(
+      clientControlForm.customNoteText.trim() ||
+        clientControlForm.clientName.trim() ||
+        clientControlForm.shopifyOrder.trim() ||
+        clientControlForm.serviceTitle.trim() ||
+        clientControlForm.depositPaid ||
+        clientControlForm.paid ||
+        clientControlForm.staffIds.length ||
+        clientControlForm.notes ||
+        clientControlForm.beforeMedia ||
+        clientControlForm.afterMedia ||
+        clientControlForm.products ||
+        clientControlForm.review,
+    );
+  }
+
+  async function polishClientControlNote() {
+    if (!hasClientControlNoteContext() || clientControlPolishing) return;
+    setClientControlPolishing(true);
+    setClientControlMessage(null);
+    try {
+      const response = await fetch("/api/client-control/polish-note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: clientControlForm.customNoteText.trim(),
+          clientName: clientControlForm.clientName,
+          serviceTitle: clientControlForm.serviceTitle,
+          orderNumber: clientControlForm.shopifyOrder,
+          salon: clientControlForm.salon,
+          depositPaid: clientControlForm.depositPaid,
+          paid: clientControlForm.paid,
+          instagramTag: clientControlForm.instagramTag,
+          staffNames: selectedClientControlStaffNames(),
+          checks: {
+            notes: clientControlForm.notes,
+            beforeMedia: clientControlForm.beforeMedia,
+            afterMedia: clientControlForm.afterMedia,
+            products: clientControlForm.products,
+            review: clientControlForm.review,
+          },
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.note) throw new Error(data?.error || "Non riesco a sistemare la nota.");
+      setClientControlForm((prev) => ({ ...prev, customNoteText: data.note, notes: true }));
+    } catch (error) {
+      setClientControlMessage({ type: "error", text: error instanceof Error ? error.message : "Non riesco a sistemare la nota." });
+    } finally {
+      setClientControlPolishing(false);
+    }
   }
 
   async function loadClientControlEmployees() {
@@ -766,11 +826,10 @@ export function AppointmentsBrowser({
       if (selectedBookingId !== null) setSelectedBookingId(null);
       return;
     }
-
-    if (!detailClosed && (!selectedBookingId || !filteredBookings.some((booking) => booking.id === selectedBookingId))) {
-      setSelectedBookingId(filteredBookings[0].id);
+    if (selectedBookingId && !filteredBookings.some((booking) => booking.id === selectedBookingId)) {
+      setSelectedBookingId(null);
     }
-  }, [detailClosed, filteredBookings, selectedBookingId]);
+  }, [filteredBookings, selectedBookingId]);
 
   type AppointmentComment = {
     id: string;
@@ -1271,7 +1330,17 @@ export function AppointmentsBrowser({
                     </label>
                   ))}
                   <label className="block md:col-span-2">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Testo nota Shopify</span>
+                      <button
+                        type="button"
+                        onClick={polishClientControlNote}
+                        disabled={!hasClientControlNoteContext() || clientControlPolishing}
+                        className="rounded-full bg-[#FCE5F3] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition active:scale-95 disabled:opacity-45"
+                      >
+                        {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
+                      </button>
+                    </div>
                     <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3">
                       <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">Suggerimenti</p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -1387,7 +1456,12 @@ export function AppointmentsBrowser({
           </div>
         </div>
       ) : null}
-      <div className="mx-auto grid w-full max-w-[1760px] gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]">
+      <div
+        className={[
+          "mx-auto grid w-full max-w-[1760px] gap-5",
+          selectedBooking ? "xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]" : "grid-cols-1",
+        ].join(" ")}
+      >
         <main className="min-w-0 space-y-5">
           <section className="rounded-[28px] border border-[#E8D8CF] bg-white/85 p-5 shadow-sm backdrop-blur sm:p-7">
             <div>
@@ -1540,13 +1614,11 @@ export function AppointmentsBrowser({
                       role="button"
                       tabIndex={0}
                       onClick={() => {
-                        setDetailClosed(false);
                         setSelectedBookingId(booking.id);
                       }}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
-                        setDetailClosed(false);
                         setSelectedBookingId(booking.id);
                       }}
                       className={[
@@ -1657,8 +1729,8 @@ export function AppointmentsBrowser({
           </section>
         </main>
 
-        <aside className="min-w-0 rounded-[28px] border border-[#E8D8CF] bg-white/95 shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-auto">
-          {selectedBooking ? (
+        {selectedBooking ? (
+          <aside className="min-w-0 rounded-[28px] border border-[#E8D8CF] bg-white/95 shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-auto">
             <div>
               <div className="flex items-start justify-between border-b border-[#E8D8CF] p-6">
                 <div>
@@ -1673,7 +1745,6 @@ export function AppointmentsBrowser({
                 <button
                   type="button"
                   onClick={() => {
-                    setDetailClosed(true);
                     setSelectedBookingId(null);
                   }}
                   className="grid size-11 place-items-center rounded-xl border border-[#E8D8CF] bg-white text-[#5B4235] transition hover:bg-[#FFF7F3]"
@@ -1816,16 +1887,8 @@ export function AppointmentsBrowser({
 
               </div>
             </div>
-          ) : (
-            <div className="grid min-h-[420px] place-items-center p-6 text-center">
-              <div>
-                <CalendarCheck className="mx-auto size-10 text-[#C98B73]" />
-                <p className="mt-4 font-serif text-2xl font-semibold text-[#1F1F1F]">Seleziona una prenotazione</p>
-                <p className="mt-2 text-sm font-medium text-[#8A7266]">Il dettaglio completo apparirà qui.</p>
-              </div>
-            </div>
-          )}
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
