@@ -15,6 +15,7 @@ FROM node:22.13.1-bookworm-slim AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
