@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, Loader2, LockKeyhole } from "lucide-react";
+import { Check, Loader2, LockKeyhole, X } from "lucide-react";
 import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
@@ -38,6 +38,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
   const [error, setError] = useState("");
   const [selectingWorkerId, setSelectingWorkerId] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [pinPrefix, setPinPrefix] = useState("");
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -74,14 +75,27 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
     return () => window.clearInterval(interval);
   }, []);
 
+  const selectedWorker = workers.find((item) => item.id === selectedWorkerId) || null;
+
+  function addPinDigit(digit: string) {
+    if (!selectedWorkerId || selectingWorkerId) return;
+    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 2));
+    setError("");
+  }
+
   async function enter(worker: ActiveWorker) {
+    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
+    if (!/^\d{2}$/.test(cleanPinPrefix)) {
+      setError("Inserisci le prime 2 cifre del PIN.");
+      return;
+    }
     setSelectingWorkerId(worker.id);
     setError("");
     try {
       const response = await fetch("/api/appointments/pc/select-worker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workerId: worker.id, salone }),
+        body: JSON.stringify({ workerId: worker.id, salone, pinPrefix: cleanPinPrefix }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
@@ -116,16 +130,17 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
               Caricamento personale attivo...
             </span>
           </div>
-        ) : error ? (
-          <div className="mt-12 max-w-xl rounded-2xl border border-red-200 bg-red-50 p-5 text-center text-sm font-bold text-red-800">
-            {error}
-          </div>
         ) : workers.length === 0 ? (
-          <div className="mt-12 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm font-bold text-amber-900">
-            Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
+          <div className={`mt-12 max-w-xl rounded-2xl border p-5 text-center text-sm font-bold ${error ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+            {error || "Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet."}
           </div>
         ) : (
           <>
+          {error ? (
+            <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-center text-sm font-bold text-red-800">
+              {error}
+            </div>
+          ) : null}
           <div className="mt-12 grid w-full max-w-7xl grid-cols-2 justify-items-center gap-x-7 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {workers.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
@@ -137,7 +152,11 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                 <button
                   key={worker.id}
                   type="button"
-                  onClick={() => setSelectedWorkerId(worker.id)}
+                  onClick={() => {
+                    setSelectedWorkerId(worker.id);
+                    setPinPrefix("");
+                    setError("");
+                  }}
                   disabled={Boolean(selectingWorkerId)}
                   className="group flex w-36 min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70 2xl:w-40"
                 >
@@ -177,28 +196,91 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
               );
             })}
           </div>
-          <button
-            type="button"
-            disabled={!selectedWorkerId || Boolean(selectingWorkerId)}
-            onClick={() => {
-              const worker = workers.find((item) => item.id === selectedWorkerId);
-              if (worker) void enter(worker);
-            }}
-            className="mt-10 inline-flex h-20 min-w-[min(92vw,520px)] items-center justify-center gap-8 rounded-2xl bg-neutral-950 px-8 text-sm font-semibold uppercase tracking-[0.28em] text-white shadow-[0_22px_45px_rgba(0,0,0,0.20)] transition hover:bg-neutral-800 disabled:pointer-events-none disabled:opacity-35"
-          >
-            {selectingWorkerId ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <>
-                <span>
-                  {selectedWorkerId
-                    ? `Continua come ${workers.find((item) => item.id === selectedWorkerId)?.name.split(" ")[0] || ""}`
-                    : "Seleziona un profilo"}
-                </span>
-                <ArrowRight className="size-7" strokeWidth={1.4} />
-              </>
-            )}
-          </button>
+          {selectedWorker ? (
+            <div className="fixed inset-0 z-[90] grid place-items-center bg-black/28 px-5 backdrop-blur-sm">
+              <div className="w-full max-w-sm rounded-[28px] border border-[#E6CEC4] bg-[#FFFBF6] p-5 text-center shadow-[0_28px_90px_rgba(60,38,28,0.24)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedWorkerId("");
+                    setPinPrefix("");
+                    setError("");
+                  }}
+                  disabled={Boolean(selectingWorkerId)}
+                  className="ml-auto grid size-10 place-items-center rounded-full border border-[#E6CEC4] bg-white/75 text-neutral-700 transition active:scale-95 disabled:opacity-45"
+                  aria-label="Chiudi tastierino PIN"
+                >
+                  <X className="size-5" />
+                </button>
+                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.24em] text-neutral-500">
+                  Prime 2 cifre PIN
+                </p>
+                <h3 className="mt-2 font-serif text-3xl font-light text-neutral-950">
+                  {selectedWorker.name.split(" ")[0] || selectedWorker.name}
+                </h3>
+                <div className="mx-auto mt-5 grid h-14 w-32 grid-cols-2 items-center gap-3 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 px-4">
+                  {[0, 1].map((index) => (
+                    <span
+                      key={index}
+                      className={`mx-auto size-5 rounded-full border-2 ${pinPrefix.length > index ? "border-[#C96F70] bg-[#C96F70]" : "border-neutral-300"}`}
+                    />
+                  ))}
+                </div>
+                <div className="mx-auto mt-5 grid w-[252px] grid-cols-3 gap-2">
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      disabled={pinPrefix.length >= 2 || Boolean(selectingWorkerId)}
+                      onClick={() => addPinDigit(digit)}
+                      className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-xl font-black text-neutral-950 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={!pinPrefix || Boolean(selectingWorkerId)}
+                    onClick={() => {
+                      setPinPrefix((current) => current.slice(0, -1));
+                      setError("");
+                    }}
+                    className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-neutral-950 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                    aria-label="Cancella una cifra"
+                  >
+                    <X className="size-5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pinPrefix.length >= 2 || Boolean(selectingWorkerId)}
+                    onClick={() => addPinDigit("0")}
+                    className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-xl font-black text-neutral-950 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pinPrefix || Boolean(selectingWorkerId)}
+                    onClick={() => {
+                      setPinPrefix("");
+                      setError("");
+                    }}
+                    className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-[10px] font-black uppercase tracking-[0.14em] text-neutral-700 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                  >
+                    Cancella
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={pinPrefix.length !== 2 || Boolean(selectingWorkerId)}
+                  onClick={() => void enter(selectedWorker)}
+                  className="mt-5 inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-neutral-950 px-6 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-[0_18px_36px_rgba(0,0,0,0.18)] transition active:scale-95 disabled:pointer-events-none disabled:opacity-35"
+                >
+                  {selectingWorkerId ? <Loader2 className="size-5 animate-spin" /> : "Continua"}
+                </button>
+              </div>
+            </div>
+          ) : null}
           </>
         )}
       </section>
