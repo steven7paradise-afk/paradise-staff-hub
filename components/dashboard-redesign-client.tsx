@@ -22,6 +22,7 @@ import {
   BookOpen
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { NotificationsPopover } from "@/components/notifications-popover";
 import { cn } from "@/lib/utils";
 
 type Promo = {
@@ -451,12 +452,7 @@ export function DashboardRedesignClient({
               </Link>
             )}
 
-            <Link href="/notifications" className="p-2.5 border border-neutral-200 hover:bg-neutral-50 rounded-full text-neutral-500 transition duration-200 relative">
-              <Bell size={15} />
-              {unreadNotifications > 0 && (
-                <span className="absolute top-0.5 right-0.5 size-2 bg-red-600 rounded-full" />
-              )}
-            </Link>
+            <NotificationsPopover initialUnread={unreadNotifications} />
           </div>
         </div>
 

@@ -17,6 +17,7 @@ import { NotificationWatcher } from "@/components/notification-watcher";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
 import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
 import { DynamicIcon } from "@/components/dynamic-icon";
+import { NotificationsPopover } from "@/components/notifications-popover";
 import pkg from "@/package.json";
 
 function getContrastYIQ(hexcolor: string) {
@@ -403,12 +404,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
           {/* Bell & Profile Photo Right */}
           <div className="flex items-center gap-3.5">
-            <InstantLink href="/notifications" className="relative p-1 text-[color:var(--sidebar-icon)] active:scale-95 transition">
-              <DynamicIcon name="Bell" className="size-5" />
-              {unreadNotifications > 0 && (
-                <span className="absolute top-0 right-0 size-2.5 rounded-full bg-[#C66170] ring-2 ring-white dark:ring-black animate-pulse-soft" />
-              )}
-            </InstantLink>
+            <NotificationsPopover initialUnread={unreadNotifications} />
 
             <InstantLink href="/profile" className="relative active:scale-95 transition">
               <div className="size-9 rounded-full overflow-hidden border border-black/5 bg-paradise-nude shadow-sm">

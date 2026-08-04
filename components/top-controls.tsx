@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 import { Bell, CalendarDays, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { NotificationsPopover } from "@/components/notifications-popover";
 
 function applyThemeVariables(isDark: boolean) {
   const root = document.querySelector<HTMLElement>(".paradise-theme-root");
@@ -131,14 +132,7 @@ export function TopControls({
           </div>
         </div>
       )}
-      <Link href="/notifications" className="relative grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15">
-        <Bell className="size-5 transition-transform duration-300 hover:rotate-12" />
-        {unread > 0 ? (
-          <span className="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-bold text-white shadow-[0_0_8px_rgba(198,97,112,0.6)] animate-pulse-soft">
-            {unread > 99 ? "99+" : unread}
-          </span>
-        ) : null}
-      </Link>
+      <NotificationsPopover initialUnread={unread} />
       <button onClick={toggleTheme} className="grid size-10 place-items-center rounded-2xl bg-white/90 shadow-sm ring-1 ring-black/5 transition-all duration-300 hover:scale-105 hover:bg-white hover:shadow-md dark:bg-white/10 dark:ring-white/10 dark:hover:bg-white/15" type="button" aria-label="Tema">
         {dark ? <Sun className="size-5 text-amber-400 animate-pulse-soft" /> : <Moon className="size-5 text-slate-700" />}
       </button>
