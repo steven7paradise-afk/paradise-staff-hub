@@ -77,16 +77,16 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#FFFBF6] text-neutral-900">
+    <main className="relative h-dvh max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
-      <section className="relative flex min-h-screen flex-col items-center px-5 py-16 md:px-10 lg:px-14">
-        <div className="mx-auto max-w-4xl space-y-6 text-center">
-          <div className="mx-auto grid size-20 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
-            <LockKeyhole className="size-9" strokeWidth={1.45} />
+      <section className="relative flex h-full flex-col items-center px-5 py-8 md:px-10 lg:px-14">
+        <div className="mx-auto max-w-4xl space-y-4 text-center">
+          <div className="mx-auto grid size-16 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
+            <LockKeyhole className="size-7" strokeWidth={1.45} />
           </div>
-          <h1 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-7xl">
-            Chi sta utilizzando il gestionale?
+          <h1 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-6xl xl:text-7xl">
+            Chi vuole usare il gestionale?
           </h1>
           <p className="text-sm font-medium uppercase tracking-[0.36em] text-neutral-700 md:text-base">
             Seleziona il tuo profilo per continuare.
@@ -110,7 +110,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
           </div>
         ) : (
           <>
-          <div className="mt-16 grid w-full max-w-7xl grid-cols-2 gap-x-7 gap-y-12 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="mt-12 grid w-full max-w-7xl grid-cols-2 justify-items-center gap-x-7 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {workers.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
@@ -122,11 +122,13 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                   type="button"
                   onClick={() => setSelectedWorkerId(worker.id)}
                   disabled={Boolean(selectingWorkerId)}
-                  className="group flex min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70"
+                  className="group flex w-36 min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70 2xl:w-40"
                 >
-                  <div className={`relative grid aspect-square w-full max-w-44 place-items-center rounded-full border p-2 shadow-[0_18px_42px_rgba(95,58,45,0.08)] transition ${selected ? "border-[#C96F70] bg-[#F8E3DE] ring-4 ring-[#D98A88]/30" : "border-[#E6CEC4] bg-white/50 group-hover:border-[#D9A69A]"}`}>
+                  <div className={`relative grid size-36 place-items-center rounded-full border p-2 shadow-[0_18px_42px_rgba(95,58,45,0.08)] transition 2xl:size-40 ${selected ? "border-[#C96F70] bg-[#F8E3DE] ring-4 ring-[#D98A88]/30" : "border-[#E6CEC4] bg-white/50 group-hover:border-[#D9A69A]"}`}>
                     {photoUrl ? (
-                      <img src={photoUrl} alt={worker.name} className="size-full scale-125 rounded-full object-cover object-[50%_24%]" />
+                      <span className="block size-full overflow-hidden rounded-full">
+                        <img src={photoUrl} alt={worker.name} className="size-full scale-125 object-cover object-[50%_24%]" />
+                      </span>
                     ) : (
                       <div className="grid size-full place-items-center rounded-full bg-[#FCE6EF] font-serif text-3xl font-semibold text-[#F12D83]">
                         {initials(worker.name)}
@@ -144,7 +146,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                       </span>
                     ) : null}
                   </div>
-                  <p className={`mt-6 max-w-full break-words text-sm font-semibold uppercase leading-tight tracking-[0.22em] md:text-base ${selected ? "text-[#C96F70]" : "text-neutral-800"}`}>
+                  <p className={`mt-4 max-w-full break-words text-sm font-semibold uppercase leading-tight tracking-[0.22em] md:text-base ${selected ? "text-[#C96F70]" : "text-neutral-800"}`}>
                     {firstName}
                   </p>
                 </button>
@@ -158,7 +160,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
               const worker = workers.find((item) => item.id === selectedWorkerId);
               if (worker) void enter(worker);
             }}
-            className="mt-16 inline-flex h-20 min-w-[min(92vw,520px)] items-center justify-center gap-8 rounded-2xl bg-neutral-950 px-8 text-sm font-semibold uppercase tracking-[0.28em] text-white shadow-[0_22px_45px_rgba(0,0,0,0.20)] transition hover:bg-neutral-800 disabled:pointer-events-none disabled:opacity-35"
+            className="mt-10 inline-flex h-20 min-w-[min(92vw,520px)] items-center justify-center gap-8 rounded-2xl bg-neutral-950 px-8 text-sm font-semibold uppercase tracking-[0.28em] text-white shadow-[0_22px_45px_rgba(0,0,0,0.20)] transition hover:bg-neutral-800 disabled:pointer-events-none disabled:opacity-35"
           >
             {selectingWorkerId ? (
               <Loader2 className="size-5 animate-spin" />

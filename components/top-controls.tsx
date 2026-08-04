@@ -90,6 +90,11 @@ export function TopControls({
   }
 
   async function handleLogout() {
+    if (userId === "PC_CASSA") {
+      window.location.replace(profileHref);
+      return;
+    }
+
     await signOut({ redirect: false });
     window.location.replace("/login");
   }
@@ -103,12 +108,10 @@ export function TopControls({
           </span>
           <div className="flex items-center -space-x-2.5">
             {activeWorkers.map((worker) => (
-              <a
+              <Link
                 key={worker.id}
-                href={`/my-shifts?userId=${worker.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={`Vedi turni di ${worker.name}`}
+                href={profileHref}
+                title={`Cambia profilo: ${worker.name}`}
                 className="relative block size-9 rounded-full ring-2 ring-white hover:ring-[#C66170] dark:ring-neutral-900 transition-all duration-300 hover:scale-110 hover:z-10 overflow-hidden bg-paradise-softPink"
               >
                 {worker.photo_url ? (
@@ -123,7 +126,7 @@ export function TopControls({
                   </div>
                 )}
                 <span className={`absolute bottom-0 right-0 size-2 rounded-full border border-white dark:border-neutral-900 ${worker.status === "BREAK" ? "bg-amber-500" : "bg-emerald-500"}`} />
-              </a>
+              </Link>
             ))}
           </div>
         </div>
@@ -156,9 +159,9 @@ export function TopControls({
               <UserRound className="size-4" />
               {userId === "PC_CASSA" ? "Cambia profilo" : "Profilo"}
             </Link>
-            <Link href="/my-shifts" className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
+            <Link href={userId === "PC_CASSA" ? profileHref : "/my-shifts"} className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
               <CalendarDays className="size-4" />
-              Turni
+              {userId === "PC_CASSA" ? "Cambia profilo" : "Turni"}
             </Link>
             <button
               type="button"
