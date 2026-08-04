@@ -139,6 +139,7 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const isPcCassa = pcMode;
+  const pcProfileChooserHref = "/appointments/buenos-aires?choose=1";
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
   const settingsKeys = [
@@ -385,7 +386,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             items={sidebarItems}
             sidebarConfig={effectiveSidebarConfig}
             logoutButton={
-              <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200" />
+              <LogoutButton
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200"
+                redirectTo={isPcCassa ? pcProfileChooserHref : undefined}
+                skipSignOut={isPcCassa}
+                label={isPcCassa ? "Cambia profilo" : "Esci"}
+                title={isPcCassa ? "Torna alla selezione profilo" : "Esci"}
+              />
             }
           />
 
@@ -434,7 +441,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         </div>
 
         <div className="shrink-0 hidden xl:block mt-auto pt-4 border-t border-black/5 dark:border-white/5">
-          <LogoutButton className="sidebar-logout flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/5 hover:bg-red-600 hover:text-white px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200" />
+          <LogoutButton
+            className="sidebar-logout flex w-full items-center justify-center gap-3 rounded-2xl border border-zinc-800 bg-red-600/5 hover:bg-red-600 hover:text-white px-4 py-2.5 text-xs font-black uppercase tracking-wider transition-all duration-200"
+            redirectTo={isPcCassa ? pcProfileChooserHref : undefined}
+            skipSignOut={isPcCassa}
+            label={isPcCassa ? "Cambia profilo" : "Esci"}
+            title={isPcCassa ? "Torna alla selezione profilo" : "Esci"}
+          />
         </div>
       </aside>
   );
