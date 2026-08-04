@@ -1071,6 +1071,7 @@ export function AppointmentsBrowser({
     ),
   );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [filterStaff, setFilterStaff] = useState<string>("all");
   const [filterPayment, setFilterPayment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
