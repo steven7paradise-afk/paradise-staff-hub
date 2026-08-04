@@ -78,9 +78,11 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
     setIsOpen(false);
   }
 
-  function formatTime(iso: string) {
+  function formatTime(iso?: string | null) {
+    if (!iso) return "";
     try {
       const date = new Date(iso);
+      if (isNaN(date.getTime())) return "";
       return date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
     } catch {
       return "";

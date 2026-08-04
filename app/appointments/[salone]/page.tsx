@@ -59,7 +59,7 @@ export default async function SalonAppointmentsPage({
     return <AppointmentsKioskEntry salone={salone} />;
   }
 
-  return AppointmentsPage({
+  return await AppointmentsPage({
     searchParams: Promise.resolve({
       ...resolvedSearchParams,
       salone,

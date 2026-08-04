@@ -23,8 +23,11 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function formatBreakTimer(startedAt: string, now: number) {
-  const elapsedSeconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
+function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
+  if (!startedAt) return "00:00";
+  const startTime = new Date(startedAt).getTime();
+  if (isNaN(startTime)) return "00:00";
+  const elapsedSeconds = Math.max(0, Math.floor((now - startTime) / 1000));
   const hours = Math.floor(elapsedSeconds / 3600);
   const minutes = Math.floor((elapsedSeconds % 3600) / 60);
   const seconds = elapsedSeconds % 60;
