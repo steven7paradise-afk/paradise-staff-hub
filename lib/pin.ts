@@ -105,10 +105,15 @@ export async function isPinValidForUser(userId: string, pin: string, pinHash: st
 }
 
 export function isPinLookupMatchingPrefix(storedLookup: string | null | undefined, prefix: string) {
-  if (!storedLookup || !/^\d{2}$/.test(prefix)) return false;
+  if (!storedLookup || !prefix || !/^\d{2,6}$/.test(prefix)) return false;
 
-  for (let length = 4; length <= 6; length += 1) {
+  // Direct match check
+  if (pinLookup(prefix) === storedLookup) return true;
+
+  const minLength = Math.max(2, prefix.length);
+  for (let length = minLength; length <= 6; length += 1) {
     const suffixLength = length - prefix.length;
+    if (suffixLength < 0) continue;
     const total = 10 ** suffixLength;
     for (let index = 0; index < total; index += 1) {
       const candidate = `${prefix}${String(index).padStart(suffixLength, "0")}`;

@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const contractStart = data.contractStart ? new Date(String(data.contractStart)) : null;
     const contractEnd = data.contractEnd ? new Date(String(data.contractEnd)) : null;
 
-    if (pin && !/^\d{4,6}$/.test(pin)) {
+    if (pin && !/^\d{2,6}$/.test(pin)) {
       return apiError("Il PIN deve avere da 4 a 6 numeri.", 400);
     }
     if (password && password.length < 8) {

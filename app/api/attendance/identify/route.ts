@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   const deviceId = String(payload.deviceId ?? request.headers.get("x-device-id") ?? "");
   const pin = String(payload.pin ?? "");
-  if (!deviceId || !/^\d{4,6}$/.test(pin)) {
+  if (!deviceId || !/^\d{2,6}$/.test(pin)) {
     return NextResponse.json({ error: "Inserisci il codice personale." }, { status: 400 });
   }
   const device = await authorizedTablet(deviceId, request.cookies.get(tabletCookieName)?.value, requestIp(request.headers));

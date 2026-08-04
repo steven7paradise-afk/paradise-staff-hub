@@ -708,10 +708,10 @@ export function StaffFormsViewer({
       return;
     }
 
-    if (!pickupQuery.trim() || !pickupName.trim() || !pickupPin.trim() || !pickupPaidConfirmed) {
+    if (!pickupQuery.trim() || !pickupName.trim() || !pickupPaidConfirmed) {
       setPickupMessage({
         type: "error",
-        text: "Compila ordine, nome ritiro, PIN firma e conferma saldo.",
+        text: "Compila ordine, nome ritiro e conferma saldo.",
       });
       return;
     }
@@ -723,7 +723,7 @@ export function StaffFormsViewer({
       const formData = new FormData();
       formData.append("query", pickupQuery.trim());
       formData.append("pickupName", pickupName.trim());
-      formData.append("pickupPin", pickupPin.trim());
+      if (pickupPin.trim()) formData.append("pickupPin", pickupPin.trim());
       formData.append("paidConfirmed", pickupPaidConfirmed ? "true" : "false");
       if (pickupProof) {
         formData.append("proof", pickupProof);
@@ -1451,19 +1451,6 @@ export function StaffFormsViewer({
                   </div>
                 </div>
               ) : null}
-
-              <label className="space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">PIN firma consegna</span>
-                <input
-                  value={pickupPin}
-                  onChange={(event) => setPickupPin(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  inputMode="numeric"
-                  type="password"
-                  placeholder="PIN personale"
-                  className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
-                />
-                <span className="block text-xs font-semibold text-white/35">Il PIN firma chi ha consegnato l'ordine al cliente.</span>
-              </label>
 
               <button
                 type="button"

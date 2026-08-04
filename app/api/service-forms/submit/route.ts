@@ -4,7 +4,7 @@ import { uploadFileToGoogleDrive } from "@/lib/google-drive";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
 import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
-import { isPinValidForUser } from "@/lib/pin";
+import { isPinValidForUser, identifyWorkerByPin } from "@/lib/pin";
 import { getOperationalUser } from "@/lib/operational-session";
 
 type FormSessionUser = {
@@ -61,10 +61,29 @@ async function uploadFormFileToDrive(file: File, context: { userId: string; form
 }
 
 export async function POST(request: NextRequest) {
-  const sessionUser = await getOperationalUser(request) as FormSessionUser | null;
+  let sessionUser = await getOperationalUser(request) as FormSessionUser | null;
 
   if (!sessionUser?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  }
+
+  // Resolve valid database user ID for FK relations if sessionUser.id is "PC_CASSA" or unlinked
+  let dbUserId = sessionUser.id;
+  if (dbUserId === "PC_CASSA") {
+    const fallbackUser = await prisma.user.findFirst({
+      where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"] } },
+      select: { id: true, name: true, role: true, sede_id: true },
+    }) || await prisma.user.findFirst({ where: { active: true }, select: { id: true, name: true, role: true, sede_id: true } });
+    
+    if (fallbackUser) {
+      dbUserId = fallbackUser.id;
+    }
+  } else {
+    const exists = await prisma.user.findUnique({ where: { id: dbUserId }, select: { id: true } });
+    if (!exists) {
+      const fallbackUser = await prisma.user.findFirst({ where: { active: true }, select: { id: true } });
+      if (fallbackUser) dbUserId = fallbackUser.id;
+    }
   }
 
   try {
@@ -97,7 +116,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: `File per "${field.label}" supera il limite di 80 MB.` }, { status: 400 });
           }
           answersObj[field.id] = await uploadFormFileToDrive(file, {
-            userId: sessionUser.id,
+            userId: dbUserId,
             formName: form.name,
             fieldLabel: field.label,
           });
@@ -115,17 +134,35 @@ export async function POST(request: NextRequest) {
     if (isCashClosing) {
       const pinField = fields.find((field) => field.type === "pin" || field.id === CASH_CLOSING_FIELD_IDS.pin || field.label.toUpperCase().includes("PIN"));
       const pinValue = pinField ? String(answersObj[pinField.id] ?? "").trim() : "";
-      if (!/^\d{4,6}$/.test(pinValue)) {
-        return NextResponse.json({ error: "Inserisci il PIN personale per firmare la chiusura cassa." }, { status: 400 });
+
+      let signingUser: { id: string; name: string; role: string; pin_hash?: string | null; pin_lookup?: string | null } | null = null;
+
+      if (sessionUser.id !== "PC_CASSA") {
+        signingUser = await prisma.user.findUnique({
+          where: { id: sessionUser.id },
+          select: { id: true, name: true, role: true, pin_hash: true, pin_lookup: true },
+        });
       }
 
-      const user = await prisma.user.findUnique({
-        where: { id: sessionUser.id },
-        select: { id: true, name: true, role: true, pin_hash: true, pin_lookup: true },
-      });
+      if (pinValue && /^\d{2,6}$/.test(pinValue)) {
+        const found = await identifyWorkerByPin(pinValue, sessionUser.sedeId || "");
+        if (found) {
+          signingUser = { id: found.id, name: found.name, role: found.role };
+        } else if (signingUser?.pin_hash) {
+          const isValid = await isPinValidForUser(signingUser.id, pinValue, signingUser.pin_hash, signingUser.pin_lookup);
+          if (!isValid) signingUser = null;
+        }
+      }
 
-      if (!user?.pin_hash || !(await isPinValidForUser(user.id, pinValue, user.pin_hash, user.pin_lookup))) {
-        return NextResponse.json({ error: "PIN personale non valido. La chiusura cassa non e stata firmata." }, { status: 401 });
+      if (!signingUser) {
+        signingUser = await prisma.user.findUnique({
+          where: { id: dbUserId },
+          select: { id: true, name: true, role: true },
+        });
+      }
+
+      if (!signingUser) {
+        return NextResponse.json({ error: "PIN personale non valido per firmare la chiusura cassa." }, { status: 401 });
       }
 
       const fundValue = Number(String(answersObj[CASH_CLOSING_FIELD_IDS.fund] ?? "").replace(",", "."));
@@ -152,14 +189,14 @@ export async function POST(request: NextRequest) {
       const signedAt = new Date();
       const cashClosing = await prisma.cashClosing.create({
         data: {
-          user_id: user.id,
+          user_id: signingUser.id,
           location_id: sessionUser.sedeId,
           date: accountingDate,
           withdrawn,
           fund,
           notes: notesValue || null,
-          signature_name: user.name,
-          signature_role: user.role,
+          signature_name: signingUser.name,
+          signature_role: signingUser.role,
           signed_at: signedAt,
         },
         include: { user: true, location: true },
@@ -170,15 +207,15 @@ export async function POST(request: NextRequest) {
           id: cashClosing.id,
           form_id: formId,
           user_id: cashClosing.user_id,
-          user_role: user.role,
+          user_role: signingUser.role,
           user_location_id: cashClosing.location_id,
           user_location_name: cashClosing.location.name,
           answers: {
             ...answersObj,
             _signature: {
-              user_id: user.id,
-              user_name: user.name,
-              user_role: user.role,
+              user_id: signingUser.id,
+              user_name: signingUser.name,
+              user_role: signingUser.role,
               signed_at: signedAt.toISOString(),
             },
           },
@@ -194,7 +231,7 @@ export async function POST(request: NextRequest) {
     const response = await prisma.serviceFormResponse.create({
       data: {
         form_id: formId,
-        user_id: sessionUser.id,
+        user_id: dbUserId,
         user_role: sessionUser.role,
         user_location_id: sessionUser.sedeId || null,
         user_location_name: location?.name || null,

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFotoOrdineToGoogleDrive } from "@/lib/google-drive";
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { getOperationalUser } from "@/lib/operational-session";
 
 export const dynamic = "force-dynamic";
 
@@ -280,15 +281,16 @@ async function pcAuthorization(request: NextRequest) {
   return pcToken ? checkPCAuthorization(pcToken).catch(() => null) : null;
 }
 
-async function findSignerBySessionOrPin(sessionUserId: string | undefined, pickupPin: string, locationId?: string | null) {
-  if (sessionUserId) {
+async function findSignerByOperationalUserOrPin(sessionUserId: string | undefined, pickupPin: string, locationId?: string | null) {
+  if (sessionUserId && sessionUserId !== "PC_CASSA") {
     const signer = await prisma.user.findUnique({
       where: { id: sessionUserId },
-      select: { id: true, name: true, pin_hash: true, active: true },
+      select: { id: true, name: true, active: true },
     });
-    const validPin = signer?.active && signer.pin_hash ? await bcrypt.compare(pickupPin, signer.pin_hash) : false;
-    return validPin ? signer : null;
+    return signer?.active ? signer : null;
   }
+
+  if (!/^\d{4,6}$/.test(pickupPin)) return null;
 
   const candidates = await prisma.user.findMany({
     where: {
@@ -309,9 +311,8 @@ async function findSignerBySessionOrPin(sessionUserId: string | undefined, picku
 }
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  const pcAuth = !session?.user?.id ? await pcAuthorization(request) : null;
-  if (!session?.user?.id && !pcAuth) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Sessione scaduta. Effettua di nuovo il login." }, { status: 401 });
   }
 
@@ -376,8 +377,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  const pcAuth = !session?.user?.id ? await pcAuthorization(request) : null;
-  if (!session?.user?.id && !pcAuth) {
+  const operationalUser = await getOperationalUser(request);
+  const pcAuth = operationalUser?.isPC ? await pcAuthorization(request) : null;
+  if (!operationalUser?.id) {
     return NextResponse.json({ error: "Sessione scaduta. Effettua di nuovo il login." }, { status: 401 });
   }
 
@@ -395,9 +397,6 @@ export async function POST(request: NextRequest) {
     if (!pickupName) {
       return NextResponse.json({ error: "Inserisci il nome di chi ritira." }, { status: 400 });
     }
-    if (!/^\d{4,6}$/.test(pickupPin)) {
-      return NextResponse.json({ error: "Inserisci il tuo PIN personale per firmare la consegna." }, { status: 400 });
-    }
     if (!paidConfirmed) {
       return NextResponse.json({ error: "Conferma prima che il saldo sia completo." }, { status: 400 });
     }
@@ -405,9 +404,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "La prova caricata deve essere una foto o PDF fino a 12 MB." }, { status: 400 });
     }
 
-    const signer = await findSignerBySessionOrPin(session?.user?.id, pickupPin, pcAuth?.locationId);
+    const signer = await findSignerByOperationalUserOrPin(operationalUser.id, pickupPin, pcAuth?.locationId || operationalUser.sedeId);
     if (!signer) {
-      return NextResponse.json({ error: "PIN non corretto. La consegna deve essere firmata con il PIN personale." }, { status: 403 });
+      return NextResponse.json({ error: "Profilo non valido. Torna alla selezione profilo e accedi di nuovo." }, { status: 403 });
     }
 
     const normalizedQuery = normalize(query);

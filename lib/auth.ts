@@ -37,7 +37,7 @@ export const authConfig = {
       async authorize(credentials) {
         const pin = String(credentials?.pin ?? "").trim();
         if (pin) {
-          if (!/^\d{4,6}$/.test(pin)) return null;
+          if (!/^\d{2,6}$/.test(pin)) return null;
           const lookup = pinLookup(pin);
           const user = await prisma.user.findUnique({
             where: { pin_lookup: lookup },

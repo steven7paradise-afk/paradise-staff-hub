@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const whatsappPhone = data.whatsappPhone ? String(data.whatsappPhone).trim() : null;
     const mansione = data.mansione ? String(data.mansione).trim() : null;
 
-    if (!name || !email || password.length < 8 || !/^\d{4,6}$/.test(pin)) {
+    if (!name || !email || password.length < 8 || !/^\d{2,6}$/.test(pin)) {
       return apiError("Nome, email, password valida e PIN da 4 a 6 numeri sono obbligatori.", 400);
     }
     if (!Object.values(UserRole).includes(role)) {

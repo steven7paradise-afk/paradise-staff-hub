@@ -9,13 +9,21 @@ export function proxy(request: NextRequest) {
     const isAllowedPage =
       pathname === "/appointments" ||
       pathname.startsWith("/appointments/") ||
+      pathname === "/client-control" ||
+      pathname.startsWith("/client-control/") ||
+      pathname === "/orders" ||
+      pathname.startsWith("/orders/") ||
       pathname === "/service-forms" ||
       pathname.startsWith("/service-forms/") ||
       pathname === "/my-shifts";
 
     const isAllowedApi =
       pathname.startsWith("/api/appointments") ||
+      pathname.startsWith("/api/client-control") ||
+      pathname.startsWith("/api/orders") ||
       pathname.startsWith("/api/service-forms") ||
+      pathname.startsWith("/api/shopify-order-lookup") ||
+      pathname.startsWith("/api/drive-image") ||
       pathname.startsWith("/api/auth");
 
     if (!isAllowedPage && !isAllowedApi && pathname !== "/pc-non-autorizzato") {

@@ -79,14 +79,14 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
 
   function addPinDigit(digit: string) {
     if (!selectedWorkerId || selectingWorkerId) return;
-    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 2));
+    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 6));
     setError("");
   }
 
   async function enter(worker: ActiveWorker) {
-    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
-    if (!/^\d{2}$/.test(cleanPinPrefix)) {
-      setError("Inserisci le prime 2 cifre del PIN.");
+    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 6);
+    if (!/^\d{2,6}$/.test(cleanPinPrefix)) {
+      setError("Inserisci il tuo PIN personale.");
       return;
     }
     setSelectingWorkerId(worker.id);
