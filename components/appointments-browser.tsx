@@ -1019,16 +1019,33 @@ export function AppointmentsBrowser({
       bookingId: null,
     });
 
+  const clientControlEmployeeOptions = useMemo(() => {
+    const merged = new Map<string, ClientControlEmployee>();
+    clientControlEmployees.forEach((employee) => {
+      merged.set(employee.id, employee);
+    });
+    corsoTeamOptions.forEach((employee) => {
+      if (!merged.has(employee.id)) {
+        merged.set(employee.id, {
+          id: employee.id,
+          name: employee.name,
+          locationName: "Salone Buenos Aires",
+        });
+      }
+    });
+    return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, "it"));
+  }, [clientControlEmployees, corsoTeamOptions]);
+
   const filteredClientControlEmployees = useMemo(() => {
     const selectedSalon = normalizeSalonName(clientControlForm.salon);
-    return clientControlEmployees.filter((employee) => {
+    return clientControlEmployeeOptions.filter((employee) => {
       const employeeSalon = normalizeSalonName(employee.locationName);
       return (
         employeeSalon.includes(selectedSalon) ||
         selectedSalon.includes(employeeSalon)
       );
     });
-  }, [clientControlEmployees, clientControlForm.salon]);
+  }, [clientControlEmployeeOptions, clientControlForm.salon]);
 
   function appendClientControlNote(text: string) {
     const value = text.trim();
@@ -1047,7 +1064,7 @@ export function AppointmentsBrowser({
     return clientControlForm.staffIds
       .map(
         (id) =>
-          clientControlEmployees.find((employee) => employee.id === id)?.name,
+          clientControlEmployeeOptions.find((employee) => employee.id === id)?.name,
       )
       .filter((name): name is string => Boolean(name));
   }

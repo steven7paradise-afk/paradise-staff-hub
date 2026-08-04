@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
+import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -85,13 +86,15 @@ function localPolish(rawNote: string) {
 export async function POST(request: NextRequest) {
   const session = await auth();
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+  const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
   const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? request.headers.get("x-device-id") ?? "";
   const tabletDevice = requestedDevice
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
     : null;
   const canUseFromDashboard = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(String(session?.user?.role ?? ""));
 
-  if (!tabletDevice && !canUseFromDashboard) {
+  if (!tabletDevice && !canUseFromDashboard && !pcAuth) {
     return NextResponse.json({ error: "Tablet non autorizzato." }, { status: 401 });
   }
 

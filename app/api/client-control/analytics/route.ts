@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
+import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,16 +40,18 @@ function countsInAnalytics(answers: Record<string, unknown>) {
 
 export async function GET(request: NextRequest) {
   const session = await auth();
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+  const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
   let tabletDevice = null;
-  if (!session?.user?.id) {
-    const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  if (!session?.user?.id && !pcAuth) {
     const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
     tabletDevice = requestedDevice
       ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
       : null;
   }
 
-  if (!session?.user?.id && !tabletDevice) {
+  if (!session?.user?.id && !tabletDevice && !pcAuth) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
