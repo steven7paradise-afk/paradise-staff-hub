@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFotoOrdineToGoogleDrive } from "@/lib/google-drive";
+import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -247,11 +248,11 @@ function orderSearchHaystack(order: any) {
 }
 
 function fileExtension(file: File) {
-  const fromName = file.name.split(".").pop()?.toLowerCase().trim();
-  if (fromName) return fromName;
+  const fromName = file.name.split(".").pop()?.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  if (fromName) return fromName.slice(0, 10);
   const fromType = file.type.split("/")[1]?.toLowerCase().trim();
   if (fromType === "jpeg") return "jpg";
-  return fromType || "bin";
+  return fromType?.replace(/[^a-z0-9]/g, "").slice(0, 10) || "bin";
 }
 
 function isValidProof(file: FormDataEntryValue | null): file is File {
@@ -260,9 +261,55 @@ function isValidProof(file: FormDataEntryValue | null): file is File {
   return file.type.startsWith("image/") || file.type === "application/pdf" || /\.(heic|heif|jpg|jpeg|png|webp|pdf)$/i.test(file.name);
 }
 
+function safeDriveSegment(value: unknown, fallback: string) {
+  const cleaned = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^#/, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "")
+    .slice(0, 80);
+  return cleaned || fallback;
+}
+
+async function pcAuthorization(request: NextRequest) {
+  const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
+  return pcToken ? checkPCAuthorization(pcToken).catch(() => null) : null;
+}
+
+async function findSignerBySessionOrPin(sessionUserId: string | undefined, pickupPin: string, locationId?: string | null) {
+  if (sessionUserId) {
+    const signer = await prisma.user.findUnique({
+      where: { id: sessionUserId },
+      select: { id: true, name: true, pin_hash: true, active: true },
+    });
+    const validPin = signer?.active && signer.pin_hash ? await bcrypt.compare(pickupPin, signer.pin_hash) : false;
+    return validPin ? signer : null;
+  }
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      active: true,
+      pin_hash: { not: null },
+      ...(locationId ? { sede_id: locationId } : {}),
+    },
+    select: { id: true, name: true, pin_hash: true, active: true },
+  });
+
+  for (const candidate of candidates) {
+    if (candidate.pin_hash && await bcrypt.compare(pickupPin, candidate.pin_hash)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  const pcAuth = !session?.user?.id ? await pcAuthorization(request) : null;
+  if (!session?.user?.id && !pcAuth) {
     return NextResponse.json({ error: "Sessione scaduta. Effettua di nuovo il login." }, { status: 401 });
   }
 
@@ -327,7 +374,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  const pcAuth = !session?.user?.id ? await pcAuthorization(request) : null;
+  if (!session?.user?.id && !pcAuth) {
     return NextResponse.json({ error: "Sessione scaduta. Effettua di nuovo il login." }, { status: 401 });
   }
 
@@ -355,12 +403,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "La prova caricata deve essere una foto o PDF fino a 12 MB." }, { status: 400 });
     }
 
-    const signer = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, name: true, pin_hash: true, active: true },
-    });
-    const validPin = signer?.active && signer.pin_hash ? await bcrypt.compare(pickupPin, signer.pin_hash) : false;
-    if (!validPin) {
+    const signer = await findSignerBySessionOrPin(session?.user?.id, pickupPin, pcAuth?.locationId);
+    if (!signer) {
       return NextResponse.json({ error: "PIN non corretto. La consegna deve essere firmata con il PIN personale." }, { status: 403 });
     }
 
@@ -396,14 +440,18 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
-    const cleanOrder = orderNumber(match).replace(/^#/, "").replace(/[^\w.-]/g, "-");
+    const cleanOrder = safeDriveSegment(orderNumber(match), "SENZA-ORDINE");
     let proofData = null;
     if (proof instanceof File && proof.size > 0) {
       const buffer = Buffer.from(await proof.arrayBuffer());
       const extension = fileExtension(proof);
       const mimeType = proof.type || (extension === "heic" ? "image/heic" : extension === "heif" ? "image/heif" : "application/octet-stream");
-      const fileName = `${cleanOrder}-RITIRO-${pickupName.replace(/[^\w]+/g, "-")}-${now.toISOString().replace(/[:.]/g, "-")}.${extension}`;
-      const driveFile = await uploadFotoOrdineToGoogleDrive(buffer, fileName, mimeType, cleanOrder);
+      const cleanPickupName = safeDriveSegment(pickupName, "cliente");
+      const fileName = `${cleanOrder}-RITIRO-${cleanPickupName}-${now.toISOString().replace(/[:.]/g, "-")}.${extension}`;
+      const driveFile = await uploadFotoOrdineToGoogleDrive(buffer, fileName, mimeType, cleanOrder).catch((error) => {
+        console.error("Pickup proof upload failed:", error);
+        throw new Error("Ritiro non salvato: la prova caricata non e stata accettata da Google Drive. Riprova senza foto oppure carica una foto/PDF con nome semplice.");
+      });
       proofData = {
         driveFileId: driveFile.id,
         driveFileUrl: driveFile.webViewLink || driveFile.webContentLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
@@ -424,13 +472,13 @@ export async function POST(request: NextRequest) {
       pickupName,
       paidConfirmed: true,
       payment: orderPaymentSummary(match),
-      completedById: session.user.id,
-      completedByName: signer?.name || session.user.name || "Staff",
+      completedById: signer.id,
+      completedByName: signer.name || "Staff",
       completedAt: now.toISOString(),
       signature: {
         method: "PIN",
-        signedById: session.user.id,
-        signedByName: signer?.name || session.user.name || "Staff",
+        signedById: signer.id,
+        signedByName: signer.name || "Staff",
         signedAt: now.toISOString(),
       },
       proof: proofData,
@@ -450,7 +498,7 @@ export async function POST(request: NextRequest) {
             type: "ORDER_PICKUP_COMPLETED",
             from: match.status,
             to: "COMPLETED",
-            by: session.user.name || "Staff",
+            by: signer.name || session?.user?.name || "Staff",
             at: now.toISOString(),
             text: `${pickupName} ha ritirato l'ordine. Saldo confermato${proofData ? " e prova caricata" : ""}.`,
           },
