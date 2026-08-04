@@ -718,15 +718,15 @@ function PcStaffLockScreen({
     <div className="fixed inset-0 z-[70] h-dvh max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
-      <section className="relative flex h-full flex-col items-center px-5 py-8 md:px-10 lg:px-14">
-        <div className="mx-auto max-w-4xl space-y-4 text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
-            <LockKeyhole className="size-7" strokeWidth={1.45} />
+      <section className="relative flex h-full min-h-0 flex-col items-center px-5 py-5 md:px-10 lg:px-14">
+        <div className="mx-auto max-w-4xl space-y-2 text-center">
+          <div className="mx-auto grid size-12 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
+            <LockKeyhole className="size-6" strokeWidth={1.45} />
           </div>
-          <h2 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-6xl xl:text-7xl">
+          <h2 className="font-serif text-4xl font-light leading-tight tracking-normal text-neutral-950 md:text-5xl xl:text-6xl">
             Chi vuole usare il gestionale?
           </h2>
-          <p className="text-sm font-medium uppercase tracking-[0.36em] text-neutral-700 md:text-base">
+          <p className="text-xs font-medium uppercase tracking-[0.32em] text-neutral-700 md:text-sm">
             Seleziona il tuo profilo per continuare.
           </p>
         </div>
@@ -749,7 +749,7 @@ function PcStaffLockScreen({
               {error}
             </div>
           ) : null}
-          <div className="mt-12 grid w-full max-w-7xl grid-cols-2 justify-items-center gap-x-7 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="mt-6 grid w-full max-w-7xl flex-1 grid-cols-2 justify-items-center gap-x-7 gap-y-5 overflow-y-auto pb-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {activeStaff.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
@@ -808,7 +808,7 @@ function PcStaffLockScreen({
               );
             })}
           </div>
-          <div className="mt-8 flex flex-col items-center gap-3">
+          <div className="sticky bottom-0 mt-4 flex w-full flex-col items-center gap-2 border-t border-[#E6CEC4]/65 bg-[#FFFBF6]/92 py-3 backdrop-blur">
             <label className="text-center text-[11px] font-black uppercase tracking-[0.24em] text-neutral-500">
               Prime 2 cifre del PIN
             </label>
@@ -819,11 +819,11 @@ function PcStaffLockScreen({
               value={pinPrefix}
               onChange={(event) => setPinPrefix(event.target.value.replace(/\D/g, "").slice(0, 2))}
               disabled={!selectedWorkerId || Boolean(selectingWorkerId)}
-              className="h-14 w-28 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 text-center text-2xl font-black tracking-[0.24em] text-neutral-950 shadow-[0_14px_30px_rgba(120,82,64,0.08)] outline-none transition placeholder:text-neutral-300 focus:border-[#C96F70] focus:ring-4 focus:ring-[#D98A88]/20 disabled:opacity-45"
+              className="h-12 w-28 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 text-center text-2xl font-black tracking-[0.24em] text-neutral-950 shadow-[0_14px_30px_rgba(120,82,64,0.08)] outline-none transition placeholder:text-neutral-300 focus:border-[#C96F70] focus:ring-4 focus:ring-[#D98A88]/20 disabled:opacity-45"
               placeholder="--"
               aria-label="Prime 2 cifre del PIN"
             />
-            <div className="grid w-[252px] grid-cols-3 gap-2">
+            <div className="grid w-[252px] grid-cols-3 gap-1.5">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
                 <button
                   key={digit}
@@ -833,7 +833,7 @@ function PcStaffLockScreen({
                     setPinPrefix((current) => `${current}${digit}`.slice(0, 2));
                     setError("");
                   }}
-                  className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-xl font-black text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                  className="grid h-11 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-lg font-black text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
                 >
                   {digit}
                 </button>
@@ -845,7 +845,7 @@ function PcStaffLockScreen({
                   setPinPrefix((current) => current.slice(0, -1));
                   setError("");
                 }}
-                className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                className="grid h-11 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
                 aria-label="Cancella una cifra"
               >
                 <X className="size-5" />
@@ -857,7 +857,7 @@ function PcStaffLockScreen({
                   setPinPrefix((current) => `${current}0`.slice(0, 2));
                   setError("");
                 }}
-                className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-xl font-black text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                className="grid h-11 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-lg font-black text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
               >
                 0
               </button>
@@ -868,20 +868,19 @@ function PcStaffLockScreen({
                   setPinPrefix("");
                   setError("");
                 }}
-                className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-xs font-black uppercase tracking-[0.16em] text-neutral-700 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                className="grid h-11 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-[10px] font-black uppercase tracking-[0.14em] text-neutral-700 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
               >
                 Cancella
               </button>
             </div>
-          </div>
-          <button
+            <button
             type="button"
             disabled={!selectedWorkerId || pinPrefix.length !== 2 || Boolean(selectingWorkerId)}
             onClick={() => {
               const worker = activeStaff.find((item) => item.id === selectedWorkerId);
               if (worker) void unlockWithWorker(worker);
             }}
-            className="mt-10 inline-flex h-20 min-w-[min(92vw,520px)] items-center justify-center gap-8 rounded-2xl bg-neutral-950 px-8 text-sm font-semibold uppercase tracking-[0.28em] text-white shadow-[0_22px_45px_rgba(0,0,0,0.20)] transition hover:bg-neutral-800 disabled:pointer-events-none disabled:opacity-35"
+            className="inline-flex h-14 min-w-[min(92vw,420px)] items-center justify-center gap-6 rounded-2xl bg-neutral-950 px-6 text-xs font-semibold uppercase tracking-[0.22em] text-white shadow-[0_22px_45px_rgba(0,0,0,0.20)] transition hover:bg-neutral-800 disabled:pointer-events-none disabled:opacity-35"
           >
             {selectingWorkerId ? (
               <Loader2 className="size-5 animate-spin" />
@@ -896,6 +895,7 @@ function PcStaffLockScreen({
               </>
             )}
           </button>
+          </div>
           </>
         )}
       </section>
