@@ -444,7 +444,8 @@ export async function appendFormResponseToGoogleSheet(input: FormSyncInput) {
           if (answer === undefined || answer === null || answer === "") return "";
           
           if (field.type === "file" && typeof answer === "object") {
-            return `File: ${answer.name} [Percorso: ${answer.storagePath}]`;
+            const fileUrl = answer.driveFileUrl || answer.webViewLink || answer.url || answer.storagePath || "";
+            return `File: ${answer.name ?? "allegato"}${fileUrl ? ` [Link: ${fileUrl}]` : ""}`;
           }
           
           if (field.type === "money") {
@@ -475,7 +476,8 @@ export async function appendFormResponseToGoogleSheet(input: FormSyncInput) {
         if (answer === undefined || answer === null || answer === "") return "";
         
         if (field.type === "file" && typeof answer === "object") {
-          return `File: ${answer.name} [Percorso: ${answer.storagePath}]`;
+          const fileUrl = answer.driveFileUrl || answer.webViewLink || answer.url || answer.storagePath || "";
+          return `File: ${answer.name ?? "allegato"}${fileUrl ? ` [Link: ${fileUrl}]` : ""}`;
         }
         
         if (field.type === "money") {

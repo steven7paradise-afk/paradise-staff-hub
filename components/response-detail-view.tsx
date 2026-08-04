@@ -7,6 +7,10 @@ import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
+function serviceFormFileUrl(answer: any) {
+  return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
+}
+
 export function ResponseDetailView({
   initialResponse,
   currentUserId,
@@ -275,14 +279,14 @@ export function ResponseDetailView({
                               {/\.(jpg|jpeg|png|webp|gif)$/i.test(answer.name) && (
                                 <div className="relative rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-sm aspect-video flex items-center justify-center">
                                   <img
-                                    src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                    src={serviceFormFileUrl(answer)}
                                     alt={answer.name}
                                     className="object-contain max-h-48 w-full"
                                   />
                                 </div>
                               )}
                               <a
-                                href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                href={serviceFormFileUrl(answer)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-black/5 bg-[#FBF7F9] px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-[#A74758]/5 transition"

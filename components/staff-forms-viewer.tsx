@@ -8,6 +8,10 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
 
+function serviceFormFileUrl(answer: any) {
+  return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
+}
+
 const CLIENT_CONTROL_FIELD_IDS = {
   serviceOwner: "client_control_service_owner",
   serviceStaff: "client_control_service_staff",
@@ -2489,7 +2493,7 @@ export function StaffFormsViewer({
                                   {(String(answer.type ?? "").startsWith("image/") || /\.(jpg|jpeg|png|webp|gif)$/i.test(answer.name)) && (
                                     <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/5 max-w-sm aspect-video flex items-center justify-center group/img">
                                       <img
-                                        src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                        src={serviceFormFileUrl(answer)}
                                         alt={answer.name}
                                         className="object-contain max-h-48 w-full transition group-hover/img:scale-[1.02]"
                                       />
@@ -2498,7 +2502,7 @@ export function StaffFormsViewer({
                                   {(String(answer.type ?? "").startsWith("video/") || /\.(mp4|mov|webm|m4v)$/i.test(answer.name)) && (
                                     <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black max-w-sm aspect-video flex items-center justify-center">
                                       <video
-                                        src={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                        src={serviceFormFileUrl(answer)}
                                         controls
                                         playsInline
                                         className="max-h-48 w-full"
@@ -2506,7 +2510,7 @@ export function StaffFormsViewer({
                                     </div>
                                   )}
                                   <a
-                                    href={`/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}`}
+                                    href={serviceFormFileUrl(answer)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#A74758] shadow-sm hover:bg-white/10 transition"

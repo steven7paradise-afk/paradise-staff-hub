@@ -153,10 +153,12 @@ function orderNotes(order: any) {
 
 function attachmentUrl(value: any) {
   if (!value || typeof value !== "object") return "";
+  const driveUrl = String(value.url || value.driveFileUrl || value.webViewLink || value.webContentLink || value.photoUrl || value.previewUrl || "").trim();
+  if (driveUrl) return driveUrl;
   if (typeof value.storagePath === "string" && value.storagePath.trim()) {
     return `/api/service-forms/responses/file?path=${encodeURIComponent(value.storagePath)}`;
   }
-  return String(value.url || value.driveFileUrl || value.webViewLink || value.webContentLink || value.photoUrl || value.previewUrl || "").trim();
+  return "";
 }
 
 function attachmentName(value: any, fallback: string) {

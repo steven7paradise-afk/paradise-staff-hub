@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { uploadPrivateDocument } from "@/lib/supabase-storage";
+import { uploadFileToGoogleDrive } from "@/lib/google-drive";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
 import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
@@ -15,6 +15,51 @@ type FormSessionUser = {
   role: string;
   sedeId?: string | null;
 };
+
+function safeFilePart(value: unknown, fallback: string) {
+  const cleaned = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "")
+    .slice(0, 80);
+  return cleaned || fallback;
+}
+
+function fileExtension(file: File) {
+  const fromName = file.name.split(".").pop()?.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  if (fromName) return fromName.slice(0, 10);
+  const fromType = file.type.split("/")[1]?.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+  if (fromType === "jpeg") return "jpg";
+  return fromType?.slice(0, 10) || "bin";
+}
+
+async function uploadFormFileToDrive(file: File, context: { userId: string; formName: string; fieldLabel: string }) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const extension = fileExtension(file);
+  const fileName = [
+    safeFilePart(context.formName, "modulo"),
+    safeFilePart(context.fieldLabel, "file"),
+    safeFilePart(context.userId, "utente"),
+    new Date().toISOString().replace(/[:.]/g, "-"),
+  ].join("-") + `.${extension}`;
+  const mimeType = file.type || "application/octet-stream";
+  const driveFile = await uploadFileToGoogleDrive(buffer, fileName, mimeType);
+
+  return {
+    url: driveFile.webViewLink || driveFile.webContentLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
+    driveFileId: driveFile.id,
+    driveFileUrl: driveFile.webViewLink || null,
+    webViewLink: driveFile.webViewLink || null,
+    webContentLink: driveFile.webContentLink || null,
+    previewUrl: driveFile.thumbnailLink || (driveFile.id ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveFile.id)}&sz=w1200` : null),
+    name: driveFile.name || fileName,
+    originalName: file.name,
+    type: mimeType,
+    uploadedAt: new Date().toISOString(),
+  };
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -75,7 +120,7 @@ export async function POST(request: NextRequest) {
     const answersObj = JSON.parse(answersStr);
     const isCashClosing = isCashClosingFormName(form.name, form.category);
 
-    // Process file fields and upload them to Supabase
+    // Process file fields and upload them to Google Drive.
     const fields = form.fields as Array<{ id: string; label: string; type: string; required?: boolean }>;
     for (const field of fields) {
       if (field.type === "file") {
@@ -84,13 +129,11 @@ export async function POST(request: NextRequest) {
           if (file.size > 80 * 1024 * 1024) {
             return NextResponse.json({ error: `File per "${field.label}" supera il limite di 80 MB.` }, { status: 400 });
           }
-          const storagePath = await uploadPrivateDocument(sessionUser.id, file);
-          // Store the path, original name, and mime type
-          answersObj[field.id] = {
-            storagePath,
-            name: file.name,
-            type: file.type,
-          };
+          answersObj[field.id] = await uploadFormFileToDrive(file, {
+            userId: sessionUser.id,
+            formName: form.name,
+            fieldLabel: field.label,
+          });
         } else {
           // Keep null if empty
           answersObj[field.id] = null;

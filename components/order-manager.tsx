@@ -9,6 +9,10 @@ import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 
+function serviceFormFileUrl(answer: any) {
+  return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
+}
+
 const ORDER_PHOTO_KEY = "__orderPhoto";
 type OrderPhoto = {
   url: string;
@@ -866,7 +870,7 @@ export function OrderManager({
                     const value = selected.answers?.[field.id];
                     if (!value) return null;
                     if (field.id.startsWith("__")) return null;
-                    const isFile = typeof value === "object" && value.storagePath;
+                    const isFile = typeof value === "object" && (value.storagePath || value.driveFileUrl || value.webViewLink || value.url);
                     const displayValue = displayOrderFieldValue(value);
                     const FieldIcon = orderFieldIcon(field.label);
                     return (
@@ -876,7 +880,7 @@ export function OrderManager({
                           {FieldIcon ? <FieldIcon className="size-4 shrink-0 text-[#C66170]" /> : null}
                         </div>
                         {isFile ? (
-                          <a href={`/api/service-forms/responses/file?path=${encodeURIComponent(value.storagePath)}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]">
+                          <a href={serviceFormFileUrl(value)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]">
                             <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
                           </a>
                         ) : (
