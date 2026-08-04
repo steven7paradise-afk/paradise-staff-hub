@@ -1195,20 +1195,53 @@ export function AppointmentsBrowser({
     });
 
   const clientControlEmployeeOptions = useMemo(() => {
-    const merged = new Map<string, ClientControlEmployee>();
-    clientControlEmployees.forEach((employee) => {
-      merged.set(employee.id, employee);
-    });
+    const rawList: ClientControlEmployee[] = [...clientControlEmployees];
     corsoTeamOptions.forEach((employee) => {
-      if (!merged.has(employee.id)) {
-        merged.set(employee.id, {
-          id: employee.id,
-          name: employee.name,
-          locationName: "Salone Buenos Aires",
-        });
-      }
+      rawList.push({
+        id: employee.id,
+        name: employee.name,
+        locationName: "Salone Buenos Aires",
+      });
     });
-    return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, "it"));
+
+    const result: ClientControlEmployee[] = [];
+    const norm = (val: string) =>
+      String(val || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+
+    for (const emp of rawList) {
+      const empNorm = norm(emp.name);
+      if (!empNorm) continue;
+      const empFirstWord = empNorm.split(" ")[0];
+
+      const existingIndex = result.findIndex((item) => {
+        const itemNorm = norm(item.name);
+        if (itemNorm === empNorm) return true;
+        const itemFirstWord = itemNorm.split(" ")[0];
+        if (
+          itemFirstWord === empFirstWord &&
+          (itemNorm.split(" ").length === 1 || empNorm.split(" ").length === 1)
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (existingIndex >= 0) {
+        const existing = result[existingIndex];
+        const existingNorm = norm(existing.name);
+        if (empNorm.length > existingNorm.length) {
+          result[existingIndex] = emp;
+        }
+      } else {
+        result.push(emp);
+      }
+    }
+
+    return result.sort((a, b) => a.name.localeCompare(b.name, "it"));
   }, [clientControlEmployees, corsoTeamOptions]);
 
   const filteredClientControlEmployees = useMemo(() => {
