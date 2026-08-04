@@ -1070,7 +1070,10 @@ export function AppointmentsBrowser({
       initialBookings.map((booking) => [booking.id, booking.teammates]),
     ),
   );
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filterStaff, setFilterStaff] = useState<string>("all");
+  const [filterPayment, setFilterPayment] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState(() => {
     const today = localDateKey(new Date());
     return {
@@ -1462,6 +1465,21 @@ export function AppointmentsBrowser({
     return from === to ? from : `${from} - ${to}`;
   }, [dateFilter]);
 
+  const availableStaffList = useMemo(() => {
+    const set = new Set<string>();
+    initialBookings.forEach((b) => {
+      getBookingTeam(b).forEach((mate) => {
+        if (mate.name) set.add(mate.name.trim());
+      });
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "it"));
+  }, [initialBookings, teamByBooking]);
+
+  const activeAdvancedFilterCount =
+    (filterStaff !== "all" ? 1 : 0) +
+    (filterPayment !== "all" ? 1 : 0) +
+    (filterStatus !== "all" ? 1 : 0);
+
   const filteredBookings = useMemo(() => {
     const statusScoped = initialBookings.filter((booking) =>
       showCanceled ? booking.isCanceled : !booking.isCanceled,
@@ -1485,8 +1503,39 @@ export function AppointmentsBrowser({
                 : dateFilter.from;
             return key >= from && key <= to;
           });
+
+    const staffScoped =
+      filterStaff === "all"
+        ? dateScoped
+        : dateScoped.filter((booking) => {
+            const team = getBookingTeam(booking);
+            return team.some(
+              (mate) => mate.name.trim().toLowerCase() === filterStaff.toLowerCase(),
+            );
+          });
+
+    const paymentScoped =
+      filterPayment === "all"
+        ? staffScoped
+        : staffScoped.filter((booking) => {
+            const financial = normalizeSearchValue(booking.financialStatus);
+            const title = normalizeSearchValue(booking.serviceTitle);
+            if (filterPayment === "pagato") return financial.includes("paid") || booking.financialStatus === "PAGATO";
+            if (filterPayment === "acconto") return title.includes("acconto") || financial.includes("partially_paid");
+            if (filterPayment === "prenotato") return !financial.includes("paid") && !title.includes("acconto");
+            return true;
+          });
+
+    const appointmentStatusScoped =
+      filterStatus === "all"
+        ? paymentScoped
+        : paymentScoped.filter((booking) => {
+            const status = getBookingStatus(booking);
+            return status === filterStatus;
+          });
+
     const searched = normalizedSearch
-      ? dateScoped.filter((booking) => {
+      ? appointmentStatusScoped.filter((booking) => {
           const orderVariants = getOrderSearchVariants(booking.bookingStr);
           const haystack = [
             booking.customerName,
@@ -1512,7 +1561,7 @@ export function AppointmentsBrowser({
 
           return haystack.includes(normalizedSearch);
         })
-      : dateScoped;
+      : appointmentStatusScoped;
 
     return [...searched].sort(
       (a, b) =>
@@ -1520,6 +1569,9 @@ export function AppointmentsBrowser({
     );
   }, [
     dateFilter,
+    filterStaff,
+    filterPayment,
+    filterStatus,
     initialBookings,
     normalizedSearch,
     salon,
@@ -2573,14 +2625,7 @@ export function AppointmentsBrowser({
           </div>
         </div>
       ) : null}
-      <div
-        className={[
-          "mx-auto grid w-full max-w-[1760px] gap-5",
-          selectedBooking
-            ? "xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]"
-            : "grid-cols-1",
-        ].join(" ")}
-      >
+      <div className="mx-auto w-full max-w-[1760px]">
         <main className="min-w-0 space-y-5">
           <section className="rounded-[28px] border border-[#E8D8CF] bg-white/85 p-5 shadow-sm backdrop-blur sm:p-7">
             <div>
@@ -2812,13 +2857,115 @@ export function AppointmentsBrowser({
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                className="flex h-12 items-center justify-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-black text-[#4E382C]"
-              >
-                <MoreVertical className="size-4 rotate-90 text-[#A56A42]" />
-                Filtri
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsFilterModalOpen((current) => !current)}
+                  className={`flex h-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition ${
+                    activeAdvancedFilterCount > 0
+                      ? "border-[#F1A7C3] bg-[#FFF1F6] text-[#B9476D] shadow-sm"
+                      : "border-[#E8D8CF] bg-white text-[#4E382C] hover:bg-[#FFF7F3]"
+                  }`}
+                >
+                  <MoreVertical className={`size-4 rotate-90 ${activeAdvancedFilterCount > 0 ? "text-[#B9476D]" : "text-[#A56A42]"}`} />
+                  <span>Filtri</span>
+                  {activeAdvancedFilterCount > 0 ? (
+                    <span className="grid size-5 place-items-center rounded-full bg-[#B9476D] text-[10px] font-black text-white">
+                      {activeAdvancedFilterCount}
+                    </span>
+                  ) : null}
+                </button>
+
+                {isFilterModalOpen ? (
+                  <div className="absolute right-0 top-14 z-40 w-80 rounded-2xl border border-[#E8D8CF] bg-white p-5 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#E8D8CF] pb-3">
+                      <h4 className="font-serif text-lg font-bold text-[#1F1F1F]">
+                        Filtri avanzati
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterModalOpen(false)}
+                        className="rounded-lg p-1 text-[#8D5E49] hover:bg-[#FFF7F3]"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-[#8D5E49] mb-1.5">
+                        Collaboratrice / Staff
+                      </label>
+                      <select
+                        value={filterStaff}
+                        onChange={(event) => setFilterStaff(event.target.value)}
+                        className="h-10 w-full rounded-xl border border-[#E8D8CF] bg-white px-3 text-xs font-bold text-[#4E382C] outline-none"
+                      >
+                        <option value="all">Tutte le collaboratrici</option>
+                        {availableStaffList.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-[#8D5E49] mb-1.5">
+                        Stato Pagamento
+                      </label>
+                      <select
+                        value={filterPayment}
+                        onChange={(event) => setFilterPayment(event.target.value)}
+                        className="h-10 w-full rounded-xl border border-[#E8D8CF] bg-white px-3 text-xs font-bold text-[#4E382C] outline-none"
+                      >
+                        <option value="all">Tutti i pagamenti</option>
+                        <option value="pagato">Pagato interamente</option>
+                        <option value="acconto">Acconto / Pre-pagamento</option>
+                        <option value="prenotato">Da pagare / In salone</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-wider text-[#8D5E49] mb-1.5">
+                        Stato Appuntamento
+                      </label>
+                      <select
+                        value={filterStatus}
+                        onChange={(event) => setFilterStatus(event.target.value)}
+                        className="h-10 w-full rounded-xl border border-[#E8D8CF] bg-white px-3 text-xs font-bold text-[#4E382C] outline-none"
+                      >
+                        <option value="all">Tutti gli stati</option>
+                        {appointmentStatusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-[#E8D8CF] pt-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterStaff("all");
+                          setFilterPayment("all");
+                          setFilterStatus("all");
+                        }}
+                        className="text-xs font-bold text-red-600 hover:underline"
+                      >
+                        Azzera filtri
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterModalOpen(false)}
+                        className="rounded-xl bg-[#1F1F1F] px-4 py-2 text-xs font-black text-white hover:bg-black"
+                      >
+                        Applica
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <button
                 type="button"
                 disabled={isRefreshing}
@@ -3021,14 +3168,18 @@ export function AppointmentsBrowser({
         </main>
 
         {selectedBooking ? (
-          <aside className="min-w-0 rounded-[28px] border border-[#E8D8CF] bg-white/95 shadow-sm xl:sticky xl:top-5 xl:max-h-[calc(100vh-40px)] xl:overflow-auto">
-            <div>
-              <div className="flex items-start justify-between border-b border-[#E8D8CF] p-6">
+          <div className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
+            <div
+              className="fixed inset-0"
+              onClick={() => setSelectedBookingId(null)}
+            />
+            <aside className="relative z-10 flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl transition-transform animate-in slide-in-from-right duration-300">
+              <div className="flex items-start justify-between border-b border-[#E8D8CF] bg-[#FFFBF8] p-6">
                 <div>
                   <h2 className="font-serif text-2xl font-semibold text-[#1F1F1F]">
                     Dettaglio prenotazione
                   </h2>
-                  <div className="mt-5 flex flex-wrap items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span
                       className={`inline-flex rounded-xl border px-3 py-1.5 text-sm font-semibold ${selectedBooking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[selectedStatus]}`}
                     >
@@ -3051,7 +3202,7 @@ export function AppointmentsBrowser({
                 </button>
               </div>
 
-              <div className="space-y-6 p-6">
+              <div className="flex-1 overflow-y-auto space-y-6 p-6">
                 <section>
                   <h3 className="font-serif text-3xl font-semibold text-[#1F1F1F]">
                     {selectedBooking.customerName}
@@ -3249,9 +3400,13 @@ export function AppointmentsBrowser({
                     </div>
                   </section>
                 ) : null}
+
+                <section className="border-t border-[#E8D8CF] pt-5">
+                  <TeamControl booking={selectedBooking} />
+                </section>
               </div>
-            </div>
-          </aside>
+            </aside>
+          </div>
         ) : null}
       </div>
     </div>
