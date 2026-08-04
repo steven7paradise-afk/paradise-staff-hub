@@ -27,6 +27,9 @@ import {
   Loader2,
   LockKeyhole,
   RefreshCw,
+  Cloud,
+  AtSign,
+  ChevronDown,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
