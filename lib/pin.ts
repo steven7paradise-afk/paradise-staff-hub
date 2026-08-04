@@ -103,3 +103,18 @@ export async function isPinValidForUser(userId: string, pin: string, pinHash: st
   }
   return valid;
 }
+
+export function isPinLookupMatchingPrefix(storedLookup: string | null | undefined, prefix: string) {
+  if (!storedLookup || !/^\d{2}$/.test(prefix)) return false;
+
+  for (let length = 4; length <= 6; length += 1) {
+    const suffixLength = length - prefix.length;
+    const total = 10 ** suffixLength;
+    for (let index = 0; index < total; index += 1) {
+      const candidate = `${prefix}${String(index).padStart(suffixLength, "0")}`;
+      if (pinLookup(candidate) === storedLookup) return true;
+    }
+  }
+
+  return false;
+}

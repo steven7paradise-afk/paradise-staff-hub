@@ -4,6 +4,7 @@ import AppointmentsPage from "../page";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,17 @@ export default async function SalonAppointmentsPage({
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = await checkPCAuthorization(pcToken);
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
+  const selectedWorkerIdentity = selectedWorker ? decodeURIComponent(selectedWorker) : "";
+  const selectedWorkerRecord = pcAuth && selectedWorkerIdentity
+    ? await prisma.user.findFirst({
+        where: {
+          active: true,
+          sede_id: pcAuth.locationId,
+          OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
+        },
+        select: { name: true },
+      }).catch(() => null)
+    : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
 
   if (!pcAuth) {
@@ -43,7 +55,7 @@ export default async function SalonAppointmentsPage({
     );
   }
 
-  if (!selectedWorker || forceProfileChoice) {
+  if (!selectedWorker || !selectedWorkerRecord || forceProfileChoice) {
     return <AppointmentsKioskEntry salone={salone} />;
   }
 
@@ -52,7 +64,7 @@ export default async function SalonAppointmentsPage({
       ...resolvedSearchParams,
       salone,
       unlocked: "1",
-      worker: decodeURIComponent(selectedWorker),
+      worker: selectedWorkerRecord.name,
     }),
     forcePcSalon: salone,
   });

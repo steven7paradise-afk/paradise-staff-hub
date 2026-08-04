@@ -638,6 +638,7 @@ function PcStaffLockScreen({
   const [error, setError] = useState("");
   const [selectingWorkerId, setSelectingWorkerId] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [pinPrefix, setPinPrefix] = useState("");
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -691,13 +692,18 @@ function PcStaffLockScreen({
       .toUpperCase();
 
   async function unlockWithWorker(worker: ActivePcWorker) {
+    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
+    if (!/^\d{2}$/.test(cleanPinPrefix)) {
+      setError("Inserisci le prime 2 cifre del PIN.");
+      return;
+    }
     setSelectingWorkerId(worker.id);
     setError("");
     try {
       const response = await fetch("/api/appointments/pc/select-worker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workerId: worker.id, salone: salon }),
+        body: JSON.stringify({ workerId: worker.id, salone: salon, pinPrefix: cleanPinPrefix }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
@@ -753,7 +759,11 @@ function PcStaffLockScreen({
                 <button
                   key={worker.id}
                   type="button"
-                  onClick={() => setSelectedWorkerId(worker.id)}
+                  onClick={() => {
+                    setSelectedWorkerId(worker.id);
+                    setPinPrefix("");
+                    setError("");
+                  }}
                   disabled={Boolean(selectingWorkerId)}
                   className="group flex w-36 min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70 2xl:w-40"
                 >
@@ -797,9 +807,25 @@ function PcStaffLockScreen({
               );
             })}
           </div>
+          <div className="mt-8 flex flex-col items-center gap-3">
+            <label className="text-center text-[11px] font-black uppercase tracking-[0.24em] text-neutral-500">
+              Prime 2 cifre del PIN
+            </label>
+            <input
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={2}
+              value={pinPrefix}
+              onChange={(event) => setPinPrefix(event.target.value.replace(/\D/g, "").slice(0, 2))}
+              disabled={!selectedWorkerId || Boolean(selectingWorkerId)}
+              className="h-14 w-28 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 text-center text-2xl font-black tracking-[0.24em] text-neutral-950 shadow-[0_14px_30px_rgba(120,82,64,0.08)] outline-none transition placeholder:text-neutral-300 focus:border-[#C96F70] focus:ring-4 focus:ring-[#D98A88]/20 disabled:opacity-45"
+              placeholder="--"
+              aria-label="Prime 2 cifre del PIN"
+            />
+          </div>
           <button
             type="button"
-            disabled={!selectedWorkerId || Boolean(selectingWorkerId)}
+            disabled={!selectedWorkerId || pinPrefix.length !== 2 || Boolean(selectingWorkerId)}
             onClick={() => {
               const worker = activeStaff.find((item) => item.id === selectedWorkerId);
               if (worker) void unlockWithWorker(worker);

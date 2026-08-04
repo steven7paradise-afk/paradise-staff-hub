@@ -9,6 +9,7 @@ import {
   checkPCAuthorization,
 } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
+import { isPinLookupMatchingPrefix } from "@/lib/pin";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +24,14 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null);
   const workerId = typeof body?.workerId === "string" ? body.workerId.trim() : "";
+  const pinPrefix = typeof body?.pinPrefix === "string" ? body.pinPrefix.replace(/\D/g, "").slice(0, 2) : "";
   const salone = normalizeAppointmentSalonSlug(body?.salone);
 
   if (!workerId) {
     return NextResponse.json({ error: "Profilo non valido." }, { status: 400 });
+  }
+  if (!/^\d{2}$/.test(pinPrefix)) {
+    return NextResponse.json({ error: "Inserisci le prime 2 cifre del tuo PIN." }, { status: 400 });
   }
 
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
@@ -43,6 +48,7 @@ export async function POST(request: NextRequest) {
     select: {
       id: true,
       name: true,
+      pin_lookup: true,
       attendance_logs: {
         where: { date: { gte: today, lt: tomorrow } },
         select: { type: true, timestamp: true },
@@ -53,6 +59,10 @@ export async function POST(request: NextRequest) {
 
   if (!worker) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
+  }
+
+  if (!isPinLookupMatchingPrefix(worker.pin_lookup, pinPrefix)) {
+    return NextResponse.json({ error: "Le prime 2 cifre del PIN non corrispondono a questo profilo." }, { status: 403 });
   }
 
   const state = deriveAttendanceState(worker.attendance_logs);
@@ -68,7 +78,7 @@ export async function POST(request: NextRequest) {
 
   response.cookies.set({
     name: appointmentsPcWorkerCookieName,
-    value: encodeURIComponent(worker.name),
+    value: worker.id,
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
