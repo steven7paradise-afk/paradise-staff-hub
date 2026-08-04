@@ -2430,10 +2430,46 @@ export function AppointmentsBrowser({
                 </div>
               </section>
 
-              {/* 2 Columns: PAGATO & COLLABORATRICE DEL SALONE */}
-              <div className="grid gap-4 sm:grid-cols-2">
+              {/* 4 Fields Grid: Ordine Shopify, Acconto, Pagato & Collaboratrice */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="block">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
+                    Ordine Shopify
+                  </span>
+                  <input
+                    type="text"
+                    value={clientControlForm.shopifyOrder}
+                    onChange={(event) =>
+                      setClientControlForm((prev) => ({
+                        ...prev,
+                        shopifyOrder: event.target.value,
+                      }))
+                    }
+                    className="mt-1.5 h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
+                    placeholder="Numero ordine"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
+                    Acconto pagato (€)
+                  </span>
+                  <input
+                    type="text"
+                    value={clientControlForm.depositPaid}
+                    onChange={(event) =>
+                      setClientControlForm((prev) => ({
+                        ...prev,
+                        depositPaid: event.target.value,
+                      }))
+                    }
+                    className="mt-1.5 h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
+                    placeholder="0.00"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
                     Pagato (€)
                   </span>
                   <input
@@ -2445,19 +2481,19 @@ export function AppointmentsBrowser({
                         paid: event.target.value,
                       }))
                     }
-                    className="mt-2 h-13 w-full rounded-2xl border border-black/10 bg-white px-4 text-base font-bold outline-none focus:border-[#D96B94]"
+                    className="mt-1.5 h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
                     placeholder="0.00"
                   />
                 </label>
 
                 <div className="relative block">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
                     Collaboratrice del salone
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
-                    className="mt-2 flex h-13 w-full items-center justify-between rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
+                    className="mt-1.5 flex h-12 w-full items-center justify-between rounded-2xl border border-black/10 bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
                   >
                     <span className="truncate">
                       {clientControlForm.staffIds.length
@@ -2472,7 +2508,7 @@ export function AppointmentsBrowser({
 
                   {/* Dropdown Popover */}
                   {isStaffDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-20 z-50 max-h-60 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-2xl space-y-1.5">
+                    <div className="absolute left-0 right-0 top-18 z-50 max-h-56 overflow-y-auto rounded-2xl border border-black/10 bg-white p-2.5 shadow-2xl space-y-1">
                       {filteredClientControlEmployees.map((employee) => {
                         const selected = clientControlForm.staffIds.includes(employee.id);
                         return (
@@ -2488,13 +2524,13 @@ export function AppointmentsBrowser({
                               }))
                             }
                             className={[
-                              "flex w-full items-center justify-between rounded-xl px-3.5 py-2 text-left text-xs font-bold transition",
+                              "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold transition",
                               selected
                                 ? "bg-[#FCE5F3] text-[#B83D7F]"
                                 : "text-black/75 hover:bg-black/5",
                             ].join(" ")}
                           >
-                            <span>{employee.name}</span>
+                            <span className="truncate">{employee.name}</span>
                             <span
                               className={`grid size-4 shrink-0 place-items-center rounded-md border ${
                                 selected
@@ -2512,8 +2548,8 @@ export function AppointmentsBrowser({
                 </div>
               </div>
 
-              {/* Suggerimenti & Sistema IA */}
-              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-5">
+              {/* Suggerimenti, Formato & Colore */}
+              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
                     Suggerimenti
@@ -2528,17 +2564,64 @@ export function AppointmentsBrowser({
                     {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
                   </button>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+
+                <div className="flex flex-wrap gap-2">
                   {clientControlNoteSuggestions.map((suggestion) => (
                     <button
                       key={suggestion}
                       type="button"
                       onClick={() => appendClientControlNote(suggestion)}
-                      className="rounded-full border border-[#F3B5D4] bg-white px-3.5 py-1.5 text-xs font-bold text-[#B83D7F] transition active:scale-95 hover:bg-[#FCE5F3]"
+                      className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-xs font-bold text-[#B83D7F] transition active:scale-95 hover:bg-[#FCE5F3]"
                     >
                       + {suggestion}
                     </button>
                   ))}
+                </div>
+
+                <div className="pt-2 grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Formato extension
+                    </span>
+                    <select
+                      value={selectedExtensionFormat}
+                      onChange={(event) => {
+                        const format = event.target.value;
+                        setSelectedExtensionFormat(format);
+                        if (format) appendClientControlNote(`Fatto ${format}`);
+                      }}
+                      className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-xs font-bold text-[#5D4A42] outline-none focus:border-[#D96B94]"
+                    >
+                      <option value="">Seleziona formato</option>
+                      {extensionFormatOptions.map((format) => (
+                        <option key={format} value={format}>
+                          {format}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                      Colore collection
+                    </span>
+                    <select
+                      value={selectedExtensionColor}
+                      onChange={(event) => {
+                        const color = event.target.value;
+                        setSelectedExtensionColor(color);
+                        if (color) appendClientControlNote(`Ha fatto colore ${color}`);
+                      }}
+                      className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-xs font-bold text-[#5D4A42] outline-none focus:border-[#D96B94]"
+                    >
+                      <option value="">Seleziona colore</option>
+                      {extensionColorOptions.map((color) => (
+                        <option key={color} value={color}>
+                          {color}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
               </section>
 
@@ -2555,10 +2638,52 @@ export function AppointmentsBrowser({
                       customNoteText: event.target.value,
                     }))
                   }
-                  rows={4}
-                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm font-medium outline-none focus:border-[#D96B94]"
+                  rows={3}
+                  className="mt-1.5 w-full rounded-2xl border border-black/10 bg-white p-3.5 text-sm font-medium outline-none focus:border-[#D96B94]"
                   placeholder="Scrivi qui la nota Shopify"
                 />
+              </div>
+
+              {/* Spunte di Verifica (I 5 Checkbox) */}
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                  Verifiche e controlli
+                </span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {[
+                    ["notes", "Note Shopify"],
+                    ["beforeMedia", "Prima foto/video"],
+                    ["afterMedia", "Dopo foto/video"],
+                    ["products", "Prodotti"],
+                    ["review", "Recensione"],
+                  ].map(([fieldKey, fieldLabel]) => {
+                    const checked = Boolean((clientControlForm as any)[fieldKey]);
+                    return (
+                      <label
+                        key={fieldKey}
+                        className={[
+                          "flex cursor-pointer items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-bold transition",
+                          checked
+                            ? "border-[#D96B94] bg-[#FCE5F3] text-[#B83D7F]"
+                            : "border-black/10 bg-white text-black/60 hover:bg-black/5",
+                        ].join(" ")}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) =>
+                            setClientControlForm((prev) => ({
+                              ...prev,
+                              [fieldKey]: event.target.checked,
+                            }))
+                          }
+                          className="size-4 accent-[#D96B94]"
+                        />
+                        <span>{fieldLabel}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               {clientControlMessage ? (
