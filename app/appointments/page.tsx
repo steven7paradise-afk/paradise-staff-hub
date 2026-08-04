@@ -297,6 +297,9 @@ export default async function AppointmentsPage({
     }
   }
 
+  const safeBookings = Array.isArray(bookings) ? bookings : [];
+  const safeServices = Array.isArray(services) ? services : [];
+
   const corsoUsers = localUsers.filter((user) => isCorsoLocation(user.location?.name));
   const pcDisplayUser = isPC && kioskWorkerName
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
@@ -304,8 +307,8 @@ export default async function AppointmentsPage({
 
   const cowlendarTeamOptionsById = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
   const cowlendarTeammates = [
-    ...bookings.flatMap((booking) => booking.teammates ?? []),
-    ...services.flatMap((service) => service.teammates ?? []),
+    ...safeBookings.flatMap((booking) => booking.teammates ?? []),
+    ...safeServices.flatMap((service) => service.teammates ?? []),
   ];
 
   for (const mate of cowlendarTeammates) {
@@ -322,9 +325,9 @@ export default async function AppointmentsPage({
   const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
   const [shopifyOrderNames, statusSetting, sheetStatusOverrides] = await Promise.all([
-    getShopifyOrderNamesBulk(bookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
+    getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
-    getAppointmentStatusesFromGoogleSheet(bookings.map((booking: any) => ({
+    getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
       id: String(booking.id),
       customerName:
         booking.customer?.name?.trim() ||
@@ -349,7 +352,7 @@ export default async function AppointmentsPage({
       ? (statusSetting.value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>)
       : {};
 
-  const serializedBookings = bookings
+  const serializedBookings = safeBookings
     .map((booking) => {
       const bookingDate = new Date(booking.start_date);
 
