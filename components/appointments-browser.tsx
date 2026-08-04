@@ -1101,8 +1101,10 @@ export function AppointmentsBrowser({
   );
 
   const normalizedSearch = normalizeSearchValue(searchTerm);
-  function getBookingTeam(booking: AppointmentRecord) {
-    return teamByBooking[booking.id] || booking.teammates;
+  function getBookingTeam(booking?: AppointmentRecord | null): BookingTeammate[] {
+    if (!booking) return [];
+    const team = teamByBooking[booking.id] || booking.teammates;
+    return Array.isArray(team) ? team : [];
   }
 
   function normalizeSalonName(value?: string | null) {
@@ -1467,9 +1469,9 @@ export function AppointmentsBrowser({
 
   const availableStaffList = useMemo(() => {
     const set = new Set<string>();
-    initialBookings.forEach((b) => {
+    (initialBookings || []).forEach((b) => {
       getBookingTeam(b).forEach((mate) => {
-        if (mate.name) set.add(mate.name.trim());
+        if (mate && mate.name) set.add(mate.name.trim());
       });
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, "it"));
@@ -1481,7 +1483,7 @@ export function AppointmentsBrowser({
     (filterStatus !== "all" ? 1 : 0);
 
   const filteredBookings = useMemo(() => {
-    const statusScoped = initialBookings.filter((booking) =>
+    const statusScoped = (initialBookings || []).filter((booking) =>
       showCanceled ? booking.isCanceled : !booking.isCanceled,
     );
     const base =
@@ -1510,7 +1512,10 @@ export function AppointmentsBrowser({
         : dateScoped.filter((booking) => {
             const team = getBookingTeam(booking);
             return team.some(
-              (mate) => mate.name.trim().toLowerCase() === filterStaff.toLowerCase(),
+              (mate) =>
+                mate &&
+                mate.name &&
+                mate.name.trim().toLowerCase() === filterStaff.toLowerCase(),
             );
           });
 
@@ -1518,8 +1523,8 @@ export function AppointmentsBrowser({
       filterPayment === "all"
         ? staffScoped
         : staffScoped.filter((booking) => {
-            const financial = normalizeSearchValue(booking.financialStatus);
-            const title = normalizeSearchValue(booking.serviceTitle);
+            const financial = normalizeSearchValue(booking.financialStatus || "");
+            const title = normalizeSearchValue(booking.serviceTitle || "");
             if (filterPayment === "pagato") return financial.includes("paid") || booking.financialStatus === "PAGATO";
             if (filterPayment === "acconto") return title.includes("acconto") || financial.includes("partially_paid");
             if (filterPayment === "prenotato") return !financial.includes("paid") && !title.includes("acconto");
