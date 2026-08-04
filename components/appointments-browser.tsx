@@ -738,16 +738,17 @@ function PcStaffLockScreen({
               Caricamento personale attivo...
             </span>
           </div>
-        ) : error ? (
-          <div className="mx-auto max-w-xl rounded-2xl border border-red-200 bg-red-50 p-5 text-center text-sm font-bold text-red-800">
-            {error}
-          </div>
         ) : activeStaff.length === 0 ? (
-          <div className="mx-auto max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-center text-sm font-bold text-amber-900">
-            Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
+          <div className={`mx-auto max-w-xl rounded-2xl border p-5 text-center text-sm font-bold ${error ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+            {error || "Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet."}
           </div>
         ) : (
           <>
+          {error ? (
+            <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-center text-sm font-bold text-red-800">
+              {error}
+            </div>
+          ) : null}
           <div className="mt-12 grid w-full max-w-7xl grid-cols-2 justify-items-center gap-x-7 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {activeStaff.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
@@ -822,6 +823,56 @@ function PcStaffLockScreen({
               placeholder="--"
               aria-label="Prime 2 cifre del PIN"
             />
+            <div className="grid w-[252px] grid-cols-3 gap-2">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                <button
+                  key={digit}
+                  type="button"
+                  disabled={!selectedWorkerId || pinPrefix.length >= 2 || Boolean(selectingWorkerId)}
+                  onClick={() => {
+                    setPinPrefix((current) => `${current}${digit}`.slice(0, 2));
+                    setError("");
+                  }}
+                  className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-xl font-black text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={!selectedWorkerId || !pinPrefix || Boolean(selectingWorkerId)}
+                onClick={() => {
+                  setPinPrefix((current) => current.slice(0, -1));
+                  setError("");
+                }}
+                className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                aria-label="Cancella una cifra"
+              >
+                <X className="size-5" />
+              </button>
+              <button
+                type="button"
+                disabled={!selectedWorkerId || pinPrefix.length >= 2 || Boolean(selectingWorkerId)}
+                onClick={() => {
+                  setPinPrefix((current) => `${current}0`.slice(0, 2));
+                  setError("");
+                }}
+                className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-xl font-black text-neutral-900 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                disabled={!selectedWorkerId || !pinPrefix || Boolean(selectingWorkerId)}
+                onClick={() => {
+                  setPinPrefix("");
+                  setError("");
+                }}
+                className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white/70 text-xs font-black uppercase tracking-[0.16em] text-neutral-700 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+              >
+                Cancella
+              </button>
+            </div>
           </div>
           <button
             type="button"
