@@ -690,6 +690,13 @@ function PcStaffLockScreen({
       .join("")
       .slice(0, 2)
       .toUpperCase();
+  const selectedPcWorker = activeStaff.find((item) => item.id === selectedWorkerId) || null;
+
+  function addPinDigit(digit: string) {
+    if (!selectedWorkerId || selectingWorkerId) return;
+    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 2));
+    setError("");
+  }
 
   async function unlockWithWorker(worker: ActivePcWorker) {
     const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
@@ -896,6 +903,91 @@ function PcStaffLockScreen({
             )}
           </button>
           </div>
+          {selectedPcWorker ? (
+            <div className="fixed inset-0 z-[90] grid place-items-center bg-black/28 px-5 backdrop-blur-sm">
+              <div className="w-full max-w-sm rounded-[28px] border border-[#E6CEC4] bg-[#FFFBF6] p-5 text-center shadow-[0_28px_90px_rgba(60,38,28,0.24)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedWorkerId("");
+                    setPinPrefix("");
+                    setError("");
+                  }}
+                  disabled={Boolean(selectingWorkerId)}
+                  className="ml-auto grid size-10 place-items-center rounded-full border border-[#E6CEC4] bg-white/75 text-neutral-700 transition active:scale-95 disabled:opacity-45"
+                  aria-label="Chiudi tastierino PIN"
+                >
+                  <X className="size-5" />
+                </button>
+                <p className="mt-1 text-[11px] font-black uppercase tracking-[0.24em] text-neutral-500">
+                  Prime 2 cifre PIN
+                </p>
+                <h3 className="mt-2 font-serif text-3xl font-light text-neutral-950">
+                  {selectedPcWorker.name.split(" ")[0] || selectedPcWorker.name}
+                </h3>
+                <div className="mx-auto mt-5 grid h-14 w-32 grid-cols-2 items-center gap-3 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 px-4">
+                  {[0, 1].map((index) => (
+                    <span
+                      key={index}
+                      className={`mx-auto size-5 rounded-full border-2 ${pinPrefix.length > index ? "border-[#C96F70] bg-[#C96F70]" : "border-neutral-300"}`}
+                    />
+                  ))}
+                </div>
+                <div className="mx-auto mt-5 grid w-[252px] grid-cols-3 gap-2">
+                  {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      disabled={pinPrefix.length >= 2 || Boolean(selectingWorkerId)}
+                      onClick={() => addPinDigit(digit)}
+                      className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-xl font-black text-neutral-950 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={!pinPrefix || Boolean(selectingWorkerId)}
+                    onClick={() => {
+                      setPinPrefix((current) => current.slice(0, -1));
+                      setError("");
+                    }}
+                    className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-neutral-950 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                    aria-label="Cancella una cifra"
+                  >
+                    <X className="size-5" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pinPrefix.length >= 2 || Boolean(selectingWorkerId)}
+                    onClick={() => addPinDigit("0")}
+                    className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-xl font-black text-neutral-950 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pinPrefix || Boolean(selectingWorkerId)}
+                    onClick={() => {
+                      setPinPrefix("");
+                      setError("");
+                    }}
+                    className="grid h-14 place-items-center rounded-2xl border border-[#D8B7A7]/65 bg-white text-[10px] font-black uppercase tracking-[0.14em] text-neutral-700 shadow-[0_10px_22px_rgba(120,82,64,0.07)] transition active:scale-95 disabled:opacity-35"
+                  >
+                    Cancella
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={pinPrefix.length !== 2 || Boolean(selectingWorkerId)}
+                  onClick={() => void unlockWithWorker(selectedPcWorker)}
+                  className="mt-5 inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-neutral-950 px-6 text-xs font-semibold uppercase tracking-[0.2em] text-white shadow-[0_18px_36px_rgba(0,0,0,0.18)] transition active:scale-95 disabled:pointer-events-none disabled:opacity-35"
+                >
+                  {selectingWorkerId ? <Loader2 className="size-5 animate-spin" /> : "Continua"}
+                </button>
+              </div>
+            </div>
+          ) : null}
           </>
         )}
       </section>
