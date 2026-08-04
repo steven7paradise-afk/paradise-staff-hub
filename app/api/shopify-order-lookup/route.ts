@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { getShopifyOrderDetails, isFuzzyNameMatch } from "@/lib/shopify";
+import { getOperationalUser } from "@/lib/operational-session";
 
 export async function GET(request: NextRequest) {
-  // 1. Authenticate user
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 

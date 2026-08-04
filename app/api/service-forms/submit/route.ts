@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
 import { uploadFileToGoogleDrive } from "@/lib/google-drive";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
 import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
 import { isPinValidForUser } from "@/lib/pin";
-import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { getOperationalUser } from "@/lib/operational-session";
 
 type FormSessionUser = {
   id: string;
@@ -62,39 +61,7 @@ async function uploadFormFileToDrive(file: File, context: { userId: string; form
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  let sessionUser = session?.user as FormSessionUser | undefined;
-  const pcAuth = !sessionUser
-    ? await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value)
-    : null;
-
-  if (!sessionUser && pcAuth) {
-    const selectedWorkerName = request.cookies.get(appointmentsPcWorkerCookieName)?.value
-      ? decodeURIComponent(request.cookies.get(appointmentsPcWorkerCookieName)?.value || "")
-      : "";
-    const selectedWorker = selectedWorkerName
-      ? await prisma.user.findFirst({
-          where: { name: selectedWorkerName, active: true, sede_id: pcAuth.locationId },
-          select: { id: true, name: true, email: true, role: true, sede_id: true },
-        })
-      : null;
-
-    sessionUser = selectedWorker
-      ? {
-          id: selectedWorker.id,
-          name: selectedWorker.name,
-          email: selectedWorker.email,
-          role: selectedWorker.role,
-          sedeId: selectedWorker.sede_id,
-        }
-      : {
-          id: "u-super-admin",
-          name: pcAuth.name,
-          email: "cassa@paradise.tech",
-          role: "RESPONSABILE",
-          sedeId: pcAuth.locationId,
-        };
-  }
+  const sessionUser = await getOperationalUser(request) as FormSessionUser | null;
 
   if (!sessionUser?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });

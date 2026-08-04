@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadOrderPhotoToGoogleDrive } from "@/lib/google-drive";
+import { getOperationalUser } from "@/lib/operational-session";
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
@@ -94,8 +94,8 @@ function uploadErrorMessage(error: unknown) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       name: driveFile.name || safeFileName,
       originalName: file.name,
       uploadedAt: new Date().toISOString(),
-      uploadedBy: session.user.name || "Staff",
+      uploadedBy: user.name || "Staff",
     };
 
     const updated = await prisma.serviceFormResponse.update({

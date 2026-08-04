@@ -115,18 +115,26 @@ export const authConfig = {
       if (pathname.startsWith("/appointments/register")) return true;
       if (pathname.startsWith("/api/attendance/clock")) return true;
 
-      // Strict lockdown for Cashier PCs (only appointments, register, service-forms, and associated APIs allowed)
+      // Strict lockdown for Cashier PCs with the operational APIs needed after profile selection.
       const pcToken = request.cookies.get("appointments_pc_token")?.value;
       if (pcToken) {
         const isAllowedPage = 
           pathname === "/appointments" || 
           pathname.startsWith("/appointments/") ||
+          pathname === "/client-control" ||
+          pathname.startsWith("/client-control/") ||
+          pathname === "/orders" ||
+          pathname.startsWith("/orders/") ||
           pathname === "/service-forms" || 
           pathname.startsWith("/service-forms/");
           
         const isAllowedApi = 
           pathname.startsWith("/api/appointments") || 
+          pathname.startsWith("/api/client-control") ||
+          pathname.startsWith("/api/orders") ||
           pathname.startsWith("/api/service-forms") ||
+          pathname.startsWith("/api/shopify-order-lookup") ||
+          pathname.startsWith("/api/drive-image") ||
           pathname.startsWith("/api/auth");
 
         if (isAllowedPage || isAllowedApi) {

@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getShopifyOrderIdentity } from "@/lib/shopify";
+import { getOperationalUser } from "@/lib/operational-session";
 
 type RouteParams = { params: Promise<{ id: string }> };
 type OrderField = { id: string; label?: string | null };
@@ -59,9 +59,9 @@ function shopifyUrlOrderId(order: OrderForBarcode) {
   return match?.[1] ?? null;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
-  const session = await auth();
-  if (!session?.user?.id) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 

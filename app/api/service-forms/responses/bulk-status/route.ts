@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { getOperationalUser } from "@/lib/operational-session";
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 

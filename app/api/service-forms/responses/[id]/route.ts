@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { getOperationalUser } from "@/lib/operational-session";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -36,8 +36,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -68,7 +68,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         from: response.status,
         to: status,
         note: statusNote || "",
-        by: session.user.name || "Staff",
+        by: user.name || "Staff",
         at: new Date().toISOString(),
       };
       dataToUpdate.activity_log = [...currentLog, newLogEntry];
@@ -171,7 +171,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         if (statusNote && statusNote.trim()) {
           await appendShopifyOrderNote(
             shopifyOrderName,
-            session.user.name || "Staff",
+            user.name || "Staff",
             `Stato cambiato in "${statusLabelText}": ${statusNote.trim()}`
           ).catch((err) => console.error("Failed to sync note to Shopify:", err));
         }
@@ -200,12 +200,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  if (session.user.role !== "ZERO") {
+  if (user.role !== "ZERO") {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 

@@ -50,14 +50,28 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         role: "RESPONSABILE",
         sedeId: pcAuth.locationId,
       } as any;
-      const selectedWorkerName = cookieStore.get(appointmentsPcWorkerCookieName)?.value
+      const selectedWorkerIdentity = cookieStore.get(appointmentsPcWorkerCookieName)?.value
         ? decodeURIComponent(cookieStore.get(appointmentsPcWorkerCookieName)?.value || "")
         : "";
-      if (selectedWorkerName) {
-        pcDisplayUser = await prisma.user.findFirst({
-          where: { name: selectedWorkerName, active: true, sede_id: pcAuth.locationId },
-          select: { name: true, photo_url: true },
+      if (selectedWorkerIdentity) {
+        const selectedWorker = await prisma.user.findFirst({
+          where: {
+            active: true,
+            sede_id: pcAuth.locationId,
+            OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
+          },
+          select: { id: true, name: true, email: true, role: true, sede_id: true, photo_url: true },
         }).catch(() => null);
+        if (selectedWorker) {
+          sessionUser = {
+            id: selectedWorker.id,
+            name: selectedWorker.name,
+            email: selectedWorker.email,
+            role: selectedWorker.role,
+            sedeId: selectedWorker.sede_id,
+          } as any;
+          pcDisplayUser = { name: selectedWorker.name, photo_url: selectedWorker.photo_url };
+        }
       }
     }
   }

@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { getOperationalUser } from "@/lib/operational-session";
 import type { Role } from "@/lib/roles";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  const role = session.user.role as Role;
+  const role = user.role as Role;
   const isManager = managementRoles.has(role);
 
   try {
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(forms);
     } else {
       // Staff sees only active, targeted forms
-      const locationId = session.user.sedeId;
+      const locationId = user.sedeId;
       const allActiveForms = await prisma.serviceForm.findMany({
         where: { active: true },
         orderBy: { created_at: "desc" },

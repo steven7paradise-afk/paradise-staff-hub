@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS, ensureClientControlForm } from "@/lib/client-control-form";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import { appendShopifyOrderNote, updateShopifyOrderMetafields } from "@/lib/shopify";
+import { getOperationalUser } from "@/lib/operational-session";
 
 export const dynamic = "force-dynamic";
 
@@ -35,14 +36,16 @@ function sameSalon(a?: string | null, b?: string | null) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
+  const operationalUser = await getOperationalUser(request);
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
   const tabletDevice = requestedDevice
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
     : null;
   const canSubmitFromDashboard = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(String(session?.user?.role ?? ""));
+  const canSubmitFromSelectedPcProfile = Boolean(operationalUser?.isPC && operationalUser.id !== "PC_CASSA");
 
-  if (!tabletDevice && !canSubmitFromDashboard) {
+  if (!tabletDevice && !canSubmitFromDashboard && !canSubmitFromSelectedPcProfile) {
     return NextResponse.json({ error: "Tablet non autorizzato" }, { status: 401 });
   }
 
@@ -116,8 +119,8 @@ export async function POST(request: NextRequest) {
 
   const staffNames = staffForSalon.map((s) => s.name);
 
-  const submitter = session?.user?.id
-    ? { id: session.user.id }
+  const submitter = operationalUser?.id && operationalUser.id !== "PC_CASSA"
+    ? { id: operationalUser.id }
     : await prisma.user.findFirst({
         where: {
           active: true,
