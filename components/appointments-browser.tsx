@@ -2187,18 +2187,10 @@ export function AppointmentsBrowser({
       setDraftIds(currentTeam.map((mate) => mate.id));
     }, [booking.id, currentTeam]);
 
-    if (booking.inferredSalon !== "buenos-aires") {
-      return (
-        <p className="mt-3 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3 text-xs font-bold text-black/45">
-          Modifica disponibile solo per il salone Corso.
-        </p>
-      );
-    }
-
     if (!corsoTeamOptions.length) {
       return (
         <p className="mt-3 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3 text-xs font-bold text-black/45">
-          Nessuna collaboratrice Corso trovata in Cowlendar.
+          Nessuna collaboratrice trovata in Cowlendar.
         </p>
       );
     }
@@ -2209,7 +2201,7 @@ export function AppointmentsBrowser({
         onClick={(event) => event.stopPropagation()}
       >
         <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
-          Modifica team Corso
+          Modifica team
         </p>
         <div className="mt-3 grid gap-2">
           {corsoTeamOptions.map((option) => {
