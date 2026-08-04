@@ -7,7 +7,7 @@ import {
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
   Archive, Plus, Trash2, UserPlus, Printer, RefreshCw,
-  ChevronLeft, Copy, Check
+  ChevronLeft, Copy, Check, HeartPulse
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -1050,6 +1050,34 @@ export function StaffDirectory({
               </div>
             )}
 
+            {/* 1. Malattie prima del profilo personale */}
+            <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <HeartPulse className="size-4 text-[#C66170]" />
+                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Malattie Anno Corrente</h2>
+                </div>
+                <Badge tone={(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "pink" : "green"}>
+                  {(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "Da controllare" : "Ok"}
+                </Badge>
+              </div>
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-2xl border border-black/5 bg-[#fcfaf8] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Totale Giorni</p>
+                  <p className="mt-1 text-2xl font-black text-neutral-900">{editForm.sicknessStats?.totalDays ?? 0}</p>
+                </div>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700/70">Giustificate</p>
+                  <p className="mt-1 text-2xl font-black text-emerald-800">{editForm.sicknessStats?.justifiedDays ?? 0}</p>
+                </div>
+                <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-rose-700/70">Mancanti / Da verificare</p>
+                  <p className="mt-1 text-2xl font-black text-rose-800">{editForm.sicknessStats?.unjustifiedDays ?? 0}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Profilo Personale, Posizione Lavorativa, Account e Sicurezza */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
                 <div className="flex items-center gap-2 border-b border-black/5 pb-3">
@@ -1265,29 +1293,6 @@ export function StaffDirectory({
                     </Select>
                   </label>
 
-                  <div className="rounded-[22px] border border-black/5 bg-[#fcfaf8] p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Malattie anno corrente</span>
-                      <Badge tone={(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "pink" : "green"}>
-                        {(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "Da controllare" : "Ok"}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      <div className="rounded-2xl border border-black/5 bg-white p-3">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Totale</p>
-                        <p className="mt-1 text-lg font-black text-neutral-900">{editForm.sicknessStats?.totalDays ?? 0}</p>
-                      </div>
-                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-emerald-700/70">Giust.</p>
-                        <p className="mt-1 text-lg font-black text-emerald-800">{editForm.sicknessStats?.justifiedDays ?? 0}</p>
-                      </div>
-                      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-3">
-                        <p className="text-[9px] font-black uppercase tracking-wider text-rose-700/70">Manca</p>
-                        <p className="mt-1 text-lg font-black text-rose-800">{editForm.sicknessStats?.unjustifiedDays ?? 0}</p>
-                      </div>
-                    </div>
-                  </div>
-
                   <label className="block space-y-1">
                     <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Cambia PIN (4-6 cifre)</span>
                     <Field
@@ -1316,29 +1321,6 @@ export function StaffDirectory({
                     Il PIN viene aggiornato quando premi Salva modifiche. Il reset password via email resta nascosto finche configuriamo il servizio email.
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm">
-              <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                <ListCheck className="size-4 text-[#C66170]" />
-                <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Accessi Abilitati</h2>
-              </div>
-              <p className="text-[10px] text-neutral-400 font-semibold mt-1">Seleziona a quali piattaforme e funzionalità può accedere il dipendente</p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
-                {PLATFORMS.map((item) => {
-                  const isChecked = Array.isArray(editForm.accessList) ? editForm.accessList.includes(item.val) : false;
-                  return (
-                    <div key={item.key} className="flex items-center justify-between p-3.5 rounded-2xl bg-[#fcfaf8] border border-black/[0.03] hover:shadow-sm transition-all duration-200">
-                      <span className="text-xs font-extrabold text-neutral-700">{item.label}</span>
-                      <Toggle
-                        checked={isChecked}
-                        onChange={() => toggleAccessInEdit(item.val)}
-                      />
-                    </div>
-                  );
-                })}
               </div>
             </div>
 
