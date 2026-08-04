@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { activatePC, appointmentsPcCookieName, appointmentsPcWorkerCookieName } from "@/lib/appointments-pc-auth";
+import { activatePC, appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, appointmentSalonUrl } from "@/lib/appointment-salon-url";
 import { prisma } from "@/lib/prisma";
+
+async function appointmentUrlForLocation(locationId: string) {
+  const location = await prisma.location.findUnique({
+    where: { id: locationId },
+    select: { name: true },
+  });
+  const salonSlug = appointmentSalonSlugFromName(location?.name);
+  return `${appointmentSalonUrl(salonSlug)}?choose=1`;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,19 +21,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Codice di attivazione mancante." }, { status: 400 });
     }
 
+    const existingPcAuth = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value);
+    if (existingPcAuth) {
+      const response = NextResponse.json({
+        success: true,
+        alreadyActivated: true,
+        name: existingPcAuth.name,
+        locationId: existingPcAuth.locationId,
+        appointmentUrl: await appointmentUrlForLocation(existingPcAuth.locationId),
+      });
+      response.cookies.set(appointmentsPcWorkerCookieName, "", {
+        path: "/",
+        maxAge: 0,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+      });
+      return response;
+    }
+
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null;
     const result = await activatePC(code, ip);
-    const location = await prisma.location.findUnique({
-      where: { id: result.locationId },
-      select: { name: true },
-    });
-    const salonSlug = appointmentSalonSlugFromName(location?.name);
-
     const response = NextResponse.json({
       success: true,
       name: result.name,
       locationId: result.locationId,
-      appointmentUrl: `${appointmentSalonUrl(salonSlug)}?choose=1`,
+      appointmentUrl: await appointmentUrlForLocation(result.locationId),
     });
 
     // Set secure long-lived cookie
@@ -35,7 +57,13 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
     });
-    response.cookies.delete(appointmentsPcWorkerCookieName);
+    response.cookies.set(appointmentsPcWorkerCookieName, "", {
+      path: "/",
+      maxAge: 0,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
 
     return response;
   } catch (error) {

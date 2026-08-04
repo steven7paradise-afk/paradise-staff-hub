@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { verifyOneTimeCode } from "@/lib/appointments-pc-auth";
+import { cookies } from "next/headers";
+import { appointmentSalonSlugFromName, appointmentSalonUrl } from "@/lib/appointment-salon-url";
+import { appointmentsPcCookieName, checkPCAuthorization, verifyOneTimeCode } from "@/lib/appointments-pc-auth";
+import { prisma } from "@/lib/prisma";
 import { PcRegisterForm } from "@/components/pc-register-form";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +17,17 @@ export default async function AppointmentsRegisterPage({
 
   let error = "";
   let pcName = "";
+  let existingAppointmentUrl = "";
+
+  const cookieStore = await cookies();
+  const existingPcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+  if (existingPcAuth) {
+    const location = await prisma.location.findUnique({
+      where: { id: existingPcAuth.locationId },
+      select: { name: true },
+    });
+    existingAppointmentUrl = `${appointmentSalonUrl(appointmentSalonSlugFromName(location?.name))}?choose=1`;
+  }
 
   if (!code) {
     error = "Codice di attivazione mancante. Usa un link di registrazione valido.";
@@ -33,7 +47,37 @@ export default async function AppointmentsRegisterPage({
     <div className="min-h-screen bg-[#FAF6F5] text-neutral-900 flex items-center justify-center p-6 font-sans">
       <div className="max-w-md w-full bg-white border border-[#E8D8CF] rounded-[32px] p-8 md:p-10 shadow-soft relative">
         
-        {error ? (
+        {error && existingAppointmentUrl ? (
+          <div className="space-y-6 text-center">
+            <div className="flex justify-center">
+              <div className="w-14 h-14 rounded-full border border-neutral-300 flex items-center justify-center font-serif text-lg tracking-widest text-neutral-800 bg-[#FAF6F5]">
+                P
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-xl md:text-2xl font-serif font-light tracking-wide uppercase text-neutral-900">
+                PC Gia Attivato
+              </h1>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">
+                DISPOSITIVO ABILITATO
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#F6FAF8] border border-[#DCEBE4] text-sm text-neutral-700 font-medium leading-relaxed">
+              Questo computer risulta gia autorizzato. Apri la scelta profilo per accedere all'agenda.
+            </div>
+
+            <div className="pt-4">
+              <Link
+                href={existingAppointmentUrl}
+                className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition"
+              >
+                Scegli profilo staff
+              </Link>
+            </div>
+          </div>
+        ) : error ? (
           <div className="space-y-6 text-center">
             {/* Dior Style Logo Emblem */}
             <div className="flex justify-center">
@@ -61,10 +105,10 @@ export default async function AppointmentsRegisterPage({
 
             <div className="pt-4">
               <Link
-                href="/dashboard"
+                href="/appointments/buenos-aires?choose=1"
                 className="inline-flex w-full items-center justify-center rounded-full bg-neutral-950 hover:bg-neutral-800 text-white py-3.5 px-6 text-xs font-black uppercase tracking-[0.2em] transition"
               >
-                Torna alla dashboard
+                Apri agenda Buenos Aires
               </Link>
             </div>
           </div>
