@@ -511,6 +511,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         "--dark-sidebar-icon": branding.dark_sidebar_icon_color || (getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF"),
       } as React.CSSProperties}
       transparentMain={transparentMain}
+      forceCollapsed={isPcCassa}
     />
   );
 }

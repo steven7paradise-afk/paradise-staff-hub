@@ -74,6 +74,9 @@ export async function GET(request: NextRequest) {
           sede_id: worker.sede_id,
           locationName: worker.location?.name ?? "",
           status: state.status,
+          breakStartedAt: state.status === "BREAK" && state.activePause
+            ? new Date(state.activePause.timestamp).toISOString()
+            : null,
         };
       })
       .filter((w) => (w.status === "IN" || w.status === "BREAK") && (!locationId || w.sede_id === locationId));

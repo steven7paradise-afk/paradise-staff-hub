@@ -10,6 +10,7 @@ type ActiveWorker = {
   name: string;
   photo_url?: string | null;
   status: string;
+  breakStartedAt?: string | null;
 };
 
 function initials(name: string) {
@@ -22,12 +23,22 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+function formatBreakTimer(startedAt: string, now: number) {
+  const elapsedSeconds = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
+  const hours = Math.floor(elapsedSeconds / 3600);
+  const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+  const seconds = elapsedSeconds % 60;
+  const parts = hours > 0 ? [hours, minutes, seconds] : [minutes, seconds];
+  return parts.map((part) => String(part).padStart(2, "0")).join(":");
+}
+
 export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlug }) {
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectingWorkerId, setSelectingWorkerId] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let active = true;
@@ -57,6 +68,11 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
       window.clearInterval(interval);
     };
   }, [salone]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   async function enter(worker: ActiveWorker) {
     setSelectingWorkerId(worker.id);
@@ -115,6 +131,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
               const selected = selectedWorkerId === worker.id;
+              const isOnBreak = worker.status === "BREAK" && Boolean(worker.breakStartedAt);
 
               return (
                 <button
@@ -134,7 +151,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                         {initials(worker.name)}
                       </div>
                     )}
-                    <span className="absolute right-4 top-3 size-4 rounded-full border-2 border-white bg-emerald-400 shadow-2xs" />
+                    <span className={`absolute right-4 top-3 size-4 rounded-full border-2 border-white shadow-2xs ${isOnBreak ? "bg-amber-400" : "bg-emerald-400"}`} />
                     {selected ? (
                       <span className="absolute -right-2 top-4 grid size-11 place-items-center rounded-full bg-[#C96F70] text-white shadow-[0_10px_25px_rgba(201,111,112,0.28)]">
                         <Check className="size-5" strokeWidth={2} />
@@ -149,6 +166,13 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                   <p className={`mt-4 max-w-full break-words text-sm font-semibold uppercase leading-tight tracking-[0.22em] md:text-base ${selected ? "text-[#C96F70]" : "text-neutral-800"}`}>
                     {firstName}
                   </p>
+                  <div className="mt-2 h-6">
+                    {isOnBreak ? (
+                      <span className="inline-flex items-center rounded-full border border-amber-300/70 bg-amber-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700">
+                        Pausa {formatBreakTimer(worker.breakStartedAt!, now)}
+                      </span>
+                    ) : null}
+                  </div>
                 </button>
               );
             })}
