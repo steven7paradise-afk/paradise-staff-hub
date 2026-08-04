@@ -1072,6 +1072,7 @@ export function AppointmentsBrowser({
   );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isStaffDropdownOpen, setIsStaffDropdownOpen] = useState(false);
   const [filterStaff, setFilterStaff] = useState<string>("all");
   const [filterPayment, setFilterPayment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -2360,311 +2361,239 @@ export function AppointmentsBrowser({
   return (
     <div className="min-h-screen bg-white px-3 py-4 sm:px-5 lg:px-6">
       {clientControlOpen ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-5">
-          <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-[24px] border border-black/15 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.35)]">
-            <div className="flex items-start justify-between gap-4 border-b border-black/10 bg-white px-5 py-5 sm:px-7">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-5">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-black/10 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 bg-white px-6 pt-7 pb-4 sm:px-8">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#E88AC5]">
+                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#D96B94]">
                   Store manager
                 </p>
-                <h2 className="mt-1 text-2xl font-black text-[#171717] sm:text-3xl">
-                  Appuntamenti e controllo cliente
+                <h2 className="mt-1 text-3xl font-extrabold text-[#1F1F1F]">
+                  {clientControlForm.clientName || "Sara Capelli Lisci"}
                 </h2>
-                <p className="mt-1 text-xs font-semibold text-black/45">
-                  Compila il controllo partendo dai dati dell'appuntamento.
-                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setClientControlOpen(false)}
-                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:bg-black/[0.02] active:scale-95"
+                onClick={() => {
+                  setClientControlOpen(false);
+                  setIsStaffDropdownOpen(false);
+                }}
+                className="grid size-10 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/70 shadow-sm transition hover:bg-black/5 active:scale-95"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-[#F8F4F1] p-4 sm:p-6">
-              <div className="space-y-5">
-                <section className="rounded-[20px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                        Sede *
-                      </p>
-                      <p className="mt-1 text-sm font-black text-[#2B211C]">
-                        Controllo cliente e nota Shopify
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {clientControlSalons.map((salon) => (
-                        <button
-                          key={salon.value}
-                          type="button"
-                          onClick={() =>
-                            setClientControlForm((prev) => ({
-                              ...prev,
-                              salon: salon.value,
-                              staffIds: [],
-                            }))
-                          }
-                          className={[
-                            "rounded-full border px-3 py-2 text-xs font-black transition",
-                            clientControlForm.salon === salon.value
-                              ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
-                              : "border-black/10 bg-white text-black/55 hover:bg-black/[0.02]",
-                          ].join(" ")}
-                        >
-                          {salon.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-[20px] border border-black/10 bg-white p-4 shadow-sm sm:p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      Dati appuntamento
-                    </p>
-                    <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[10px] font-black text-black/45">
-                      Shopify + controllo cliente
+            {/* Scrollable Content */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-8 space-y-6">
+              {/* Info cliente da API Card */}
+              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5">
+                <div className="flex items-center gap-2 text-xs font-bold text-black/50">
+                  <Cloud className="size-4 text-[#D96B94]" />
+                  <span>Info cliente da API</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2.5">
+                  {clientControlForm.email ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                      <Mail className="size-3.5 text-[#D96B94]" />
+                      <span className="truncate max-w-[200px]">{clientControlForm.email}</span>
                     </span>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    {[
-                      ["clientName", "Nome cliente *", "Nome cliente"],
-                      ["email", "Email cliente", "email@esempio.com"],
-                      ["phone", "Telefono cliente", ""],
-                      ["serviceTitle", "Servizio prenotato", "Servizio"],
-                      ["shopifyOrder", "Ordine Shopify", "Numero ordine"],
-                      ["depositPaid", "Acconto pagato (€)", "0.00"],
-                      ["paid", "Pagato (€)", "0.00"],
-                      ["instagramTag", "IG tag", "@cliente"],
-                    ].map(([fieldKey, label, placeholder]) => (
-                      <label key={fieldKey} className="block">
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                          {label}
-                        </span>
-                        <input
-                          value={String(
-                            (clientControlForm as any)[fieldKey] ?? "",
-                          )}
-                          readOnly={fieldKey === "serviceTitle"}
-                          onChange={(event) =>
-                            setClientControlForm((prev) => ({
-                              ...prev,
-                              [fieldKey]: event.target.value,
-                            }))
-                          }
-                          className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5] read-only:bg-black/[0.02] read-only:text-black/60"
-                          placeholder={placeholder}
-                        />
-                      </label>
-                    ))}
-                    <div className="block md:col-span-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                          Testo nota Shopify
-                        </span>
-                        <button
-                          type="button"
-                          onClick={polishClientControlNote}
-                          disabled={
-                            !hasClientControlNoteContext() ||
-                            clientControlPolishing
-                          }
-                          className="inline-flex items-center gap-1.5 rounded-full bg-[#E88AC5] px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white shadow-sm shadow-pink-200 transition active:scale-95 disabled:opacity-45"
-                        >
-                          <Sparkles className="size-3.5" />
-                          {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
-                        </button>
-                      </div>
-                      <div className="mt-2 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#B83D7F]/70">
-                          Suggerimenti
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {clientControlNoteSuggestions.map((suggestion) => (
-                            <button
-                              key={suggestion}
-                              type="button"
-                              onClick={() =>
-                                appendClientControlNote(suggestion)
-                              }
-                              className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-[11px] font-black text-[#B83D7F] transition active:scale-95"
-                            >
-                              + {suggestion}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="mt-4 grid gap-3 md:grid-cols-2">
-                          <label className="block">
-                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                              Formato extension
-                            </span>
-                            <select
-                              value={selectedExtensionFormat}
-                              onChange={(event) => {
-                                const format = event.target.value;
-                                setSelectedExtensionFormat(format);
-                                if (format)
-                                  appendClientControlNote(`Fatto ${format}`);
-                              }}
-                              className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-sm font-bold text-[#5D4A42] outline-none focus:border-[#E88AC5]"
-                            >
-                              <option value="">Seleziona formato</option>
-                              {extensionFormatOptions.map((format) => (
-                                <option key={format} value={format}>
-                                  {format}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="block">
-                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                              Colore collection
-                            </span>
-                            <select
-                              value={selectedExtensionColor}
-                              onChange={(event) => {
-                                const color = event.target.value;
-                                setSelectedExtensionColor(color);
-                                if (color)
-                                  appendClientControlNote(
-                                    `Ha fatto colore ${color}`,
-                                  );
-                              }}
-                              className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-sm font-bold text-[#5D4A42] outline-none focus:border-[#E88AC5]"
-                            >
-                              <option value="">Seleziona colore</option>
-                              {extensionColorOptions.map((color) => (
-                                <option key={color} value={color}>
-                                  {color}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                      </div>
-                      <textarea
-                        value={clientControlForm.customNoteText}
-                        onChange={(event) =>
-                          setClientControlForm((prev) => ({
-                            ...prev,
-                            customNoteText: event.target.value,
-                          }))
-                        }
-                        className="mt-2 min-h-24 w-full rounded-2xl border border-[#F3B5D4] bg-white p-3 text-sm font-semibold outline-none focus:border-[#E88AC5]"
-                        placeholder="Scrivi qui la nota Shopify"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      Collaboratrice del salone *
-                    </p>
-                    <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-black/[0.02] p-2 sm:grid-cols-2 md:grid-cols-4">
-                      {clientControlLoading ? (
-                        <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">
-                          Carico collaboratrici...
-                        </p>
-                      ) : filteredClientControlEmployees.length ? (
-                        filteredClientControlEmployees.map((employee) => {
-                          const selected = clientControlForm.staffIds.includes(
-                            employee.id,
-                          );
-                          return (
-                            <button
-                              key={employee.id}
-                              type="button"
-                              onClick={() =>
-                                setClientControlForm((prev) => ({
-                                  ...prev,
-                                  staffIds: selected
-                                    ? prev.staffIds.filter((id) => id !== employee.id)
-                                    : [...prev.staffIds, employee.id],
-                                }))
-                              }
-                              className={[
-                                "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-black transition",
-                                selected
-                                  ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
-                                  : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
-                              ].join(" ")}
-                            >
-                              <span className="truncate">{employee.name}</span>
-                              <span
-                                className={`grid size-4 shrink-0 place-items-center rounded-md border ${
-                                  selected
-                                    ? "border-[#B83D7F] bg-[#B83D7F] text-white"
-                                    : "border-black/20 bg-white"
-                                }`}
-                              >
-                                {selected && <Check className="size-3" strokeWidth={3} />}
-                              </span>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <p className="col-span-full p-3 text-center text-sm font-bold text-black/40">
-                          Nessuna collaboratrice trovata per questa sede.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                    {[
-                      ["notes", "Note Shopify"],
-                      ["beforeMedia", "Prima foto/video"],
-                      ["afterMedia", "Dopo foto/video"],
-                      ["products", "Prodotti"],
-                      ["review", "Recensione"],
-                    ].map(([fieldKey, fieldLabel]) => (
-                      <label
-                        key={fieldKey}
-                        className="flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 text-xs font-black text-black/60 hover:bg-black/[0.01]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(
-                            (clientControlForm as any)[fieldKey],
-                          )}
-                          onChange={(event) =>
-                            setClientControlForm((prev) => ({
-                              ...prev,
-                              [fieldKey]: event.target.checked,
-                            }))
-                          }
-                          className="size-4 accent-[#E88AC5]"
-                        />
-                        <span>{fieldLabel}</span>
-                      </label>
-                    ))}
-                  </div>
-
-                  {clientControlMessage ? (
-                    <p
-                      className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
-                    >
-                      {clientControlMessage.text}
-                    </p>
                   ) : null}
+                  {clientControlForm.phone ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                      <Phone className="size-3.5 text-[#D96B94]" />
+                      <span>{clientControlForm.phone}</span>
+                    </span>
+                  ) : null}
+                  {clientControlForm.serviceTitle ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                      <CalendarDays className="size-3.5 text-[#D96B94]" />
+                      <span className="truncate max-w-[280px]">{clientControlForm.serviceTitle}</span>
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                    <AtSign className="size-3.5 text-[#D96B94]" />
+                    <input
+                      type="text"
+                      value={clientControlForm.instagramTag}
+                      onChange={(e) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          instagramTag: e.target.value,
+                        }))
+                      }
+                      placeholder="@cliente"
+                      className="bg-transparent outline-none w-24 text-xs font-bold"
+                    />
+                  </span>
+                </div>
+              </section>
 
+              {/* 2 Columns: PAGATO & COLLABORATRICE DEL SALONE */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
+                    Pagato (€)
+                  </span>
+                  <input
+                    type="text"
+                    value={clientControlForm.paid}
+                    onChange={(event) =>
+                      setClientControlForm((prev) => ({
+                        ...prev,
+                        paid: event.target.value,
+                      }))
+                    }
+                    className="mt-2 h-13 w-full rounded-2xl border border-black/10 bg-white px-4 text-base font-bold outline-none focus:border-[#D96B94]"
+                    placeholder="0.00"
+                  />
+                </label>
+
+                <div className="relative block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
+                    Collaboratrice del salone
+                  </span>
                   <button
                     type="button"
-                    onClick={submitClientControlForm}
-                    disabled={clientControlSubmitting || clientControlLoading}
-                    className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
+                    onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
+                    className="mt-2 flex h-13 w-full items-center justify-between rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
                   >
-                    {clientControlSubmitting
-                      ? "Salvataggio..."
-                      : "Salva appuntamento"}
+                    <span className="truncate">
+                      {clientControlForm.staffIds.length
+                        ? filteredClientControlEmployees
+                            .filter((e) => clientControlForm.staffIds.includes(e.id))
+                            .map((e) => e.name)
+                            .join(", ")
+                        : "Seleziona collaboratrice"}
+                    </span>
+                    <ChevronDown className={`size-4 text-black/50 transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
-                </section>
+
+                  {/* Dropdown Popover */}
+                  {isStaffDropdownOpen ? (
+                    <div className="absolute left-0 right-0 top-20 z-50 max-h-60 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-2xl space-y-1.5">
+                      {filteredClientControlEmployees.map((employee) => {
+                        const selected = clientControlForm.staffIds.includes(employee.id);
+                        return (
+                          <button
+                            key={employee.id}
+                            type="button"
+                            onClick={() =>
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                staffIds: selected
+                                  ? prev.staffIds.filter((id) => id !== employee.id)
+                                  : [...prev.staffIds, employee.id],
+                              }))
+                            }
+                            className={[
+                              "flex w-full items-center justify-between rounded-xl px-3.5 py-2 text-left text-xs font-bold transition",
+                              selected
+                                ? "bg-[#FCE5F3] text-[#B83D7F]"
+                                : "text-black/75 hover:bg-black/5",
+                            ].join(" ")}
+                          >
+                            <span>{employee.name}</span>
+                            <span
+                              className={`grid size-4 shrink-0 place-items-center rounded-md border ${
+                                selected
+                                  ? "border-[#B83D7F] bg-[#B83D7F] text-white"
+                                  : "border-black/20 bg-white"
+                              }`}
+                            >
+                              {selected && <Check className="size-3" strokeWidth={3} />}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               </div>
+
+              {/* Suggerimenti & Sistema IA */}
+              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
+                    Suggerimenti
+                  </span>
+                  <button
+                    type="button"
+                    onClick={polishClientControlNote}
+                    disabled={!hasClientControlNoteContext() || clientControlPolishing}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#D96B94] px-4 py-2 text-[11px] font-bold text-white shadow-sm transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
+                  >
+                    <Sparkles className="size-3.5" />
+                    {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
+                  </button>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {clientControlNoteSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => appendClientControlNote(suggestion)}
+                      className="rounded-full border border-[#F3B5D4] bg-white px-3.5 py-1.5 text-xs font-bold text-[#B83D7F] transition active:scale-95 hover:bg-[#FCE5F3]"
+                    >
+                      + {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* NOTA SHOPIFY */}
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/45">
+                  Nota Shopify
+                </span>
+                <textarea
+                  value={clientControlForm.customNoteText}
+                  onChange={(event) =>
+                    setClientControlForm((prev) => ({
+                      ...prev,
+                      customNoteText: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  className="mt-2 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm font-medium outline-none focus:border-[#D96B94]"
+                  placeholder="Scrivi qui la nota Shopify"
+                />
+              </div>
+
+              {clientControlMessage ? (
+                <p
+                  className={`rounded-2xl px-4 py-3 text-sm font-bold ${
+                    clientControlMessage.type === "success"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-red-50 text-red-700"
+                  }`}
+                >
+                  {clientControlMessage.text}
+                </p>
+              ) : null}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between border-t border-black/5 bg-white px-6 py-5 sm:px-8">
+              <button
+                type="button"
+                onClick={() => {
+                  setClientControlOpen(false);
+                  setIsStaffDropdownOpen(false);
+                }}
+                className="rounded-2xl bg-[#F8EEF3] px-7 py-3 text-sm font-bold text-black/70 transition hover:bg-[#F2E0EA] active:scale-95"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={submitClientControlForm}
+                disabled={clientControlSubmitting || clientControlLoading}
+                className="rounded-2xl bg-[#D96B94] px-7 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#C85982] active:scale-95 disabled:opacity-60"
+              >
+                {clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}
+              </button>
             </div>
           </div>
         </div>
