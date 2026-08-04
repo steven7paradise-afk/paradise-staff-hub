@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarCheck,
   CalendarDays,
+  ArrowRight,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -625,6 +627,7 @@ function PcStaffLockScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectingWorkerId, setSelectingWorkerId] = useState("");
+  const [selectedWorkerId, setSelectedWorkerId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -690,18 +693,19 @@ function PcStaffLockScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] bg-white text-neutral-900">
-      <div className="absolute inset-y-0 left-0 hidden w-20 bg-gradient-to-b from-[#F8D7EB] via-[#FDE7F3] to-[#F4C6E6] md:block" />
-      <section className="relative flex min-h-screen flex-col items-center px-5 py-14 md:ml-20 md:px-10 lg:px-14">
-        <div className="mx-auto max-w-3xl space-y-4 text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-full bg-[#FADBEA] text-[#F12D83]">
-            <LockKeyhole className="size-8" strokeWidth={1.8} />
+    <div className="fixed inset-0 z-[70] overflow-hidden bg-[#FFFBF6] text-neutral-900">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
+      <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
+      <section className="relative flex min-h-screen flex-col items-center px-5 py-16 md:px-10 lg:px-14">
+        <div className="mx-auto max-w-4xl space-y-6 text-center">
+          <div className="mx-auto grid size-20 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
+            <LockKeyhole className="size-9" strokeWidth={1.45} />
           </div>
-          <h2 className="text-3xl font-black leading-tight tracking-normal text-[#171C2A] md:text-4xl">
-            Seleziona il tuo profilo per accedere alle prenotazioni
+          <h2 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-7xl">
+            Chi sta utilizzando il gestionale?
           </h2>
-          <p className="text-base font-medium text-[#667085]">
-            Per motivi di sicurezza, devi selezionare il tuo profilo utente per continuare.
+          <p className="text-sm font-medium uppercase tracking-[0.36em] text-neutral-700 md:text-base">
+            Seleziona il tuo profilo per continuare.
           </p>
         </div>
 
@@ -721,20 +725,22 @@ function PcStaffLockScreen({
             Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
           </div>
         ) : (
-          <div className="mt-12 grid w-full max-w-6xl grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <>
+          <div className="mt-16 grid w-full max-w-7xl grid-cols-2 gap-x-7 gap-y-12 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {activeStaff.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;
+              const selected = selectedWorkerId === worker.id;
 
               return (
                 <button
                   key={worker.id}
                   type="button"
-                  onClick={() => unlockWithWorker(worker)}
+                  onClick={() => setSelectedWorkerId(worker.id)}
                   disabled={Boolean(selectingWorkerId)}
                   className="group flex min-w-0 flex-col items-center text-center transition hover:-translate-y-1 disabled:pointer-events-none disabled:opacity-70"
                 >
-                  <div className="relative grid aspect-square w-full max-w-36 place-items-center rounded-full border-[5px] border-[#F9C8DF] bg-white p-1 shadow-[0_10px_28px_rgba(241,45,131,0.12)] transition group-hover:border-[#F12D83]">
+                  <div className={`relative grid aspect-square w-full max-w-44 place-items-center rounded-full border p-2 shadow-[0_18px_42px_rgba(95,58,45,0.08)] transition ${selected ? "border-[#C96F70] bg-[#F8E3DE] ring-4 ring-[#D98A88]/30" : "border-[#E6CEC4] bg-white/50 group-hover:border-[#D9A69A]"}`}>
                     {photoUrl ? (
                       <img
                         src={photoUrl}
@@ -746,20 +752,48 @@ function PcStaffLockScreen({
                         {getInitials(worker.name)}
                       </div>
                     )}
-                    <span className="absolute right-3 top-2 size-4 rounded-full border-2 border-white bg-emerald-400 shadow-2xs" />
+                    <span className="absolute right-4 top-3 size-4 rounded-full border-2 border-white bg-emerald-400 shadow-2xs" />
+                    {selected ? (
+                      <span className="absolute -right-2 top-4 grid size-11 place-items-center rounded-full bg-[#C96F70] text-white shadow-[0_10px_25px_rgba(201,111,112,0.28)]">
+                        <Check className="size-5" strokeWidth={2} />
+                      </span>
+                    ) : null}
                     {selectingWorkerId === worker.id ? (
                       <span className="absolute inset-0 grid place-items-center rounded-full bg-white/70">
                         <Loader2 className="size-7 animate-spin text-[#F12D83]" />
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-4 max-w-full break-words text-base font-black leading-tight tracking-normal text-[#F12D83] md:text-lg">
+                  <p className={`mt-6 max-w-full break-words text-sm font-semibold uppercase leading-tight tracking-[0.22em] md:text-base ${selected ? "text-[#C96F70]" : "text-neutral-800"}`}>
                     {firstName}
                   </p>
                 </button>
               );
             })}
           </div>
+          <button
+            type="button"
+            disabled={!selectedWorkerId || Boolean(selectingWorkerId)}
+            onClick={() => {
+              const worker = activeStaff.find((item) => item.id === selectedWorkerId);
+              if (worker) void unlockWithWorker(worker);
+            }}
+            className="mt-16 inline-flex h-20 min-w-[min(92vw,520px)] items-center justify-center gap-8 rounded-2xl bg-neutral-950 px-8 text-sm font-semibold uppercase tracking-[0.28em] text-white shadow-[0_22px_45px_rgba(0,0,0,0.20)] transition hover:bg-neutral-800 disabled:pointer-events-none disabled:opacity-35"
+          >
+            {selectingWorkerId ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <>
+                <span>
+                  {selectedWorkerId
+                    ? `Continua come ${activeStaff.find((item) => item.id === selectedWorkerId)?.name.split(" ")[0] || ""}`
+                    : "Seleziona un profilo"}
+                </span>
+                <ArrowRight className="size-7" strokeWidth={1.4} />
+              </>
+            )}
+          </button>
+          </>
         )}
       </section>
     </div>
