@@ -139,18 +139,20 @@ export function DesktopSidebarNav({
         <div className="space-y-5 px-1 pb-4">
           {sections.map((section) => (
             <div key={section.id} className="space-y-1.5">
-              <button
-                type="button"
-                onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                className="sidebar-label flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.055]"
-              >
-                <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
-                  {section.title}
-                </p>
-                <ChevronDown className={cn("size-3.5 shrink-0 text-[color:var(--sidebar-text)] opacity-35 transition-transform", openSectionId === section.id && "rotate-180")} />
-              </button>
+              {section.title ? (
+                <button
+                  type="button"
+                  onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
+                  className="sidebar-label flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.055]"
+                >
+                  <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
+                    {section.title}
+                  </p>
+                  <ChevronDown className={cn("size-3.5 shrink-0 text-[color:var(--sidebar-text)] opacity-35 transition-transform", openSectionId === section.id && "rotate-180")} />
+                </button>
+              ) : null}
 
-              {openSectionId === section.id || searchQuery.trim() ? (
+              {openSectionId === section.id || !section.title || searchQuery.trim() ? (
                 <div className="space-y-1.5">
                   {section.items.map((item) => {
                     const isActive = isItemActive(item.href);

@@ -1,6 +1,31 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export function proxy() {
+export function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const isPcCassa = Boolean(request.cookies.get("appointments_pc_token")?.value);
+
+  if (isPcCassa) {
+    const isAllowedPage =
+      pathname === "/appointments" ||
+      pathname.startsWith("/appointments/") ||
+      pathname === "/service-forms" ||
+      pathname.startsWith("/service-forms/") ||
+      pathname === "/my-shifts";
+
+    const isAllowedApi =
+      pathname.startsWith("/api/appointments") ||
+      pathname.startsWith("/api/service-forms") ||
+      pathname.startsWith("/api/auth");
+
+    if (!isAllowedPage && !isAllowedApi && pathname !== "/pc-non-autorizzato") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/pc-non-autorizzato";
+      url.searchParams.set("from", pathname);
+      return NextResponse.redirect(url);
+    }
+  }
+
   return NextResponse.next();
 }
 

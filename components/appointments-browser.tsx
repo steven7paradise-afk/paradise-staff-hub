@@ -690,9 +690,9 @@ function PcStaffLockScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#FCE6EF] p-5 text-neutral-900">
-      <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-b from-[#F8D7EB] via-[#FDE7F3] to-[#F4C6E6]" />
-      <section className="relative ml-0 flex min-h-[82vh] w-full max-w-7xl flex-col items-center rounded-[28px] border border-white/70 bg-white/95 px-5 py-12 shadow-2xl backdrop-blur md:ml-20 md:px-10 lg:px-14">
+    <div className="fixed inset-0 z-[70] bg-white text-neutral-900">
+      <div className="absolute inset-y-0 left-0 hidden w-20 bg-gradient-to-b from-[#F8D7EB] via-[#FDE7F3] to-[#F4C6E6] md:block" />
+      <section className="relative flex min-h-screen flex-col items-center px-5 py-14 md:ml-20 md:px-10 lg:px-14">
         <div className="mx-auto max-w-3xl space-y-4 text-center">
           <div className="mx-auto grid size-16 place-items-center rounded-full bg-[#FADBEA] text-[#F12D83]">
             <LockKeyhole className="size-8" strokeWidth={1.8} />
@@ -721,7 +721,7 @@ function PcStaffLockScreen({
             Nessun membro dello staff risulta timbrato. Effettua prima la timbratura dal tablet.
           </div>
         ) : (
-          <div className="mt-12 grid w-full max-w-6xl grid-cols-2 gap-x-5 gap-y-9 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          <div className="mt-12 grid w-full max-w-6xl grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             {activeStaff.map((worker) => {
               const photoUrl = resolveDrivePhotoUrl(worker.photo_url || "");
               const firstName = worker.name.split(" ")[0] || worker.name;

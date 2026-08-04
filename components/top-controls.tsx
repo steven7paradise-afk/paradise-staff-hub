@@ -37,11 +37,13 @@ export function TopControls({
   name,
   photoUrl,
   userId,
+  profileHref = "/profile",
 }: {
   unread: number;
   name: string;
   photoUrl: string | null;
   userId?: string;
+  profileHref?: string;
 }) {
   const [dark, setDark] = useState(false);
   const [activeWorkers, setActiveWorkers] = useState<any[]>([]);
@@ -138,7 +140,7 @@ export function TopControls({
         {dark ? <Sun className="size-5 text-amber-400 animate-pulse-soft" /> : <Moon className="size-5 text-slate-700" />}
       </button>
       <div className="group relative">
-        <Link href="/profile" className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
+        <Link href={profileHref} className="relative grid size-12 place-items-center rounded-full text-sm font-bold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:shadow-md">
           <span className="grid size-12 place-items-center overflow-hidden rounded-full bg-[#C66170]">
             {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="size-full object-cover" /> : name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
           </span>
@@ -150,9 +152,9 @@ export function TopControls({
               <p className="truncate text-sm font-bold text-black dark:text-white">{name}</p>
               <p className="text-xs text-black/45 dark:text-white/45">Account staff</p>
             </div>
-            <Link href="/profile" className="mt-2 flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
+            <Link href={profileHref} className="mt-2 flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
               <UserRound className="size-4" />
-              Profilo
+              {userId === "PC_CASSA" ? "Cambia profilo" : "Profilo"}
             </Link>
             <Link href="/my-shifts" className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
               <CalendarDays className="size-4" />

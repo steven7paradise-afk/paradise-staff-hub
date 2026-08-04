@@ -136,8 +136,9 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
+  const isPcCassa = pcMode;
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
   const settingsKeys = [
@@ -175,7 +176,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         },
       }).catch(() => null)
     : Promise.resolve(null);
-
   const unreadNotificationsPromise = session?.user?.id
     ? prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
     : Promise.resolve(0);
@@ -186,6 +186,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     currentUserPromise,
     unreadNotificationsPromise,
   ]);
+  const displayUser = isPcCassa && pcDisplayUser ? pcDisplayUser : currentUser;
 
   const settingsMap = new Map(settingsList.map((s) => [s.key, s]));
   const sidebarConfigSetting = settingsMap.get("sidebar_configuration") || null;
@@ -349,8 +350,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     iconName: item.iconName,
     section: item.section,
   }));
-  if (session?.user?.id === "PC_CASSA") {
-    sidebarItems = sidebarItems.filter(item => item.href === "/appointments" || item.href === "/service-forms");
+  let effectiveSidebarConfig = sidebarConfig;
+  if (isPcCassa) {
+    sidebarItems = sidebarItems
+      .filter(item => item.href === "/appointments" || item.href === "/service-forms")
+      .map((item) => item.href === "/appointments" ? { ...item, href: "/appointments/buenos-aires", label: "Appuntamenti" } : item);
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms"] }];
   }
   const dateLabel = new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
@@ -373,12 +378,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           {/* Hamburger Drawer */}
           <MobileMenuDrawer
             logoUrl={branding.logo_url}
-            userName={currentUser?.name ?? session?.user?.name ?? ""}
-            userPhoto={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null}
-            roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
+            userPhoto={displayUser?.photo_url ? resolveDrivePhotoUrl(displayUser.photo_url) : null}
+            roleLabel={isPcCassa ? "PC Cassa" : currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
-            sidebarConfig={sidebarConfig}
+            sidebarConfig={effectiveSidebarConfig}
             logoutButton={
               <LogoutButton className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] px-4 py-3.5 text-sm font-black uppercase tracking-[0.14em] text-slate-300 shadow-inner transition-all duration-200 hover:border-red-400/30 hover:bg-red-500/15 hover:text-red-200" />
             }
@@ -418,13 +423,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         <div className="flex-1 min-h-0 flex flex-col hidden xl:flex">
           <DesktopSidebarNav
             logoUrl={branding.logo_url}
-            userName={currentUser?.name ?? session?.user?.name ?? ""}
-            userPhoto={currentUser?.photo_url ?? null}
-            roleLabel={currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
+            userPhoto={displayUser?.photo_url ?? null}
+            roleLabel={isPcCassa ? "PC Cassa" : currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
             currentRole={currentRole}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
-            sidebarConfig={sidebarConfig}
+            sidebarConfig={effectiveSidebarConfig}
           />
         </div>
 
@@ -442,7 +447,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
         <div className="mb-5 hidden justify-end xl:flex">
-          <TopControls unread={unreadNotifications} name={currentUser?.name ?? session?.user?.name ?? "Paradise"} photoUrl={currentUser?.photo_url ? resolveDrivePhotoUrl(currentUser.photo_url) : null} userId={session?.user?.id || ""} />
+          <TopControls
+            unread={unreadNotifications}
+            name={displayUser?.name ?? session?.user?.name ?? "Paradise"}
+            photoUrl={displayUser?.photo_url ? resolveDrivePhotoUrl(displayUser.photo_url) : null}
+            userId={isPcCassa ? "PC_CASSA" : session?.user?.id || ""}
+            profileHref={isPcCassa ? "/appointments/buenos-aires?choose=1" : "/profile"}
+          />
         </div>
         {!hideHeader ? <header className={cn("mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", hidePageHeaderOnMobile && "hidden sm:flex")}>
           <div>

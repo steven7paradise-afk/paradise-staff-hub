@@ -179,15 +179,17 @@ export function MobileMenuDrawer({
             <div className="space-y-8 pb-4">
               {sections.map((section) => (
                 <div key={section.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                    className="mb-3 flex w-full items-center justify-between rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.04]"
-                  >
-                    <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-400/85">{section.title}</p>
-                    <ChevronDown className={cn("size-4 text-slate-500 transition-transform", openSectionId === section.id && "rotate-180")} />
-                  </button>
-                  {openSectionId === section.id || searchQuery.trim() ? (
+                  {section.title ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
+                      className="mb-3 flex w-full items-center justify-between rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.04]"
+                    >
+                      <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-400/85">{section.title}</p>
+                      <ChevronDown className={cn("size-4 text-slate-500 transition-transform", openSectionId === section.id && "rotate-180")} />
+                    </button>
+                  ) : null}
+                  {openSectionId === section.id || !section.title || searchQuery.trim() ? (
                     <div className="space-y-1.5">
                       {section.items.map((item) => {
                         const isActive = isItemActive(item.href);

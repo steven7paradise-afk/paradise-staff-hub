@@ -298,6 +298,9 @@ export default async function AppointmentsPage({
   }
 
   const corsoUsers = localUsers.filter((user) => isCorsoLocation(user.location?.name));
+  const pcDisplayUser = isPC && kioskWorkerName
+    ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
+    : null;
 
   const cowlendarTeamOptionsById = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
   const cowlendarTeammates = [
@@ -471,7 +474,14 @@ export default async function AppointmentsPage({
   }
 
   return (
-    <AppShell title="Appuntamenti" subtitle="Agenda interna appuntamenti." role={role} hideHeader>
+    <AppShell
+      title="Appuntamenti"
+      subtitle="Agenda interna appuntamenti."
+      role={role}
+      hideHeader
+      pcMode={isPC}
+      pcDisplayUser={pcDisplayUser ? { name: pcDisplayUser.name, photo_url: pcDisplayUser.photo_url } : kioskWorkerName ? { name: kioskWorkerName, photo_url: null } : null}
+    >
       {!hasCowlendarToken() ? (
         <div className="p-4 sm:p-6 lg:p-8">
           <section className="rounded-[28px] border border-[#F1D7DD] bg-[#FFF7F9] px-5 py-6 text-sm text-[#A15062] shadow-sm">
