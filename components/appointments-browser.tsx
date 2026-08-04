@@ -1351,7 +1351,9 @@ export function AppointmentsBrowser({
           "",
         serviceTitle: booking.serviceTitle || "",
         depositPaid:
-          booking.priceAmount != null ? String(booking.priceAmount) : "",
+          booking.bookingStr && booking.priceAmount != null
+            ? String(booking.priceAmount)
+            : "",
         paid: "",
         staffIds: matchEmployeeIdsForBooking(
           booking,
