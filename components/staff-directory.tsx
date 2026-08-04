@@ -1051,20 +1051,22 @@ export function StaffDirectory({
             )}
 
             {/* 1. Malattie prima del profilo personale */}
-            <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-3">
-                <div className="flex items-center gap-2">
-                  <HeartPulse className="size-4 text-[#C66170]" />
-                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Malattie Anno Corrente</h2>
+            <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <HeartPulse className="size-4" />
+                  </div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Malattie Anno Corrente</h2>
                 </div>
                 <Badge tone={(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "pink" : "green"}>
                   {(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "Da controllare" : "Ok"}
                 </Badge>
               </div>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-black/5 bg-[#fcfaf8] p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Totale Giorni</p>
-                  <p className="mt-1 text-2xl font-black text-neutral-900">{editForm.sicknessStats?.totalDays ?? 0}</p>
+                <div className="rounded-2xl border border-black/5 bg-[#FAF7F6] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-black/40">Totale Giorni</p>
+                  <p className="mt-1 text-2xl font-black text-[#1F1F1F]">{editForm.sicknessStats?.totalDays ?? 0}</p>
                 </div>
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                   <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700/70">Giustificate</p>
@@ -1079,10 +1081,12 @@ export function StaffDirectory({
 
             {/* 2. Profilo Personale, Posizione Lavorativa, Account e Sicurezza */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                  <User className="size-4 text-[#C66170]" />
-                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Profilo Personale</h2>
+              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <User className="size-4" />
+                  </div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Profilo Personale</h2>
                 </div>
 
                 <div className="space-y-3.5 mt-4">
@@ -1165,10 +1169,12 @@ export function StaffDirectory({
                 </div>
               </div>
 
-              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                  <Briefcase className="size-4 text-[#C66170]" />
-                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Posizione Lavorativa</h2>
+              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <Briefcase className="size-4" />
+                  </div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Posizione Lavorativa</h2>
                 </div>
 
                 <div className="space-y-3.5 mt-4">
@@ -1275,10 +1281,12 @@ export function StaffDirectory({
                 </div>
               </div>
 
-              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                  <Shield className="size-4 text-[#C66170]" />
-                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Account e Sicurezza</h2>
+              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
+                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <Shield className="size-4" />
+                  </div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Account e Sicurezza</h2>
                 </div>
 
                 <div className="space-y-4 mt-4">
@@ -1325,16 +1333,18 @@ export function StaffDirectory({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm lg:col-span-2">
-                <div className="flex flex-col gap-3 border-b border-black/5 pb-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="size-4 text-[#C66170]" />
-                    <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Storico contratti e rinnovi</h2>
+              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm lg:col-span-2">
+                <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                      <ClipboardList className="size-4" />
+                    </div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
                   </div>
                   <button
                     type="button"
                     onClick={openRenewalForm}
-                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-2xl border border-[#C66170]/20 bg-[#C66170]/5 px-3 text-xs font-black uppercase tracking-wider text-[#B85B68] transition hover:bg-[#C66170]/10 active:scale-[0.98]"
+                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#FCE5F3] px-4 text-xs font-bold text-[#B83D7F] transition hover:bg-[#F9D4E8] active:scale-[0.98]"
                   >
                     <Plus className="size-4" />
                     Pianifica rinnovo
@@ -1342,7 +1352,7 @@ export function StaffDirectory({
                 </div>
 
                 {showRenewalForm && (
-                  <div className="mt-4 rounded-[22px] border border-[#C66170]/15 bg-[#fff7fb] p-4">
+                  <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                       <label className="space-y-1">
                         <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data inizio rinnovo</span>
@@ -1383,7 +1393,7 @@ export function StaffDirectory({
                       <button
                         type="button"
                         onClick={planContractRenewal}
-                        className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#C66170] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#B85B68] active:scale-[0.98]"
+                        className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#D96B94] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-[0.98]"
                       >
                         Aggiungi rinnovo
                       </button>
@@ -1414,7 +1424,7 @@ export function StaffDirectory({
                             <td className="py-3">{c.fine}</td>
                             <td className="py-3">
                               <span className={cn(
-                                "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide",
+                                "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide",
                                 c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
                                 c.stato === "Completato" && "bg-neutral-100 text-neutral-600",
                                 c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100"
@@ -1423,7 +1433,7 @@ export function StaffDirectory({
                               </span>
                             </td>
                             <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
-                            <td className="py-3 text-[#B85B68] font-bold">{c.scadenza}</td>
+                            <td className="py-3 text-[#D96B94] font-bold">{c.scadenza}</td>
                             <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
                             <td className="py-3 text-right">
                               {c.historyIndex !== undefined ? (
@@ -1453,12 +1463,16 @@ export function StaffDirectory({
                 </div>
               </div>
 
-              <div className="bg-white rounded-[28px] border border-black/5 p-6 shadow-sm flex flex-col">
-                <div className="flex items-center gap-2 border-b border-black/5 pb-3">
-                  <SlidersHorizontal className="size-4 text-[#C66170]" />
-                  <h2 className="text-sm font-black uppercase tracking-wider text-neutral-600">Note amministrazione HR (interne)</h2>
+              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm flex flex-col">
+                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <SlidersHorizontal className="size-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Note HR (interne)</h2>
+                    <p className="text-[10px] text-neutral-400 font-semibold">Visibili solo ad HR ed amministratori</p>
+                  </div>
                 </div>
-                <p className="text-[10px] text-neutral-400 font-semibold mt-1">Visibile solo ad amministratori e responsabili HR</p>
 
                 <div className="flex-1 flex flex-col justify-between mt-4">
                   <textarea
@@ -1467,9 +1481,9 @@ export function StaffDirectory({
                       const text = e.target.value.slice(0, 1000);
                       setEditForm(prev => prev ? { ...prev, hrNotes: text } : null);
                     }}
-                    placeholder="Scrivi una nota interna..."
+                    placeholder="Scrivi qui la nota interna per l'amministrazione HR..."
                     rows={6}
-                    className="w-full flex-1 rounded-2xl border border-black/10 bg-white/80 p-3.5 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20 resize-none font-medium"
+                    className="w-full flex-1 rounded-2xl border border-black/10 bg-[#FAF7F6] p-3.5 text-sm outline-none transition focus:border-[#D96B94] resize-none font-medium text-[#1F1F1F]"
                   />
                   <div className="text-[10px] text-neutral-400 font-bold text-right mt-2">
                     {(editForm.hrNotes || "").length}/1000 caratteri
@@ -1478,26 +1492,25 @@ export function StaffDirectory({
               </div>
             </div>
 
-            <div className="flex justify-center gap-4 pt-4 border-t border-black/5">
-              <Button
+            <div className="flex items-center justify-between pt-6 border-t border-black/5">
+              <button
                 type="button"
-                variant="soft"
                 onClick={() => {
                   setIsEditing(false);
                   setSelectedEmployee(null);
                   resetRenewalForm();
                 }}
-                className="min-w-[150px] border border-black/10 bg-white text-neutral-600"
+                className="rounded-2xl bg-[#F8EEF3] px-7 py-3 text-sm font-bold text-black/70 transition hover:bg-[#F2E0EA] active:scale-95"
               >
                 Annulla
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
                 disabled={submitting}
-                className="min-w-[180px] bg-gradient-to-r from-paradise-pink to-[#ffa8dd] text-paradise-noir font-black shadow-md hover:shadow-lg transition active:scale-[0.98]"
+                className="rounded-2xl bg-[#D96B94] px-8 py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#C85982] active:scale-95 disabled:opacity-60"
               >
                 {submitting ? "Salvataggio..." : "Salva modifiche"}
-              </Button>
+              </button>
             </div>
           </form>
         </div>
