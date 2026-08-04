@@ -1356,7 +1356,7 @@ export function AppointmentsBrowser({
         staffIds: matchEmployeeIdsForBooking(
           booking,
           clientControlEmployees,
-        ).slice(0, 1),
+        ),
         shopifyOrder: booking.bookingStr
           ? booking.bookingStr.replace(/^#/, "")
           : "",
@@ -1404,8 +1404,8 @@ export function AppointmentsBrowser({
       return {
         ...current,
         staffIds: current.staffIds.length
-          ? current.staffIds.slice(0, 1)
-          : matchEmployeeIdsForBooking(booking, employees).slice(0, 1),
+          ? current.staffIds
+          : matchEmployeeIdsForBooking(booking, employees),
         customNoteText:
           current.customNoteText || bookingNotes?.shopifyNote || "",
       };
@@ -2547,17 +2547,28 @@ export function AppointmentsBrowser({
                               onClick={() =>
                                 setClientControlForm((prev) => ({
                                   ...prev,
-                                  staffIds: selected ? [] : [employee.id],
+                                  staffIds: selected
+                                    ? prev.staffIds.filter((id) => id !== employee.id)
+                                    : [...prev.staffIds, employee.id],
                                 }))
                               }
                               className={[
-                                "rounded-xl border px-3 py-2 text-left text-xs font-black transition",
+                                "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs font-black transition",
                                 selected
                                   ? "border-[#E88AC5] bg-[#FCE5F3] text-[#B83D7F]"
                                   : "border-black/10 bg-white text-black/60 hover:bg-black/[0.02]",
                               ].join(" ")}
                             >
-                              {employee.name}
+                              <span className="truncate">{employee.name}</span>
+                              <span
+                                className={`grid size-4 shrink-0 place-items-center rounded-md border ${
+                                  selected
+                                    ? "border-[#B83D7F] bg-[#B83D7F] text-white"
+                                    : "border-black/20 bg-white"
+                                }`}
+                              >
+                                {selected && <Check className="size-3" strokeWidth={3} />}
+                              </span>
                             </button>
                           );
                         })
