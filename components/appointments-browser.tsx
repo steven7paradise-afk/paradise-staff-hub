@@ -739,7 +739,7 @@ function PcStaffLockScreen({
                       <img
                         src={photoUrl}
                         alt={worker.name}
-                        className="size-full rounded-full object-cover object-top"
+                        className="size-full scale-125 rounded-full object-cover object-[50%_24%]"
                       />
                     ) : (
                       <div className="grid size-full place-items-center rounded-full bg-[#FCE6EF] font-serif text-3xl font-semibold text-[#F12D83]">

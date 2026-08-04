@@ -122,7 +122,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                 >
                   <div className="relative grid aspect-square w-full max-w-36 place-items-center rounded-full border-[5px] border-[#F9C8DF] bg-white p-1 shadow-[0_10px_28px_rgba(241,45,131,0.12)] transition group-hover:border-[#F12D83]">
                     {photoUrl ? (
-                      <img src={photoUrl} alt={worker.name} className="size-full rounded-full object-cover object-top" />
+                      <img src={photoUrl} alt={worker.name} className="size-full scale-125 rounded-full object-cover object-[50%_24%]" />
                     ) : (
                       <div className="grid size-full place-items-center rounded-full bg-[#FCE6EF] font-serif text-3xl font-semibold text-[#F12D83]">
                         {initials(worker.name)}

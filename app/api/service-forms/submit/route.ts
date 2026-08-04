@@ -6,10 +6,52 @@ import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
 import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
 import { isPinValidForUser } from "@/lib/pin";
+import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+
+type FormSessionUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+  sedeId?: string | null;
+};
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
+  let sessionUser = session?.user as FormSessionUser | undefined;
+  const pcAuth = !sessionUser
+    ? await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value)
+    : null;
+
+  if (!sessionUser && pcAuth) {
+    const selectedWorkerName = request.cookies.get(appointmentsPcWorkerCookieName)?.value
+      ? decodeURIComponent(request.cookies.get(appointmentsPcWorkerCookieName)?.value || "")
+      : "";
+    const selectedWorker = selectedWorkerName
+      ? await prisma.user.findFirst({
+          where: { name: selectedWorkerName, active: true, sede_id: pcAuth.locationId },
+          select: { id: true, name: true, email: true, role: true, sede_id: true },
+        })
+      : null;
+
+    sessionUser = selectedWorker
+      ? {
+          id: selectedWorker.id,
+          name: selectedWorker.name,
+          email: selectedWorker.email,
+          role: selectedWorker.role,
+          sedeId: selectedWorker.sede_id,
+        }
+      : {
+          id: "u-super-admin",
+          name: pcAuth.name,
+          email: "cassa@paradise.tech",
+          role: "RESPONSABILE",
+          sedeId: pcAuth.locationId,
+        };
+  }
+
+  if (!sessionUser?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -42,7 +84,7 @@ export async function POST(request: NextRequest) {
           if (file.size > 80 * 1024 * 1024) {
             return NextResponse.json({ error: `File per "${field.label}" supera il limite di 80 MB.` }, { status: 400 });
           }
-          const storagePath = await uploadPrivateDocument(session.user.id, file);
+          const storagePath = await uploadPrivateDocument(sessionUser.id, file);
           // Store the path, original name, and mime type
           answersObj[field.id] = {
             storagePath,
@@ -56,8 +98,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const location = session.user.sedeId
-      ? await prisma.location.findUnique({ where: { id: session.user.sedeId } })
+    const location = sessionUser.sedeId
+      ? await prisma.location.findUnique({ where: { id: sessionUser.sedeId } })
       : null;
 
     if (isCashClosing) {
@@ -68,7 +110,7 @@ export async function POST(request: NextRequest) {
       }
 
       const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
+        where: { id: sessionUser.id },
         select: { id: true, name: true, role: true, pin_hash: true, pin_lookup: true },
       });
 
@@ -86,7 +128,7 @@ export async function POST(request: NextRequest) {
         delete answersObj[pinField.id];
       }
 
-      if (!location || !session.user.sedeId) {
+      if (!location || !sessionUser.sedeId) {
         return NextResponse.json({ error: "Sede non assegnata: impossibile registrare la chiusura cassa." }, { status: 400 });
       }
 
@@ -101,7 +143,7 @@ export async function POST(request: NextRequest) {
       const cashClosing = await prisma.cashClosing.create({
         data: {
           user_id: user.id,
-          location_id: session.user.sedeId,
+          location_id: sessionUser.sedeId,
           date: accountingDate,
           withdrawn,
           fund,
@@ -142,9 +184,9 @@ export async function POST(request: NextRequest) {
     const response = await prisma.serviceFormResponse.create({
       data: {
         form_id: formId,
-        user_id: session.user.id,
-        user_role: session.user.role,
-        user_location_id: session.user.sedeId || null,
+        user_id: sessionUser.id,
+        user_role: sessionUser.role,
+        user_location_id: sessionUser.sedeId || null,
         user_location_name: location?.name || null,
         answers: answersObj,
       },
@@ -217,8 +259,8 @@ export async function POST(request: NextRequest) {
       await appendFormResponseToGoogleSheet({
         formName: form.name,
         fields,
-        employeeName: session.user.name ?? "Dipendente",
-        employeeEmail: session.user.email ?? "",
+        employeeName: sessionUser.name ?? "Dipendente",
+        employeeEmail: sessionUser.email ?? "",
         locationName: location?.name ?? "Nessuna sede",
         answers: answersObj,
       });
@@ -247,8 +289,8 @@ export async function POST(request: NextRequest) {
           });
           const roleRecipients = matchedUsers.filter((u) => {
             if (u.role === "ZERO" || u.role === "SUPER_ADMIN" || u.role === "ADMIN") return true;
-            if (!session.user.sedeId) return true;
-            return u.sede_id === session.user.sedeId;
+            if (!sessionUser.sedeId) return true;
+            return u.sede_id === sessionUser.sedeId;
           });
           recipients.push(...roleRecipients);
         }
@@ -270,12 +312,12 @@ export async function POST(request: NextRequest) {
           return true;
         });
       } else {
-        recipients = session.user.sedeId
+        recipients = sessionUser.sedeId
           ? await prisma.user.findMany({
               where: {
                 active: true,
                 role: "RESPONSABILE",
-                sede_id: session.user.sedeId,
+                sede_id: sessionUser.sedeId,
               },
             })
           : [];
@@ -299,7 +341,7 @@ export async function POST(request: NextRequest) {
           recipients.map((r) => ({
             user_id: r.id,
             title: `Modulo Compilato: ${form.name}`,
-            message: `Il dipendente ${session.user.name ?? "Dipendente"} ha inviato una risposta per il modulo "${form.name}".`,
+            message: `Il dipendente ${sessionUser.name ?? "Dipendente"} ha inviato una risposta per il modulo "${form.name}".`,
             type: "FORM",
             action_url: `/service-forms/responses/${response.id}`,
           }))
@@ -307,7 +349,7 @@ export async function POST(request: NextRequest) {
 
         // Send Email
         const emailTemplate = emailTemplates.formResponseSubmitted(
-          session.user.name ?? "Dipendente",
+          sessionUser.name ?? "Dipendente",
           form.name,
           location?.name ?? "Nessuna sede"
         );

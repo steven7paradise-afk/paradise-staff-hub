@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { checkPCAuthorization, appointmentsPcCookieName, appointmentsPcWorkerCookieName } from "@/lib/appointments-pc-auth";
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
@@ -34,9 +34,10 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   let sessionUser = session?.user;
   let isPC = false;
   let pcLocationId = "";
+  let pcDisplayUser: { name: string; photo_url?: string | null } | null = null;
+  const cookieStore = await cookies();
 
   if (!sessionUser) {
-    const cookieStore = await cookies();
     const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
     const pcAuth = await checkPCAuthorization(pcToken);
     if (pcAuth) {
@@ -49,6 +50,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         role: "RESPONSABILE",
         sedeId: pcAuth.locationId,
       } as any;
+      const selectedWorkerName = cookieStore.get(appointmentsPcWorkerCookieName)?.value
+        ? decodeURIComponent(cookieStore.get(appointmentsPcWorkerCookieName)?.value || "")
+        : "";
+      if (selectedWorkerName) {
+        pcDisplayUser = await prisma.user.findFirst({
+          where: { name: selectedWorkerName, active: true, sede_id: pcAuth.locationId },
+          select: { name: true, photo_url: true },
+        }).catch(() => null);
+      }
     }
   }
 
@@ -67,7 +77,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
 
   const locationId = sessionUser.sedeId;
 
-  const cookieStore = await cookies();
   const headerStore = await headers();
   const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
   const tabletDevice = requestedDevice
@@ -85,13 +94,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
       orderBy: { created_at: "desc" },
     }),
     prisma.setting.findUnique({ where: { key: SERVICE_FORMS_VISIBILITY_KEY } }).catch(() => null),
-    prisma.attendanceLog.findFirst({
-      where: {
-        user_id: session.user.id,
-        date: new Date(today),
-      },
-      orderBy: { timestamp: "desc" },
-    }).catch(() => null),
+    isPC
+      ? Promise.resolve(null)
+      : prisma.attendanceLog.findFirst({
+          where: {
+            user_id: sessionUser.id,
+            date: new Date(today),
+          },
+          orderBy: { timestamp: "desc" },
+        }).catch(() => null),
   ]);
 
   const visibilityRules = normalizeServiceFormsVisibility(visibilitySetting?.value);
@@ -131,7 +142,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   const responses = await prisma.serviceFormResponse.findMany({
     where: {
       OR: [
-        { user_id: session.user.id },
+        { user_id: sessionUser.id },
         ...(locationId ? [{ user_location_id: locationId }] : []),
         { status: { not: "ARCHIVED" } },
       ],
@@ -150,18 +161,18 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     const notifyUserIds = r.form?.notify_user_ids as string[] | null;
     const notifyRoles = r.form?.notify_roles as string[] | null;
 
-    const isUserNotified = notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(session.user.id);
+    const isUserNotified = notifyUserIds && Array.isArray(notifyUserIds) && notifyUserIds.includes(sessionUser.id);
     const isRoleNotified = notifyRoles && Array.isArray(notifyRoles) && notifyRoles.includes(role);
     const isNominated = isUserNotified || isRoleNotified;
 
     if (r.status === "ARCHIVED") {
       // For archived ones: only see own submission or where explicitly nominated
-      return r.user_id === session.user.id || isNominated;
+      return r.user_id === sessionUser.id || isNominated;
     }
 
     // For active ones:
     // 1. Own submission
-    if (r.user_id === session.user.id) return true;
+    if (r.user_id === sessionUser.id) return true;
     
     // 2. Same salon
     if (locationId && r.user_location_id === locationId) return true;
@@ -249,13 +260,13 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   });
 
   return (
-    <AppShell title="Forms" role={role} hideHeader>
+    <AppShell title="Forms" role={role} hideHeader pcMode={isPC} pcDisplayUser={pcDisplayUser}>
       <StaffFormsViewer 
         forms={serializedForms} 
         employees={serializedEmployees} 
         initialResponses={serializedResponses}
-        currentUserId={session.user.id}
-        currentUserName={session.user.name || "Dipendente"}
+        currentUserId={sessionUser.id}
+        currentUserName={pcDisplayUser?.name || sessionUser.name || "Dipendente"}
         currentUserRole={role}
         autoFillFormId={fillId}
         autoFillFormName={fill}
