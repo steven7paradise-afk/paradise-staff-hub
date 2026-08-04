@@ -322,8 +322,8 @@ export default async function AppointmentsPage({
   const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
   const [shopifyOrderNames, statusSetting, sheetStatusOverrides] = await Promise.all([
-    getShopifyOrderNamesBulk(bookings.map((b: any) => b.order_id).filter(Boolean)),
-    prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }),
+    getShopifyOrderNamesBulk(bookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
+    prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     getAppointmentStatusesFromGoogleSheet(bookings.map((booking: any) => ({
       id: String(booking.id),
       customerName:
@@ -341,7 +341,7 @@ export default async function AppointmentsPage({
         booking.form_data?.telefono ||
         null,
       startDate: booking.start_date,
-    }))),
+    }))).catch(() => ({})),
   ]);
 
   const statusOverrides =

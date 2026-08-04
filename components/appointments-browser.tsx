@@ -2094,7 +2094,7 @@ export function AppointmentsBrowser({
     }
 
     const formFields = selectedBooking.extraDetails.filter((item) => {
-      const label = item.label.toLowerCase();
+      const label = String(item?.label || "").toLowerCase();
       return (
         label.startsWith("nome") ||
         label.startsWith("cognome") ||
