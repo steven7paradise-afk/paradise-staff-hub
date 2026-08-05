@@ -45,6 +45,7 @@ import {
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { AppointmentSignModal } from "./appointment-sign-modal";
+import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 
 type ViewMode = "day" | "week" | "month";
 type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
