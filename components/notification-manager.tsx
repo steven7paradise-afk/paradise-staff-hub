@@ -7,20 +7,27 @@ import {
   BellRing,
   Bookmark,
   CalendarDays,
+  Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
+  Clock,
+  ExternalLink,
   FileCheck2,
+  LayoutGrid,
   Mail,
   MailPlus,
   Megaphone,
-  MessageSquareText,
+  Newspaper,
   PencilLine,
   Pin,
   Search,
   Send,
-  ShieldCheck,
+  Share2,
+  Sparkles,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -43,16 +50,27 @@ type Recipient = { id: string; name: string; locationId: string | null; location
 type LocationOption = { id: string; name: string };
 type Filter = "ALL" | "IMPORTANT" | "UNREAD";
 
-const typeStyles: Record<string, { icon: typeof Megaphone; bg: string; pill: string }> = {
-  COMUNICAZIONE: { icon: Megaphone, bg: "bg-pink-100 text-[#C66170]", pill: "bg-pink-100 text-[#C66170]" },
-  TASK: { icon: CheckCircle2, bg: "bg-violet-100 text-violet-700", pill: "bg-violet-100 text-violet-700" },
-  RICHIESTA: { icon: FileCheck2, bg: "bg-amber-100 text-amber-700", pill: "bg-amber-100 text-amber-700" },
-  DOCUMENTO: { icon: Mail, bg: "bg-blue-100 text-blue-700", pill: "bg-blue-100 text-blue-700" },
-  TIMBRATURA: { icon: BellRing, bg: "bg-rose-100 text-rose-700", pill: "bg-rose-100 text-rose-700" },
-  CONTRACT_EXPIRY: { icon: AlertTriangle, bg: "bg-red-100 text-red-700", pill: "bg-red-100 text-red-700" },
+const typeStyles: Record<string, { icon: typeof Megaphone; bg: string; pill: string; label: string }> = {
+  COMUNICAZIONE: { icon: Megaphone, bg: "bg-pink-100 text-[#C66170]", pill: "bg-pink-100 text-[#C66170]", label: "Comunicazione" },
+  TASK: { icon: CheckCircle2, bg: "bg-violet-100 text-violet-700", pill: "bg-violet-100 text-violet-700", label: "Task" },
+  RICHIESTA: { icon: FileCheck2, bg: "bg-amber-100 text-amber-700", pill: "bg-amber-100 text-amber-700", label: "Richiesta" },
+  DOCUMENTO: { icon: Mail, bg: "bg-blue-100 text-blue-700", pill: "bg-blue-100 text-blue-700", label: "Documento" },
+  TIMBRATURA: { icon: BellRing, bg: "bg-rose-100 text-rose-700", pill: "bg-rose-100 text-rose-700", label: "Timbratura" },
+  CONTRACT_EXPIRY: { icon: AlertTriangle, bg: "bg-red-100 text-red-700", pill: "bg-red-100 text-red-700", label: "Contratto" },
 };
 
 function dateLabel(value: string) {
+  return new Intl.DateTimeFormat("it-IT", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Rome",
+  }).format(new Date(value));
+}
+
+function shortDateLabel(value: string) {
   return new Intl.DateTimeFormat("it-IT", {
     day: "numeric",
     month: "short",
@@ -78,10 +96,10 @@ function needsSignature(item: NotificationItem) {
 }
 
 function notificationStatus(item: NotificationItem) {
-  if (item.read) return { label: "Letta", className: "bg-emerald-100 text-emerald-700" };
-  if (needsSignature(item)) return { label: "Da confermare", className: "bg-amber-100 text-amber-700" };
-  if (item.type === "DOCUMENTO") return { label: "Documento", className: "bg-violet-100 text-violet-700" };
-  return { label: "Nuova", className: "bg-pink-100 text-[#C66170]" };
+  if (item.read) return { label: "Letta", className: "bg-emerald-50 text-emerald-700 border border-emerald-200" };
+  if (needsSignature(item)) return { label: "Da confermare", className: "bg-amber-50 text-amber-700 border border-amber-200" };
+  if (item.type === "DOCUMENTO") return { label: "Documento", className: "bg-blue-50 text-blue-700 border border-blue-200" };
+  return { label: "Nuova", className: "bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-2xs" };
 }
 
 export function NotificationManager({
@@ -100,6 +118,7 @@ export function NotificationManager({
   currentUserName?: string;
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  const [viewMode, setViewMode] = useState<"BLOG" | "LIST">("BLOG");
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(role === "RESPONSABILE" ? "location" : "all");
@@ -109,12 +128,13 @@ export function NotificationManager({
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
   const [items, setItems] = useState(notifications);
-  const [selected, setSelected] = useState<NotificationItem | null>(null);
+
+  // Active communication for the Blog Reader view (defaults to latest)
+  const [activeItem, setActiveItem] = useState<NotificationItem | null>(() => notifications[0] ?? null);
+
   const [filter, setFilter] = useState<Filter>("ALL");
   const [query, setQuery] = useState("");
   const router = useRouter();
-  const clickCountsRef = useRef<Record<string, number>>({});
-  const clickTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const recipientsByLocation = locations.map((location) => ({
     ...location,
@@ -124,13 +144,10 @@ export function NotificationManager({
 
   useEffect(() => {
     setItems(notifications);
+    if (!activeItem && notifications.length > 0) {
+      setActiveItem(notifications[0]);
+    }
   }, [notifications]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(clickTimeoutsRef.current).forEach((timeoutId) => clearTimeout(timeoutId));
-    };
-  }, []);
 
   const stats = useMemo(() => {
     return {
@@ -144,18 +161,17 @@ export function NotificationManager({
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items
-      .filter((item) => filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true)
+      .filter((item) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true))
       .filter((item) => !q || `${item.title} ${item.message} ${item.type}`.toLowerCase().includes(q))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [filter, items, query]);
 
-  const importantItems = items.filter(isImportant).slice(0, 3);
-  const unreadItems = items.filter((item) => !item.read).slice(0, 4);
-  const eventItems = items.filter((item) => /riunione|evento|calendar|scadenza|appuntamento/i.test(`${item.title} ${item.message}`)).slice(0, 1);
-
   async function markRead(notification: NotificationItem) {
     if (notification.read) return;
-    setItems((current) => current.map((item) => item.id === notification.id ? { ...item, read: true } : item));
+    setItems((current) => current.map((item) => (item.id === notification.id ? { ...item, read: true } : item)));
+    if (activeItem?.id === notification.id) {
+      setActiveItem((current) => (current ? { ...current, read: true } : current));
+    }
     await fetch("/api/notifications/read", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -168,51 +184,23 @@ export function NotificationManager({
     const ok = window.confirm("Eliminare questa notifica?");
     if (!ok) return;
     setItems((current) => current.filter((item) => item.id !== notification.id));
+    if (activeItem?.id === notification.id) {
+      const remaining = items.filter((item) => item.id !== notification.id);
+      setActiveItem(remaining[0] ?? null);
+    }
     await fetch(`/api/notifications/${notification.id}`, { method: "DELETE" });
     router.refresh();
   }
 
-  async function openNotification(notification: NotificationItem) {
-    await markRead(notification);
-    const href = notification.actionUrl ?? (notification.type === "RICHIESTA" ? "/requests" : notification.type === "DOCUMENTO" ? "/documents" : notification.type === "TIMBRATURA" ? "/attendance" : "");
-    if (href && href.startsWith("/service-forms/responses/")) {
-      const responseId = href.split("/").pop();
-      if (responseId) {
-        setSelectedResponseIdForModal(responseId);
-        return;
-      }
+  // 1-Click action: Select and view in Blog Reader
+  function selectCommunication(item: NotificationItem) {
+    setActiveItem(item);
+    if (!item.read) {
+      void markRead(item);
     }
-    if (!href || href === "/notifications" || notification.type === "COMUNICAZIONE") {
-      setSelected({ ...notification, read: true });
-      return;
+    if (viewMode === "LIST") {
+      setViewMode("BLOG");
     }
-    router.push(href);
-  }
-
-  function handleNotificationClick(notification: NotificationItem) {
-    const currentCount = (clickCountsRef.current[notification.id] ?? 0) + 1;
-    clickCountsRef.current[notification.id] = currentCount;
-
-    const existingTimeout = clickTimeoutsRef.current[notification.id];
-    if (existingTimeout) clearTimeout(existingTimeout);
-
-    clickTimeoutsRef.current[notification.id] = setTimeout(() => {
-      const finalCount = clickCountsRef.current[notification.id] ?? 0;
-      delete clickCountsRef.current[notification.id];
-      delete clickTimeoutsRef.current[notification.id];
-
-      if (finalCount >= 3) {
-        void deleteNotification(notification);
-        return;
-      }
-
-      if (finalCount === 2) {
-        void openNotification(notification);
-        return;
-      }
-
-      void markRead(notification);
-    }, 260);
   }
 
   async function send() {
@@ -229,223 +217,494 @@ export function NotificationManager({
       setStatus(data.error ?? "Comunicazione non inviata.");
       return;
     }
+    const newPost: NotificationItem = {
+      id: String(Date.now()),
+      title,
+      message,
+      type: "COMUNICAZIONE",
+      page: 1,
+      read: true,
+      actionUrl: "/notifications",
+      createdAt: new Date().toISOString(),
+    };
+    setItems((prev) => [newPost, ...prev]);
+    setActiveItem(newPost);
     setTitle("");
     setMessage("");
-    setStatus(`Comunicazione inviata a ${data.sent} destinatari.`);
-    setTimeout(() => setOpen(false), 900);
+    setStatus(`✓ Comunicazione pubblicata con successo ed inviata a ${data.sent} destinatari.`);
+    setTimeout(() => {
+      setOpen(false);
+      setStatus("");
+    }, 1200);
     router.refresh();
   }
+
+  // Find next and previous index in filtered list
+  const activeIndex = activeItem ? filteredItems.findIndex((item) => item.id === activeItem.id) : -1;
+  const prevPost = activeIndex > 0 ? filteredItems[activeIndex - 1] : null;
+  const nextPost = activeIndex >= 0 && activeIndex < filteredItems.length - 1 ? filteredItems[activeIndex + 1] : null;
 
   return (
     <>
       <div className="w-full max-w-none space-y-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        {/* Top Header & View Controls */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-base text-black/55">Messaggi, avvisi e comunicazioni interne.</p>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs mb-1">
+              Blog & Comunicazioni
+            </span>
+            <h1 className="text-3xl font-black tracking-tight text-[#1F1F1F]">Comunicazioni Aziendali</h1>
+            <p className="mt-1 text-xs font-semibold text-black/55">
+              Il blog interno con i messaggi, gli avvisi e le disposizioni ufficiali Paradise.
+            </p>
           </div>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="grid grid-cols-3 rounded-2xl border border-black/10 bg-white p-1 text-sm font-semibold shadow-sm">
-              {[
-                ["ALL", "Tutte"],
-                ["IMPORTANT", "Importanti"],
-                ["UNREAD", "Non lette"],
-              ].map(([value, label]) => (
-                <button key={value} onClick={() => setFilter(value as Filter)} className={cn("rounded-xl px-6 py-3 transition", filter === value ? "bg-white text-[#E13D81] shadow-sm ring-1 ring-[#E13D81]/20" : "text-black/65")}>
-                  {label}
-                </button>
-              ))}
+            {/* View Mode Toggle: Blog Reader vs List */}
+            <div className="inline-flex items-center rounded-2xl border border-black/10 bg-white p-1 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("BLOG")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95",
+                  viewMode === "BLOG"
+                    ? "bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                    : "text-black/60 hover:text-black hover:bg-neutral-50"
+                )}
+              >
+                <Newspaper className="size-4" />
+                <span>Vista Blog</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("LIST")}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95",
+                  viewMode === "LIST"
+                    ? "bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                    : "text-black/60 hover:text-black hover:bg-neutral-50"
+                )}
+              >
+                <LayoutGrid className="size-4" />
+                <span>Vista Elenco</span>
+              </button>
             </div>
+
             {canSend ? (
-              <Button onClick={() => setOpen(true)} className="min-h-14 rounded-xl bg-[#DD2C72] px-8 text-white shadow-lg shadow-pink-200">
-                <MailPlus className="size-5" /> Nuova comunicazione
-              </Button>
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-6 py-3 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95"
+              >
+                <MailPlus className="size-4" /> Nuova comunicazione
+              </button>
             ) : null}
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-4 md:gap-6">
+        {/* Stats Metrics Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
           {[
-            { label: "Totali comunicazioni", shortLabel: "Totali", value: stats.total, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
-            { label: "Non lette", shortLabel: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
-            { label: "Da firmare", shortLabel: "Da firmare", value: stats.sign, icon: PencilLine, bg: "bg-amber-100 text-amber-700" },
-            { label: "Urgenti", shortLabel: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-rose-100 text-rose-700" },
+            { label: "Totali comunicazioni", value: stats.total, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
+            { label: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
+            { label: "Da firmare", value: stats.sign, icon: PencilLine, bg: "bg-amber-100 text-amber-700" },
+            { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-rose-100 text-rose-700" },
           ].map((metric) => {
             const Icon = metric.icon;
             return (
-              <Card key={metric.label} className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-5 p-1.5 py-3 sm:p-5 text-center sm:text-left">
-                <div className={cn("grid size-9 sm:size-14 place-items-center rounded-xl sm:rounded-2xl shrink-0", metric.bg)}>
-                  <Icon className="size-4 sm:size-6" />
+              <Card key={metric.label} className="flex items-center gap-3.5 p-4 sm:p-5 border border-black/5 shadow-2xs">
+                <div className={cn("grid size-11 place-items-center rounded-2xl shrink-0", metric.bg)}>
+                  <Icon className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base sm:text-3xl font-semibold leading-none sm:leading-tight">{metric.value}</p>
-                  <p className="text-[9px] sm:text-sm text-black/55 leading-tight line-clamp-2 mt-0.5 sm:mt-0">
-                    <span className="inline sm:hidden">{metric.shortLabel}</span>
-                    <span className="hidden sm:inline">{metric.label}</span>
-                  </p>
+                  <p className="text-2xl font-black tracking-tight text-[#1F1F1F]">{metric.value}</p>
+                  <p className="text-xs font-bold text-black/50 truncate">{metric.label}</p>
                 </div>
               </Card>
             );
           })}
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-          <Card className="p-0">
-            <div className="flex flex-col gap-4 border-b border-black/5 p-6 lg:flex-row lg:items-center lg:justify-between">
-              <h3 className="text-lg font-semibold">{filter === "IMPORTANT" ? "Comunicazioni importanti" : filter === "UNREAD" ? "Comunicazioni non lette" : "Tutte le comunicazioni"}</h3>
+        {/* MAIN CONTENT AREA */}
+        {viewMode === "BLOG" ? (
+          /* BLOG READER VIEW (2 Columns) */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* LEFT COLUMN: Featured Main Article (8 Cols) */}
+            <div className="lg:col-span-8 space-y-4">
+              {activeItem ? (
+                <article className="overflow-hidden rounded-[32px] border border-[#F6C6DE] bg-white shadow-xl transition-all">
+                  {/* Article Banner Header */}
+                  <div className="border-b border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-6 sm:p-8 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        {isImportant(activeItem) ? (
+                          <span className="rounded-full bg-[#E13D81] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-2xs">
+                            Importante
+                          </span>
+                        ) : null}
+                        <span className="rounded-full bg-white/80 border border-[#F4D3E2] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#B83D7F]">
+                          {typeStyles[activeItem.type]?.label || activeItem.type}
+                        </span>
+                      </div>
+                      <span className={cn("rounded-full px-3 py-1 text-xs font-black", notificationStatus(activeItem).className)}>
+                        {notificationStatus(activeItem).label}
+                      </span>
+                    </div>
+
+                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-[#1F1F1F] leading-tight">
+                      {activeItem.title}
+                    </h2>
+
+                    <div className="flex items-center gap-4 text-xs font-bold text-black/60 pt-1 border-t border-black/5">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="size-3.5 text-[#D96B94]" />
+                        {dateLabel(activeItem.createdAt)}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <User className="size-3.5 text-[#D96B94]" />
+                        Direzione Paradise
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Article Content Body */}
+                  <div className="p-6 sm:p-8 space-y-6">
+                    <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-6 sm:p-8 shadow-2xs">
+                      <p className="whitespace-pre-line text-base font-semibold leading-relaxed text-[#2C2C2C]">
+                        {activeItem.message}
+                      </p>
+                    </div>
+
+                    {/* Action Bar */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                      {!activeItem.read ? (
+                        <button
+                          type="button"
+                          onClick={() => markRead(activeItem)}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 w-full sm:w-auto"
+                        >
+                          <Check className="size-4" strokeWidth={3} />
+                          <span>Conferma e segna come letta</span>
+                        </button>
+                      ) : (
+                        <div className="inline-flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-2.5 text-xs font-black text-emerald-800">
+                          <Check className="size-4 text-emerald-600" strokeWidth={3} />
+                          <span>Comunicazione letta</span>
+                        </div>
+                      )}
+
+                      {activeItem.actionUrl && activeItem.actionUrl !== "/notifications" ? (
+                        <a
+                          href={activeItem.actionUrl}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-black/10 bg-neutral-100 px-5 py-3 text-xs font-black text-black/80 hover:bg-neutral-200 transition active:scale-95 w-full sm:w-auto"
+                        >
+                          <span>Apri dettaglio collegato</span>
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Navigation Footer (Prev / Next Post) */}
+                  <div className="flex items-center justify-between border-t border-black/5 bg-neutral-50/70 px-6 py-4">
+                    {prevPost ? (
+                      <button
+                        type="button"
+                        onClick={() => selectCommunication(prevPost)}
+                        className="inline-flex items-center gap-1.5 text-xs font-black text-black/60 hover:text-[#B83D7F] transition truncate max-w-[200px]"
+                      >
+                        <ChevronLeft className="size-4" />
+                        <span className="truncate">Prec: {prevPost.title}</span>
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+
+                    {nextPost ? (
+                      <button
+                        type="button"
+                        onClick={() => selectCommunication(nextPost)}
+                        className="inline-flex items-center gap-1.5 text-xs font-black text-black/60 hover:text-[#B83D7F] transition truncate max-w-[200px]"
+                      >
+                        <span className="truncate">Succ: {nextPost.title}</span>
+                        <ChevronRight className="size-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              ) : (
+                <div className="rounded-[32px] border border-dashed border-black/10 bg-white p-12 text-center text-sm font-bold text-black/40">
+                  Nessuna comunicazione selezionata.
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT COLUMN: Blog Stream & Search (4 Cols) */}
+            <div className="lg:col-span-4 space-y-4">
+              <Card className="p-5 border border-black/5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase tracking-wider text-[#B83D7F] flex items-center gap-2">
+                    <Newspaper className="size-4 text-[#D96B94]" /> Tutte le Comunicazioni
+                  </h3>
+                  <span className="rounded-full bg-[#FFF0F6] px-2.5 py-0.5 text-[10px] font-black text-[#B83D7F]">
+                    {filteredItems.length}
+                  </span>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-black/40" />
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Cerca per titolo o parola..."
+                    className="h-10 w-full rounded-2xl border border-black/10 bg-neutral-50/80 pl-10 pr-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition"
+                  />
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1.5">
+                  {[
+                    ["ALL", "Tutte"],
+                    ["IMPORTANT", "Importanti"],
+                    ["UNREAD", "Non lette"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFilter(value as Filter)}
+                      className={cn(
+                        "rounded-xl px-3 py-1.5 text-[11px] font-black transition active:scale-95",
+                        filter === value
+                          ? "bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-2xs"
+                          : "bg-neutral-100 text-black/60 hover:bg-neutral-200"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Communications Feed Stream (1-Click selection) */}
+                <div className="divide-y divide-black/5 max-h-[620px] overflow-y-auto pr-1 space-y-2">
+                  {filteredItems.length === 0 ? (
+                    <p className="p-4 text-center text-xs font-bold text-black/40">Nessuna comunicazione trovata.</p>
+                  ) : (
+                    filteredItems.map((item) => {
+                      const isSelected = activeItem?.id === item.id;
+                      const style = typeStyles[item.type] ?? typeStyles.COMUNICAZIONE;
+                      const Icon = style.icon;
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => selectCommunication(item)}
+                          className={cn(
+                            "w-full text-left p-3.5 rounded-2xl border transition-all duration-150 flex flex-col gap-1.5 active:scale-98 shadow-2xs mt-2",
+                            isSelected
+                              ? "border-[#D96B94] bg-gradient-to-r from-[#FFF0F6] via-[#FFF7FB] to-white ring-2 ring-[#D96B94]/20 shadow-xs"
+                              : item.read
+                              ? "border-black/5 bg-white hover:bg-neutral-50"
+                              : "border-[#F9D5E7] bg-[#FFF8FB] hover:bg-[#FCE5F3]"
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={cn("grid size-7 place-items-center rounded-xl shrink-0", style.bg)}>
+                                <Icon className="size-3.5" />
+                              </div>
+                              <span className="text-[10px] font-black uppercase text-black/50">
+                                {shortDateLabel(item.createdAt)}
+                              </span>
+                            </div>
+                            {!item.read && (
+                              <span className="size-2.5 rounded-full bg-[#E13D81] ring-4 ring-pink-100 animate-pulse" />
+                            )}
+                          </div>
+
+                          <h4 className="text-xs font-black text-[#1F1F1F] line-clamp-1 leading-snug">
+                            {item.title}
+                          </h4>
+
+                          <p className="text-[11px] font-semibold text-black/50 line-clamp-2 leading-normal">
+                            {item.message}
+                          </p>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </Card>
+            </div>
+          </div>
+        ) : (
+          /* TRADITIONAL LIST VIEW */
+          <Card className="p-0 border border-black/5 shadow-2xs overflow-hidden">
+            <div className="flex flex-col gap-4 border-b border-black/5 p-6 lg:flex-row lg:items-center lg:justify-between bg-white">
+              <h3 className="text-lg font-black text-[#1F1F1F]">
+                {filter === "IMPORTANT" ? "Comunicazioni importanti" : filter === "UNREAD" ? "Comunicazioni non lette" : "Tutte le comunicazioni"}
+              </h3>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button className="inline-flex items-center gap-1 text-sm font-medium text-black/60">
-                  Ordina: Più recenti <ChevronDown className="size-4" />
-                </button>
                 <label className="relative block sm:w-80">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-black/40" />
                   <Field value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca comunicazione..." className="pl-11" />
                 </label>
               </div>
             </div>
-            <div className="divide-y divide-black/5">
-              {filteredItems.length === 0 ? (
-                <div className="p-6 text-sm text-black/50">Nessuna comunicazione trovata.</div>
-              ) : filteredItems.map((notification) => {
-                const style = typeStyles[notification.type] ?? typeStyles.COMUNICAZIONE;
-                const Icon = style.icon;
-                const statusInfo = notificationStatus(notification);
-                return (
-                  <button
-                    key={notification.id}
-                    className="grid w-full gap-4 p-6 text-left transition hover:bg-[#FAF7F9] md:grid-cols-[72px_1fr_auto] md:items-center"
-                    onClick={() => handleNotificationClick(notification)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      void deleteNotification(notification);
-                    }}
-                    title="1 click segna letta, 2 click apre, 3 click archivia."
-                  >
-                    <div className={cn("grid size-16 place-items-center rounded-[20px]", style.bg)}>
-                      <Icon className="size-7" />
-                    </div>
-                    <div className="min-w-0">
-                      {isImportant(notification) ? <span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-bold uppercase text-[#E13D81]">Importante</span> : null}
-                      <p className="mt-2 text-lg font-semibold">{notification.title}</p>
-                      <p className="mt-1 text-sm text-black/55">{notification.type.toLowerCase()} <span className="mx-2">•</span> {dateLabel(notification.createdAt)}</p>
-                      <p className="mt-2 line-clamp-1 text-sm leading-6 text-black/50">{notification.message}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={cn("rounded-full px-3 py-1 text-xs font-bold", statusInfo.className)}>{statusInfo.label}</span>
-                      <Bookmark className="size-4 text-black/60" />
-                      <ChevronRight className="size-5 text-black/45" />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            {filteredItems.length > 0 ? (
-              <div className="border-t border-black/5 p-5 text-center">
-                <button className="inline-flex items-center gap-2 text-sm font-bold text-[#E13D81]">
-                  Carica altre comunicazioni <ChevronDown className="size-4" />
-                </button>
-              </div>
-            ) : null}
-          </Card>
 
-          <aside className="space-y-5">
-            <SideCard title="Comunicazioni importanti" icon={Pin} items={importantItems} empty="Nessuna comunicazione importante." onOpen={openNotification} />
-            <SideCard title="Da leggere" count={stats.unread} items={unreadItems} empty="Tutto letto." onOpen={openNotification} />
-            <Card>
-              <div className="mb-4 flex items-center gap-2">
-                <CalendarDays className="size-5 text-violet-600" />
-                <h3 className="font-semibold">Prossimi eventi</h3>
-              </div>
-              {eventItems.length === 0 ? (
-                <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/50">Nessun evento in arrivo.</p>
-              ) : eventItems.map((item) => (
-                <button key={item.id} onClick={() => openNotification(item)} className="w-full rounded-2xl bg-violet-50 p-4 text-left">
-                  <p className="font-semibold">{item.title}</p>
-                  <p className="mt-1 text-sm text-violet-700">{dateLabel(item.createdAt)}</p>
-                  <p className="mt-1 text-xs text-black/50">Apri comunicazione</p>
-                </button>
-              ))}
-            </Card>
-          </aside>
-        </div>
+            <div className="divide-y divide-black/5 bg-white">
+              {filteredItems.length === 0 ? (
+                <div className="p-6 text-sm font-semibold text-black/50">Nessuna comunicazione trovata.</div>
+              ) : (
+                filteredItems.map((notification) => {
+                  const style = typeStyles[notification.type] ?? typeStyles.COMUNICAZIONE;
+                  const Icon = style.icon;
+                  const statusInfo = notificationStatus(notification);
+
+                  return (
+                    <button
+                      key={notification.id}
+                      className="grid w-full gap-4 p-6 text-left transition hover:bg-[#FAF7F9] md:grid-cols-[64px_1fr_auto] md:items-center"
+                      onClick={() => selectCommunication(notification)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        void deleteNotification(notification);
+                      }}
+                    >
+                      <div className={cn("grid size-14 place-items-center rounded-2xl shrink-0", style.bg)}>
+                        <Icon className="size-6" />
+                      </div>
+                      <div className="min-w-0">
+                        {isImportant(notification) ? (
+                          <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-bold uppercase text-[#E13D81] mb-1 inline-block">
+                            Importante
+                          </span>
+                        ) : null}
+                        <p className="text-base font-black text-[#1F1F1F]">{notification.title}</p>
+                        <p className="mt-1 text-xs font-semibold text-black/50">
+                          {notification.type.toLowerCase()} <span className="mx-2">•</span> {dateLabel(notification.createdAt)}
+                        </p>
+                        <p className="mt-2 line-clamp-1 text-xs font-medium text-black/60 leading-relaxed">{notification.message}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={cn("rounded-full px-3 py-1 text-xs font-bold", statusInfo.className)}>{statusInfo.label}</span>
+                        <ChevronRight className="size-5 text-black/40" />
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+        )}
       </div>
 
-      {selected ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-2xl border border-black/5 bg-white p-7 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#C85C8C]">{selected.type.toLowerCase()}</p>
-                <h2 className="mt-2 text-2xl font-semibold leading-tight text-black">{selected.title}</h2>
-                <p className="mt-2 text-sm font-medium text-black/45">{dateLabel(selected.createdAt)}</p>
-              </div>
-              <button className="grid size-10 place-items-center rounded-xl border border-black/10" onClick={() => setSelected(null)}><X className="size-5" /></button>
-            </div>
-            <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-5">
-              <p className="whitespace-pre-line text-base leading-8 text-black/80">{selected.message}</p>
-            </div>
-            <Button className="mt-6 min-h-14 w-full rounded-2xl bg-[#E88CCC] text-base font-semibold text-white shadow-lg shadow-pink-100 hover:bg-[#DF78BF]" onClick={() => setSelected(null)}>Ho letto</Button>
-          </Card>
-        </div>
-      ) : null}
-
+      {/* NEW COMMUNICATION MODAL */}
       {open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/25 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
+          <Card className="w-full max-w-xl border border-black/10 shadow-2xl p-6 sm:p-8 rounded-[32px] bg-white">
+            <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/40">Comunicazione</p>
-                <h2 className="mt-2 text-2xl font-semibold">Nuova comunicazione</h2>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
+                  Nuovo Post
+                </span>
+                <h2 className="mt-2 text-2xl font-black text-[#1F1F1F]">Nuova comunicazione</h2>
+                <p className="mt-1 text-xs font-semibold text-black/50">
+                  Pubblica un articolo sul blog aziendale ed invia notifica allo staff.
+                </p>
               </div>
-              <button className="grid size-10 place-items-center rounded-xl border border-black/10" onClick={() => setOpen(false)}><X className="size-5" /></button>
+              <button className="grid size-10 place-items-center rounded-full border border-black/10 bg-neutral-50 hover:bg-neutral-100 transition" onClick={() => setOpen(false)}>
+                <X className="size-5" />
+              </button>
             </div>
+
             <div className="grid gap-4">
               {role !== "RESPONSABILE" ? (
-                <label className="space-y-2">
-                  <span className="text-sm font-semibold">Destinatari</span>
-                  <Select value={target} onChange={(event) => { setTarget(event.target.value); setTargetId(event.target.value === "location" ? locations[0]?.id ?? "" : recipients[0]?.id ?? ""); }}>
-                    <option value="all">Tutti</option>
-                    <option value="location">Salone</option>
-                    <option value="user">Persona</option>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Destinatari</span>
+                  <Select
+                    value={target}
+                    onChange={(event) => {
+                      setTarget(event.target.value);
+                      setTargetId(event.target.value === "location" ? locations[0]?.id ?? "" : recipients[0]?.id ?? "");
+                    }}
+                  >
+                    <option value="all">Tutti lo staff</option>
+                    <option value="location">Specifico salone</option>
+                    <option value="user">Singola persona</option>
                   </Select>
                 </label>
               ) : null}
+
               {target === "location" ? (
-                <label className="space-y-2">
-                  <span className="text-sm font-semibold">Salone</span>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Salone</span>
                   <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-                    {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
                   </Select>
                 </label>
               ) : null}
+
               {target === "user" ? (
-                <label className="space-y-2">
-                  <span className="text-sm font-semibold">Persona</span>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Persona</span>
                   <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
                     {recipientsByLocation.map((location) =>
                       location.recipients.length > 0 ? (
                         <optgroup key={location.id} label={location.name}>
-                          {location.recipients.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.name}</option>)}
+                          {location.recipients.map((recipient) => (
+                            <option key={recipient.id} value={recipient.id}>
+                              {recipient.name}
+                            </option>
+                          ))}
                         </optgroup>
-                      ) : null,
+                      ) : null
                     )}
                     {recipientsWithoutLocation.length > 0 ? (
                       <optgroup label="Senza salone">
-                        {recipientsWithoutLocation.map((recipient) => <option key={recipient.id} value={recipient.id}>{recipient.name}</option>)}
+                        {recipientsWithoutLocation.map((recipient) => (
+                          <option key={recipient.id} value={recipient.id}>
+                            {recipient.name}
+                          </option>
+                        ))}
                       </optgroup>
                     ) : null}
                   </Select>
                 </label>
               ) : null}
-              <label className="space-y-2">
-                <span className="text-sm font-semibold">Titolo</span>
-                <Field value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Esempio: Riunione staff" />
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-black uppercase tracking-wider text-black/50">Titolo comunicazione</span>
+                <Field value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Es: Nuove direttive per la piega mossa" />
               </label>
-              <label className="space-y-2">
-                <span className="text-sm font-semibold">Messaggio</span>
-                <textarea className="min-h-32 w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm outline-none focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Scrivi la comunicazione..." />
+
+              <label className="space-y-1.5">
+                <span className="text-xs font-black uppercase tracking-wider text-black/50">Testo del messaggio</span>
+                <textarea
+                  className="min-h-36 w-full rounded-2xl border border-black/10 bg-white p-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition"
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="Scrivi qui la comunicazione completa..."
+                />
               </label>
-              {status ? <p className="rounded-2xl bg-paradise-nude px-4 py-3 text-sm font-medium">{status}</p> : null}
-              <Button onClick={send} disabled={sending}><Send className="size-4" /> {sending ? "Invio..." : "Invia"}</Button>
+
+              {status ? <p className="rounded-2xl bg-[#FFF0F6] border border-[#F9D5E7] p-3 text-xs font-black text-[#B83D7F]">{status}</p> : null}
+
+              <button
+                type="button"
+                onClick={send}
+                disabled={sending}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60 mt-2"
+              >
+                <Send className="size-4" />
+                <span>{sending ? "Pubblicazione..." : "Pubblica sul Blog ed Invia"}</span>
+              </button>
             </div>
           </Card>
         </div>
@@ -462,32 +721,5 @@ export function NotificationManager({
         />
       )}
     </>
-  );
-}
-
-function SideCard({ title, icon: Icon, count, items, empty, onOpen }: { title: string; icon?: typeof Pin; count?: number; items: NotificationItem[]; empty: string; onOpen: (item: NotificationItem) => void }) {
-  return (
-    <Card>
-      <div className="mb-4 flex items-center gap-2">
-        {Icon ? <Icon className="size-5 text-[#E13D81]" /> : null}
-        <h3 className="font-semibold">{title}</h3>
-        {typeof count === "number" ? <Badge tone="pink">{count}</Badge> : null}
-      </div>
-      {items.length === 0 ? (
-        <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/50">{empty}</p>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <button key={item.id} onClick={() => onOpen(item)} className="grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-2xl bg-pink-50 p-4 text-left transition hover:bg-pink-100/70">
-              <div>
-                <p className="line-clamp-1 text-sm font-semibold">{item.title}</p>
-                <p className="mt-1 text-xs text-black/50">{dateLabel(item.createdAt)}</p>
-              </div>
-              <ChevronRight className="size-4 text-black/45" />
-            </button>
-          ))}
-        </div>
-      )}
-    </Card>
   );
 }
