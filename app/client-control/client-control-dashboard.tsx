@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers } from "lucide-react";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, Pencil, Sparkles, FileText, ExternalLink, Save } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { cn } from "@/lib/utils";
@@ -979,78 +979,265 @@ export function ClientControlDashboard({
       </section>
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-black/10 p-6">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-5">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-black/10 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-white/95 px-6 pt-7 pb-5 sm:px-8">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Modifica controllo</p>
-                <h3 className="text-2xl font-black">{answerText(draftAnswers[CLIENT_CONTROL_FIELD_IDS.clientName])}</h3>
-                <p className="mt-1 text-xs font-semibold text-black/40">
-                  Compilato da {selected.user.name ?? "Dipendente"} il {new Date(selected.created_at).toLocaleString("it-IT")}
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
+                  Modifica Controllo
+                </span>
+                <h2 className="mt-2 text-3xl font-black tracking-tight text-[#1F1F1F] sm:text-4xl">
+                  {String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente")}
+                </h2>
+                <p className="mt-1 text-xs font-semibold text-black/50">
+                  Compilato da <span className="font-bold text-black/75">{selected.user.name ?? "Dipendente"}</span> il {new Date(selected.created_at).toLocaleString("it-IT")}
                 </p>
               </div>
-              <button type="button" onClick={() => setSelected(null)} className="grid size-11 place-items-center rounded-full bg-black/[0.04]"><X className="size-5" /></button>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-neutral-50 text-black/70 shadow-2xs transition hover:bg-neutral-100 active:scale-95"
+              >
+                <X className="size-5" />
+              </button>
             </div>
-            <div className="max-h-[58vh] overflow-y-auto p-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block md:col-span-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.16em] text-black/42">Nome cliente</span>
+
+            {/* Scrollable Content */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 space-y-6">
+              {/* Info cliente Card */}
+              <section className="rounded-[28px] border border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-5 shadow-2xs">
+                <div className="flex items-center gap-2 text-xs font-bold text-black/60">
+                  <User className="size-4 text-[#D96B94]" />
+                  <span className="uppercase tracking-wider font-black text-[11px] text-[#B83D7F]">Info cliente da</span>
+                </div>
+                <div className="mt-3.5 flex flex-wrap gap-2.5">
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                    <Receipt className="size-3.5 text-[#D96B94]" />
+                    <span>N° acconto: #{String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "---")}</span>
+                  </span>
+                  {draftAnswers[CLIENT_CONTROL_FIELD_IDS.email] ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                      <Mail className="size-3.5 text-[#D96B94]" />
+                      <span className="truncate max-w-[200px]">{String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.email])}</span>
+                    </span>
+                  ) : null}
+                  {draftAnswers[CLIENT_CONTROL_FIELD_IDS.phone] ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                      <Phone className="size-3.5 text-[#D96B94]" />
+                      <span>{String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.phone])}</span>
+                    </span>
+                  ) : null}
+                  {draftAnswers[CLIENT_CONTROL_FIELD_IDS.productsList] ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                      <CalendarDays className="size-3.5 text-[#D96B94]" />
+                      <span className="truncate max-w-[280px]">{String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.productsList])}</span>
+                    </span>
+                  ) : null}
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                    <AtSign className="size-3.5 text-[#D96B94]" />
+                    <input
+                      type="text"
+                      value={String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.instagramTag] ?? "")}
+                      onChange={(e) =>
+                        setDraftAnswers((prev) => ({
+                          ...prev,
+                          [CLIENT_CONTROL_FIELD_IDS.instagramTag]: e.target.value,
+                        }))
+                      }
+                      placeholder="@cliente"
+                      className="bg-transparent outline-none w-24 text-xs font-black text-[#D96B94]"
+                    />
+                  </span>
+                </div>
+              </section>
+
+              {/* 1° e 2° Ordine Shopify Card */}
+              <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
+                    <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (1° ACCONTO / 2° SALDO)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-black/50 mb-1">1° Ordine (Acconto)</span>
+                    <input
+                      type="text"
+                      value={String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ?? "")}
+                      onChange={(event) =>
+                        setDraftAnswers((prev) => ({
+                          ...prev,
+                          [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: event.target.value,
+                        }))
+                      }
+                      className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                      placeholder="N° Acconto"
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-black/50 mb-1">2° Ordine (Saldo / Salone)</span>
+                    <input
+                      type="text"
+                      value={String(draftAnswers.second_shopify_order ?? "")}
+                      onChange={(event) =>
+                        setDraftAnswers((prev) => ({
+                          ...prev,
+                          second_shopify_order: event.target.value,
+                        }))
+                      }
+                      className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                      placeholder="N° Saldo (es. 25270)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Acconto, Pagato & Collaboratrice Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
+                    <Coins className="size-3.5 text-[#D96B94]" /> ACCONTO PAGATO (€)
+                  </span>
                   <input
                     type="text"
-                    value={String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.clientName] ?? "")}
+                    value={String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.depositPaid] ?? "")}
                     onChange={(event) =>
                       setDraftAnswers((prev) => ({
                         ...prev,
-                        [CLIENT_CONTROL_FIELD_IDS.clientName]: event.target.value,
+                        [CLIENT_CONTROL_FIELD_IDS.depositPaid]: event.target.value,
                       }))
                     }
-                    className="mt-2 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none focus:border-[#EA8CCD] focus:ring-2 focus:ring-[#FBE1EB]"
+                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                    placeholder="0.00"
                   />
                 </label>
 
-                {selected.form.fields
-                  .filter((field) => field.id !== CLIENT_CONTROL_FIELD_IDS.clientName)
-                  .map((field) => {
-                    const value = draftAnswers[field.id];
+                <label className="block">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
+                    <CreditCard className="size-3.5 text-[#D96B94]" /> PAGATO (€)
+                  </span>
+                  <input
+                    type="text"
+                    value={String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.paid] ?? "")}
+                    onChange={(event) =>
+                      setDraftAnswers((prev) => ({
+                        ...prev,
+                        [CLIENT_CONTROL_FIELD_IDS.paid]: event.target.value,
+                      }))
+                    }
+                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                    placeholder="0.00"
+                  />
+                </label>
+
+                <div className="block">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
+                    <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE
+                  </span>
+                  <input
+                    type="text"
+                    value={Array.isArray(draftAnswers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]) ? draftAnswers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].join(", ") : String(draftAnswers[CLIENT_CONTROL_FIELD_IDS.serviceStaff] ?? draftAnswers[CLIENT_CONTROL_FIELD_IDS.serviceOwner] ?? "")}
+                    onChange={(event) =>
+                      setDraftAnswers((prev) => ({
+                        ...prev,
+                        [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: event.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                      }))
+                    }
+                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                    placeholder="Nome collaboratrice..."
+                  />
+                </div>
+              </div>
+
+              {/* NOTA SHOPIFY (Read-only) */}
+              <div>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
+                  <FileText className="size-4 text-[#D96B94]" /> NOTA SHOPIFY COMPILATA
+                </span>
+                <textarea
+                  value={String(draftAnswers.client_control_shopify_order_note || draftAnswers.custom_note_text || draftAnswers.customNoteText || "")}
+                  readOnly={true}
+                  rows={3}
+                  className="mt-1.5 w-full rounded-2xl border border-[#F4D3E2] bg-neutral-50 p-4 text-xs font-bold text-[#1F1F1F] shadow-2xs outline-none cursor-not-allowed select-none"
+                  placeholder="Nota Shopify compilata per questo ordine..."
+                />
+              </div>
+
+              {/* Verifiche e Controlli Checkboxes */}
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
+                  VERIFICHE E CONTROLLI
+                </span>
+                <div className="mt-2.5 flex flex-wrap gap-2.5">
+                  {[
+                    [CLIENT_CONTROL_FIELD_IDS.notes, "Note Shopify"],
+                    [CLIENT_CONTROL_FIELD_IDS.beforeMedia, "Prima foto/video"],
+                    [CLIENT_CONTROL_FIELD_IDS.afterMedia, "Dopo foto/video"],
+                    [CLIENT_CONTROL_FIELD_IDS.products, "Prodotti"],
+                    [CLIENT_CONTROL_FIELD_IDS.review, "Recensione"],
+                  ].map(([fieldKey, fieldLabel]) => {
+                    const checked = truthy(draftAnswers[fieldKey]);
                     return (
-                      <label key={field.id} className={cn("block", field.type === "textarea" && "md:col-span-2")}>
-                      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-black/42">{field.label}</span>
-                      {field.type === "checkbox" ? (
-                        <button
-                          type="button"
-                          onClick={() => setDraftAnswers((prev) => ({ ...prev, [field.id]: !truthy(prev[field.id]) }))}
-                          className={cn("mt-2 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-bold", truthy(value) ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-black/10 bg-white text-black/55")}
-                        >
-                          <span className={cn("grid size-5 place-items-center rounded-md border", truthy(value) ? "border-emerald-500 bg-emerald-500 text-white" : "border-black/20")}>{truthy(value) ? <Check className="size-3" /> : null}</span>
-                          {truthy(value) ? "Fatto" : "Non fatto"}
-                        </button>
-                      ) : field.type === "select" && field.options?.length ? (
-                        <select value={String(value ?? "")} onChange={(event) => setDraftAnswers((prev) => ({ ...prev, [field.id]: event.target.value }))} className="mt-2 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none">
-                          <option value="">Seleziona</option>
-                          {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
-                        </select>
-                      ) : field.type === "textarea" ? (
-                        <textarea value={String(value ?? "")} onChange={(event) => setDraftAnswers((prev) => ({ ...prev, [field.id]: event.target.value }))} className="mt-2 min-h-28 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm outline-none" />
-                      ) : (
-                        <input value={Array.isArray(value) ? value.join(", ") : String(value ?? "")} onChange={(event) => {
-                          const nextValue = field.type === "worker_multi" ? event.target.value.split(",").map((item) => item.trim()).filter(Boolean) : event.target.value;
-                          setDraftAnswers((prev) => ({ ...prev, [field.id]: nextValue }));
-                        }} className="mt-2 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none" />
-                      )}
-                    </label>
-                  );
-                })}
+                      <button
+                        key={fieldKey}
+                        type="button"
+                        onClick={() =>
+                          setDraftAnswers((prev) => ({
+                            ...prev,
+                            [fieldKey]: !truthy(prev[fieldKey]),
+                          }))
+                        }
+                        className={[
+                          "flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-black transition active:scale-95 shadow-2xs",
+                          checked
+                            ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                            : "border-black/10 bg-white text-black/70 hover:bg-neutral-50",
+                        ].join(" ")}
+                      >
+                        <span className={`grid size-4 place-items-center rounded-md border ${checked ? "border-white bg-white text-[#D96B94]" : "border-black/20"}`}>
+                          {checked && <Check className="size-3" strokeWidth={3} />}
+                        </span>
+                        <span>{fieldLabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-            <div className="flex flex-col gap-3 border-t border-black/10 p-5 sm:flex-row sm:justify-end">
-              {canDelete ? (
-                <button type="button" onClick={() => deleteResponse(selected)} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-50 px-5 py-3 text-sm font-black text-red-600">
-                  <Trash2 className="size-4" /> Elimina
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between border-t border-black/5 bg-white/95 px-6 py-5 sm:px-8">
+              <div>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => deleteResponse(selected)}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-6 py-3.5 text-xs font-black text-red-600 border border-red-200 transition hover:bg-red-100 active:scale-95"
+                  >
+                    <Trash2 className="size-4" /> Elimina
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="rounded-2xl border border-black/10 bg-neutral-100 px-7 py-3.5 text-xs font-black text-black/70 transition hover:bg-neutral-200 active:scale-95"
+                >
+                  Annulla
                 </button>
-              ) : null}
-              <button type="button" onClick={saveSelected} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#EA8CCD] px-6 py-3 text-sm font-black text-white disabled:opacity-60">
-                <Edit3 className="size-4" /> {saving ? "Salvataggio..." : "Salva modifiche"}
-              </button>
+                <button
+                  type="button"
+                  onClick={saveSelected}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60"
+                >
+                  <Save className="size-4" />
+                  <span>{saving ? "Salvataggio..." : "Salva modifiche"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
