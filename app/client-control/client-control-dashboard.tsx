@@ -1320,7 +1320,7 @@ export function ClientControlDashboard({
               {/* Cliente Info Section */}
               <div className="bg-[#FAF6F9]/50 rounded-2xl p-4 border border-black/[0.03] space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Informazioni Cliente</p>
-                <div className="grid gap-3 sm:grid-cols-2 text-sm font-semibold">
+                <div className="grid gap-3 sm:grid-cols-3 text-sm font-semibold">
                   <div>
                     <span className="text-black/40 block text-xs">Email</span>
                     <span className="text-black/85">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.email]) || "Non inserita"}</span>
@@ -1328,6 +1328,12 @@ export function ClientControlDashboard({
                   <div>
                     <span className="text-black/40 block text-xs">Telefono</span>
                     <span className="text-black/85">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.phone]) || "Non inserito"}</span>
+                  </div>
+                  <div>
+                    <span className="text-black/40 block text-xs">Tag Instagram</span>
+                    <span className="text-[#D96B94] font-bold">
+                      {viewingResponse.answers?.custom_ig_tag || viewingResponse.answers?.igTag ? `@${String(viewingResponse.answers.custom_ig_tag || viewingResponse.answers.igTag).replace(/^@/, "")}` : "Non inserito"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1354,24 +1360,30 @@ export function ClientControlDashboard({
                 )}
               </div>
 
-              {/* Details grid */}
+              {/* Details grid: Pagamento & Staff */}
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* Pagamento */}
                 <div className="bg-[#FAF6F9]/30 rounded-2xl p-4 border border-black/[0.03] space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Dettagli Pagamento</p>
-                  <div className="space-y-1 text-sm font-bold">
+                  <div className="space-y-1.5 text-sm font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-black/40 font-semibold text-xs">Acconto Pagato</span>
+                      <span className="text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-black/40 font-semibold text-xs">Saldo Pagato</span>
                       <span className="text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-black/40 font-semibold text-xs">Acconto</span>
-                      <span className="text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</span>
-                    </div>
                     {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ? (
                       <div className="flex justify-between pt-1 border-t border-black/5">
-                        <span className="text-black/40 font-semibold text-xs">ID Ordine Shopify</span>
+                        <span className="text-black/40 font-semibold text-xs">1° Ordine Shopify (Acconto)</span>
                         <span className="text-black/70">#{viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder]}</span>
+                      </div>
+                    ) : null}
+                    {(viewingResponse.answers?.second_shopify_order || viewingResponse.answers?.secondShopifyOrder) ? (
+                      <div className="flex justify-between">
+                        <span className="text-black/40 font-semibold text-xs">2° Ordine Shopify (Saldo)</span>
+                        <span className="text-[#D96B94] font-black">#{viewingResponse.answers.second_shopify_order || viewingResponse.answers.secondShopifyOrder}</span>
                       </div>
                     ) : null}
                   </div>
@@ -1380,13 +1392,13 @@ export function ClientControlDashboard({
                 {/* Staff / Sede */}
                 <div className="bg-[#FAF6F9]/30 rounded-2xl p-4 border border-black/[0.03] space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Sede e Collaboratori</p>
-                  <div className="space-y-1 text-sm font-bold">
+                  <div className="space-y-1.5 text-sm font-bold">
                     <div className="flex justify-between">
                       <span className="text-black/40 font-semibold text-xs">Sede</span>
                       <span className="text-black/80">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.location] || viewingResponse.user_location_name)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-black/40 font-semibold text-xs">Staff</span>
+                      <span className="text-black/40 font-semibold text-xs">Staff Collaboratrici</span>
                       <span className="text-black/80 line-clamp-1">
                         {answerText(
                           namesFromAnswer(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] || viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceOwner] || viewingResponse.user?.name)
@@ -1395,6 +1407,75 @@ export function ClientControlDashboard({
                       </span>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* DETTAGLI EXTENSION & APPOINTMENT */}
+              <div className="bg-[#FFF8FB] rounded-2xl p-4 border border-[#F9D5E7] space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#B83D7F]">Dettagli Extension & Appuntamento</p>
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-black/5">
+                    <span className="text-black/40 block font-semibold text-[10px] uppercase">Grammi</span>
+                    <span className="font-black text-[#1F1F1F] text-sm">
+                      {viewingResponse.answers?.custom_grammi || viewingResponse.answers?.customGrammi || "N/D"}
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-black/5">
+                    <span className="text-black/40 block font-semibold text-[10px] uppercase">Lunghezza</span>
+                    <span className="font-black text-[#1F1F1F] text-sm">
+                      {viewingResponse.answers?.custom_lunghezza || viewingResponse.answers?.customLunghezza || "N/D"}
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-black/5">
+                    <span className="text-black/40 block font-semibold text-[10px] uppercase">Fasce</span>
+                    <span className="font-black text-[#1F1F1F] text-sm">
+                      {viewingResponse.answers?.custom_fasce || viewingResponse.answers?.customFasce || "N/D"}
+                    </span>
+                  </div>
+                  <div className="bg-white p-3 rounded-xl border border-black/5">
+                    <span className="text-black/40 block font-semibold text-[10px] uppercase">Atteggiamento</span>
+                    <span className="font-black text-[#1F1F1F] text-sm">
+                      {viewingResponse.answers?.custom_atteggiamento || viewingResponse.answers?.customAtteggiamento || "N/D"}
+                    </span>
+                  </div>
+                </div>
+                {(viewingResponse.answers?.custom_extra_note || viewingResponse.answers?.customExtraNote) ? (
+                  <div className="bg-white p-3 rounded-xl border border-black/5">
+                    <span className="text-black/40 block font-semibold text-[10px] uppercase mb-0.5">Note Extra</span>
+                    <p className="text-xs font-semibold text-black/80 italic">
+                      "{viewingResponse.answers.custom_extra_note || viewingResponse.answers.customExtraNote}"
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* VERIFICHE E CONTROLLI BADGES */}
+              <div className="bg-neutral-50 rounded-2xl p-4 border border-black/5 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">Verifiche e Controlli Effettuati</p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    [CLIENT_CONTROL_FIELD_IDS.notes, "Note Shopify"],
+                    [CLIENT_CONTROL_FIELD_IDS.beforeMedia, "Prima foto/video"],
+                    [CLIENT_CONTROL_FIELD_IDS.afterMedia, "Dopo foto/video"],
+                    [CLIENT_CONTROL_FIELD_IDS.products, "Prodotti"],
+                    [CLIENT_CONTROL_FIELD_IDS.review, "Recensione"],
+                  ].map(([fieldKey, fieldLabel]) => {
+                    const isChecked = truthy(viewingResponse.answers?.[fieldKey]);
+                    return (
+                      <span
+                        key={fieldKey}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black border",
+                          isChecked
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                            : "bg-neutral-100 text-black/40 border-black/5 opacity-60"
+                        )}
+                      >
+                        <Check className={cn("size-3.5", isChecked ? "text-emerald-600" : "text-black/30")} strokeWidth={3} />
+                        <span>{fieldLabel}</span>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
 
