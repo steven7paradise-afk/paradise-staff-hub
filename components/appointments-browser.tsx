@@ -1198,6 +1198,54 @@ export function AppointmentsBrowser({
       bookingId: null,
     });
 
+  const [shopifyLookupLoading, setShopifyLookupLoading] = useState(false);
+
+  async function handleShopifyOrderLookup(queryOverride?: string) {
+    const query = (queryOverride ?? clientControlForm.shopifyOrder ?? clientControlForm.clientName ?? "").trim();
+    if (!query) return;
+
+    setShopifyLookupLoading(true);
+    try {
+      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data) {
+        setClientControlForm((prev) => {
+          const newOrder = data.orderName ? data.orderName.replace(/^#/, "") : prev.shopifyOrder;
+          const newDeposit = data.totalPrice != null ? String(data.totalPrice) : prev.depositPaid;
+          const newEmail = data.email || prev.email;
+          const newPhone = data.phone || prev.phone;
+          const newClientName = data.clientName || prev.clientName;
+
+          let updatedNote = prev.customNoteText || "";
+          if (data.note && !updatedNote.includes(data.note)) {
+            updatedNote = updatedNote ? `${updatedNote}\n${data.note}` : data.note;
+          }
+          if (Array.isArray(data.lineItems) && data.lineItems.length) {
+            const lineSummary = data.lineItems.map((item: any) => `${item.title} (€${item.price})`).join(", ");
+            if (!updatedNote.includes(lineSummary)) {
+              updatedNote = updatedNote ? `${updatedNote}\nShopify items: ${lineSummary}` : `Shopify items: ${lineSummary}`;
+            }
+          }
+
+          return {
+            ...prev,
+            shopifyOrder: newOrder,
+            depositPaid: newDeposit,
+            email: newEmail,
+            phone: newPhone,
+            clientName: newClientName,
+            customNoteText: updatedNote,
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Failed to lookup Shopify order:", err);
+    } finally {
+      setShopifyLookupLoading(false);
+    }
+  }
+
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
     corsoTeamOptions.forEach((employee) => {
@@ -1411,6 +1459,11 @@ export function AppointmentsBrowser({
 
       setClientControlForm(baseForm);
       setClientControlOpen(true);
+
+      // Automatic Shopify Lookup from order number or customer name
+      if (booking.bookingStr || booking.customerName) {
+        void handleShopifyOrderLookup(booking.bookingStr || booking.customerName);
+      }
     } catch (error) {
       console.error("Failed to open client control form:", error);
       setClientControlOpen(true);
@@ -2436,9 +2489,20 @@ export function AppointmentsBrowser({
               {/* 4 Fields Grid: Ordine Shopify, Acconto, Pagato & Collaboratrice */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="block">
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
-                    Ordine Shopify
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
+                      Ordine Shopify
+                    </span>
+                    <button
+                      type="button"
+                      disabled={shopifyLookupLoading}
+                      onClick={() => handleShopifyOrderLookup()}
+                      className="text-[10px] font-extrabold text-[#D96B94] hover:underline disabled:opacity-50 transition"
+                      title="Cerca ordine su Shopify da numero o nome cliente"
+                    >
+                      {shopifyLookupLoading ? "Ricerca..." : "⚡ Cerca"}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={clientControlForm.shopifyOrder}
@@ -2448,6 +2512,12 @@ export function AppointmentsBrowser({
                         shopifyOrder: event.target.value,
                       }))
                     }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleShopifyOrderLookup();
+                      }
+                    }}
                     className="mt-1.5 h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
                     placeholder="Numero ordine"
                   />
