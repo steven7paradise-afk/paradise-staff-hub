@@ -1399,11 +1399,13 @@ export function AppointmentsBrowser({
     setClientControlForm((prev) => {
       const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
       
-      // If shopifyOrder already has the 1st deposit order, set secondShopifyOrder!
+      const isSecond = Boolean(prev.shopifyOrder && prev.shopifyOrder !== cleanName);
       const firstOrder = prev.shopifyOrder || cleanName;
-      const secondOrder = prev.shopifyOrder && prev.shopifyOrder !== cleanName ? cleanName : (prev.secondShopifyOrder || "");
+      const secondOrder = isSecond ? cleanName : (prev.secondShopifyOrder || "");
 
-      const newDeposit = order.totalPrice != null ? String(order.totalPrice) : prev.depositPaid;
+      const orderPriceStr = order.totalPrice != null ? String(order.totalPrice) : "";
+      const newPaid = isSecond && orderPriceStr ? orderPriceStr : prev.paid;
+      const newDeposit = !isSecond && orderPriceStr ? orderPriceStr : prev.depositPaid;
       const newEmail = order.email || prev.email;
       const newPhone = order.phone || prev.phone;
       const newClientName = order.clientName || prev.clientName;
@@ -1420,7 +1422,8 @@ export function AppointmentsBrowser({
         ...prev,
         shopifyOrder: firstOrder,
         secondShopifyOrder: secondOrder,
-        depositPaid: prev.depositPaid || newDeposit,
+        depositPaid: newDeposit,
+        paid: newPaid,
         email: newEmail,
         phone: newPhone,
         clientName: newClientName,
@@ -1450,6 +1453,21 @@ export function AppointmentsBrowser({
       return 0;
     });
   }, [todayOrdersList, clientControlForm.clientName]);
+
+  const suggestedOrderForClient = useMemo(() => {
+    if (!clientControlForm.clientName || !todayOrdersList.length) return null;
+    const clientFirstName = clientControlForm.clientName.split(" ")[0].toLowerCase().trim();
+    if (!clientFirstName || clientFirstName.length < 2) return null;
+
+    const firstOrderClean = clientControlForm.shopifyOrder ? clientControlForm.shopifyOrder.replace(/^#/, "") : "";
+
+    return todayOrdersList.find((order) => {
+      const orderNameClean = order.orderName ? order.orderName.replace(/^#/, "") : "";
+      const matchesClient = (order.clientName || "").toLowerCase().includes(clientFirstName);
+      const isNotDepositOrder = orderNameClean !== firstOrderClean;
+      return matchesClient && isNotDepositOrder;
+    }) || null;
+  }, [clientControlForm.clientName, clientControlForm.shopifyOrder, todayOrdersList]);
 
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
@@ -1668,7 +1686,8 @@ export function AppointmentsBrowser({
       setClientControlForm(baseForm);
       setClientControlOpen(true);
 
-      // Automatic Shopify Lookup from order number or customer name
+      // Fetch today's orders list & perform lookup automatically
+      void fetchTodayShopifyOrders();
       if (booking.bookingStr || booking.customerName) {
         void handleShopifyOrderLookup(booking.bookingStr || booking.customerName);
       }
@@ -2799,9 +2818,27 @@ export function AppointmentsBrowser({
                             secondShopifyOrder: event.target.value,
                           }))
                         }
+                        onFocus={() => {
+                          setShowTodayOrdersDropdown(true);
+                          if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                        }}
                         className="h-11 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-xs font-bold outline-none focus:border-[#D96B94]"
-                        placeholder="N° Saldo (opzionale)"
+                        placeholder="N° Saldo (es. 25270)"
                       />
+                      {suggestedOrderForClient && (
+                        <button
+                          type="button"
+                          onClick={() => selectShopifyOrderFromList(suggestedOrderForClient)}
+                          className="mt-1 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-2.5 py-1 text-[10px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                          title="Clicca per inserire l'ordine del saldo di oggi"
+                        >
+                          <span className="flex items-center gap-1">
+                            <Sparkles className="size-3 text-[#D96B94]" />
+                            <span>Suggerito: {suggestedOrderForClient.orderName}</span>
+                          </span>
+                          <span className="font-extrabold text-[10px]">€{suggestedOrderForClient.totalPrice.toFixed(2)}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
