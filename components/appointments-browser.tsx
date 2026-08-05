@@ -1208,6 +1208,41 @@ export function AppointmentsBrowser({
       bookingId: null,
     });
 
+  const [toastNotification, setToastNotification] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    type: "success" | "error";
+  }>({
+    show: false,
+    title: "",
+    message: "",
+    type: "success",
+  });
+
+  function showPushToast(title: string, message: string, type: "success" | "error" = "success") {
+    setToastNotification({
+      show: true,
+      title,
+      message,
+      type,
+    });
+
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification(title, {
+          body: message,
+        });
+      } catch (e) {
+        // ignore push errors
+      }
+    }
+
+    setTimeout(() => {
+      setToastNotification((prev) => ({ ...prev, show: false }));
+    }, 4000);
+  }
+
   const [shopifyLookupLoading, setShopifyLookupLoading] = useState(false);
 
   async function handleShopifyOrderLookup(queryOverride?: string) {
@@ -1625,17 +1660,26 @@ export function AppointmentsBrowser({
       const data = await response.json().catch(() => null);
       if (!response.ok)
         throw new Error(data?.error || "Errore durante il salvataggio.");
+
+      const clientName = clientControlForm.clientName || "Cliente";
+      showPushToast(
+        "✓ Salvato con successo!",
+        `Scheda controllo per ${clientName} registrata correttamente.`
+      );
       setClientControlMessage({
         type: "success",
-        text: "Scheda controllo cliente salvata.",
+        text: "✓ Scheda controllo cliente salvata con successo!",
       });
+
+      setTimeout(() => {
+        setClientControlOpen(false);
+      }, 1000);
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Errore durante il salvataggio.";
+      showPushToast("❌ Errore di salvataggio", errMsg, "error");
       setClientControlMessage({
         type: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : "Errore durante il salvataggio.",
+        text: errMsg,
       });
     } finally {
       setClientControlSubmitting(false);
@@ -2512,7 +2556,34 @@ export function AppointmentsBrowser({
     : "";
 
   return (
-    <div className="min-h-screen bg-white px-3 py-4 sm:px-5 lg:px-6">
+    <div className="min-h-screen bg-white px-3 py-4 sm:px-5 lg:px-6 relative">
+      {/* Floating Push Toast Notification Banner */}
+      {toastNotification.show && (
+        <div
+          className={`fixed top-5 right-5 sm:right-8 z-[200] flex items-center gap-3.5 rounded-2xl border px-5 py-4 text-white shadow-[0_20px_50px_rgba(0,0,0,0.25)] animate-in fade-in slide-in-from-top-5 duration-300 ${
+            toastNotification.type === "success"
+              ? "border-emerald-400 bg-[#059669]"
+              : "border-red-400 bg-red-600"
+          }`}
+        >
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/20">
+            {toastNotification.type === "success" ? (
+              <Check className="size-5 text-white" strokeWidth={3} />
+            ) : (
+              <X className="size-5 text-white" strokeWidth={3} />
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-white/90">
+              {toastNotification.title}
+            </p>
+            <p className="text-sm font-bold text-white">
+              {toastNotification.message}
+            </p>
+          </div>
+        </div>
+      )}
+
       {clientControlOpen ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-5">
           <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-black/10 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
