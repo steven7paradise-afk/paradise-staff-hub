@@ -1204,8 +1204,10 @@ export function AppointmentsBrowser({
     text: string;
   } | null>(null);
   const [selectedGrammi, setSelectedGrammi] = useState("");
+  const [customGrammiInput, setCustomGrammiInput] = useState("");
   const [selectedLunghezza, setSelectedLunghezza] = useState("");
   const [selectedFasce, setSelectedFasce] = useState("");
+  const [customFasceInput, setCustomFasceInput] = useState("");
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
 
@@ -1216,9 +1218,14 @@ export function AppointmentsBrowser({
     atteggiamento?: string;
     extraNote?: string;
   }) {
-    const g = overrides?.grammi !== undefined ? overrides.grammi : selectedGrammi;
+    const rawG = overrides?.grammi !== undefined ? overrides.grammi : selectedGrammi;
+    const g = rawG === "custom" ? customGrammiInput : rawG;
+
     const l = overrides?.lunghezza !== undefined ? overrides.lunghezza : selectedLunghezza;
-    const f = overrides?.fasce !== undefined ? overrides.fasce : selectedFasce;
+
+    const rawF = overrides?.fasce !== undefined ? overrides.fasce : selectedFasce;
+    const f = rawF === "custom" ? customFasceInput : rawF;
+
     const a = overrides?.atteggiamento !== undefined ? overrides.atteggiamento : selectedAtteggiamento;
     const n = overrides?.extraNote !== undefined ? overrides.extraNote : extraNoteText;
 
@@ -1640,8 +1647,10 @@ export function AppointmentsBrowser({
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
     setSelectedGrammi("");
+    setCustomGrammiInput("");
     setSelectedLunghezza("");
     setSelectedFasce("");
+    setCustomFasceInput("");
     setSelectedAtteggiamento("");
     setExtraNoteText("");
     try {
@@ -2765,147 +2774,149 @@ export function AppointmentsBrowser({
                 </div>
               </section>
 
-              {/* 4 Fields Grid: Ordine Shopify (1° e 2°), Acconto, Pagato & Collaboratrice */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="block relative col-span-1 sm:col-span-2">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
-                      <ShoppingBag className="size-3.5 text-[#D96B94]" /> ORDINI SHOPIFY (1° ACCONTO / 2° SALDO)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowTodayOrdersDropdown((prev) => !prev);
+              {/* 1° e 2° Ordine Shopify Card */}
+              <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
+                    <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (1° ACCONTO / 2° SALDO)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTodayOrdersDropdown((prev) => !prev);
+                      if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black text-white shadow-2xs hover:opacity-95 transition active:scale-95"
+                    title="Mostra gli ordini Shopify arrivati oggi"
+                  >
+                    <Sparkles className="size-3 text-white" />
+                    <span>{loadingTodayOrders ? "Carico..." : "⚡ ORDINI OGGI"}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-black/50 mb-1">1° Ordine (Acconto)</span>
+                    <input
+                      type="text"
+                      value={clientControlForm.shopifyOrder}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          shopifyOrder: event.target.value,
+                        }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleShopifyOrderLookup();
+                        }
+                      }}
+                      className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                      placeholder="N° Acconto"
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-black/50 mb-1">2° Ordine (Saldo / Salone)</span>
+                    <input
+                      type="text"
+                      value={clientControlForm.secondShopifyOrder || ""}
+                      onChange={(event) =>
+                        setClientControlForm((prev) => ({
+                          ...prev,
+                          secondShopifyOrder: event.target.value,
+                        }))
+                      }
+                      onFocus={() => {
+                        setShowTodayOrdersDropdown(true);
                         if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
                       }}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#FCE5F3] border border-[#F6E1EB] px-3 py-1 text-[10px] font-extrabold text-[#B83D7F] hover:bg-[#F9D2E8] transition active:scale-95 shadow-2xs"
-                      title="Mostra gli ordini Shopify arrivati oggi"
-                    >
-                      <Sparkles className="size-3 text-[#D96B94]" />
-                      <span>{loadingTodayOrders ? "Carico..." : "⚡ ORDINI OGGI"}</span>
-                    </button>
+                      className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
+                      placeholder="N° Saldo (es. 25270)"
+                    />
+                    {suggestedOrderForClient && (
+                      <button
+                        type="button"
+                        onClick={() => selectShopifyOrderFromList(suggestedOrderForClient)}
+                        className="mt-1.5 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                        title="Clicca per inserire l'ordine del saldo di oggi"
+                      >
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="size-3.5 text-[#D96B94]" />
+                          <span>Suggerito: {suggestedOrderForClient.orderName}</span>
+                        </span>
+                        <span className="font-extrabold text-xs">€{suggestedOrderForClient.totalPrice.toFixed(2)}</span>
+                      </button>
+                    )}
                   </div>
-                  <div className="mt-1.5 grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="block text-[9px] font-bold text-neutral-400 mb-0.5">1° Ordine (Acconto)</span>
-                      <input
-                        type="text"
-                        value={clientControlForm.shopifyOrder}
-                        onChange={(event) =>
-                          setClientControlForm((prev) => ({
-                            ...prev,
-                            shopifyOrder: event.target.value,
-                          }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleShopifyOrderLookup();
-                          }
-                        }}
-                        className="h-11 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-xs font-bold outline-none focus:border-[#D96B94]"
-                        placeholder="N° Acconto"
-                      />
+                </div>
+
+                {/* Dropdown list for today's orders */}
+                {showTodayOrdersDropdown && (
+                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[420px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between pb-2 border-b border-black/5">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
+                        ORDINI SHOPIFY DI OGGI ({sortedTodayOrdersList.length})
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowTodayOrdersDropdown(false)}
+                        className="text-[10px] font-extrabold text-neutral-400 hover:text-black"
+                      >
+                        Chiudi ✕
+                      </button>
                     </div>
-                    <div>
-                      <span className="block text-[9px] font-bold text-neutral-400 mb-0.5">2° Ordine (Saldo / Salone)</span>
-                      <input
-                        type="text"
-                        value={clientControlForm.secondShopifyOrder || ""}
-                        onChange={(event) =>
-                          setClientControlForm((prev) => ({
-                            ...prev,
-                            secondShopifyOrder: event.target.value,
-                          }))
-                        }
-                        onFocus={() => {
-                          setShowTodayOrdersDropdown(true);
-                          if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
-                        }}
-                        className="h-11 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-xs font-bold outline-none focus:border-[#D96B94]"
-                        placeholder="N° Saldo (es. 25270)"
-                      />
-                      {suggestedOrderForClient && (
-                        <button
-                          type="button"
-                          onClick={() => selectShopifyOrderFromList(suggestedOrderForClient)}
-                          className="mt-1 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-2.5 py-1 text-[10px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
-                          title="Clicca per inserire l'ordine del saldo di oggi"
-                        >
-                          <span className="flex items-center gap-1">
-                            <Sparkles className="size-3 text-[#D96B94]" />
-                            <span>Suggerito: {suggestedOrderForClient.orderName}</span>
-                          </span>
-                          <span className="font-extrabold text-[10px]">€{suggestedOrderForClient.totalPrice.toFixed(2)}</span>
-                        </button>
+                    <div className="max-h-64 overflow-y-auto mt-2 space-y-1.5 pr-0.5">
+                      {loadingTodayOrders ? (
+                        <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
+                          Caricamento ordini recenti...
+                        </p>
+                      ) : sortedTodayOrdersList.length > 0 ? (
+                        sortedTodayOrdersList.map((order, idx) => {
+                          const isSuggested = idx === 0 && clientControlForm.clientName && order.clientName.toLowerCase().includes(clientControlForm.clientName.split(" ")[0].toLowerCase());
+                          return (
+                            <button
+                              key={order.id}
+                              type="button"
+                              onClick={() => selectShopifyOrderFromList(order)}
+                              className={`w-full text-left p-3 rounded-2xl border transition flex flex-col gap-1 ${
+                                isSuggested
+                                  ? "border-[#D96B94] bg-[#FFF0F6] shadow-sm"
+                                  : "border-black/5 hover:border-[#D96B94] bg-[#FFF8FB] hover:bg-[#FCE5F3]"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5">
+                                  {order.clientName}
+                                  {isSuggested && (
+                                    <span className="rounded-md bg-[#D96B94] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
+                                      Suggerito
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="text-xs font-black text-[#D96B94]">{order.orderName}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
+                                <span className="truncate max-w-[220px]">{order.serviceTitle || "Servizio Shopify"}</span>
+                                <span className="font-extrabold text-[#D96B94]">Acconto €{order.totalPrice.toFixed(2)}</span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p className="p-3 text-center text-xs text-neutral-400 font-semibold">
+                          Nessun ordine recente trovato.
+                        </p>
                       )}
                     </div>
                   </div>
+                )}
+              </div>
 
-                  {/* Dropdown list for today's orders (Image 3 design & #1 suggestion) */}
-                  {showTodayOrdersDropdown && (
-                    <div className="absolute left-0 top-full z-50 mt-1.5 w-[320px] sm:w-[420px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
-                      <div className="flex items-center justify-between pb-2 border-b border-black/5">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
-                          ORDINI SHOPIFY DI OGGI ({sortedTodayOrdersList.length})
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setShowTodayOrdersDropdown(false)}
-                          className="text-[10px] font-extrabold text-neutral-400 hover:text-black"
-                        >
-                          Chiudi ✕
-                        </button>
-                      </div>
-                      <div className="max-h-64 overflow-y-auto mt-2 space-y-1.5 pr-0.5">
-                        {loadingTodayOrders ? (
-                          <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
-                            Caricamento ordini recenti...
-                          </p>
-                        ) : sortedTodayOrdersList.length > 0 ? (
-                          sortedTodayOrdersList.map((order, idx) => {
-                            const isSuggested = idx === 0 && clientControlForm.clientName && order.clientName.toLowerCase().includes(clientControlForm.clientName.split(" ")[0].toLowerCase());
-                            return (
-                              <button
-                                key={order.id}
-                                type="button"
-                                onClick={() => selectShopifyOrderFromList(order)}
-                                className={`w-full text-left p-3 rounded-2xl border transition flex flex-col gap-1 ${
-                                  isSuggested
-                                    ? "border-[#D96B94] bg-[#FFF0F6] shadow-sm"
-                                    : "border-black/5 hover:border-[#D96B94] bg-[#FFF8FB] hover:bg-[#FCE5F3]"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5">
-                                    {order.clientName}
-                                    {isSuggested && (
-                                      <span className="rounded-md bg-[#D96B94] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
-                                        Suggerito
-                                      </span>
-                                    )}
-                                  </span>
-                                  <span className="text-xs font-black text-[#D96B94]">{order.orderName}</span>
-                                </div>
-                                <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
-                                  <span className="truncate max-w-[220px]">{order.serviceTitle || "Servizio Shopify"}</span>
-                                  <span className="font-extrabold text-[#D96B94]">Acconto €{order.totalPrice.toFixed(2)}</span>
-                                </div>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <p className="p-3 text-center text-xs text-neutral-400 font-semibold">
-                            Nessun ordine recente trovato.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
+              {/* Acconto, Pagato & Collaboratrice - Griglia a 3 Colonne Perfettamente Bilanciata */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
                     <Coins className="size-3.5 text-[#D96B94]" /> ACCONTO PAGATO (€)
                   </span>
                   <input
@@ -2917,13 +2928,13 @@ export function AppointmentsBrowser({
                         depositPaid: event.target.value,
                       }))
                     }
-                    className="mt-1.5 h-12 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
+                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
                     placeholder="0.00"
                   />
                 </label>
 
                 <label className="block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
                     <CreditCard className="size-3.5 text-[#D96B94]" /> PAGATO (€)
                   </span>
                   <input
@@ -2935,19 +2946,19 @@ export function AppointmentsBrowser({
                         paid: event.target.value,
                       }))
                     }
-                    className="mt-1.5 h-12 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
+                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
                     placeholder="0.00"
                   />
                 </label>
 
                 <div className="relative block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
-                    <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE DEL SALONE
+                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
+                    <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
-                    className="mt-1.5 flex h-12 w-full items-center justify-between rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-sm font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
+                    className="flex h-12 w-full items-center justify-between rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] shadow-2xs"
                   >
                     <span className="truncate">
                       {clientControlForm.staffIds.length
@@ -2955,7 +2966,7 @@ export function AppointmentsBrowser({
                             .filter((e) => clientControlForm.staffIds.includes(e.id))
                             .map((e) => e.name)
                             .join(", ")
-                        : "Seleziona collaboratrice"}
+                        : "Seleziona..."}
                     </span>
                     <ChevronDown className={`size-4 text-black/50 transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -3002,12 +3013,12 @@ export function AppointmentsBrowser({
                 </div>
               </div>
 
-              {/* Interactive Shopify Order Info Card (quando viene selezionato un ordine) */}
+              {/* Details for Selected Order if available */}
               {selectedOrderDetails && (
-                <div className="rounded-[22px] border border-[#F6E1EB] bg-[#FFF0F6] p-4 shadow-2xs space-y-2.5 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between">
+                <div className="rounded-[24px] border border-[#F6C6DE] bg-gradient-to-r from-[#FFF0F6] to-[#FFEBF4] p-4 sm:p-5 shadow-2xs space-y-2.5">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-xl bg-[#D96B94] px-2.5 py-1 text-[11px] font-black text-white uppercase tracking-wider shadow-2xs">
+                      <span className="rounded-xl bg-[#D96B94] px-3 py-1 text-xs font-black text-white uppercase tracking-wider shadow-2xs">
                         {selectedOrderDetails.orderName}
                       </span>
                       <span className="text-xs font-black text-[#1F1F1F]">
@@ -3015,29 +3026,22 @@ export function AppointmentsBrowser({
                       </span>
                     </div>
                     <a
-                      href="https://admin.shopify.com/store/paradisebeautymilano/orders"
+                      href={`https://admin.shopify.com/store/6134a9-2/orders?query=${encodeURIComponent(selectedOrderDetails.orderName)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#F6D5E5] px-3 py-1.5 text-[11px] font-extrabold text-[#D96B94] hover:bg-[#FCE5F3] transition shadow-2xs"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#F6C6DE] px-4 py-1.5 text-xs font-black text-[#D96B94] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"
                     >
+                      <span>Vedi su Shopify</span>
                       <ExternalLink className="size-3.5" />
-                      <span>Vedi su Shopify ↗</span>
                     </a>
                   </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[11px] font-bold text-neutral-600 border-t border-black/5 pt-2.5">
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#F6C6DE]/60">
                     <div>
-                      <span className="text-black/40 block text-[9px] uppercase tracking-wider font-black">Servizio / Articoli</span>
-                      <span className="text-[#1F1F1F] font-extrabold truncate block">{selectedOrderDetails.serviceTitle || "Servizio Shopify"}</span>
+                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO</span>
+                      <span className="font-extrabold text-[#1F1F1F]">{selectedOrderDetails.serviceTitle || "N/A"}</span>
                     </div>
                     <div>
-                      <span className="text-black/40 block text-[9px] uppercase tracking-wider font-black">Ora & Data Pagamento</span>
-                      <span className="text-[#1F1F1F] font-extrabold block">
-                        {selectedOrderDetails.createdAt ? new Date(selectedOrderDetails.createdAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Oggi"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-black/40 block text-[9px] uppercase tracking-wider font-black">Importo Pagato</span>
+                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO</span>
                       <span className="text-[#D96B94] font-black block text-xs">€{selectedOrderDetails.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
@@ -3066,7 +3070,7 @@ export function AppointmentsBrowser({
                   <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
                     QUANTI GRAMMI?
                   </span>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {["100g", "150g", "200g"].map((gram) => {
                       const selected = selectedGrammi === gram;
                       return (
@@ -3088,6 +3092,35 @@ export function AppointmentsBrowser({
                         </button>
                       );
                     })}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isCustom = selectedGrammi === "custom";
+                        const next = isCustom ? "" : "custom";
+                        setSelectedGrammi(next);
+                        updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
+                      }}
+                      className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                        selectedGrammi === "custom"
+                          ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                          : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                      }`}
+                    >
+                      Personalizzato
+                    </button>
+                    {selectedGrammi === "custom" && (
+                      <input
+                        type="text"
+                        value={customGrammiInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomGrammiInput(val);
+                          updateShopifyNote({ grammi: val });
+                        }}
+                        placeholder="es. 250g"
+                        className="h-8 w-24 rounded-full border border-[#D96B94] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -3097,7 +3130,7 @@ export function AppointmentsBrowser({
                     LUNGHEZZA
                   </span>
                   <div className="flex flex-wrap gap-2">
-                    {["55cm", "65cm", "75cm"].map((len) => {
+                    {["50cm", "55cm", "65cm", "75cm"].map((len) => {
                       const selected = selectedLunghezza === len;
                       return (
                         <button
@@ -3126,8 +3159,8 @@ export function AppointmentsBrowser({
                   <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
                     QUANTE FASCE?
                   </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => {
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {["1", "2", "3", "4", "5"].map((num) => {
                       const selected = selectedFasce === num;
                       return (
                         <button
@@ -3148,6 +3181,35 @@ export function AppointmentsBrowser({
                         </button>
                       );
                     })}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isCustom = selectedFasce === "custom";
+                        const next = isCustom ? "" : "custom";
+                        setSelectedFasce(next);
+                        updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
+                      }}
+                      className={`h-9 rounded-xl px-3 text-xs font-black transition active:scale-95 border grid place-items-center ${
+                        selectedFasce === "custom"
+                          ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                          : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                      }`}
+                    >
+                      Personalizzato
+                    </button>
+                    {selectedFasce === "custom" && (
+                      <input
+                        type="text"
+                        value={customFasceInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomFasceInput(val);
+                          updateShopifyNote({ fasce: val });
+                        }}
+                        placeholder="es. 6"
+                        className="h-9 w-20 rounded-xl border border-[#D96B94] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -3158,10 +3220,10 @@ export function AppointmentsBrowser({
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {[
+                      { label: "Tranquilla", emoji: "😌" },
                       { label: "Simpatica", emoji: "😊" },
-                      { label: "Indifferente", emoji: "😐" },
-                      { label: "Antipatica", emoji: "😒" },
-                      { label: "Arrabbiata", emoji: "😡" },
+                      { label: "Esigente", emoji: "🧐" },
+                      { label: "Pretenziosa", emoji: "💅" },
                     ].map((att) => {
                       const selected = selectedAtteggiamento === att.label;
                       return (
@@ -3212,22 +3274,17 @@ export function AppointmentsBrowser({
                 </div>
               </section>
 
-              {/* NOTA SHOPIFY */}
+              {/* NOTA SHOPIFY (Read-only) */}
               <div>
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
                   <FileText className="size-4 text-[#D96B94]" /> NOTA SHOPIFY COMPILATA
                 </span>
                 <textarea
                   value={clientControlForm.customNoteText}
-                  onChange={(event) =>
-                    setClientControlForm((prev) => ({
-                      ...prev,
-                      customNoteText: event.target.value,
-                    }))
-                  }
+                  readOnly={true}
                   rows={3}
-                  className="mt-1.5 w-full rounded-2xl border border-[#F4D3E2] bg-white p-4 text-xs font-bold text-[#1F1F1F] shadow-2xs outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition"
-                  placeholder="La nota formattata per Shopify comparirà qui..."
+                  className="mt-1.5 w-full rounded-2xl border border-[#F4D3E2] bg-neutral-50 p-4 text-xs font-bold text-[#1F1F1F] shadow-2xs outline-none cursor-not-allowed select-none"
+                  placeholder="La nota formattata per Shopify viene generata automaticamente dalle selezioni sopra..."
                 />
               </div>
 
