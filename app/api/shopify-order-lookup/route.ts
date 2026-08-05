@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Shopify non configurato correttamente." }, { status: 500 });
     }
 
-    // Mode 'today': return list of recent orders for quick selection
+    // Mode 'today': return list of orders created TODAY for quick selection
     if (mode === "today") {
       const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=50&status=any&fields=id,name,customer,total_price,line_items,note,created_at`, {
         headers: {
@@ -34,7 +34,22 @@ export async function GET(request: NextRequest) {
       }
 
       const data = await res.json();
-      const ordersList = (data?.orders || []).map((order: any) => {
+      const rawOrders = data?.orders || [];
+
+      // Filter orders created TODAY in Europe/Rome timezone
+      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+      let filteredOrders = rawOrders.filter((order: any) => {
+        if (!order.created_at) return false;
+        const orderDay = new Date(order.created_at).toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+        return orderDay === todayStr;
+      });
+
+      // If no orders created today yet, fallback to 10 most recent orders so the list is helpful
+      if (filteredOrders.length === 0) {
+        filteredOrders = rawOrders.slice(0, 10);
+      }
+
+      const ordersList = filteredOrders.map((order: any) => {
         const firstName = String(order.customer?.first_name || "").trim();
         const lastName = String(order.customer?.last_name || "").trim();
         const clientName = [firstName, lastName].filter(Boolean).join(" ") || "Cliente Shopify";
