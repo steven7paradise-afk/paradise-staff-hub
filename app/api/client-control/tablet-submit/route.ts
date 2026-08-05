@@ -297,31 +297,91 @@ export async function POST(request: NextRequest) {
     photo_prima_dietro: answerPhotoPrimaDietro || undefined,
     photo_dopo_fronte: answerPhotoDopoFronte || undefined,
     photo_dopo_dietro: answerPhotoDopoDietro || undefined,
+    second_shopify_order: textValue(body?.secondShopifyOrder),
+    custom_grammi: textValue(body?.customGrammi),
+    custom_lunghezza: textValue(body?.customLunghezza),
+    custom_fasce: textValue(body?.customFasce),
+    custom_atteggiamento: textValue(body?.customAtteggiamento),
+    custom_extra_note: textValue(body?.customExtraNote),
     client_control_created_from: "Tablet Clock",
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,
   };
 
-  const response = await prisma.serviceFormResponse.create({
-    data: {
-      form_id: form.id,
-      user_id: submitter.id,
-      user_role: "TABLET",
-      user_location_id: location.id,
-      user_location_name: location.name,
-      answers,
-      status: "NEW",
-      priority: "MEDIA",
-      activity_log: [
-        {
-          type: "CREATED_FROM_TABLET",
-          text: `Appuntamento creato dal tablet ${tabletDevice.device_name}`,
-          at: new Date().toISOString(),
-        },
-      ],
-    },
-    select: { id: true, created_at: true },
-  });
+  const bookingId = textValue(body?.bookingId);
+  const cleanOrder = shopifyOrder ? shopifyOrder.replace(/#/g, "").trim() : "";
+  const cleanName = (clientName || shopifyClientName || "").trim().toLowerCase();
+
+  let existingResponse = null;
+  if (bookingId) {
+    existingResponse = await prisma.serviceFormResponse.findFirst({
+      where: {
+        form_id: form.id,
+        answers: { path: ["booking_id"], equals: bookingId },
+      },
+      orderBy: { created_at: "desc" },
+    });
+  }
+
+  if (!existingResponse && (cleanOrder || cleanName)) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const candidates = await prisma.serviceFormResponse.findMany({
+      where: {
+        form_id: form.id,
+        created_at: { gte: todayStart },
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    existingResponse = candidates.find((r) => {
+      const ans = (r.answers || {}) as Record<string, any>;
+      const rOrder = String(ans[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").replace(/#/g, "").trim();
+      const rName = String(ans[CLIENT_CONTROL_FIELD_IDS.clientName] || "").trim().toLowerCase();
+      if (cleanOrder && rOrder === cleanOrder) return true;
+      if (cleanName && rName === cleanName) return true;
+      return false;
+    }) || null;
+  }
+
+  let response: { id: string; created_at: Date };
+
+  if (existingResponse) {
+    const updatedAnswers = {
+      ...(existingResponse.answers as Record<string, any>),
+      ...answers,
+    };
+    response = await prisma.serviceFormResponse.update({
+      where: { id: existingResponse.id },
+      data: {
+        answers: updatedAnswers,
+        updated_at: new Date(),
+      },
+      select: { id: true, created_at: true },
+    });
+  } else {
+    response = await prisma.serviceFormResponse.create({
+      data: {
+        form_id: form.id,
+        user_id: submitter.id,
+        user_role: "TABLET",
+        user_location_id: location.id,
+        user_location_name: location.name,
+        answers,
+        status: "NEW",
+        priority: "MEDIA",
+        activity_log: [
+          {
+            type: "CREATED_FROM_TABLET",
+            text: `Appuntamento creato dal tablet ${tabletDevice?.device_name || "Web"}`,
+            at: new Date().toISOString(),
+          },
+        ],
+      },
+      select: { id: true, created_at: true },
+    });
+  }
 
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
   if (shopifyOrder) {

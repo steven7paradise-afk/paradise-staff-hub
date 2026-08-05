@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const orderName = searchParams.get("orderName");
   const bookingId = searchParams.get("bookingId");
-
-  if (!orderName && !bookingId) {
-    return NextResponse.json({ error: "Parametri mancanti" }, { status: 400 });
-  }
+  const clientNameParam = searchParams.get("clientName");
+  const cleanOrder = orderName ? orderName.replace(/^#/, "").trim() : "";
+  const cleanBookingId = bookingId ? bookingId.trim() : "";
+  const cleanClientName = clientNameParam ? clientNameParam.trim().toLowerCase() : "";
 
   try {
-    const [comments, shopifyNote, cowlendarOrderNote] = await Promise.all([
+    const [comments, shopifyNote, cowlendarOrderNote, rawResponses] = await Promise.all([
       prisma.shopifyOrderComment.findMany({
         where: {
           OR: [
@@ -43,12 +43,30 @@ export async function GET(request: NextRequest) {
       }),
       orderName ? getShopifyOrderNoteText(orderName) : Promise.resolve(null),
       orderName ? getShopifyOrderCowlendarText(orderName) : Promise.resolve(null),
+      prisma.serviceFormResponse.findMany({
+        orderBy: { created_at: "desc" },
+        take: 100,
+        select: { id: true, answers: true, created_at: true },
+      }),
     ]);
+
+    const existingControl = rawResponses.find((r) => {
+      const ans = (r.answers || {}) as Record<string, any>;
+      const rBookingId = String(ans.booking_id || "").trim();
+      const rOrder = String(ans.client_control_shopify_order || "").replace(/^#/, "").trim();
+      const rName = String(ans.client_control_client_name || "").trim().toLowerCase();
+
+      if (cleanBookingId && rBookingId === cleanBookingId) return true;
+      if (cleanOrder && rOrder === cleanOrder) return true;
+      if (cleanClientName && rName === cleanClientName) return true;
+      return false;
+    });
 
     return NextResponse.json({
       comments,
       shopifyNote,
       cowlendarOrderNote,
+      existingControl: existingControl ? { id: existingControl.id, answers: existingControl.answers } : null,
     });
   } catch (error) {
     console.error("Failed to fetch appointment comments:", error);

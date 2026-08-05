@@ -1733,14 +1733,39 @@ export function AppointmentsBrowser({
         return [] as ClientControlEmployee[];
       }),
       fetch(
-        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`,
+        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}`,
       )
         .then((response) => (response.ok ? response.json() : null))
         .catch(() => null),
     ]);
 
+    const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
+
     setClientControlForm((current) => {
       if (current.bookingId !== booking.id) return current;
+      if (existingAnswers) {
+        return {
+          ...current,
+          staffIds: current.staffIds.length
+            ? current.staffIds
+            : matchEmployeeIdsForBooking(booking, employees),
+          secondShopifyOrder: String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || ""),
+          paid: existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid] !== undefined && existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid] !== null
+            ? String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid])
+            : current.paid,
+          depositPaid: existingAnswers[CLIENT_CONTROL_FIELD_IDS.depositPaid] !== undefined && existingAnswers[CLIENT_CONTROL_FIELD_IDS.depositPaid] !== null
+            ? String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.depositPaid])
+            : current.depositPaid,
+          shopifyOrder: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || current.shopifyOrder || ""),
+          instagramTag: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.instagramTag] || ""),
+          customNoteText: String(existingAnswers.client_control_notes_text || current.customNoteText || bookingNotes?.shopifyNote || ""),
+          notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]),
+          beforeMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
+          afterMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.afterMedia]),
+          products: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.products]),
+          review: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.review]),
+        };
+      }
       return {
         ...current,
         staffIds: current.staffIds.length
@@ -1750,6 +1775,36 @@ export function AppointmentsBrowser({
           current.customNoteText || bookingNotes?.shopifyNote || "",
       };
     });
+
+    if (existingAnswers) {
+      if (existingAnswers.custom_grammi) {
+        const g = String(existingAnswers.custom_grammi);
+        if (["100g", "150g", "200g"].includes(g)) {
+          setSelectedGrammi(g);
+        } else {
+          setSelectedGrammi("custom");
+          setCustomGrammiInput(g);
+        }
+      }
+      if (existingAnswers.custom_lunghezza) {
+        setSelectedLunghezza(String(existingAnswers.custom_lunghezza));
+      }
+      if (existingAnswers.custom_fasce) {
+        const f = String(existingAnswers.custom_fasce);
+        if (["1", "2", "3", "4", "5"].includes(f)) {
+          setSelectedFasce(f);
+        } else {
+          setSelectedFasce("custom");
+          setCustomFasceInput(f);
+        }
+      }
+      if (existingAnswers.custom_atteggiamento) {
+        setSelectedAtteggiamento(String(existingAnswers.custom_atteggiamento));
+      }
+      if (existingAnswers.custom_extra_note) {
+        setExtraNoteText(String(existingAnswers.custom_extra_note));
+      }
+    }
   }
 
   async function submitClientControlForm() {
@@ -1768,10 +1823,23 @@ export function AppointmentsBrowser({
 
     setClientControlSubmitting(true);
     try {
+      const customGrammiVal = selectedGrammi === "custom" ? customGrammiInput : selectedGrammi;
+      const customFasceVal = selectedFasce === "custom" ? customFasceInput : selectedFasce;
+
+      const payload = {
+        ...clientControlForm,
+        secondShopifyOrder: clientControlForm.secondShopifyOrder || "",
+        customGrammi: customGrammiVal || "",
+        customLunghezza: selectedLunghezza || "",
+        customFasce: customFasceVal || "",
+        customAtteggiamento: selectedAtteggiamento || "",
+        customExtraNote: extraNoteText || "",
+      };
+
       const response = await fetch("/api/client-control/tablet-submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(clientControlForm),
+        body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok)
