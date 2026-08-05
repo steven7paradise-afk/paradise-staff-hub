@@ -147,6 +147,7 @@ export async function GET(request: NextRequest) {
     const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
     return NextResponse.json({
+      id: String(matchingOrder.id),
       orderName: matchingOrder.name,
       clientName: fullName || null,
       totalPrice: matchingOrder.total_price ? parseFloat(matchingOrder.total_price) : null,

@@ -1269,6 +1269,7 @@ export function AppointmentsBrowser({
     });
 
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<{
+    id?: string;
     orderName: string;
     clientName: string;
     totalPrice: number;
@@ -1326,6 +1327,16 @@ export function AppointmentsBrowser({
       const data = await res.json().catch(() => null);
 
       if (res.ok && data) {
+        setSelectedOrderDetails({
+          id: data.id ? String(data.id) : undefined,
+          orderName: data.orderName || query,
+          clientName: data.clientName || clientControlForm.clientName,
+          totalPrice: data.totalPrice || 0,
+          email: data.email || "",
+          phone: data.phone || "",
+          serviceTitle: Array.isArray(data.lineItems) ? data.lineItems.map((i: any) => i.title).join(", ") : "",
+          note: data.note || "",
+        });
         setClientControlForm((prev) => {
           const newOrder = data.orderName ? data.orderName.replace(/^#/, "") : prev.shopifyOrder;
           const newDeposit = data.totalPrice != null ? String(data.totalPrice) : prev.depositPaid;
@@ -1392,6 +1403,7 @@ export function AppointmentsBrowser({
   }
 
   function selectShopifyOrderFromList(order: {
+    id?: string;
     orderName: string;
     clientName: string;
     totalPrice: number;
@@ -3026,7 +3038,11 @@ export function AppointmentsBrowser({
                       </span>
                     </div>
                     <a
-                      href={`https://admin.shopify.com/store/6134a9-2/orders?query=${encodeURIComponent(selectedOrderDetails.orderName)}`}
+                      href={
+                        selectedOrderDetails.id
+                          ? `https://admin.shopify.com/store/c1uzax-u0/orders/${selectedOrderDetails.id}`
+                          : `https://admin.shopify.com/store/c1uzax-u0/orders?query=${encodeURIComponent(selectedOrderDetails.orderName)}`
+                      }
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#F6C6DE] px-4 py-1.5 text-xs font-black text-[#D96B94] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"

@@ -790,6 +790,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const phone = orderData.customer?.phone || null;
 
       return {
+        id: String(orderData.id),
         clientName,
         totalPrice,
         lineItems,
