@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() || "";
+  const mode = searchParams.get("mode")?.trim() || "";
 
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -17,6 +18,42 @@ export async function GET(request: NextRequest) {
 
     if (!shop || !token) {
       return NextResponse.json({ error: "Shopify non configurato correttamente." }, { status: 500 });
+    }
+
+    // Mode 'today': return list of recent orders for quick selection
+    if (mode === "today") {
+      const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=30&status=any&fields=id,name,customer,total_price,line_items,note,created_at`, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        return NextResponse.json({ error: "Errore nel caricamento degli ordini recenti." }, { status: res.status });
+      }
+
+      const data = await res.json();
+      const ordersList = (data?.orders || []).map((order: any) => {
+        const firstName = String(order.customer?.first_name || "").trim();
+        const lastName = String(order.customer?.last_name || "").trim();
+        const clientName = [firstName, lastName].filter(Boolean).join(" ") || "Cliente Shopify";
+        const lineSummary = Array.isArray(order.line_items) ? order.line_items.map((i: any) => i.title).join(", ") : "";
+
+        return {
+          id: String(order.id),
+          orderName: order.name,
+          clientName,
+          totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
+          email: order.customer?.email || "",
+          phone: order.customer?.phone || "",
+          serviceTitle: lineSummary,
+          note: order.note || "",
+          createdAt: order.created_at,
+        };
+      });
+
+      return NextResponse.json({ orders: ordersList });
     }
 
     // A. If query is empty: fetch the absolute most recent order

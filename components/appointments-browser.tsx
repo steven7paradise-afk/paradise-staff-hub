@@ -1247,6 +1247,72 @@ export function AppointmentsBrowser({
     }
   }
 
+  const [showTodayOrdersDropdown, setShowTodayOrdersDropdown] = useState(false);
+  const [todayOrdersList, setTodayOrdersList] = useState<Array<{
+    id: string;
+    orderName: string;
+    clientName: string;
+    totalPrice: number;
+    email: string;
+    phone: string;
+    serviceTitle: string;
+    note: string;
+    createdAt: string;
+  }>>([]);
+  const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
+
+  async function fetchTodayShopifyOrders() {
+    setLoadingTodayOrders(true);
+    try {
+      const res = await fetch("/api/shopify-order-lookup?mode=today");
+      const data = await res.json().catch(() => null);
+      if (res.ok && Array.isArray(data?.orders)) {
+        setTodayOrdersList(data.orders);
+      }
+    } catch (err) {
+      console.error("Failed to fetch today's Shopify orders:", err);
+    } finally {
+      setLoadingTodayOrders(false);
+    }
+  }
+
+  function selectShopifyOrderFromList(order: {
+    orderName: string;
+    clientName: string;
+    totalPrice: number;
+    email: string;
+    phone: string;
+    serviceTitle: string;
+    note: string;
+  }) {
+    setClientControlForm((prev) => {
+      const newOrder = order.orderName ? order.orderName.replace(/^#/, "") : prev.shopifyOrder;
+      const newDeposit = order.totalPrice != null ? String(order.totalPrice) : prev.depositPaid;
+      const newEmail = order.email || prev.email;
+      const newPhone = order.phone || prev.phone;
+      const newClientName = order.clientName || prev.clientName;
+
+      let updatedNote = prev.customNoteText || "";
+      if (order.note && !updatedNote.includes(order.note)) {
+        updatedNote = updatedNote ? `${updatedNote}\n${order.note}` : order.note;
+      }
+      if (order.serviceTitle && !updatedNote.includes(order.serviceTitle)) {
+        updatedNote = updatedNote ? `${updatedNote}\nServizi: ${order.serviceTitle}` : `Servizi: ${order.serviceTitle}`;
+      }
+
+      return {
+        ...prev,
+        shopifyOrder: newOrder,
+        depositPaid: newDeposit,
+        email: newEmail,
+        phone: newPhone,
+        clientName: newClientName,
+        customNoteText: updatedNote,
+      };
+    });
+    setShowTodayOrdersDropdown(false);
+  }
+
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
     corsoTeamOptions.forEach((employee) => {
@@ -2493,20 +2559,34 @@ export function AppointmentsBrowser({
 
               {/* 4 Fields Grid: Ordine Shopify, Acconto, Pagato & Collaboratrice */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="block">
+                <div className="block relative">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
                       Ordine Shopify
                     </span>
-                    <button
-                      type="button"
-                      disabled={shopifyLookupLoading}
-                      onClick={() => handleShopifyOrderLookup()}
-                      className="text-[10px] font-extrabold text-[#D96B94] hover:underline disabled:opacity-50 transition"
-                      title="Cerca ordine su Shopify da numero o nome cliente"
-                    >
-                      {shopifyLookupLoading ? "Ricerca..." : "⚡ Cerca"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowTodayOrdersDropdown((prev) => !prev);
+                          if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                        }}
+                        className="text-[10px] font-extrabold text-[#D96B94] hover:underline transition"
+                        title="Mostra gli ordini Shopify di oggi"
+                      >
+                        {loadingTodayOrders ? "Carico..." : "⚡ Ordini Oggi"}
+                      </button>
+                      <span className="text-black/20">•</span>
+                      <button
+                        type="button"
+                        disabled={shopifyLookupLoading}
+                        onClick={() => handleShopifyOrderLookup()}
+                        className="text-[10px] font-extrabold text-[#D96B94] hover:underline disabled:opacity-50 transition"
+                        title="Cerca ordine su Shopify da numero o nome cliente"
+                      >
+                        {shopifyLookupLoading ? "Ricerca..." : "Cerca"}
+                      </button>
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -2526,7 +2606,54 @@ export function AppointmentsBrowser({
                     className="mt-1.5 h-12 w-full rounded-2xl border border-black/10 bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
                     placeholder="Numero ordine"
                   />
-                </label>
+
+                  {/* Dropdown list for today's orders */}
+                  {showTodayOrdersDropdown && (
+                    <div className="absolute left-0 top-full z-50 mt-1.5 w-[320px] sm:w-[380px] rounded-2xl border border-[#F6E1EB] bg-white p-3 shadow-xl animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between pb-2 border-b border-black/5">
+                        <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#D96B94]">
+                          Ordini Shopify di Oggi ({todayOrdersList.length})
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowTodayOrdersDropdown(false)}
+                          className="text-[10px] font-bold text-neutral-400 hover:text-black"
+                        >
+                          Chiudi ✕
+                        </button>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto mt-2 space-y-1.5">
+                        {loadingTodayOrders ? (
+                          <p className="p-3 text-center text-xs text-neutral-400 font-semibold animate-pulse">
+                            Caricamento ordini di oggi...
+                          </p>
+                        ) : todayOrdersList.length > 0 ? (
+                          todayOrdersList.map((order) => (
+                            <button
+                              key={order.id}
+                              type="button"
+                              onClick={() => selectShopifyOrderFromList(order)}
+                              className="w-full text-left p-2.5 rounded-xl border border-black/5 hover:border-[#D96B94] bg-[#FFF8FB] hover:bg-[#FCE5F3] transition flex flex-col gap-0.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-extrabold text-[#1F1F1F]">{order.clientName}</span>
+                                <span className="text-[10px] font-black text-[#D96B94]">{order.orderName}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
+                                <span className="truncate max-w-[200px]">{order.serviceTitle || "Servizio"}</span>
+                                <span className="font-bold text-emerald-700">Acconto €{order.totalPrice.toFixed(2)}</span>
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <p className="p-3 text-center text-xs text-neutral-400 font-semibold">
+                            Nessun ordine recente trovato.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <label className="block">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/45">
