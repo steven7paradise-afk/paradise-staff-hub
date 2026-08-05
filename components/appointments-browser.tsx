@@ -1052,6 +1052,14 @@ export function AppointmentsBrowser({
     }
   }, [searchParams, router]);
 
+  // Real-time Auto-polling: re-fetch appointments every 30 seconds automatically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      router.refresh();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [router]);
+
   useEffect(() => {
     const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
     setSalon((salonFromUrl || initialSalon) as SalonFilter);
@@ -1670,6 +1678,8 @@ export function AppointmentsBrowser({
         type: "success",
         text: "✓ Scheda controllo cliente salvata con successo!",
       });
+
+      router.refresh();
 
       setTimeout(() => {
         setClientControlOpen(false);
@@ -3390,7 +3400,9 @@ export function AppointmentsBrowser({
                 disabled={isRefreshing}
                 onClick={() => {
                   setIsRefreshing(true);
-                  router.push("/appointments?refresh=true");
+                  const currentSalonSlug = salon === "tutti" ? null : salon;
+                  const targetUrl = appointmentSalonUrl(currentSalonSlug);
+                  router.push(`${targetUrl}?refresh=true`);
                 }}
                 className="flex h-12 items-center justify-center gap-2 rounded-xl border border-[#E8D8CF] bg-white px-4 text-sm font-black text-[#4E382C] hover:bg-[#FFF7F3] transition disabled:opacity-50"
               >
