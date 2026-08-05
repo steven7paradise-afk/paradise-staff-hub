@@ -1397,14 +1397,27 @@ export function ClientControlDashboard({
                       <span className="text-black/40 font-semibold text-xs">Sede</span>
                       <span className="text-black/80">{answerText(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.location] || viewingResponse.user_location_name)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-center">
                       <span className="text-black/40 font-semibold text-xs">Staff Collaboratrici</span>
-                      <span className="text-black/80 line-clamp-1">
-                        {answerText(
-                          namesFromAnswer(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] || viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceOwner] || viewingResponse.user?.name)
-                            .map((name) => resolveCanonicalStaffName(name, employeeNames))
+                      <div className="flex items-center gap-2">
+                        {viewingResponse.user?.photo_url ? (
+                          <img
+                            src={viewingResponse.user.photo_url}
+                            alt="Foto Staff"
+                            className="size-7 rounded-full object-cover border border-[#D96B94] shadow-2xs"
+                          />
+                        ) : (
+                          <div className="grid size-7 place-items-center rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white text-[11px] font-black uppercase shadow-2xs">
+                            {(String(namesFromAnswer(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] || viewingResponse.user?.name || "S")[0] || "S"))[0]}
+                          </div>
                         )}
-                      </span>
+                        <span className="text-black/80 font-bold line-clamp-1">
+                          {answerText(
+                            namesFromAnswer(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] || viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.serviceOwner] || viewingResponse.user?.name)
+                              .map((name) => resolveCanonicalStaffName(name, employeeNames))
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1480,27 +1493,53 @@ export function ClientControlDashboard({
               </div>
 
               {/* Comparison Section (Shopify Expected vs Declared) */}
-              <div className="bg-[#FAF6F9]/50 rounded-2xl p-4 border border-black/[0.03] space-y-2">
+              <div className="bg-[#FAF6F9]/50 rounded-2xl p-5 border border-black/[0.03] space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40 font-bold">Confronto Pagamento (Shopify vs Dichiarato)</p>
                 <div className="grid gap-4 sm:grid-cols-2 text-sm">
-                  <div className="bg-white rounded-xl p-3 border border-black/5">
-                    <span className="text-black/40 block text-xs font-semibold">Dichiarato da Staff</span>
-                    <span className="text-lg font-black text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}</span>
+                  {/* Dichiarato da Staff */}
+                  <div className="bg-white rounded-2xl p-4 border border-black/5 space-y-2 shadow-2xs">
+                    <span className="text-black/40 block text-xs font-bold uppercase tracking-wider">Dichiarato da Staff</span>
+                    <div className="space-y-1.5 text-xs font-semibold">
+                      <div className="flex justify-between">
+                        <span className="text-black/50">1° Acconto Pagato:</span>
+                        <span className="font-bold text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-black/50">2° Saldo Pagato:</span>
+                        <span className="font-bold text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-black/5 pt-1.5 mt-1">
+                        <span className="font-black text-black">Totale Dichiarato:</span>
+                        <span className="text-base font-black text-[#1F1F1F]">
+                          {money(parseFloat(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid] || "0") + parseFloat(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid] || "0"))}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-white rounded-xl p-3 border border-black/5">
-                    <span className="text-black/40 block text-xs font-semibold">Atteso su Shopify</span>
-                    <span className={cn(
-                      "text-lg font-black",
-                      viewingResponse.answers?.client_control_shopify_expected_paid !== undefined &&
-                      viewingResponse.answers?.client_control_shopify_expected_paid !== null &&
-                      parseFloat(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid] || "0") !== parseFloat(viewingResponse.answers?.client_control_shopify_expected_paid || "0")
-                        ? "text-red-600"
-                        : "text-emerald-600"
-                    )}>
-                      {viewingResponse.answers?.client_control_shopify_expected_paid !== undefined && viewingResponse.answers?.client_control_shopify_expected_paid !== null
-                        ? money(viewingResponse.answers.client_control_shopify_expected_paid) 
-                        : "Non disponibile"}
-                    </span>
+
+                  {/* Atteso su Shopify */}
+                  <div className="bg-white rounded-2xl p-4 border border-black/5 space-y-2 shadow-2xs">
+                    <span className="text-black/40 block text-xs font-bold uppercase tracking-wider">Atteso su Shopify</span>
+                    <div className="space-y-1.5 text-xs font-semibold">
+                      <div className="flex justify-between">
+                        <span className="text-black/50">1° Acconto (Atteso):</span>
+                        <span className="font-bold text-emerald-700">
+                          {money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid] || viewingResponse.answers?.client_control_shopify_expected_paid || "0")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-black/50">2° Saldo (Atteso):</span>
+                        <span className="font-bold text-emerald-700">
+                          {money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}
+                        </span>
+                      </div>
+                      <div className="flex justify-between border-t border-black/5 pt-1.5 mt-1">
+                        <span className="font-black text-black">Totale Atteso Shopify:</span>
+                        <span className="text-base font-black text-emerald-600">
+                          {money(parseFloat(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.depositPaid] || "0") + parseFloat(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid] || "0"))}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
