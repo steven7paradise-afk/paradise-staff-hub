@@ -3618,20 +3618,16 @@ export function AppointmentsBrowser({
                       </div>
 
                       <div
-                        className="space-y-2"
+                        className="space-y-1.5"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <StatusControl booking={booking} compact />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${booking.isCanceled ? "border-red-100 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}
-                          >
-                            {booking.isCanceled
-                              ? "Annullato"
-                              : appointmentStatusLabels[status]}
+                        {booking.isCanceled ? (
+                          <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                            Annullato
                           </span>
-                          <WhatsAppSheetNote booking={booking} compact />
-                        </div>
+                        ) : null}
+                        <WhatsAppSheetNote booking={booking} compact />
                       </div>
 
                       <button
