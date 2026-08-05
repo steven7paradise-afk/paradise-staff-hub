@@ -40,6 +40,7 @@ import {
   FileText,
   Save,
   DollarSign,
+  ExternalLink,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
@@ -81,6 +82,7 @@ type ClientControlAppointmentForm = {
   paid: string;
   staffIds: string[];
   shopifyOrder: string;
+  secondShopifyOrder?: string;
   instagramTag: string;
   customNoteText: string;
   notes: boolean;
@@ -1206,6 +1208,7 @@ export function AppointmentsBrowser({
       paid: "",
       staffIds: [],
       shopifyOrder: "",
+      secondShopifyOrder: "",
       instagramTag: "",
       customNoteText: "",
       notes: false,
@@ -1215,6 +1218,17 @@ export function AppointmentsBrowser({
       review: false,
       bookingId: null,
     });
+
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<{
+    orderName: string;
+    clientName: string;
+    totalPrice: number;
+    email: string;
+    phone: string;
+    serviceTitle: string;
+    note: string;
+    createdAt?: string;
+  } | null>(null);
 
   const [toastNotification, setToastNotification] = useState<{
     show: boolean;
@@ -1336,9 +1350,17 @@ export function AppointmentsBrowser({
     phone: string;
     serviceTitle: string;
     note: string;
+    createdAt?: string;
   }) {
+    setSelectedOrderDetails(order);
+
     setClientControlForm((prev) => {
-      const newOrder = order.orderName ? order.orderName.replace(/^#/, "") : prev.shopifyOrder;
+      const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
+      
+      // If shopifyOrder already has the 1st deposit order, set secondShopifyOrder!
+      const firstOrder = prev.shopifyOrder || cleanName;
+      const secondOrder = prev.shopifyOrder && prev.shopifyOrder !== cleanName ? cleanName : (prev.secondShopifyOrder || "");
+
       const newDeposit = order.totalPrice != null ? String(order.totalPrice) : prev.depositPaid;
       const newEmail = order.email || prev.email;
       const newPhone = order.phone || prev.phone;
@@ -1349,13 +1371,14 @@ export function AppointmentsBrowser({
         updatedNote = updatedNote ? `${updatedNote}\n${order.note}` : order.note;
       }
       if (order.serviceTitle && !updatedNote.includes(order.serviceTitle)) {
-        updatedNote = updatedNote ? `${updatedNote}\nServizi: ${order.serviceTitle}` : `Servizi: ${order.serviceTitle}`;
+        updatedNote = updatedNote ? `${updatedNote}\nShopify: ${order.serviceTitle}` : `Shopify: ${order.serviceTitle}`;
       }
 
       return {
         ...prev,
-        shopifyOrder: newOrder,
-        depositPaid: newDeposit,
+        shopifyOrder: firstOrder,
+        secondShopifyOrder: secondOrder,
+        depositPaid: prev.depositPaid || newDeposit,
         email: newEmail,
         phone: newPhone,
         clientName: newClientName,
@@ -2668,59 +2691,68 @@ export function AppointmentsBrowser({
                 </div>
               </section>
 
-              {/* 4 Fields Grid: Ordine Shopify, Acconto, Pagato & Collaboratrice */}
+              {/* 4 Fields Grid: Ordine Shopify (1° e 2°), Acconto, Pagato & Collaboratrice */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="block relative">
+                <div className="block relative col-span-1 sm:col-span-2">
                   <div className="flex items-center justify-between">
                     <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
-                      <ShoppingBag className="size-3.5 text-[#D96B94]" /> Ordine Shopify
+                      <ShoppingBag className="size-3.5 text-[#D96B94]" /> ORDINI SHOPIFY (1° ACCONTO / 2° SALDO)
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowTodayOrdersDropdown((prev) => !prev);
-                          if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTodayOrdersDropdown((prev) => !prev);
+                        if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full bg-[#FCE5F3] border border-[#F6E1EB] px-3 py-1 text-[10px] font-extrabold text-[#B83D7F] hover:bg-[#F9D2E8] transition active:scale-95 shadow-2xs"
+                      title="Mostra gli ordini Shopify arrivati oggi"
+                    >
+                      <Sparkles className="size-3 text-[#D96B94]" />
+                      <span>{loadingTodayOrders ? "Carico..." : "⚡ ORDINI OGGI"}</span>
+                    </button>
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="block text-[9px] font-bold text-neutral-400 mb-0.5">1° Ordine (Acconto)</span>
+                      <input
+                        type="text"
+                        value={clientControlForm.shopifyOrder}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            shopifyOrder: event.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleShopifyOrderLookup();
+                          }
                         }}
-                        className="text-[10px] font-extrabold text-[#D96B94] hover:underline transition"
-                        title="Mostra gli ordini Shopify di oggi"
-                      >
-                        {loadingTodayOrders ? "Carico..." : "Ordini oggi"}
-                      </button>
-                      <span className="text-black/20">•</span>
-                      <button
-                        type="button"
-                        disabled={shopifyLookupLoading}
-                        onClick={() => handleShopifyOrderLookup()}
-                        className="text-[10px] font-extrabold text-[#D96B94] hover:underline disabled:opacity-50 transition"
-                        title="Cerca ordine su Shopify da numero o nome cliente"
-                      >
-                        {shopifyLookupLoading ? "..." : "Cerca"}
-                      </button>
+                        className="h-11 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-xs font-bold outline-none focus:border-[#D96B94]"
+                        placeholder="N° Acconto"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-bold text-neutral-400 mb-0.5">2° Ordine (Saldo / Salone)</span>
+                      <input
+                        type="text"
+                        value={clientControlForm.secondShopifyOrder || ""}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            secondShopifyOrder: event.target.value,
+                          }))
+                        }
+                        className="h-11 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-xs font-bold outline-none focus:border-[#D96B94]"
+                        placeholder="N° Saldo (opzionale)"
+                      />
                     </div>
                   </div>
-                  <input
-                    type="text"
-                    value={clientControlForm.shopifyOrder}
-                    onChange={(event) =>
-                      setClientControlForm((prev) => ({
-                        ...prev,
-                        shopifyOrder: event.target.value,
-                      }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleShopifyOrderLookup();
-                      }
-                    }}
-                    className="mt-1.5 h-12 w-full rounded-2xl border border-[#F4E3EA] bg-white px-3.5 text-sm font-bold outline-none focus:border-[#D96B94]"
-                    placeholder="Numero ordine"
-                  />
 
                   {/* Dropdown list for today's orders (Image 3 design & #1 suggestion) */}
                   {showTodayOrdersDropdown && (
-                    <div className="absolute left-0 top-full z-50 mt-1.5 w-[320px] sm:w-[400px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
+                    <div className="absolute left-0 top-full z-50 mt-1.5 w-[320px] sm:w-[420px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
                       <div className="flex items-center justify-between pb-2 border-b border-black/5">
                         <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
                           ORDINI SHOPIFY DI OGGI ({sortedTodayOrdersList.length})
@@ -2877,6 +2909,48 @@ export function AppointmentsBrowser({
                   ) : null}
                 </div>
               </div>
+
+              {/* Interactive Shopify Order Info Card (quando viene selezionato un ordine) */}
+              {selectedOrderDetails && (
+                <div className="rounded-[22px] border border-[#F6E1EB] bg-[#FFF0F6] p-4 shadow-2xs space-y-2.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-xl bg-[#D96B94] px-2.5 py-1 text-[11px] font-black text-white uppercase tracking-wider shadow-2xs">
+                        {selectedOrderDetails.orderName}
+                      </span>
+                      <span className="text-xs font-black text-[#1F1F1F]">
+                        {selectedOrderDetails.clientName}
+                      </span>
+                    </div>
+                    <a
+                      href="https://admin.shopify.com/store/paradisebeautymilano/orders"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#F6D5E5] px-3 py-1.5 text-[11px] font-extrabold text-[#D96B94] hover:bg-[#FCE5F3] transition shadow-2xs"
+                    >
+                      <ExternalLink className="size-3.5" />
+                      <span>Vedi su Shopify ↗</span>
+                    </a>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[11px] font-bold text-neutral-600 border-t border-black/5 pt-2.5">
+                    <div>
+                      <span className="text-black/40 block text-[9px] uppercase tracking-wider font-black">Servizio / Articoli</span>
+                      <span className="text-[#1F1F1F] font-extrabold truncate block">{selectedOrderDetails.serviceTitle || "Servizio Shopify"}</span>
+                    </div>
+                    <div>
+                      <span className="text-black/40 block text-[9px] uppercase tracking-wider font-black">Ora & Data Pagamento</span>
+                      <span className="text-[#1F1F1F] font-extrabold block">
+                        {selectedOrderDetails.createdAt ? new Date(selectedOrderDetails.createdAt).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Oggi"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-black/40 block text-[9px] uppercase tracking-wider font-black">Importo Pagato</span>
+                      <span className="text-[#D96B94] font-black block text-xs">€{selectedOrderDetails.totalPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Suggerimenti, Formato & Colore */}
               <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5 space-y-3">
