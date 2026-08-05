@@ -1054,11 +1054,19 @@ export function AppointmentsBrowser({
     }
   }, [searchParams, router]);
 
-  // Real-time Auto-polling: re-fetch appointments every 30 seconds automatically
+  // Safe Real-time Auto-polling: re-fetch appointments every 45 seconds when page is active & online
   useEffect(() => {
-    const interval = setInterval(() => {
-      router.refresh();
-    }, 30000);
+    const doPolling = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible" && typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          router.refresh();
+        } catch (err) {
+          console.warn("Background refresh skipped safely:", err);
+        }
+      }
+    };
+
+    const interval = setInterval(doPolling, 45000);
     return () => clearInterval(interval);
   }, [router]);
 

@@ -493,23 +493,15 @@ export default async function AppointmentsPage({
         </div>
       ) : null}
 
-      {loadError ? (
-        <div className="p-4 sm:p-6 lg:p-8">
-          <section className="rounded-[28px] border border-[#F7D9DD] bg-[#FFF6F7] px-5 py-6 text-sm text-[#A15062] shadow-sm">
-            Non sono riuscito a leggere Cowlendar adesso: {loadError}
-          </section>
-        </div>
-      ) : (
-        <AppointmentsBrowser
-          initialBookings={serializedBookings}
-          corsoTeamOptions={corsoTeamOptions}
-          isPC={isPC}
-          pcLocationId={pcLocationId}
-          initialSalon={initialSalon}
-          initialPcWorkerName={kioskWorkerName}
-          locations={locations}
-        />
-      )}
+      <AppointmentsBrowser
+        initialBookings={serializedBookings}
+        corsoTeamOptions={corsoTeamOptions}
+        isPC={isPC}
+        pcLocationId={pcLocationId}
+        initialSalon={initialSalon}
+        initialPcWorkerName={kioskWorkerName}
+        locations={locations}
+      />
     </AppShell>
   );
 }
