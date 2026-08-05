@@ -205,8 +205,8 @@ export function StaffDirectory({
   
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   
-  // Modals editing state
   const [isEditing, setIsEditing] = useState(false);
+  const [showFullForm, setShowFullForm] = useState(false);
   const [editForm, setEditForm] = useState<Employee | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [pinConfirmInput, setPinConfirmInput] = useState("");
@@ -952,9 +952,9 @@ export function StaffDirectory({
         </div>
 
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-3 w-full min-w-0 overflow-hidden">
-          <div className="bg-white rounded-[24px] sm:rounded-[32px] border border-[#F4E3EA] p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6 min-w-0 w-full">
+          <div className="bg-white rounded-[24px] sm:rounded-[32px] border border-[#F4E3EA] p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 min-w-0 w-full">
             <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5 min-w-0 w-full">
-              <div className="relative size-24 sm:size-28 rounded-[24px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-3xl font-black text-neutral-800 shadow-md group shrink-0">
+              <div className="relative size-20 sm:size-24 rounded-[22px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-2xl font-black text-neutral-800 shadow-md group shrink-0">
                 {editForm.photoUrl ? (
                   <img src={resolveDrivePhotoUrl(editForm.photoUrl)} alt={editForm.name} className="size-full object-cover" />
                 ) : (
@@ -976,73 +976,88 @@ export function StaffDirectory({
               </div>
 
               <div className="min-w-0 w-full">
-                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-neutral-900 break-words">{editForm.name}</h1>
-                <p className="text-xs sm:text-sm font-semibold text-neutral-400 mt-1 capitalize">{editForm.mansione || "Nessun ruolo"}</p>
-                <div className="flex flex-wrap justify-center sm:justify-start gap-2 items-center mt-3">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                  <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-neutral-900 break-words">{editForm.name}</h1>
                   <span className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-wider shadow-sm",
+                    "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-2xs",
                     editForm.active ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-800 border border-red-200"
                   )}>
-                    <span className={cn("size-2 rounded-full", editForm.active ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
+                    <span className={cn("size-1.5 rounded-full", editForm.active ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
                     {editForm.active ? "Attivo" : "Disattivato"}
                   </span>
-                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-wider max-w-full truncate">
-                    CF: {editForm.fiscalCode || "Non inserito"}
-                  </span>
-                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-wider flex items-center gap-1 max-w-full">
+                </div>
+
+                <p className="text-xs font-semibold text-neutral-400 mt-0.5 capitalize">{editForm.mansione || "Nessuna mansione specificata"}</p>
+
+                <div className="flex flex-wrap justify-center sm:justify-start gap-2 items-center mt-3">
+                  {editForm.email && (
+                    <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold max-w-full truncate">
+                      ✉️ {editForm.email}
+                    </span>
+                  )}
+                  {editForm.whatsappPhone && (
+                    <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold">
+                      📱 {editForm.whatsappPhone}
+                    </span>
+                  )}
+                  {editForm.contractStart && (
+                    <span className="bg-[#FAF7F6] text-[#B83D7F] border border-[#F4E3EA] px-2.5 py-1 rounded-full text-[11px] font-bold">
+                      📅 Inizio Contratto: {formatContractDate(editForm.contractStart)}
+                    </span>
+                  )}
+                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1">
                     <MapPin className="size-3 text-red-500 shrink-0" />
-                    <span className="truncate">{editForm.location}</span>
+                    <span>{editForm.location}</span>
                   </span>
                 </div>
-                <div className="mt-4 grid gap-2 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 w-full">
-                  {[
-                    { label: "WhatsApp", value: editForm.whatsappPhone || "Non inserito" },
-                    { label: "Data nascita", value: editForm.birthDate ? formatContractDate(editForm.birthDate) : "Non inserita" },
-                    { label: "Codice fiscale", value: editForm.fiscalCode || "Non inserito" },
-                    { label: "IBAN", value: editForm.iban || "Non inserito" },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-2xl border border-black/5 bg-white/65 px-3 py-2 shadow-sm min-w-0">
-                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-neutral-400">{item.label}</p>
-                      <p className="mt-1 truncate text-xs font-extrabold text-neutral-700" title={item.value}>{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-                {editForm.lastEditedByName && (
-                  <p className="text-[10px] sm:text-[11px] text-neutral-400 font-semibold mt-2.5 italic truncate">
-                    Ultima modifica: <span className="font-extrabold">{editForm.lastEditedByName}</span> ({new Date(editForm.lastEditedAt!).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })})
-                  </p>
-                )}
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full shrink-0">
-              {[
-                { title: "Lavori", count: stats?.jobs.count ?? 0, growth: stats?.jobs.growth ?? 0, unit: "" },
-                { title: "Ore", count: stats?.hours.count ?? 0, growth: stats?.hours.growth ?? 0, unit: "h" },
-                { title: "Turni", count: stats?.shifts.count ?? 0, growth: stats?.shifts.growth ?? 0, unit: "" },
-              ].map((card, idx) => (
-                <div key={idx} className="bg-[#FAF7F6] border border-[#F4E3EA] p-2.5 sm:p-3 rounded-[20px] shadow-2xs flex flex-col justify-between min-h-[85px] min-w-0">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400 leading-tight truncate">{card.title}</p>
-                  {loadingStats ? (
-                    <div className="h-5 w-12 bg-neutral-200 animate-pulse rounded-md mt-2" />
-                  ) : (
-                    <div className="flex flex-wrap items-baseline justify-between gap-1 mt-1.5 min-w-0">
-                      <span className="text-base sm:text-xl font-black tracking-tight text-[#1F1F1F] truncate">{card.count.toLocaleString("it-IT")}{card.unit}</span>
-                      <span className={cn(
-                        "text-[8px] sm:text-[9px] font-extrabold rounded-full px-1.5 py-0.5 shrink-0",
-                        card.growth >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
-                      )}>
-                        {card.growth >= 0 ? `+${card.growth}%` : `${card.growth}%`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0 justify-center">
+              <button
+                type="button"
+                onClick={() => setShowFullForm(!showFullForm)}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#D96B94] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-95 whitespace-nowrap"
+              >
+                <SlidersHorizontal className="size-3.5" />
+                {showFullForm ? "▲ Nascondi Modifica" : "✏️ Modifica dipendente"}
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-6 w-full min-w-0 overflow-hidden">
+        {/* STATS KEY INDICATORS BANNER */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+            {[
+              { title: "Lavori completati", count: stats?.jobs.count ?? 0, growth: stats?.jobs.growth ?? 0, unit: "" },
+              { title: "Ore lavorate", count: stats?.hours.count ?? 0, growth: stats?.hours.growth ?? 0, unit: "h" },
+              { title: "Turni effettuati", count: stats?.shifts.count ?? 0, growth: stats?.shifts.growth ?? 0, unit: "" },
+              { title: "Malattie Anno", count: editForm.sicknessStats?.totalDays ?? 0, growth: 0, unit: " gg" },
+            ].map((card, idx) => (
+              <div key={idx} className="bg-white border border-[#F4E3EA] p-3 rounded-[22px] shadow-2xs flex flex-col justify-between min-h-[85px] min-w-0">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-neutral-400 leading-tight truncate">{card.title}</p>
+                {loadingStats ? (
+                  <div className="h-5 w-12 bg-neutral-200 animate-pulse rounded-md mt-2" />
+                ) : (
+                  <div className="flex flex-wrap items-baseline justify-between gap-1 mt-1.5 min-w-0">
+                    <span className="text-lg sm:text-xl font-extrabold tracking-tight text-[#1F1F1F] truncate">{card.count.toLocaleString("it-IT")}{card.unit}</span>
+                    {idx < 3 && (
+                      <span className={cn(
+                        "text-[9px] font-extrabold rounded-full px-1.5 py-0.5 shrink-0",
+                        card.growth >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+                      )}>
+                        {card.growth >= 0 ? `+${card.growth}%` : `${card.growth}%`}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
           <form onSubmit={handleSaveEmployee} className="space-y-6">
             {errorMsg && (
               <div className="p-4 text-sm font-semibold text-rose-800 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in">
@@ -1050,467 +1065,481 @@ export function StaffDirectory({
               </div>
             )}
 
-            {/* 1. Malattie prima del profilo personale */}
-            <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-                    <HeartPulse className="size-4" />
-                  </div>
-                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Malattie Anno Corrente</h2>
-                </div>
-                <Badge tone={(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "pink" : "green"}>
-                  {(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "Da controllare" : "Ok"}
-                </Badge>
-              </div>
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-black/5 bg-[#FAF7F6] p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-black/40">Totale Giorni</p>
-                  <p className="mt-1 text-2xl font-black text-[#1F1F1F]">{editForm.sicknessStats?.totalDays ?? 0}</p>
-                </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700/70">Giustificate</p>
-                  <p className="mt-1 text-2xl font-black text-emerald-800">{editForm.sicknessStats?.justifiedDays ?? 0}</p>
-                </div>
-                <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-rose-700/70">Mancanti / Da verificare</p>
-                  <p className="mt-1 text-2xl font-black text-rose-800">{editForm.sicknessStats?.unjustifiedDays ?? 0}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Profilo Personale, Posizione Lavorativa, Account e Sicurezza */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
-                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
-                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-                    <User className="size-4" />
-                  </div>
-                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Profilo Personale</h2>
-                </div>
-
-                <div className="space-y-3.5 mt-4">
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Nome e cognome</span>
-                    <Field
-                      required
-                      value={editForm.name}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, name: e.target.value } : null)}
-                    />
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Email di accesso</span>
-                    <Field
-                      required
-                      type="email"
-                      value={editForm.email}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, email: e.target.value } : null)}
-                    />
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">URL foto profilo</span>
-                    <div className="relative">
-                      <Field
-                        value={editForm.photoUrl || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)}
-                        placeholder="https://..."
-                        className="pr-12"
-                      />
-                      {editForm.photoUrl && (
-                        <button
-                          type="button"
-                          onClick={copyPhotoUrl}
-                          className="absolute right-2.5 top-2.5 grid size-7 place-items-center bg-black/5 hover:bg-black/10 active:scale-95 rounded-lg text-neutral-500 transition-all"
-                          title="Copia link"
-                        >
-                          {copiedPhotoUrl ? <Check className="size-3.5 text-emerald-600 animate-in zoom-in" /> : <Copy className="size-3.5" />}
-                        </button>
-                      )}
-                    </div>
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Numero WhatsApp</span>
-                    <Field
-                      value={editForm.whatsappPhone || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)}
-                      placeholder="+39..."
-                    />
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data di nascita</span>
-                    <Field
-                      type="date"
-                      value={editForm.birthDate || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
-                    />
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Codice fiscale</span>
-                    <Field
-                      value={editForm.fiscalCode || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, fiscalCode: e.target.value.toUpperCase() } : null)}
-                      placeholder="Codice fiscale..."
-                    />
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">IBAN</span>
-                    <Field
-                      value={editForm.iban || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
-                      placeholder="IT..."
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
-                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
-                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-                    <Briefcase className="size-4" />
-                  </div>
-                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Posizione Lavorativa</h2>
-                </div>
-
-                <div className="space-y-3.5 mt-4">
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Mansione / Ruolo</span>
-                    <Select
-                      value={customMansioneEdit ? "custom" : (editForm.mansione || "").toLowerCase()}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setCustomMansioneEdit(true);
-                          setEditForm(prev => prev ? { ...prev, mansione: "" } : null);
-                        } else {
-                          setCustomMansioneEdit(false);
-                          setEditForm(prev => prev ? { ...prev, mansione: val } : null);
-                        }
-                      }}
-                    >
-                      <option value="">Seleziona mansione...</option>
-                      {mansioniList.map((m) => (
-                        <option key={m} value={m.toLowerCase()}>{m}</option>
-                      ))}
-                      <option value="custom">+ Aggiungi altra mansione...</option>
-                    </Select>
-                    {customMansioneEdit && (
-                      <Field
-                        required
-                        value={editForm.mansione || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
-                        placeholder="Inserisci nuova mansione..."
-                        className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
-                      />
-                    )}
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato Dipendente</span>
-                    <Select
-                      value={editForm.employeeStatus}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}
-                    >
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </Select>
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Livello sistema</span>
-                    <Select
-                      value={editForm.role}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, role: e.target.value } : null)}
-                    >
-                      {ROLE_OPTIONS.map((role) => (
-                        <option key={role.value} value={role.value}>{role.label}</option>
-                      ))}
-                    </Select>
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Salone sede</span>
-                    <Select
-                      value={editForm.sedeId || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, sedeId: e.target.value || null } : null)}
-                    >
-                      <option value="">Nessuna sede</option>
-                      {locations.map((loc) => (
-                        <option key={loc.id} value={loc.id}>{loc.name}</option>
-                      ))}
-                    </Select>
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Responsabile diretto</span>
-                    <Select
-                      value={editForm.managerId || ""}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, managerId: e.target.value || null } : null)}
-                    >
-                      <option value="">Nessun manager</option>
-                      {managers.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </Select>
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block space-y-1">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Inizio contratto</span>
-                      <Field
-                        type="date"
-                        value={editForm.contractStart || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)}
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Fine contratto</span>
-                      <Field
-                        type="date"
-                        value={editForm.contractEnd || ""}
-                        onChange={(e) => setEditForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
-                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
-                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-                    <Shield className="size-4" />
-                  </div>
-                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Account e Sicurezza</h2>
-                </div>
-
-                <div className="space-y-4 mt-4">
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato account</span>
-                    <Select
-                      value={editForm.active ? "true" : "false"}
-                      onChange={(e) => setEditForm(prev => prev ? { ...prev, active: e.target.value === "true" } : null)}
-                    >
-                      <option value="true">Attivo / Abilitato</option>
-                      <option value="false">Disattivato / Bloccato</option>
-                    </Select>
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Cambia PIN (4-6 cifre)</span>
-                    <Field
-                      value={pinInput}
-                      onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="Nuovo PIN"
-                      maxLength={6}
-                      type="password"
-                      autoComplete="new-password"
-                    />
-                  </label>
-
-                  <label className="block space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Conferma PIN</span>
-                    <Field
-                      value={pinConfirmInput}
-                      onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="Conferma PIN"
-                      maxLength={6}
-                      type="password"
-                      autoComplete="new-password"
-                    />
-                  </label>
-
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
-                    Il PIN viene aggiornato quando premi Salva modifiche. Il reset password via email resta nascosto finche configuriamo il servizio email.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm lg:col-span-2">
-                <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-                      <ClipboardList className="size-4" />
-                    </div>
-                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
-                  </div>
+            {/* FULL EDITING FORM - TOGGLEABLE */}
+            {showFullForm && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] p-4 text-xs font-bold text-[#B83D7F] flex items-center justify-between">
+                  <span>Modifica completa dati dipendente attiva</span>
                   <button
                     type="button"
-                    onClick={openRenewalForm}
-                    className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#FCE5F3] px-4 text-xs font-bold text-[#B83D7F] transition hover:bg-[#F9D4E8] active:scale-[0.98]"
+                    onClick={() => setShowFullForm(false)}
+                    className="text-[10px] uppercase tracking-wider underline hover:text-black"
                   >
-                    <Plus className="size-4" />
-                    Pianifica rinnovo
+                    Chiudi modifica
                   </button>
                 </div>
 
-                {showRenewalForm && (
-                  <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data inizio rinnovo</span>
-                        <Field
-                          type="date"
-                          value={renewalDraft.startDate}
-                          onChange={(e) => setRenewalDraft((prev) => ({ ...prev, startDate: e.target.value }))}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data fine rinnovo</span>
-                        <Field
-                          type="date"
-                          value={renewalDraft.endDate}
-                          onChange={(e) => setRenewalDraft((prev) => ({ ...prev, endDate: e.target.value }))}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Note</span>
-                        <Field
-                          value={renewalDraft.note}
-                          onChange={(e) => setRenewalDraft((prev) => ({ ...prev, note: e.target.value }))}
-                          placeholder="Da confermare"
-                        />
-                      </label>
+                {/* Malattie Dettaglio */}
+                <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                        <HeartPulse className="size-4" />
+                      </div>
+                      <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Malattie Anno Corrente</h2>
                     </div>
-                    <div className="mt-4 flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          resetRenewalForm();
-                          setErrorMsg("");
-                        }}
-                        className="inline-flex min-h-9 items-center justify-center rounded-2xl border border-black/10 bg-white px-4 text-xs font-bold text-neutral-600 transition hover:bg-black/[0.03]"
-                      >
-                        Annulla
-                      </button>
-                      <button
-                        type="button"
-                        onClick={planContractRenewal}
-                        className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#D96B94] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-[0.98]"
-                      >
-                        Aggiungi rinnovo
-                      </button>
+                    <Badge tone={(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "pink" : "green"}>
+                      {(editForm.sicknessStats?.unjustifiedDays ?? 0) > 0 ? "Da controllare" : "Ok"}
+                    </Badge>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-2xl border border-black/5 bg-[#FAF7F6] p-4">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-black/40">Totale Giorni</p>
+                      <p className="mt-1 text-2xl font-black text-[#1F1F1F]">{editForm.sicknessStats?.totalDays ?? 0}</p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-emerald-700/70">Giustificate</p>
+                      <p className="mt-1 text-2xl font-black text-emerald-800">{editForm.sicknessStats?.justifiedDays ?? 0}</p>
+                    </div>
+                    <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-rose-700/70">Mancanti / Da verificare</p>
+                      <p className="mt-1 text-2xl font-black text-rose-800">{editForm.sicknessStats?.unjustifiedDays ?? 0}</p>
                     </div>
                   </div>
-                )}
+                </div>
 
-                <div className="overflow-x-auto mt-4">
-                  <table className="min-w-full divide-y divide-black/5 text-left text-xs">
-                    <thead>
-                      <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
-                        <th className="py-2.5">Tipo</th>
-                        <th className="py-2.5">Data Inizio</th>
-                        <th className="py-2.5">Data Fine</th>
-                        <th className="py-2.5">Stato</th>
-                        <th className="py-2.5">Rinnovato il</th>
-                        <th className="py-2.5">Scadenza tra</th>
-                        <th className="py-2.5">Note</th>
-                        <th className="py-2.5 text-right">Azioni</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
-                      {contracts.length > 0 ? (
-                        contracts.map((c, idx) => (
-                          <tr key={idx} className="hover:bg-neutral-50/50 transition">
-                            <td className="py-3 font-extrabold text-neutral-900">{c.tipo}</td>
-                            <td className="py-3">{c.inizio}</td>
-                            <td className="py-3">{c.fine}</td>
-                            <td className="py-3">
-                              <span className={cn(
-                                "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide",
-                                c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
-                                c.stato === "Completato" && "bg-neutral-100 text-neutral-600",
-                                c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100"
-                              )}>
-                                {c.stato}
-                              </span>
-                            </td>
-                            <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
-                            <td className="py-3 text-[#D96B94] font-bold">{c.scadenza}</td>
-                            <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
-                            <td className="py-3 text-right">
-                              {c.historyIndex !== undefined ? (
-                                <button
-                                  type="button"
-                                  onClick={() => deleteContractRenewal(c.historyIndex!)}
-                                  className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
-                                  title="Elimina rinnovo"
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </button>
-                              ) : (
-                                <span className="text-neutral-300">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={8} className="py-6 text-center text-neutral-400 italic">
-                            Nessuna data di contratto configurata per questo dipendente.
+                {/* Profilo Personale, Posizione Lavorativa, Account e Sicurezza */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                      <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                        <User className="size-4" />
+                      </div>
+                      <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Profilo Personale</h2>
+                    </div>
+
+                    <div className="space-y-3.5 mt-4">
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Nome e cognome</span>
+                        <Field
+                          required
+                          value={editForm.name}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, name: e.target.value } : null)}
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Email di accesso</span>
+                        <Field
+                          required
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, email: e.target.value } : null)}
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">URL foto profilo</span>
+                        <div className="relative">
+                          <Field
+                            value={editForm.photoUrl || ""}
+                            onChange={(e) => setEditForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)}
+                            placeholder="https://..."
+                            className="pr-12"
+                          />
+                          {editForm.photoUrl && (
+                            <button
+                              type="button"
+                              onClick={copyPhotoUrl}
+                              className="absolute right-2.5 top-2.5 grid size-7 place-items-center bg-black/5 hover:bg-black/10 active:scale-95 rounded-lg text-neutral-500 transition-all"
+                              title="Copia link"
+                            >
+                              {copiedPhotoUrl ? <Check className="size-3.5 text-emerald-600 animate-in zoom-in" /> : <Copy className="size-3.5" />}
+                            </button>
+                          )}
+                        </div>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Numero WhatsApp</span>
+                        <Field
+                          value={editForm.whatsappPhone || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)}
+                          placeholder="+39..."
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data di nascita</span>
+                        <Field
+                          type="date"
+                          value={editForm.birthDate || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Codice fiscale</span>
+                        <Field
+                          value={editForm.fiscalCode || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, fiscalCode: e.target.value.toUpperCase() } : null)}
+                          placeholder="Codice fiscale..."
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">IBAN</span>
+                        <Field
+                          value={editForm.iban || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
+                          placeholder="IT..."
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                      <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                        <Briefcase className="size-4" />
+                      </div>
+                      <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Posizione Lavorativa</h2>
+                    </div>
+
+                    <div className="space-y-3.5 mt-4">
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Mansione / Ruolo</span>
+                        <Select
+                          value={customMansioneEdit ? "custom" : (editForm.mansione || "").toLowerCase()}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "custom") {
+                              setCustomMansioneEdit(true);
+                              setEditForm(prev => prev ? { ...prev, mansione: "" } : null);
+                            } else {
+                              setCustomMansioneEdit(false);
+                              setEditForm(prev => prev ? { ...prev, mansione: val } : null);
+                            }
+                          }}
+                        >
+                          <option value="">Seleziona mansione...</option>
+                          {mansioniList.map((m) => (
+                            <option key={m} value={m.toLowerCase()}>{m}</option>
+                          ))}
+                          <option value="custom">+ Aggiungi altra mansione...</option>
+                        </Select>
+                        {customMansioneEdit && (
+                          <Field
+                            required
+                            value={editForm.mansione || ""}
+                            onChange={(e) => setEditForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
+                            placeholder="Inserisci nuova mansione..."
+                            className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
+                          />
+                        )}
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato Dipendente</span>
+                        <Select
+                          value={editForm.employeeStatus}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}
+                        >
+                          {STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </Select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Livello sistema</span>
+                        <Select
+                          value={editForm.role}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, role: e.target.value } : null)}
+                        >
+                          {ROLE_OPTIONS.map((role) => (
+                            <option key={role.value} value={role.value}>{role.label}</option>
+                          ))}
+                        </Select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Salone sede</span>
+                        <Select
+                          value={editForm.sedeId || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, sedeId: e.target.value || null } : null)}
+                        >
+                          <option value="">Nessuna sede</option>
+                          {locations.map((loc) => (
+                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                          ))}
+                        </Select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Responsabile diretto</span>
+                        <Select
+                          value={editForm.managerId || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, managerId: e.target.value || null } : null)}
+                        >
+                          <option value="">Nessun manager</option>
+                          {managers.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </Select>
+                      </label>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block space-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Inizio contratto</span>
+                          <Field
+                            type="date"
+                            value={editForm.contractStart || ""}
+                            onChange={(e) => setEditForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)}
+                          />
+                        </label>
+                        <label className="block space-y-1">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Fine contratto</span>
+                          <Field
+                            type="date"
+                            value={editForm.contractEnd || ""}
+                            onChange={(e) => setEditForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm space-y-4">
+                    <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                      <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                        <Shield className="size-4" />
+                      </div>
+                      <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Account e Sicurezza</h2>
+                    </div>
+
+                    <div className="space-y-4 mt-4">
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato account</span>
+                        <Select
+                          value={editForm.active ? "true" : "false"}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, active: e.target.value === "true" } : null)}
+                        >
+                          <option value="true">Attivo / Abilitato</option>
+                          <option value="false">Disattivato / Bloccato</option>
+                        </Select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Cambia PIN (4-6 cifre)</span>
+                        <Field
+                          value={pinInput}
+                          onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="Nuovo PIN"
+                          maxLength={6}
+                          type="password"
+                          autoComplete="new-password"
+                        />
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#B85B68]">Conferma PIN</span>
+                        <Field
+                          value={pinConfirmInput}
+                          onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          placeholder="Conferma PIN"
+                          maxLength={6}
+                          type="password"
+                          autoComplete="new-password"
+                        />
+                      </label>
+
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">
+                        Il PIN viene aggiornato quando premi Salva modifiche.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm flex flex-col">
+                  <div className="flex items-center gap-3 border-b border-black/5 pb-4">
+                    <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                      <SlidersHorizontal className="size-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Note HR (interne)</h2>
+                      <p className="text-[10px] text-neutral-400 font-semibold">Visibili solo ad HR ed amministratori</p>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-between mt-4">
+                    <textarea
+                      value={editForm.hrNotes || ""}
+                      onChange={(e) => {
+                        const text = e.target.value.slice(0, 1000);
+                        setEditForm(prev => prev ? { ...prev, hrNotes: text } : null);
+                      }}
+                      placeholder="Scrivi qui la nota interna per l'amministrazione HR..."
+                      rows={4}
+                      className="w-full flex-1 rounded-2xl border border-black/10 bg-[#FAF7F6] p-3.5 text-sm outline-none transition focus:border-[#D96B94] resize-none font-medium text-[#1F1F1F]"
+                    />
+                    <div className="text-[10px] text-neutral-400 font-bold text-right mt-2">
+                      {(editForm.hrNotes || "").length}/1000 caratteri
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-6 border-t border-black/5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFullForm(false);
+                      setErrorMsg("");
+                    }}
+                    className="rounded-2xl bg-[#F8EEF3] px-7 py-3 text-sm font-bold text-black/70 transition hover:bg-[#F2E0EA] active:scale-95"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="rounded-2xl bg-[#D96B94] px-8 py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#C85982] active:scale-95 disabled:opacity-60"
+                  >
+                    {submitting ? "Salvataggio..." : "Salva modifiche"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STORICO CONTRATTI E RINNOVI (SEMPRE VISIBILE) */}
+            <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <ClipboardList className="size-4" />
+                  </div>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={openRenewalForm}
+                  className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#FCE5F3] px-4 text-xs font-bold text-[#B83D7F] transition hover:bg-[#F9D4E8] active:scale-[0.98]"
+                >
+                  <Plus className="size-4" />
+                  Pianifica rinnovo
+                </button>
+              </div>
+
+              {showRenewalForm && (
+                <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data inizio rinnovo</span>
+                      <Field
+                        type="date"
+                        value={renewalDraft.startDate}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, startDate: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data fine rinnovo</span>
+                      <Field
+                        type="date"
+                        value={renewalDraft.endDate}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, endDate: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Note</span>
+                      <Field
+                        value={renewalDraft.note}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, note: e.target.value }))}
+                        placeholder="Da confermare"
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-4 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetRenewalForm();
+                        setErrorMsg("");
+                      }}
+                      className="inline-flex min-h-9 items-center justify-center rounded-2xl border border-black/10 bg-white px-4 text-xs font-bold text-neutral-600 transition hover:bg-black/[0.03]"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      type="button"
+                      onClick={planContractRenewal}
+                      className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#D96B94] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-[0.98]"
+                    >
+                      Aggiungi rinnovo
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="overflow-x-auto mt-4">
+                <table className="min-w-full divide-y divide-black/5 text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                      <th className="py-2.5">Tipo</th>
+                      <th className="py-2.5">Data Inizio</th>
+                      <th className="py-2.5">Data Fine</th>
+                      <th className="py-2.5">Stato</th>
+                      <th className="py-2.5">Rinnovato il</th>
+                      <th className="py-2.5">Scadenza tra</th>
+                      <th className="py-2.5">Note</th>
+                      <th className="py-2.5 text-right">Azioni</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
+                    {contracts.length > 0 ? (
+                      contracts.map((c, idx) => (
+                        <tr key={idx} className="hover:bg-neutral-50/50 transition">
+                          <td className="py-3 font-extrabold text-neutral-900">{c.tipo}</td>
+                          <td className="py-3">{c.inizio}</td>
+                          <td className="py-3">{c.fine}</td>
+                          <td className="py-3">
+                            <span className={cn(
+                              "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide",
+                              c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
+                              c.stato === "Completato" && "bg-neutral-100 text-neutral-600",
+                              c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100"
+                            )}>
+                              {c.stato}
+                            </span>
+                          </td>
+                          <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
+                          <td className="py-3 text-[#D96B94] font-bold">{c.scadenza}</td>
+                          <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
+                          <td className="py-3 text-right">
+                            {c.historyIndex !== undefined ? (
+                              <button
+                                type="button"
+                                onClick={() => deleteContractRenewal(c.historyIndex!)}
+                                className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
+                                title="Elimina rinnovo"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            ) : (
+                              <span className="text-neutral-300">—</span>
+                            )}
                           </td>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="py-6 text-center text-neutral-400 italic">
+                          Nessuna data di contratto configurata per questo dipendente.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-
-              <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm flex flex-col">
-                <div className="flex items-center gap-3 border-b border-black/5 pb-4">
-                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-                    <SlidersHorizontal className="size-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Note HR (interne)</h2>
-                    <p className="text-[10px] text-neutral-400 font-semibold">Visibili solo ad HR ed amministratori</p>
-                  </div>
-                </div>
-
-                <div className="flex-1 flex flex-col justify-between mt-4">
-                  <textarea
-                    value={editForm.hrNotes || ""}
-                    onChange={(e) => {
-                      const text = e.target.value.slice(0, 1000);
-                      setEditForm(prev => prev ? { ...prev, hrNotes: text } : null);
-                    }}
-                    placeholder="Scrivi qui la nota interna per l'amministrazione HR..."
-                    rows={6}
-                    className="w-full flex-1 rounded-2xl border border-black/10 bg-[#FAF7F6] p-3.5 text-sm outline-none transition focus:border-[#D96B94] resize-none font-medium text-[#1F1F1F]"
-                  />
-                  <div className="text-[10px] text-neutral-400 font-bold text-right mt-2">
-                    {(editForm.hrNotes || "").length}/1000 caratteri
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-6 border-t border-black/5">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditing(false);
-                  setSelectedEmployee(null);
-                  resetRenewalForm();
-                }}
-                className="rounded-2xl bg-[#F8EEF3] px-7 py-3 text-sm font-bold text-black/70 transition hover:bg-[#F2E0EA] active:scale-95"
-              >
-                Annulla
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-2xl bg-[#D96B94] px-8 py-3.5 text-sm font-bold text-white shadow-md transition hover:bg-[#C85982] active:scale-95 disabled:opacity-60"
-              >
-                {submitting ? "Salvataggio..." : "Salva modifiche"}
-              </button>
             </div>
           </form>
         </div>
