@@ -30,6 +30,7 @@ import {
   Cloud,
   AtSign,
   ChevronDown,
+  Receipt,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
@@ -2450,6 +2451,10 @@ export function AppointmentsBrowser({
                   <span>Info cliente da API</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2.5">
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                    <Receipt className="size-3.5 text-[#D96B94]" />
+                    <span>N° acconto: #{clientControlForm.shopifyOrder || "---"}</span>
+                  </span>
                   {clientControlForm.email ? (
                     <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
                       <Mail className="size-3.5 text-[#D96B94]" />
