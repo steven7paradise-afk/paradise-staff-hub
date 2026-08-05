@@ -2703,7 +2703,7 @@ export function AppointmentsBrowser({
               <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5">
                 <div className="flex items-center gap-2 text-xs font-bold text-black/60">
                   <User className="size-4 text-[#D96B94]" />
-                  <span className="uppercase tracking-wider font-extrabold text-[11px]">Info cliente da API</span>
+                  <span className="uppercase tracking-wider font-extrabold text-[11px]">Info cliente da</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2.5">
                   <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
