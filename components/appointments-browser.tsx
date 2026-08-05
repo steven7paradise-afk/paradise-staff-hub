@@ -2676,12 +2676,12 @@ export function AppointmentsBrowser({
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-5">
           <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-black/10 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 bg-white px-6 pt-7 pb-4 sm:px-8">
+            <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-white/95 px-6 pt-7 pb-5 sm:px-8">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#D96B94]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
                   Store manager
-                </p>
-                <h2 className="mt-1 text-3xl font-extrabold text-[#1F1F1F]">
+                </span>
+                <h2 className="mt-2 text-3xl font-black tracking-tight text-[#1F1F1F] sm:text-4xl">
                   {clientControlForm.clientName || "Sara Capelli Lisci"}
                 </h2>
               </div>
@@ -2691,44 +2691,44 @@ export function AppointmentsBrowser({
                   setClientControlOpen(false);
                   setIsStaffDropdownOpen(false);
                 }}
-                className="grid size-10 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/70 shadow-sm transition hover:bg-black/5 active:scale-95"
+                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-neutral-50 text-black/70 shadow-2xs transition hover:bg-neutral-100 active:scale-95"
               >
                 <X className="size-5" />
               </button>
             </div>
 
             {/* Scrollable Content */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-8 space-y-6">
-              {/* Info cliente da API Card */}
-              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 space-y-6">
+              {/* Info cliente da Card */}
+              <section className="rounded-[28px] border border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-5 shadow-2xs">
                 <div className="flex items-center gap-2 text-xs font-bold text-black/60">
                   <User className="size-4 text-[#D96B94]" />
-                  <span className="uppercase tracking-wider font-extrabold text-[11px]">Info cliente da</span>
+                  <span className="uppercase tracking-wider font-black text-[11px] text-[#B83D7F]">Info cliente da</span>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2.5">
-                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                <div className="mt-3.5 flex flex-wrap gap-2.5">
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                     <Receipt className="size-3.5 text-[#D96B94]" />
                     <span>N° acconto: #{clientControlForm.shopifyOrder || "---"}</span>
                   </span>
                   {clientControlForm.email ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <Mail className="size-3.5 text-[#D96B94]" />
                       <span className="truncate max-w-[200px]">{clientControlForm.email}</span>
                     </span>
                   ) : null}
                   {clientControlForm.phone ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <Phone className="size-3.5 text-[#D96B94]" />
                       <span>{clientControlForm.phone}</span>
                     </span>
                   ) : null}
                   {clientControlForm.serviceTitle ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <CalendarDays className="size-3.5 text-[#D96B94]" />
                       <span className="truncate max-w-[280px]">{clientControlForm.serviceTitle}</span>
                     </span>
                   ) : null}
-                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6D5E5] bg-white px-3.5 py-2 text-xs font-bold text-[#1F1F1F] shadow-2xs">
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                     <AtSign className="size-3.5 text-[#D96B94]" />
                     <input
                       type="text"
@@ -2740,7 +2740,7 @@ export function AppointmentsBrowser({
                         }))
                       }
                       placeholder="@cliente"
-                      className="bg-transparent outline-none w-24 text-xs font-bold"
+                      className="bg-transparent outline-none w-24 text-xs font-black text-[#D96B94]"
                     />
                   </span>
                 </div>
@@ -3177,8 +3177,8 @@ export function AppointmentsBrowser({
 
               {/* NOTA SHOPIFY */}
               <div>
-                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
-                  <FileText className="size-3.5 text-[#D96B94]" /> NOTA SHOPIFY
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
+                  <FileText className="size-4 text-[#D96B94]" /> NOTA SHOPIFY COMPILATA
                 </span>
                 <textarea
                   value={clientControlForm.customNoteText}
@@ -3189,17 +3189,17 @@ export function AppointmentsBrowser({
                     }))
                   }
                   rows={3}
-                  className="mt-1.5 w-full rounded-2xl border border-black/10 bg-white p-3.5 text-sm font-medium outline-none focus:border-[#D96B94]"
-                  placeholder="Scrivi qui la nota Shopify"
+                  className="mt-1.5 w-full rounded-2xl border border-[#F4D3E2] bg-white p-4 text-xs font-bold text-[#1F1F1F] shadow-2xs outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition"
+                  placeholder="La nota formattata per Shopify comparirà qui..."
                 />
               </div>
 
               {/* Spunte di Verifica (I 5 Checkbox) */}
               <div>
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
                   VERIFICHE E CONTROLLI
                 </span>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2.5 flex flex-wrap gap-2.5">
                   {[
                     ["notes", "Note Shopify"],
                     ["beforeMedia", "Prima foto/video"],
@@ -3212,10 +3212,10 @@ export function AppointmentsBrowser({
                       <label
                         key={fieldKey}
                         className={[
-                          "flex cursor-pointer items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-bold transition",
+                          "flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-black transition active:scale-95 shadow-2xs",
                           checked
-                            ? "border-[#D96B94] bg-[#FCE5F3] text-[#B83D7F]"
-                            : "border-black/10 bg-white text-black/60 hover:bg-black/5",
+                            ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                            : "border-black/10 bg-white text-black/70 hover:bg-neutral-50",
                         ].join(" ")}
                       >
                         <input
@@ -3238,10 +3238,10 @@ export function AppointmentsBrowser({
 
               {clientControlMessage ? (
                 <p
-                  className={`rounded-2xl px-4 py-3 text-sm font-bold ${
+                  className={`rounded-2xl px-5 py-3.5 text-xs font-extrabold ${
                     clientControlMessage.type === "success"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-red-50 text-red-700"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-red-50 text-red-700 border border-red-200"
                   }`}
                 >
                   {clientControlMessage.text}
@@ -3250,14 +3250,14 @@ export function AppointmentsBrowser({
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between border-t border-black/5 bg-white px-6 py-5 sm:px-8">
+            <div className="flex items-center justify-between border-t border-black/5 bg-white/95 px-6 py-5 sm:px-8">
               <button
                 type="button"
                 onClick={() => {
                   setClientControlOpen(false);
                   setIsStaffDropdownOpen(false);
                 }}
-                className="rounded-2xl bg-[#F8EEF3] px-7 py-3 text-sm font-bold text-black/70 transition hover:bg-[#F2E0EA] active:scale-95"
+                className="rounded-2xl border border-black/10 bg-neutral-100 px-8 py-3.5 text-xs font-black text-black/70 transition hover:bg-neutral-200 active:scale-95"
               >
                 Annulla
               </button>
@@ -3265,7 +3265,7 @@ export function AppointmentsBrowser({
                 type="button"
                 onClick={submitClientControlForm}
                 disabled={clientControlSubmitting || clientControlLoading}
-                className="inline-flex items-center gap-2 rounded-2xl bg-[#D96B94] px-7 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#C85982] active:scale-95 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60"
               >
                 <Save className="size-4" />
                 <span>{clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}</span>
