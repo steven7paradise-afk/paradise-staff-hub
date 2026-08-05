@@ -370,10 +370,20 @@ export default async function AppointmentsPage({
         })
         .filter((mate) => mate.name);
 
+      const teammateSalons = teammates
+        .map((mate) => {
+          const matchedUser = matchUserByTeamName(localUsers, mate.name);
+          if (!matchedUser?.location?.name) return null;
+          return getSalonFromText(matchedUser.location.name);
+        })
+        .filter((s): s is "duomo" | "buenos-aires" | "ufficio" => s !== null && s !== "altro");
+
       const inferredSalon: "duomo" | "buenos-aires" | "ufficio" | "altro" =
+        teammateSalons.find((s) => s === "buenos-aires" || s === "duomo") ||
         [booking.service?.title, booking.booking_str, ...(booking.teammates ?? []).map((mate) => `${mate.firstname ?? ""} ${mate.lastname ?? ""}`)]
           .map(getSalonFromText)
-          .find((value) => value !== "altro") || "altro";
+          .find((value) => value !== "altro") ||
+        "altro";
 
       const usedKeys = new Set([
         "id",

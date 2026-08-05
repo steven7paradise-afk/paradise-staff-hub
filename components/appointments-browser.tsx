@@ -1762,9 +1762,19 @@ export function AppointmentsBrowser({
       showCanceled ? booking.isCanceled : !booking.isCanceled,
     );
     const base =
-      salon === "tutti"
+      salon === "tutti" || normalizedSearch
         ? statusScoped
-        : statusScoped.filter((booking) => booking.inferredSalon === salon);
+        : statusScoped.filter((booking) => {
+            if (booking.inferredSalon === salon) return true;
+            // Also include if assigned teammate belongs to current salon
+            const team = getBookingTeam(booking);
+            return team.some((mate) => {
+              const matched = corsoTeamOptions.some(
+                (opt) => opt.name.toLowerCase() === mate.name.toLowerCase()
+              );
+              return salon === "buenos-aires" ? matched : false;
+            });
+          });
     const dateScoped =
       dateFilter.mode === "all"
         ? base
