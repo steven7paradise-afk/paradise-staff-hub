@@ -19,6 +19,7 @@ import {
   Mail,
   MailPlus,
   Megaphone,
+  MessageSquareText,
   Newspaper,
   PencilLine,
   Pin,
