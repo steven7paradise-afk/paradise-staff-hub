@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     // Mode 'today': return list of recent orders for quick selection
     if (mode === "today") {
-      const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=30&status=any&fields=id,name,customer,total_price,line_items,note,created_at`, {
+      const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=50&status=any&fields=id,name,customer,total_price,line_items,note,created_at`, {
         headers: {
           "X-Shopify-Access-Token": token,
           "Content-Type": "application/json",
