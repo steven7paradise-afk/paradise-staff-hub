@@ -1203,8 +1203,42 @@ export function AppointmentsBrowser({
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [selectedExtensionFormat, setSelectedExtensionFormat] = useState("");
-  const [selectedExtensionColor, setSelectedExtensionColor] = useState("");
+  const [selectedGrammi, setSelectedGrammi] = useState("");
+  const [selectedLunghezza, setSelectedLunghezza] = useState("");
+  const [selectedFasce, setSelectedFasce] = useState("");
+  const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
+  const [extraNoteText, setExtraNoteText] = useState("");
+
+  function updateShopifyNote(overrides?: {
+    grammi?: string;
+    lunghezza?: string;
+    fasce?: string;
+    atteggiamento?: string;
+    extraNote?: string;
+  }) {
+    const g = overrides?.grammi !== undefined ? overrides.grammi : selectedGrammi;
+    const l = overrides?.lunghezza !== undefined ? overrides.lunghezza : selectedLunghezza;
+    const f = overrides?.fasce !== undefined ? overrides.fasce : selectedFasce;
+    const a = overrides?.atteggiamento !== undefined ? overrides.atteggiamento : selectedAtteggiamento;
+    const n = overrides?.extraNote !== undefined ? overrides.extraNote : extraNoteText;
+
+    const parts: string[] = [];
+    if (g) parts.push(`Grammi: ${g}`);
+    if (l) parts.push(`Lunghezza: ${l}`);
+    if (f) parts.push(`Fasce: ${f}`);
+    if (a) parts.push(`Cliente: ${a}`);
+
+    let formatted = parts.join(" • ");
+    if (n.trim()) {
+      formatted = formatted ? `${formatted}\nNote: ${n.trim()}` : n.trim();
+    }
+
+    setClientControlForm((prev) => ({
+      ...prev,
+      customNoteText: formatted,
+      notes: Boolean(formatted.trim()),
+    }));
+  }
   const [clientControlForm, setClientControlForm] =
     useState<ClientControlAppointmentForm>({
       salon: "Salone Buenos Aires",
@@ -1587,8 +1621,11 @@ export function AppointmentsBrowser({
 
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
-    setSelectedExtensionFormat("");
-    setSelectedExtensionColor("");
+    setSelectedGrammi("");
+    setSelectedLunghezza("");
+    setSelectedFasce("");
+    setSelectedAtteggiamento("");
+    setExtraNoteText("");
     try {
       const salonName = salonNameForBooking(booking);
       const baseForm: ClientControlAppointmentForm = {
@@ -2970,80 +3007,171 @@ export function AppointmentsBrowser({
                 </div>
               )}
 
-              {/* Suggerimenti, Formato & Colore */}
-              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
-                    <Pencil className="size-3.5 text-[#D96B94]" /> SUGGERIMENTI
+              {/* Nuova Sezione Dettagli Extension & Cliente */}
+              <section className="rounded-[24px] border border-[#F6E1EB] bg-[#FFF8FB] p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-2.5">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
+                    <Pencil className="size-3.5 text-[#D96B94]" /> DETTAGLI APPOINTMENT & CLIENTE
                   </span>
                   <button
                     type="button"
                     onClick={polishClientControlNote}
                     disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#D96B94] px-4 py-2 text-[11px] font-bold text-white shadow-sm transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#D96B94] px-4 py-1.5 text-[11px] font-bold text-white shadow-2xs transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
                   >
                     <Sparkles className="size-3.5" />
                     {clientControlPolishing ? "Sistemo..." : "Sistema IA"}
                   </button>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {clientControlNoteSuggestions.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => appendClientControlNote(suggestion)}
-                      className="rounded-full border border-[#F3B5D4] bg-white px-3 py-1.5 text-xs font-bold text-[#B83D7F] transition active:scale-95 hover:bg-[#FCE5F3]"
-                    >
-                      + {suggestion}
-                    </button>
-                  ))}
+                {/* 1. Quanti grammi? */}
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
+                    QUANTI GRAMMI?
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {["100g", "150g", "200g"].map((gram) => {
+                      const selected = selectedGrammi === gram;
+                      return (
+                        <button
+                          key={gram}
+                          type="button"
+                          onClick={() => {
+                            const next = selected ? "" : gram;
+                            setSelectedGrammi(next);
+                            updateShopifyNote({ grammi: next });
+                          }}
+                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                            selected
+                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                          }`}
+                        >
+                          {gram}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="pt-2 grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      <Ruler className="size-3.5 text-[#D96B94]" /> FORMATO EXTENSION
-                    </span>
-                    <select
-                      value={selectedExtensionFormat}
-                      onChange={(event) => {
-                        const format = event.target.value;
-                        setSelectedExtensionFormat(format);
-                        if (format) appendClientControlNote(`Fatto ${format}`);
-                      }}
-                      className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-xs font-bold text-[#5D4A42] outline-none focus:border-[#D96B94]"
-                    >
-                      <option value="">Seleziona formato</option>
-                      {extensionFormatOptions.map((format) => (
-                        <option key={format} value={format}>
-                          {format}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                {/* 2. Lunghezza */}
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
+                    LUNGHEZZA
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {["55cm", "65cm", "75cm"].map((len) => {
+                      const selected = selectedLunghezza === len;
+                      return (
+                        <button
+                          key={len}
+                          type="button"
+                          onClick={() => {
+                            const next = selected ? "" : len;
+                            setSelectedLunghezza(next);
+                            updateShopifyNote({ lunghezza: next });
+                          }}
+                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                            selected
+                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                          }`}
+                        >
+                          {len}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                  <label className="block">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      <Palette className="size-3.5 text-[#D96B94]" /> COLORE COLLECTION
+                {/* 3. Quante fasce? */}
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
+                    QUANTE FASCE?
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => {
+                      const selected = selectedFasce === num;
+                      return (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            const next = selected ? "" : num;
+                            setSelectedFasce(next);
+                            updateShopifyNote({ fasce: next });
+                          }}
+                          className={`size-9 rounded-xl text-xs font-black transition active:scale-95 border grid place-items-center ${
+                            selected
+                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Come era la cliente? */}
+                <div>
+                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
+                    COME ERA LA CLIENTE?
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: "Simpatica", emoji: "😊" },
+                      { label: "Indifferente", emoji: "😐" },
+                      { label: "Antipatica", emoji: "😒" },
+                      { label: "Arrabbiata", emoji: "😡" },
+                    ].map((att) => {
+                      const selected = selectedAtteggiamento === att.label;
+                      return (
+                        <button
+                          key={att.label}
+                          type="button"
+                          onClick={() => {
+                            const next = selected ? "" : att.label;
+                            setSelectedAtteggiamento(next);
+                            updateShopifyNote({ atteggiamento: next });
+                          }}
+                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border flex items-center gap-1.5 ${
+                            selected
+                              ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
+                              : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
+                          }`}
+                        >
+                          <span>{att.emoji}</span>
+                          <span>{att.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 5. Note Extra (con limite di caratteri) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-black/50">
+                      NOTE EXTRA (MAX 250 CARATTERI)
                     </span>
-                    <select
-                      value={selectedExtensionColor}
-                      onChange={(event) => {
-                        const color = event.target.value;
-                        setSelectedExtensionColor(color);
-                        if (color) appendClientControlNote(`Ha fatto colore ${color}`);
-                      }}
-                      className="mt-1 h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 text-xs font-bold text-[#5D4A42] outline-none focus:border-[#D96B94]"
-                    >
-                      <option value="">Seleziona colore</option>
-                      {extensionColorOptions.map((color) => (
-                        <option key={color} value={color}>
-                          {color}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                    <span className="text-[10px] font-extrabold text-black/40">
+                      {extraNoteText.length}/250
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={250}
+                    value={extraNoteText}
+                    onChange={(e) => {
+                      const text = e.target.value;
+                      setExtraNoteText(text);
+                      updateShopifyNote({ extraNote: text });
+                    }}
+                    className="h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3.5 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
+                    placeholder="Scrivi qui eventuali note extra per la cliente..."
+                  />
                 </div>
               </section>
 
