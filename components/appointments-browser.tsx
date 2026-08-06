@@ -1913,11 +1913,10 @@ export function AppointmentsBrowser({
       const targetBookingId = clientControlForm.bookingId || selectedBooking?.id;
 
       if (targetBookingId) {
-        setBookings((prevBookings) =>
-          prevBookings.map((b) =>
-            b.id === targetBookingId ? { ...b, localStatus: "COMPLETATO" } : b
-          )
-        );
+        setStatusByBooking((prev) => ({
+          ...prev,
+          [targetBookingId]: "COMPLETATO",
+        }));
       }
 
       showPushToast(

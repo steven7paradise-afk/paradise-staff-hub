@@ -354,14 +354,30 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
 
     const cleanCurrent = currentNote.trim();
 
-    // DEDUPLICATION FIX: If current note already contains this message, DO NOT append it again!
-    if (cleanCurrent && cleanCurrent.includes(cleanMessage)) {
-      console.log(`[Shopify Note] Message already present in order ${cleanName}, skipping duplicate append.`);
+    // DEDUPLICATION FIX: Filter out lines that are ALREADY present in the existing note!
+    const existingLines = new Set(
+      cleanCurrent
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+    );
+
+    const inputLines = cleanMessage
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const uniqueLines = inputLines.filter((line) => !existingLines.has(line));
+
+    if (uniqueLines.length === 0) {
+      console.log(`[Shopify Note] All lines already present in order ${cleanName}, skipping duplicate append.`);
       return true;
     }
 
+    const deduplicatedMessage = uniqueLines.join("\n");
+
     // 3. Format the new note block
-    const newNoteBlock = `Staff: ${userName}\n${cleanMessage}`;
+    const newNoteBlock = `Staff: ${userName}\n${deduplicatedMessage}`;
     const updatedNote = cleanCurrent
       ? `${cleanCurrent}\n\n${newNoteBlock}`
       : newNoteBlock;
