@@ -402,5 +402,29 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // AUTO-UPDATE APPOINTMENT STATUS TO COMPLETATO
+  if (bookingId) {
+    try {
+      const SETTING_KEY = "appointment_status_overrides";
+      const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } }).catch(() => null);
+      const currentMap = (currentSetting?.value && typeof currentSetting.value === "object" ? currentSetting.value : {}) as Record<string, any>;
+      const updatedMap = {
+        ...currentMap,
+        [bookingId]: {
+          status: isNoShow ? "NON_PRESENTATO" : "COMPLETATO",
+          updatedAt: new Date().toISOString(),
+          updatedBy: "Controllo Cliente",
+        },
+      };
+      await prisma.setting.upsert({
+        where: { key: SETTING_KEY },
+        update: { value: updatedMap },
+        create: { key: SETTING_KEY, value: updatedMap },
+      });
+    } catch (err) {
+      console.error("Failed to auto-set appointment status to COMPLETATO:", err);
+    }
+  }
+
   return NextResponse.json({ ok: true, id: response.id, createdAt: response.created_at.toISOString() });
 }

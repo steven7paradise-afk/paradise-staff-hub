@@ -1835,13 +1835,23 @@ export function AppointmentsBrowser({
         throw new Error(data?.error || "Errore durante il salvataggio.");
 
       const clientName = clientControlForm.clientName || "Cliente";
+      const targetBookingId = clientControlForm.bookingId || selectedBooking?.id;
+
+      if (targetBookingId) {
+        setBookings((prevBookings) =>
+          prevBookings.map((b) =>
+            b.id === targetBookingId ? { ...b, localStatus: "COMPLETATO" } : b
+          )
+        );
+      }
+
       showPushToast(
         "✓ Salvato con successo!",
-        `Scheda controllo per ${clientName} registrata correttamente.`
+        `Scheda controllo per ${clientName} registrata. Stato cambiato in Completato.`
       );
       setClientControlMessage({
         type: "success",
-        text: "✓ Scheda controllo cliente salvata con successo!",
+        text: "✓ Scheda controllo salvata! Stato appuntamento: COMPLETATO",
       });
 
       router.refresh();
@@ -2800,13 +2810,37 @@ export function AppointmentsBrowser({
               <section className="rounded-[28px] border border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-5 shadow-2xs">
                 <div className="flex items-center gap-2 text-xs font-bold text-black/60">
                   <User className="size-4 text-[#D96B94]" />
-                  <span className="uppercase tracking-wider font-black text-[11px] text-[#B83D7F]">Info cliente da</span>
+                  <span className="uppercase tracking-wider font-black text-[11px] text-[#B83D7F]">Info cliente & Ordini Shopify</span>
                 </div>
                 <div className="mt-3.5 flex flex-wrap gap-2.5">
                   <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                     <Receipt className="size-3.5 text-[#D96B94]" />
-                    <span>N° acconto: #{clientControlForm.shopifyOrder || "---"}</span>
+                    <span>Codice Acconto: #{clientControlForm.shopifyOrder || "---"}</span>
+                    {clientControlForm.shopifyOrder && (
+                      <a
+                        href={`https://admin.shopify.com/store/c1uzax-u0/orders/${clientControlForm.shopifyOrder.replace("#", "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-1 text-[10px] text-[#B83D7F] underline font-extrabold hover:text-black"
+                      >
+                        Vedi ↗
+                      </a>
+                    )}
                   </span>
+                  {clientControlForm.secondShopifyOrder ? (
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#D96B94] bg-[#FFF0F6] backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#B83D7F] shadow-2xs">
+                      <ShoppingBag className="size-3.5 text-[#D96B94]" />
+                      <span>Codice Ordine Finale: #{clientControlForm.secondShopifyOrder}</span>
+                      <a
+                        href={`https://admin.shopify.com/store/c1uzax-u0/orders/${clientControlForm.secondShopifyOrder.replace("#", "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-1 text-[10px] text-[#B83D7F] underline font-extrabold hover:text-black"
+                      >
+                        Vedi ↗
+                      </a>
+                    </span>
+                  ) : null}
                   {clientControlForm.email ? (
                     <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <Mail className="size-3.5 text-[#D96B94]" />
@@ -2847,7 +2881,7 @@ export function AppointmentsBrowser({
               <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
-                    <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (1° ACCONTO / 2° SALDO)
+                    <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (ACCONTO + ORDINE FINALE)
                   </span>
                   <button
                     type="button"
@@ -2863,30 +2897,47 @@ export function AppointmentsBrowser({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <span className="block text-[9px] font-black uppercase text-black/50 mb-1">1° Ordine (Acconto)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Codice Ordine Acconto */}
+                  <div className="rounded-2xl border border-black/5 bg-white/80 p-3 shadow-2xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black uppercase text-black/60 tracking-wider">
+                        1° Codice Ordine (Acconto Booking)
+                      </span>
+                      {selectedBooking?.bookingStr && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-[#B83D7F] bg-[#FFF0F6] px-2 py-0.5 rounded-md border border-[#F6C6DE]">
+                          🔒 Bloccato
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={clientControlForm.shopifyOrder}
-                      onChange={(event) =>
+                      readOnly={Boolean(selectedBooking?.bookingStr)}
+                      onChange={(event) => {
+                        if (selectedBooking?.bookingStr) return;
                         setClientControlForm((prev) => ({
                           ...prev,
                           shopifyOrder: event.target.value,
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleShopifyOrderLookup();
-                        }
+                        }));
                       }}
-                      className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
-                      placeholder="N° Acconto"
+                      className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
+                        selectedBooking?.bookingStr
+                          ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
+                          : "border-[#F4D3E2] bg-white text-black/90 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
+                      }`}
+                      placeholder="N° Acconto (es. 22831)"
                     />
                   </div>
-                  <div>
-                    <span className="block text-[9px] font-black uppercase text-black/50 mb-1">2° Ordine (Saldo / Salone)</span>
+
+                  {/* Codice Ordine Finale (Pagamento Totale) */}
+                  <div className="rounded-2xl border border-[#D96B94]/40 bg-white p-3 shadow-2xs ring-2 ring-[#D96B94]/10">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black uppercase text-[#B83D7F] tracking-wider flex items-center gap-1">
+                        ⭐ 2° Codice Ordine (Pagamento Totale Finale)
+                      </span>
+                      <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">Principale</span>
+                    </div>
                     <input
                       type="text"
                       value={clientControlForm.secondShopifyOrder || ""}
@@ -2900,14 +2951,14 @@ export function AppointmentsBrowser({
                         setShowTodayOrdersDropdown(true);
                         if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
                       }}
-                      className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
-                      placeholder="N° Saldo (es. 25270)"
+                      className="h-11 w-full rounded-xl border border-[#D96B94]/50 bg-white px-3.5 text-xs font-black text-[#1F1F1F] outline-none focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30 transition shadow-2xs"
+                      placeholder="N° Ordine Finale Salone (es. 25344)"
                     />
                     {suggestedOrderForClient && (
                       <button
                         type="button"
                         onClick={() => selectShopifyOrderFromList(suggestedOrderForClient)}
-                        className="mt-1.5 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                        className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
                         title="Clicca per inserire l'ordine del saldo di oggi"
                       >
                         <span className="flex items-center gap-1">
