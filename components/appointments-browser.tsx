@@ -1281,6 +1281,18 @@ export function AppointmentsBrowser({
     createdAt?: string;
   } | null>(null);
 
+  const [secondOrderDetails, setSecondOrderDetails] = useState<{
+    id?: string;
+    orderName: string;
+    clientName: string;
+    totalPrice: number;
+    email: string;
+    phone: string;
+    serviceTitle: string;
+    note: string;
+    createdAt?: string;
+  } | null>(null);
+
   const [toastNotification, setToastNotification] = useState<{
     show: boolean;
     title: string;
@@ -1402,12 +1414,16 @@ export function AppointmentsBrowser({
     note: string;
     createdAt?: string;
   }) {
-    setSelectedOrderDetails(order);
+    const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
+    const isSecond = Boolean(clientControlForm.shopifyOrder && clientControlForm.shopifyOrder !== cleanName);
+
+    if (isSecond) {
+      setSecondOrderDetails(order);
+    } else {
+      setSelectedOrderDetails(order);
+    }
 
     setClientControlForm((prev) => {
-      const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
-      
-      const isSecond = Boolean(prev.shopifyOrder && prev.shopifyOrder !== cleanName);
       const firstOrder = prev.shopifyOrder || cleanName;
       const secondOrder = isSecond ? cleanName : (prev.secondShopifyOrder || "");
 
@@ -1418,14 +1434,6 @@ export function AppointmentsBrowser({
       const newPhone = order.phone || prev.phone;
       const newClientName = order.clientName || prev.clientName;
 
-      let updatedNote = prev.customNoteText || "";
-      if (order.note && !updatedNote.includes(order.note)) {
-        updatedNote = updatedNote ? `${updatedNote}\n${order.note}` : order.note;
-      }
-      if (order.serviceTitle && !updatedNote.includes(order.serviceTitle)) {
-        updatedNote = updatedNote ? `${updatedNote}\nShopify: ${order.serviceTitle}` : `Shopify: ${order.serviceTitle}`;
-      }
-
       return {
         ...prev,
         shopifyOrder: firstOrder,
@@ -1433,9 +1441,10 @@ export function AppointmentsBrowser({
         depositPaid: newDeposit,
         paid: newPaid,
         email: newEmail,
+        paid: newPaid,
+        email: newEmail,
         phone: newPhone,
         clientName: newClientName,
-        customNoteText: updatedNote,
       };
     });
     setShowTodayOrdersDropdown(false);
@@ -3202,7 +3211,7 @@ export function AppointmentsBrowser({
                 </div>
               </div>
 
-              {/* Details for Selected Order if available */}
+              {/* Details for 1° Ordine (Acconto) if available */}
               {selectedOrderDetails && (
                 <div className="rounded-[24px] border border-[#F6C6DE] bg-gradient-to-r from-[#FFF0F6] to-[#FFEBF4] p-4 sm:p-5 shadow-2xs space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
@@ -3230,12 +3239,51 @@ export function AppointmentsBrowser({
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#F6C6DE]/60">
                     <div>
-                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO</span>
-                      <span className="font-extrabold text-[#1F1F1F]">{selectedOrderDetails.serviceTitle || "N/A"}</span>
+                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO ACCONTO</span>
+                      <span className="font-extrabold text-[#1F1F1F]">{selectedOrderDetails.serviceTitle || "Acconto Booking"}</span>
                     </div>
                     <div>
-                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO</span>
+                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO ACCONTO</span>
                       <span className="text-[#D96B94] font-black block text-xs">€{selectedOrderDetails.totalPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Details for 2° Ordine (Saldo Finale) if available */}
+              {secondOrderDetails && (
+                <div className="rounded-[24px] border border-[#B83D7F] bg-gradient-to-r from-[#FFEBF4] to-[#FFF0F6] p-4 sm:p-5 shadow-sm space-y-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-xl bg-gradient-to-r from-[#B83D7F] to-[#D96B94] px-3 py-1 text-xs font-black text-white uppercase tracking-wider shadow-2xs flex items-center gap-1">
+                        ⭐ {secondOrderDetails.orderName} (Saldo Totale)
+                      </span>
+                      <span className="text-xs font-black text-[#1F1F1F]">
+                        {secondOrderDetails.clientName}
+                      </span>
+                    </div>
+                    <a
+                      href={
+                        secondOrderDetails.id
+                          ? `https://admin.shopify.com/store/c1uzax-u0/orders/${secondOrderDetails.id}`
+                          : `https://admin.shopify.com/store/c1uzax-u0/orders?query=${encodeURIComponent(secondOrderDetails.orderName)}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B83D7F]/40 px-4 py-1.5 text-xs font-black text-[#B83D7F] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"
+                    >
+                      <span>Vedi su Shopify</span>
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#B83D7F]/30">
+                    <div>
+                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO SALONE (TOTALE)</span>
+                      <span className="font-extrabold text-[#1F1F1F]">{secondOrderDetails.serviceTitle || "Servizio Salone"}</span>
+                    </div>
+                    <div>
+                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO PAGATO IN SALONE</span>
+                      <span className="text-[#B83D7F] font-black block text-xs">€{secondOrderDetails.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
