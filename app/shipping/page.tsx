@@ -45,7 +45,17 @@ export default async function ShippingPage() {
 
       if (response.ok) {
         const data = await response.json();
-        shopifyOrders = data.orders || [];
+        const rawOrders = data.orders || [];
+        
+        shopifyOrders = rawOrders.filter((order: any) => {
+          const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+          const hasPhysicalItems = lineItems.some((item: any) => item.requires_shipping === true || (item.title && !item.title.toLowerCase().includes("commission")));
+          const hasShippingLines = Array.isArray(order.shipping_lines) && order.shipping_lines.length > 0;
+          const isPureCommission = lineItems.length > 0 && lineItems.every((item: any) => item.requires_shipping === false || item.title?.toLowerCase().includes("commission"));
+
+          if (isPureCommission && !hasShippingLines) return false;
+          return hasPhysicalItems || hasShippingLines;
+        });
       }
     } catch (err) {
       console.error("Failed to query Shopify API for unfulfilled orders:", err);

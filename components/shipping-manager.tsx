@@ -121,11 +121,107 @@ export function ShippingManager({
   const [savingStatus, setSavingStatus] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Camera Barcode Scanner State
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<"TRACKING" | "BARCODE">("TRACKING");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setOrders(initialOrders);
   }, [initialOrders]);
+
+  function playBeepSound() {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (e) {
+      // Audio context ignored if not user gesture
+    }
+  }
+
+  async function startCameraScanner(target: "TRACKING" | "BARCODE") {
+    setCameraTarget(target);
+    setIsCameraActive(true);
+    setSavingStatus("Punta la fotocamera sul codice a barre o etichetta del corriere...");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      mediaStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (err) {
+      console.error("Camera access error:", err);
+      setSavingStatus("Impossibile accedere alla fotocamera. Inserisci il codice manualmente.");
+      setIsCameraActive(false);
+    }
+  }
+
+  function stopCameraScanner() {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsCameraActive(false);
+  }
+
+  function handleScannedCodeFromCamera(code: string) {
+    if (!code) return;
+    const cleanCode = code.trim();
+    playBeepSound();
+    stopCameraScanner();
+
+    if (cameraTarget === "TRACKING") {
+      setTrackingNumber(cleanCode);
+      setSavingStatus(`✓ Codice Tracciamento scansionato ed inserito: ${cleanCode}`);
+    } else {
+      setBarcodeInput(cleanCode);
+      setScannedBarcodes((prev) => [...prev, cleanCode]);
+      setSavingStatus(`✓ Codice articolo verificato: ${cleanCode}`);
+    }
+  }
+
+  useEffect(() => {
+    if (!isCameraActive) return;
+    let intervalId: any = null;
+
+    if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+      const detector = new (window as any).BarcodeDetector({
+        formats: ["code_128", "code_39", "ean_13", "ean_8", "qr_code", "itf", "data_matrix"],
+      });
+
+      intervalId = setInterval(async () => {
+        if (videoRef.current && videoRef.current.readyState === 4) {
+          try {
+            const detected = await detector.detect(videoRef.current);
+            if (detected && detected.length > 0) {
+              const raw = detected[0].rawValue;
+              if (raw) handleScannedCodeFromCamera(raw);
+            }
+          } catch (e) {
+            // Ignore detection frame error
+          }
+        }
+      }, 350);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isCameraActive, cameraTarget]);
 
   // Open Packing Modal for an order
   function openPackingModal(order: ShipmentOrder) {
@@ -562,13 +658,49 @@ export function ShippingManager({
               </button>
             </div>
 
+            {/* Camera Viewfinder Overlay when scanning */}
+            {isCameraActive && (
+              <div className="rounded-3xl border-2 border-[#D96B94] bg-black p-4 space-y-3 relative overflow-hidden text-center text-white shadow-xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-pink-300 flex items-center gap-1.5">
+                    <Barcode className="size-4 animate-pulse" />
+                    Fotocamera Attiva — Inquadra {cameraTarget === "TRACKING" ? "Etichetta / Tracking Code" : "Codice a Barre Prodotto"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={stopCameraScanner}
+                    className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition"
+                  >
+                    Chiudi
+                  </button>
+                </div>
+
+                <div className="relative w-full h-56 rounded-2xl overflow-hidden bg-neutral-900 border border-white/20 flex items-center justify-center">
+                  <video ref={videoRef} playsInline autoPlay muted className="w-full h-full object-cover" />
+                  <div className="absolute inset-x-8 top-1/2 h-0.5 bg-red-500 shadow-[0_0_12px_red] animate-pulse" />
+                  <div className="absolute inset-8 border-2 border-dashed border-white/50 rounded-xl pointer-events-none" />
+                </div>
+
+                <p className="text-[11px] font-bold text-white/70">
+                  Avvicina la fotocamera del tablet al codice per la scansione automatica
+                </p>
+              </div>
+            )}
+
             {/* Barcode Scanner Input Box */}
             <div className="rounded-2xl border border-[#F6C6DE] bg-gradient-to-br from-[#FFF7FB] to-[#FFF0F6] p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black uppercase tracking-wider text-[#B83D7F] flex items-center gap-1.5">
                   <Barcode className="size-4" /> Scansione Codice a Barre / SKU Articolo
                 </span>
-                <span className="text-[10px] font-bold text-black/40">Premi INVIO dopo la scansione</span>
+                <button
+                  type="button"
+                  onClick={() => startCameraScanner("BARCODE")}
+                  className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wider bg-[#B83D7F] text-white px-3 py-1 rounded-xl shadow-2xs hover:opacity-90 transition active:scale-95"
+                >
+                  <Barcode className="size-3.5" />
+                  <span>📷 Fotocamera</span>
+                </button>
               </div>
 
               <form onSubmit={handleBarcodeSubmit} className="flex gap-2">
@@ -668,11 +800,21 @@ export function ShippingManager({
               </label>
 
               <label className="space-y-1.5">
-                <span className="text-xs font-black uppercase tracking-wider text-black/50">Codice Tracciamento (Tracking Code)</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Codice Tracciamento (Tracking Code)</span>
+                  <button
+                    type="button"
+                    onClick={() => startCameraScanner("TRACKING")}
+                    className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] bg-pink-50 hover:bg-pink-100 border border-pink-200 px-2 py-0.5 rounded-lg transition active:scale-95"
+                  >
+                    <Barcode className="size-3" />
+                    <span>📷 Scansiona Etichetta</span>
+                  </button>
+                </div>
                 <Field
                   value={trackingNumber}
                   onChange={(e) => setTrackingNumber(e.target.value)}
-                  placeholder="Es: 1Z99999999999999"
+                  placeholder="Es: 1Z99999999999999 (o scansiona con fotocamera)"
                 />
               </label>
             </div>

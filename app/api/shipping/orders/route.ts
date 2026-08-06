@@ -27,7 +27,18 @@ export async function GET(request: NextRequest) {
 
         if (response.ok) {
           const data = await response.json();
-          shopifyOrders = data.orders || [];
+          const rawOrders = data.orders || [];
+          
+          // Filter ONLY orders that require physical shipping (exclude salon appointments / commissions / digital items)
+          shopifyOrders = rawOrders.filter((order: any) => {
+            const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+            const hasPhysicalItems = lineItems.some((item: any) => item.requires_shipping === true || (item.title && !item.title.toLowerCase().includes("commission")));
+            const hasShippingLines = Array.isArray(order.shipping_lines) && order.shipping_lines.length > 0;
+            const isPureCommission = lineItems.length > 0 && lineItems.every((item: any) => item.requires_shipping === false || item.title?.toLowerCase().includes("commission"));
+
+            if (isPureCommission && !hasShippingLines) return false;
+            return hasPhysicalItems || hasShippingLines;
+          });
         } else {
           console.error("Shopify orders API error:", response.status, response.statusText);
         }
