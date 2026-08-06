@@ -1443,39 +1443,105 @@ export function AppointmentsBrowser({
 
   const sortedTodayOrdersList = useMemo(() => {
     if (!todayOrdersList.length) return [];
-    if (!clientControlForm.clientName) return todayOrdersList;
+    if (!clientControlForm.clientName && !clientControlForm.email && !clientControlForm.phone) return todayOrdersList;
 
-    const target = clientControlForm.clientName.toLowerCase().trim();
-    const parts = target.split(/\s+/).filter((p) => p.length > 2);
-    if (!parts.length) return todayOrdersList;
+    const phoneDigits = (clientControlForm.phone || "").replace(/\D/g, "");
+    const emailClean = (clientControlForm.email || "").trim().toLowerCase();
+    const nameNorm = (clientControlForm.clientName || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    const nameParts = nameNorm.split(/\s+/).filter((p) => p.length > 1);
 
     return [...todayOrdersList].sort((a, b) => {
-      const nameA = (a.clientName || "").toLowerCase();
-      const nameB = (b.clientName || "").toLowerCase();
+      const aPhone = (a.phone || "").replace(/\D/g, "");
+      const bPhone = (b.phone || "").replace(/\D/g, "");
 
-      const matchA = parts.some((p) => nameA.includes(p));
-      const matchB = parts.some((p) => nameB.includes(p));
+      const aEmail = (a.email || "").trim().toLowerCase();
+      const bEmail = (b.email || "").trim().toLowerCase();
 
-      if (matchA && !matchB) return -1;
-      if (!matchA && matchB) return 1;
+      const aName = (a.clientName || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+      const bName = (b.clientName || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+
+      // Phone match
+      const phoneMatchA = phoneDigits && aPhone && (phoneDigits === aPhone || phoneDigits.endsWith(aPhone) || aPhone.endsWith(phoneDigits));
+      const phoneMatchB = phoneDigits && bPhone && (phoneDigits === bPhone || phoneDigits.endsWith(bPhone) || bPhone.endsWith(phoneDigits));
+
+      // Email match
+      const emailMatchA = emailClean && aEmail && emailClean === aEmail;
+      const emailMatchB = emailClean && bEmail && emailClean === bEmail;
+
+      // Full Name match (both first and last)
+      const nameMatchA = nameNorm && aName && (nameNorm === aName || (nameParts.length >= 2 && aName.includes(nameParts[0]) && aName.includes(nameParts[nameParts.length - 1])));
+      const nameMatchB = nameNorm && bName && (nameNorm === bName || (nameParts.length >= 2 && bName.includes(nameParts[0]) && bName.includes(nameParts[nameParts.length - 1])));
+
+      const isMatchA = Boolean(phoneMatchA || emailMatchA || nameMatchA);
+      const isMatchB = Boolean(phoneMatchB || emailMatchB || nameMatchB);
+
+      if (isMatchA && !isMatchB) return -1;
+      if (!isMatchA && isMatchB) return 1;
       return 0;
     });
-  }, [todayOrdersList, clientControlForm.clientName]);
+  }, [todayOrdersList, clientControlForm.clientName, clientControlForm.email, clientControlForm.phone]);
 
   const suggestedOrderForClient = useMemo(() => {
-    if (!clientControlForm.clientName || !todayOrdersList.length) return null;
-    const clientFirstName = clientControlForm.clientName.split(" ")[0].toLowerCase().trim();
-    if (!clientFirstName || clientFirstName.length < 2) return null;
+    if (!todayOrdersList.length) return null;
+
+    const phoneDigits = (clientControlForm.phone || "").replace(/\D/g, "");
+    const emailClean = (clientControlForm.email || "").trim().toLowerCase();
+    const nameNorm = (clientControlForm.clientName || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    const nameParts = nameNorm.split(/\s+/).filter((p) => p.length > 1);
 
     const firstOrderClean = clientControlForm.shopifyOrder ? clientControlForm.shopifyOrder.replace(/^#/, "") : "";
 
-    return todayOrdersList.find((order) => {
-      const orderNameClean = order.orderName ? order.orderName.replace(/^#/, "") : "";
-      const matchesClient = (order.clientName || "").toLowerCase().includes(clientFirstName);
-      const isNotDepositOrder = orderNameClean !== firstOrderClean;
-      return matchesClient && isNotDepositOrder;
-    }) || null;
-  }, [clientControlForm.clientName, clientControlForm.shopifyOrder, todayOrdersList]);
+    return (
+      todayOrdersList.find((order) => {
+        const orderNameClean = order.orderName ? order.orderName.replace(/^#/, "") : "";
+        if (orderNameClean && orderNameClean === firstOrderClean) return false;
+
+        const oPhone = (order.phone || "").replace(/\D/g, "");
+        const oEmail = (order.email || "").trim().toLowerCase();
+        const oName = (order.clientName || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .trim();
+
+        // 1. Match Phone
+        if (phoneDigits && oPhone && (phoneDigits === oPhone || phoneDigits.endsWith(oPhone) || oPhone.endsWith(phoneDigits))) {
+          return true;
+        }
+
+        // 2. Match Email
+        if (emailClean && oEmail && emailClean === oEmail) {
+          return true;
+        }
+
+        // 3. Match Full Name (requires both first and last name match or exact match)
+        if (nameNorm && oName) {
+          if (nameNorm === oName) return true;
+          if (nameParts.length >= 2 && oName.includes(nameParts[0]) && oName.includes(nameParts[nameParts.length - 1])) {
+            return true;
+          }
+        }
+
+        return false;
+      }) || null
+    );
+  }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, clientControlForm.shopifyOrder, todayOrdersList]);
 
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
@@ -2904,7 +2970,7 @@ export function AppointmentsBrowser({
                       <span className="text-[10px] font-black uppercase text-black/60 tracking-wider">
                         1° Codice Ordine (Acconto Booking)
                       </span>
-                      {selectedBooking?.bookingStr && (
+                      {Boolean(selectedBooking?.bookingStr || clientControlForm.shopifyOrder) && (
                         <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-[#B83D7F] bg-[#FFF0F6] px-2 py-0.5 rounded-md border border-[#F6C6DE]">
                           🔒 Bloccato
                         </span>
@@ -2913,16 +2979,16 @@ export function AppointmentsBrowser({
                     <input
                       type="text"
                       value={clientControlForm.shopifyOrder}
-                      readOnly={Boolean(selectedBooking?.bookingStr)}
+                      readOnly={Boolean(selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== ""))}
                       onChange={(event) => {
-                        if (selectedBooking?.bookingStr) return;
+                        if (selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")) return;
                         setClientControlForm((prev) => ({
                           ...prev,
                           shopifyOrder: event.target.value,
                         }));
                       }}
                       className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
-                        selectedBooking?.bookingStr
+                        selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")
                           ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
                           : "border-[#F4D3E2] bg-white text-black/90 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
                       }`}
@@ -2992,8 +3058,11 @@ export function AppointmentsBrowser({
                           Caricamento ordini recenti...
                         </p>
                       ) : sortedTodayOrdersList.length > 0 ? (
-                        sortedTodayOrdersList.map((order, idx) => {
-                          const isSuggested = idx === 0 && clientControlForm.clientName && order.clientName.toLowerCase().includes(clientControlForm.clientName.split(" ")[0].toLowerCase());
+                        sortedTodayOrdersList.map((order) => {
+                          const isSuggested = Boolean(
+                            suggestedOrderForClient &&
+                              (order.id === suggestedOrderForClient.id || order.orderName === suggestedOrderForClient.orderName)
+                          );
                           return (
                             <button
                               key={order.id}
