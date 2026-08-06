@@ -1391,62 +1391,70 @@ export function AppointmentsBrowser({
   async function fetchTodayShopifyOrders() {
     setLoadingTodayOrders(true);
     try {
-      const res = await fetch("/api/shopify-order-lookup?mode=today");
+      const params = new URLSearchParams({
+        mode: "client_orders",
+        clientName: clientControlForm.clientName || "",
+        email: clientControlForm.email || "",
+        phone: clientControlForm.phone || "",
+      });
+      const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`);
       const data = await res.json().catch(() => null);
       if (res.ok && Array.isArray(data?.orders)) {
         setTodayOrdersList(data.orders);
       }
     } catch (err) {
-      console.error("Failed to fetch today's Shopify orders:", err);
+      console.error("Failed to fetch client's Shopify orders:", err);
     } finally {
       setLoadingTodayOrders(false);
     }
   }
 
-  function selectShopifyOrderFromList(order: {
-    id?: string;
-    orderName: string;
-    clientName: string;
-    totalPrice: number;
-    email: string;
-    phone: string;
-    serviceTitle: string;
-    note: string;
-    createdAt?: string;
-  }) {
+  function selectShopifyOrderFromList(
+    order: {
+      id?: string;
+      orderName: string;
+      clientName: string;
+      totalPrice: number;
+      email: string;
+      phone: string;
+      serviceTitle: string;
+      note: string;
+      createdAt?: string;
+    },
+    forceTarget?: "first" | "second"
+  ) {
     const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
-    const isSecond = Boolean(clientControlForm.shopifyOrder && clientControlForm.shopifyOrder !== cleanName);
+    const isSecond = forceTarget
+      ? forceTarget === "second"
+      : Boolean(clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "");
 
     if (isSecond) {
       setSecondOrderDetails(order);
+      setClientControlForm((prev) => {
+        const orderPriceStr = order.totalPrice != null ? String(order.totalPrice) : "";
+        return {
+          ...prev,
+          secondShopifyOrder: cleanName,
+          paid: orderPriceStr || prev.paid,
+          email: order.email || prev.email,
+          phone: order.phone || prev.phone,
+          clientName: order.clientName || prev.clientName,
+        };
+      });
     } else {
       setSelectedOrderDetails(order);
+      setClientControlForm((prev) => {
+        const orderPriceStr = order.totalPrice != null ? String(order.totalPrice) : "";
+        return {
+          ...prev,
+          shopifyOrder: cleanName,
+          depositPaid: orderPriceStr || prev.depositPaid,
+          email: order.email || prev.email,
+          phone: order.phone || prev.phone,
+          clientName: order.clientName || prev.clientName,
+        };
+      });
     }
-
-    setClientControlForm((prev) => {
-      const firstOrder = prev.shopifyOrder || cleanName;
-      const secondOrder = isSecond ? cleanName : (prev.secondShopifyOrder || "");
-
-      const orderPriceStr = order.totalPrice != null ? String(order.totalPrice) : "";
-      const newPaid = isSecond && orderPriceStr ? orderPriceStr : prev.paid;
-      const newDeposit = !isSecond && orderPriceStr ? orderPriceStr : prev.depositPaid;
-      const newEmail = order.email || prev.email;
-      const newPhone = order.phone || prev.phone;
-      const newClientName = order.clientName || prev.clientName;
-
-      return {
-        ...prev,
-        shopifyOrder: firstOrder,
-        secondShopifyOrder: secondOrder,
-        depositPaid: newDeposit,
-        paid: newPaid,
-        email: newEmail,
-        paid: newPaid,
-        email: newEmail,
-        phone: newPhone,
-        clientName: newClientName,
-      };
-    });
     setShowTodayOrdersDropdown(false);
   }
 
@@ -2967,7 +2975,7 @@ export function AppointmentsBrowser({
                     title="Mostra gli ordini Shopify arrivati oggi"
                   >
                     <Sparkles className="size-3 text-white" />
-                    <span>{loadingTodayOrders ? "Carico..." : "⚡ ORDINI OGGI"}</span>
+                    <span>{loadingTodayOrders ? "Carico..." : "⚡ ORDINI CLIENTE"}</span>
                   </button>
                 </div>
 
@@ -3031,7 +3039,7 @@ export function AppointmentsBrowser({
                     {suggestedOrderForClient && (
                       <button
                         type="button"
-                        onClick={() => selectShopifyOrderFromList(suggestedOrderForClient)}
+                        onClick={() => selectShopifyOrderFromList(suggestedOrderForClient, "second")}
                         className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
                         title="Clicca per inserire l'ordine del saldo di oggi"
                       >
@@ -3050,7 +3058,7 @@ export function AppointmentsBrowser({
                   <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[420px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
                     <div className="flex items-center justify-between pb-2 border-b border-black/5">
                       <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
-                        ORDINI SHOPIFY DI OGGI ({sortedTodayOrdersList.length})
+                        ORDINI SHOPIFY CLIENTE ({sortedTodayOrdersList.length})
                       </p>
                       <button
                         type="button"
@@ -3063,7 +3071,7 @@ export function AppointmentsBrowser({
                     <div className="max-h-64 overflow-y-auto mt-2 space-y-1.5 pr-0.5">
                       {loadingTodayOrders ? (
                         <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
-                          Caricamento ordini recenti...
+                          Caricamento ordini cliente...
                         </p>
                       ) : sortedTodayOrdersList.length > 0 ? (
                         sortedTodayOrdersList.map((order) => {
@@ -3075,7 +3083,7 @@ export function AppointmentsBrowser({
                             <button
                               key={order.id}
                               type="button"
-                              onClick={() => selectShopifyOrderFromList(order)}
+                              onClick={() => selectShopifyOrderFromList(order, "second")}
                               className={`w-full text-left p-3 rounded-2xl border transition flex flex-col gap-1 ${
                                 isSuggested
                                   ? "border-[#D96B94] bg-[#FFF0F6] shadow-sm"

@@ -20,8 +20,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Shopify non configurato correttamente." }, { status: 500 });
     }
 
-    // Mode 'today': return list of orders created TODAY for quick selection
-    if (mode === "today") {
+    // Mode 'client_orders' or 'today': return list of orders for this specific client or created TODAY
+    if (mode === "today" || mode === "client_orders") {
+      const clientNameParam = searchParams.get("clientName")?.trim() || "";
+      const emailParam = searchParams.get("email")?.trim() || "";
+      const phoneParam = searchParams.get("phone")?.trim() || "";
+
       const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=50&status=any&fields=id,name,customer,total_price,line_items,note,created_at`, {
         headers: {
           "X-Shopify-Access-Token": token,
@@ -36,17 +40,57 @@ export async function GET(request: NextRequest) {
       const data = await res.json();
       const rawOrders = data?.orders || [];
 
-      // Filter orders created TODAY in Europe/Rome timezone
-      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+      const cleanPhone = (p?: string | null) => (p || "").replace(/\D/g, "");
+      const targetPhone = cleanPhone(phoneParam);
+      const targetEmail = emailParam.toLowerCase();
+      const targetName = clientNameParam
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+      const nameParts = targetName.split(/\s+/).filter((p) => p.length > 1);
+
+      // First try filtering ONLY for this client's orders
       let filteredOrders = rawOrders.filter((order: any) => {
-        if (!order.created_at) return false;
-        const orderDay = new Date(order.created_at).toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
-        return orderDay === todayStr;
+        const oEmail = (order.customer?.email || "").trim().toLowerCase();
+        const oPhone = cleanPhone(order.customer?.phone || order.phone);
+        const firstName = (order.customer?.first_name || "").trim().toLowerCase();
+        const lastName = (order.customer?.last_name || "").trim().toLowerCase();
+        const oFullName = `${firstName} ${lastName}`
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .trim();
+
+        // 1. Match Phone
+        if (targetPhone && oPhone && (targetPhone === oPhone || targetPhone.endsWith(oPhone) || oPhone.endsWith(targetPhone))) {
+          return true;
+        }
+        // 2. Match Email
+        if (targetEmail && oEmail && targetEmail === oEmail) {
+          return true;
+        }
+        // 3. Match Full Name (exact match or first + last name match)
+        if (targetName && oFullName) {
+          if (targetName === oFullName) return true;
+          if (nameParts.length >= 2 && oFullName.includes(nameParts[0]) && oFullName.includes(nameParts[nameParts.length - 1])) {
+            return true;
+          }
+        }
+        return false;
       });
 
-      // If no orders created today yet, fallback to 10 most recent orders so the list is helpful
+      // If no client-specific orders found or no client info passed, fallback to orders created TODAY
       if (filteredOrders.length === 0) {
-        filteredOrders = rawOrders.slice(0, 10);
+        const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+        filteredOrders = rawOrders.filter((order: any) => {
+          if (!order.created_at) return false;
+          const orderDay = new Date(order.created_at).toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
+          return orderDay === todayStr;
+        });
+
+        // Fallback to 10 most recent orders if none today
+        if (filteredOrders.length === 0) {
+          filteredOrders = rawOrders.slice(0, 10);
+        }
       }
 
       const ordersList = filteredOrders.map((order: any) => {
