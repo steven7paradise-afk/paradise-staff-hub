@@ -3102,7 +3102,7 @@ export function AppointmentsBrowser({
                             >
                               <span className="flex items-center gap-1">
                                 <Sparkles className="size-3.5 text-[#D96B94]" />
-                                <span>Suggerito Acconto: #{suggestedAccontoOrder.orderName}</span>
+                                <span>Suggerito Acconto: #{suggestedAccontoOrder.orderName.replace(/^#/, "")}</span>
                               </span>
                               <span className="font-extrabold text-xs">€{suggestedAccontoOrder.totalPrice.toFixed(2)}</span>
                             </button>
@@ -3173,7 +3173,7 @@ export function AppointmentsBrowser({
                             >
                               <span className="flex items-center gap-1">
                                 <Sparkles className="size-3.5 text-[#D96B94]" />
-                                <span>Suggerito Saldo: #{suggestedSaldoOrder.orderName}</span>
+                                <span>Suggerito Saldo: #{suggestedSaldoOrder.orderName.replace(/^#/, "")}</span>
                               </span>
                               <span className="font-extrabold text-xs">€{suggestedSaldoOrder.totalPrice.toFixed(2)}</span>
                             </button>
@@ -3186,7 +3186,7 @@ export function AppointmentsBrowser({
 
                 {/* Dropdown list for today's orders */}
                 {showTodayOrdersDropdown && (
-                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[420px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
+                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[480px] sm:max-w-[500px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
                     <div className="flex items-center justify-between pb-2 border-b border-black/5">
                       <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
                         ORDINI SHOPIFY CLIENTE ({sortedTodayOrdersList.length})
@@ -3199,7 +3199,7 @@ export function AppointmentsBrowser({
                         Chiudi ✕
                       </button>
                     </div>
-                    <div className="max-h-64 overflow-y-auto mt-2 space-y-1.5 pr-0.5">
+                    <div className="max-h-72 overflow-y-auto mt-2 space-y-2 pr-0.5">
                       {loadingTodayOrders ? (
                         <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
                           Caricamento ordini cliente...
@@ -3223,8 +3223,8 @@ export function AppointmentsBrowser({
                                   : "border-black/5 bg-[#FFF8FB] hover:bg-[#FCE5F3]"
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5 flex-wrap">
                                   {order.clientName}
                                   {isAccontoSuggested && (
                                     <span className="rounded-md bg-[#D96B94] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
@@ -3237,35 +3237,40 @@ export function AppointmentsBrowser({
                                     </span>
                                   )}
                                 </span>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 shrink-0">
                                   {order.createdAt && (
-                                    <span className="text-[10px] font-extrabold text-[#B83D7F]/80 bg-[#FFF0F6] px-1.5 py-0.5 rounded-md border border-[#F6C6DE]/60">
+                                    <span className="text-[10px] font-extrabold text-[#B83D7F]/80 bg-white/90 px-2 py-0.5 rounded-md border border-[#F6C6DE]/60">
                                       {formatOrderDate(order.createdAt)}
                                     </span>
                                   )}
-                                  <span className="text-xs font-black text-[#D96B94]">#{order.orderName}</span>
+                                  <span className="text-xs font-black text-[#D96B94]">
+                                    #{order.orderName.replace(/^#/, "")}
+                                  </span>
                                 </div>
                               </div>
-                              <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
-                                <span className="truncate max-w-[180px]">{order.serviceTitle || "Servizio Shopify"}</span>
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => selectShopifyOrderFromList(order, "first")}
-                                    className="rounded-lg bg-white border border-[#F6C6DE] px-2 py-1 text-[10px] font-black text-[#D96B94] hover:bg-[#FFF0F6] active:scale-95 transition"
-                                    title="Inserisci nel 1° Codice Ordine (Acconto)"
-                                  >
-                                    + 1° Acconto
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => selectShopifyOrderFromList(order, "second")}
-                                    className="rounded-lg bg-[#D96B94] px-2 py-1 text-[10px] font-black text-white hover:bg-[#B83D7F] active:scale-95 transition"
-                                    title="Inserisci nel 2° Codice Ordine (Saldo Finale)"
-                                  >
-                                    + 2° Saldo
-                                  </button>
-                                </div>
+                              <div className="flex items-center justify-between text-xs font-bold text-neutral-600 pt-1 border-t border-black/5">
+                                <span className="truncate max-w-[260px] text-black/80">{order.serviceTitle || "Servizio Shopify"}</span>
+                                <span className="text-sm font-black text-[#D96B94] shrink-0">
+                                  €{order.totalPrice.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-end gap-2 pt-1 border-t border-black/5">
+                                <button
+                                  type="button"
+                                  onClick={() => selectShopifyOrderFromList(order, "first")}
+                                  className="rounded-xl bg-white border border-[#F6C6DE] px-3 py-1.5 text-[10px] font-black text-[#D96B94] hover:bg-[#FFF0F6] active:scale-95 transition shadow-2xs"
+                                  title="Inserisci nel 1° Codice Ordine (Acconto)"
+                                >
+                                  + 1° Acconto
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => selectShopifyOrderFromList(order, "second")}
+                                  className="rounded-xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1.5 text-[10px] font-black text-white hover:opacity-95 active:scale-95 transition shadow-2xs"
+                                  title="Inserisci nel 2° Codice Ordine (Saldo Finale)"
+                                >
+                                  + 2° Saldo
+                                </button>
                               </div>
                             </div>
                           );
