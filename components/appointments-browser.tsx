@@ -1260,6 +1260,7 @@ export function AppointmentsBrowser({
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
   const [isDepositUnlockedManually, setIsDepositUnlockedManually] = useState(false);
+  const [isSecondUnlockedManually, setIsSecondUnlockedManually] = useState(false);
 
   function updateShopifyNote(overrides?: {
     grammi?: string;
@@ -1559,8 +1560,8 @@ export function AppointmentsBrowser({
     });
   }, [todayOrdersList, clientControlForm.clientName, clientControlForm.email, clientControlForm.phone]);
 
-  const suggestedOrderForClient = useMemo(() => {
-    if (!todayOrdersList.length) return null;
+  const clientMatchingOrders = useMemo(() => {
+    if (!todayOrdersList.length) return [];
 
     const phoneDigits = (clientControlForm.phone || "").replace(/\D/g, "");
     const emailClean = (clientControlForm.email || "").trim().toLowerCase();
@@ -1571,43 +1572,58 @@ export function AppointmentsBrowser({
       .trim();
     const nameParts = nameNorm.split(/\s+/).filter((p) => p.length > 1);
 
-    const firstOrderClean = clientControlForm.shopifyOrder ? clientControlForm.shopifyOrder.replace(/^#/, "") : "";
+    return todayOrdersList.filter((order) => {
+      const oPhone = (order.phone || "").replace(/\D/g, "");
+      const oEmail = (order.email || "").trim().toLowerCase();
+      const oName = (order.clientName || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
 
-    return (
-      todayOrdersList.find((order) => {
-        const orderNameClean = order.orderName ? order.orderName.replace(/^#/, "") : "";
-        if (orderNameClean && orderNameClean === firstOrderClean) return false;
-
-        const oPhone = (order.phone || "").replace(/\D/g, "");
-        const oEmail = (order.email || "").trim().toLowerCase();
-        const oName = (order.clientName || "")
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .trim();
-
-        // 1. Match Phone
-        if (phoneDigits && oPhone && (phoneDigits === oPhone || phoneDigits.endsWith(oPhone) || oPhone.endsWith(phoneDigits))) {
+      // 1. Match Phone
+      if (phoneDigits && oPhone && (phoneDigits === oPhone || phoneDigits.endsWith(oPhone) || oPhone.endsWith(phoneDigits))) {
+        return true;
+      }
+      // 2. Match Email
+      if (emailClean && oEmail && emailClean === oEmail) {
+        return true;
+      }
+      // 3. Match Full Name
+      if (nameNorm && oName) {
+        if (nameNorm === oName) return true;
+        if (nameParts.length >= 2 && oName.includes(nameParts[0]) && oName.includes(nameParts[nameParts.length - 1])) {
           return true;
         }
+      }
+      return false;
+    });
+  }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, todayOrdersList]);
 
-        // 2. Match Email
-        if (emailClean && oEmail && emailClean === oEmail) {
-          return true;
-        }
+  // Suggested 1° Ordine (Acconto)
+  const suggestedAccontoOrder = useMemo(() => {
+    if (!clientMatchingOrders.length) return null;
+    const isAccontoKey = (title?: string) => /acconto|booking|prenotazione|cowlendar|deposit/i.test(title || "");
+    const explicit = clientMatchingOrders.find((o) => isAccontoKey(o.serviceTitle));
+    if (explicit) return explicit;
+    if (clientMatchingOrders.length > 1) {
+      return clientMatchingOrders[clientMatchingOrders.length - 1]; // oldest order
+    }
+    return clientMatchingOrders[0];
+  }, [clientMatchingOrders]);
 
-        // 3. Match Full Name (requires both first and last name match or exact match)
-        if (nameNorm && oName) {
-          if (nameNorm === oName) return true;
-          if (nameParts.length >= 2 && oName.includes(nameParts[0]) && oName.includes(nameParts[nameParts.length - 1])) {
-            return true;
-          }
-        }
-
-        return false;
-      }) || null
-    );
-  }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, clientControlForm.shopifyOrder, todayOrdersList]);
+  // Suggested 2° Ordine (Saldo Finale)
+  const suggestedSaldoOrder = useMemo(() => {
+    if (!clientMatchingOrders.length) return null;
+    const isSaldoKey = (title?: string) => /saldo|salone|riapplicazione|pos|commissioni/i.test(title || "");
+    const explicit = clientMatchingOrders.find((o) => isSaldoKey(o.serviceTitle));
+    if (explicit) return explicit;
+    if (clientMatchingOrders.length > 1 && suggestedAccontoOrder) {
+      const nonAcconto = clientMatchingOrders.find((o) => o.id !== suggestedAccontoOrder.id && o.orderName !== suggestedAccontoOrder.orderName);
+      if (nonAcconto) return nonAcconto;
+    }
+    return clientMatchingOrders[0];
+  }, [clientMatchingOrders, suggestedAccontoOrder]);
 
   const clientControlEmployeeOptions = useMemo(() => {
     const rawList: ClientControlEmployee[] = [...clientControlEmployees];
@@ -1787,6 +1803,7 @@ export function AppointmentsBrowser({
     setSelectedAtteggiamento("");
     setExtraNoteText("");
     setIsDepositUnlockedManually(false);
+    setIsSecondUnlockedManually(false);
     try {
       const salonName = salonNameForBooking(booking);
       const baseForm: ClientControlAppointmentForm = {
@@ -3076,6 +3093,20 @@ export function AppointmentsBrowser({
                             }`}
                             placeholder="N° Acconto (es. 22831)"
                           />
+                          {suggestedAccontoOrder && (
+                            <button
+                              type="button"
+                              onClick={() => selectShopifyOrderFromList(suggestedAccontoOrder, "first")}
+                              className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#F6C6DE] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                              title="Clicca per inserire il codice dell'acconto booking"
+                            >
+                              <span className="flex items-center gap-1">
+                                <Sparkles className="size-3.5 text-[#D96B94]" />
+                                <span>Suggerito Acconto: #{suggestedAccontoOrder.orderName}</span>
+                              </span>
+                              <span className="font-extrabold text-xs">€{suggestedAccontoOrder.totalPrice.toFixed(2)}</span>
+                            </button>
+                          )}
                         </>
                       );
                     })()}
@@ -3083,42 +3114,73 @@ export function AppointmentsBrowser({
 
                   {/* Codice Ordine Finale (Pagamento Totale) */}
                   <div className="rounded-2xl border border-[#D96B94]/40 bg-white p-3 shadow-2xs ring-2 ring-[#D96B94]/10">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-black uppercase text-[#B83D7F] tracking-wider flex items-center gap-1">
-                        ⭐ 2° Codice Ordine (Pagamento Totale Finale)
-                      </span>
-                      <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">Principale</span>
-                    </div>
-                    <input
-                      type="text"
-                      value={clientControlForm.secondShopifyOrder || ""}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          secondShopifyOrder: event.target.value,
-                        }))
-                      }
-                      onFocus={() => {
-                        setShowTodayOrdersDropdown(true);
-                        if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
-                      }}
-                      className="h-11 w-full rounded-xl border border-[#D96B94]/50 bg-white px-3.5 text-xs font-black text-[#1F1F1F] outline-none focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30 transition shadow-2xs"
-                      placeholder="N° Ordine Finale Salone (es. 25344)"
-                    />
-                    {suggestedOrderForClient && (
-                      <button
-                        type="button"
-                        onClick={() => selectShopifyOrderFromList(suggestedOrderForClient, "second")}
-                        className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
-                        title="Clicca per inserire l'ordine del saldo di oggi"
-                      >
-                        <span className="flex items-center gap-1">
-                          <Sparkles className="size-3.5 text-[#D96B94]" />
-                          <span>Suggerito: {suggestedOrderForClient.orderName}</span>
-                        </span>
-                        <span className="font-extrabold text-xs">€{suggestedOrderForClient.totalPrice.toFixed(2)}</span>
-                      </button>
-                    )}
+                    {(() => {
+                      const isSecondLocked = Boolean(
+                        (clientControlForm.secondShopifyOrder && clientControlForm.secondShopifyOrder.trim() !== "") &&
+                          !isSecondUnlockedManually
+                      );
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-black uppercase text-[#B83D7F] tracking-wider flex items-center gap-1">
+                              ⭐ 2° Codice Ordine (Pagamento Totale Finale)
+                            </span>
+                            {Boolean(clientControlForm.secondShopifyOrder) ? (
+                              <button
+                                type="button"
+                                onClick={() => setIsSecondUnlockedManually((prev) => !prev)}
+                                className={`inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                  isSecondLocked
+                                    ? "text-[#B83D7F] bg-[#FFF0F6] border-[#F6C6DE]"
+                                    : "text-emerald-700 bg-emerald-50 border-emerald-300 shadow-2xs"
+                                }`}
+                                title={isSecondLocked ? "Clicca per sbloccare e modificare il codice saldo" : "Clicca per ribloccare"}
+                              >
+                                {isSecondLocked ? "🔒 Bloccato" : "🔓 Sbloccato (Clicca per bloccare)"}
+                              </button>
+                            ) : (
+                              <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">Principale</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={clientControlForm.secondShopifyOrder || ""}
+                            readOnly={isSecondLocked}
+                            onChange={(event) => {
+                              if (isSecondLocked) return;
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                secondShopifyOrder: event.target.value,
+                              }));
+                            }}
+                            onFocus={() => {
+                              setShowTodayOrdersDropdown(true);
+                              if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                            }}
+                            className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
+                              isSecondLocked
+                                ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
+                                : "border-[#D96B94]/50 bg-white text-[#1F1F1F] focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30"
+                            }`}
+                            placeholder="N° Ordine Finale Salone (es. 25344)"
+                          />
+                          {suggestedSaldoOrder && (
+                            <button
+                              type="button"
+                              onClick={() => selectShopifyOrderFromList(suggestedSaldoOrder, "second")}
+                              className="mt-2 flex w-full items-center justify-between rounded-xl border border-[#D96B94] bg-[#FFF0F6] px-3 py-1.5 text-[11px] font-black text-[#B83D7F] hover:bg-[#FCE5F3] transition active:scale-95 shadow-2xs"
+                              title="Clicca per inserire il codice del saldo finale salone"
+                            >
+                              <span className="flex items-center gap-1">
+                                <Sparkles className="size-3.5 text-[#D96B94]" />
+                                <span>Suggerito Saldo: #{suggestedSaldoOrder.orderName}</span>
+                              </span>
+                              <span className="font-extrabold text-xs">€{suggestedSaldoOrder.totalPrice.toFixed(2)}</span>
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -3144,27 +3206,34 @@ export function AppointmentsBrowser({
                         </p>
                       ) : sortedTodayOrdersList.length > 0 ? (
                         sortedTodayOrdersList.map((order) => {
-                          const isSuggested = Boolean(
-                            suggestedOrderForClient &&
-                              (order.id === suggestedOrderForClient.id || order.orderName === suggestedOrderForClient.orderName)
+                          const isAccontoSuggested = Boolean(
+                            suggestedAccontoOrder &&
+                              (order.id === suggestedAccontoOrder.id || order.orderName === suggestedAccontoOrder.orderName)
+                          );
+                          const isSaldoSuggested = Boolean(
+                            suggestedSaldoOrder &&
+                              (order.id === suggestedSaldoOrder.id || order.orderName === suggestedSaldoOrder.orderName)
                           );
                           return (
-                            <button
+                            <div
                               key={order.id}
-                              type="button"
-                              onClick={() => selectShopifyOrderFromList(order, "second")}
-                              className={`w-full text-left p-3 rounded-2xl border transition flex flex-col gap-1 ${
-                                isSuggested
+                              className={`w-full p-3 rounded-2xl border transition flex flex-col gap-2 ${
+                                isAccontoSuggested || isSaldoSuggested
                                   ? "border-[#D96B94] bg-[#FFF0F6] shadow-sm"
-                                  : "border-black/5 hover:border-[#D96B94] bg-[#FFF8FB] hover:bg-[#FCE5F3]"
+                                  : "border-black/5 bg-[#FFF8FB] hover:bg-[#FCE5F3]"
                               }`}
                             >
                               <div className="flex items-center justify-between">
                                 <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5">
                                   {order.clientName}
-                                  {isSuggested && (
+                                  {isAccontoSuggested && (
                                     <span className="rounded-md bg-[#D96B94] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
-                                      Suggerito
+                                      Suggerito Acconto
+                                    </span>
+                                  )}
+                                  {isSaldoSuggested && (
+                                    <span className="rounded-md bg-[#B83D7F] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
+                                      Suggerito Saldo
                                     </span>
                                   )}
                                 </span>
@@ -3174,14 +3243,31 @@ export function AppointmentsBrowser({
                                       {formatOrderDate(order.createdAt)}
                                     </span>
                                   )}
-                                  <span className="text-xs font-black text-[#D96B94]">{order.orderName}</span>
+                                  <span className="text-xs font-black text-[#D96B94]">#{order.orderName}</span>
                                 </div>
                               </div>
                               <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
-                                <span className="truncate max-w-[220px]">{order.serviceTitle || "Servizio Shopify"}</span>
-                                <span className="font-extrabold text-[#D96B94]">Acconto €{order.totalPrice.toFixed(2)}</span>
+                                <span className="truncate max-w-[180px]">{order.serviceTitle || "Servizio Shopify"}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => selectShopifyOrderFromList(order, "first")}
+                                    className="rounded-lg bg-white border border-[#F6C6DE] px-2 py-1 text-[10px] font-black text-[#D96B94] hover:bg-[#FFF0F6] active:scale-95 transition"
+                                    title="Inserisci nel 1° Codice Ordine (Acconto)"
+                                  >
+                                    + 1° Acconto
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => selectShopifyOrderFromList(order, "second")}
+                                    className="rounded-lg bg-[#D96B94] px-2 py-1 text-[10px] font-black text-white hover:bg-[#B83D7F] active:scale-95 transition"
+                                    title="Inserisci nel 2° Codice Ordine (Saldo Finale)"
+                                  >
+                                    + 2° Saldo
+                                  </button>
+                                </div>
                               </div>
-                            </button>
+                            </div>
                           );
                         })
                       ) : (
