@@ -1345,17 +1345,6 @@ export function AppointmentsBrowser({
           const newPhone = data.phone || prev.phone;
           const newClientName = data.clientName || prev.clientName;
 
-          let updatedNote = prev.customNoteText || "";
-          if (data.note && !updatedNote.includes(data.note)) {
-            updatedNote = updatedNote ? `${updatedNote}\n${data.note}` : data.note;
-          }
-          if (Array.isArray(data.lineItems) && data.lineItems.length) {
-            const lineSummary = data.lineItems.map((item: any) => `${item.title} (€${item.price})`).join(", ");
-            if (!updatedNote.includes(lineSummary)) {
-              updatedNote = updatedNote ? `${updatedNote}\nShopify items: ${lineSummary}` : `Shopify items: ${lineSummary}`;
-            }
-          }
-
           return {
             ...prev,
             shopifyOrder: newOrder,
@@ -1363,7 +1352,6 @@ export function AppointmentsBrowser({
             email: newEmail,
             phone: newPhone,
             clientName: newClientName,
-            customNoteText: updatedNote,
           };
         });
       }

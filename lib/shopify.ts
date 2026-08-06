@@ -244,8 +244,25 @@ export async function getShopifyOrderIdentity(orderNameOrId: string): Promise<{
 }
 
 /**
+ * Helper to extract all valid Shopify order codes/IDs from string or array of strings
+ */
+export function extractShopifyOrderCodes(...inputs: (string | null | undefined)[]): string[] {
+  const codes: string[] = [];
+  for (const input of inputs) {
+    if (!input) continue;
+    const str = String(input);
+    const matches = str.match(/#?\d{4,}/g) || [];
+    for (const m of matches) {
+      const clean = m.trim();
+      if (clean) codes.push(clean);
+    }
+  }
+  return Array.from(new Set(codes));
+}
+
+/**
  * Appends a staff comment/note to a Shopify order's note field.
- * Handles inputs representing either order name (e.g. #22910) or direct order ID.
+ * Prevents duplicating the exact same note text multiple times.
  */
 export async function appendShopifyOrderNote(orderName: string, userName: string, message: string): Promise<boolean> {
   try {
@@ -256,6 +273,9 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
       console.warn("Shopify shop domain or access token not configured.");
       return false;
     }
+
+    const cleanMessage = message.trim();
+    if (!cleanMessage) return true;
 
     const cleanName = orderName.trim();
     if (!cleanName) return false;
@@ -332,10 +352,18 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
       return false;
     }
 
+    const cleanCurrent = currentNote.trim();
+
+    // DEDUPLICATION FIX: If current note already contains this message, DO NOT append it again!
+    if (cleanCurrent && cleanCurrent.includes(cleanMessage)) {
+      console.log(`[Shopify Note] Message already present in order ${cleanName}, skipping duplicate append.`);
+      return true;
+    }
+
     // 3. Format the new note block
-    const newNoteBlock = `Staff: ${userName}\n${message}`;
-    const updatedNote = currentNote.trim()
-      ? `${currentNote.trim()}\n\n${newNoteBlock}`
+    const newNoteBlock = `Staff: ${userName}\n${cleanMessage}`;
+    const updatedNote = cleanCurrent
+      ? `${cleanCurrent}\n\n${newNoteBlock}`
       : newNoteBlock;
 
     // 4. Update the order note in Shopify

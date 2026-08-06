@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS, ensureClientControlForm } from "@/lib/client-control-form";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
-import { appendShopifyOrderNote, updateShopifyOrderMetafields } from "@/lib/shopify";
+import { appendShopifyOrderNote, updateShopifyOrderMetafields, extractShopifyOrderCodes } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
 
 export const dynamic = "force-dynamic";
@@ -384,17 +384,22 @@ export async function POST(request: NextRequest) {
   }
 
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
-  if (shopifyOrder) {
+  const targetOrders = extractShopifyOrderCodes(body?.shopifyOrder, body?.secondShopifyOrder);
+
+  if (targetOrders.length > 0) {
     const writerName = isNoShow ? "NO SHOW" : (staffNames.join(" e ") || "Staff");
     const collaboratorName = isNoShow ? "NO SHOW" : (staffNames.join(", ") || "");
-    appendShopifyOrderNote(shopifyOrder, writerName, customNote || "Stato cambiato")
-      .catch((err) => console.error("Failed to append tablet note to Shopify:", err));
-    updateShopifyOrderMetafields(
-      shopifyOrder,
-      isNoShow ? "No Show" : "Controllato",
-      customNote || "",
-      collaboratorName
-    ).catch((err) => console.error("Failed to update Shopify metafields from tablet submit:", err));
+
+    for (const singleOrder of targetOrders) {
+      appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato")
+        .catch((err) => console.error(`Failed to append note to Shopify order ${singleOrder}:`, err));
+      updateShopifyOrderMetafields(
+        singleOrder,
+        isNoShow ? "No Show" : "Controllato",
+        customNote || "",
+        collaboratorName
+      ).catch((err) => console.error(`Failed to update Shopify metafields for order ${singleOrder}:`, err));
+    }
   }
 
   return NextResponse.json({ ok: true, id: response.id, createdAt: response.created_at.toISOString() });

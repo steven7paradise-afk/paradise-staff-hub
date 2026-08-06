@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { appendShopifyOrderNote, getShopifyOrderCowlendarText, getShopifyOrderNoteText } from "@/lib/shopify";
+import { appendShopifyOrderNote, getShopifyOrderCowlendarText, getShopifyOrderNoteText, extractShopifyOrderCodes } from "@/lib/shopify";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 
 export async function GET(request: NextRequest) {
@@ -115,9 +115,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (orderName) {
-      appendShopifyOrderNote(orderName, authorName, message.trim() + (signedBy ? ` [Cassa: ${sessionUserName}]` : ""))
-        .catch((err) => console.error("Failed to sync comment to Shopify note:", err));
+    const targetOrderCodes = extractShopifyOrderCodes(orderName);
+    for (const code of targetOrderCodes) {
+      appendShopifyOrderNote(code, authorName, message.trim() + (signedBy ? ` [Cassa: ${sessionUserName}]` : ""))
+        .catch((err) => console.error(`Failed to sync comment to Shopify order ${code}:`, err));
     }
 
     return NextResponse.json(comment);
