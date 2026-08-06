@@ -115,6 +115,33 @@ export function getShopifyAdminOrderUrl(orderNameOrId?: string | null, numericId
   return `https://admin.shopify.com/store/${shopDomain}/orders?query=${encodeURIComponent("#" + nameStr)}`;
 }
 
+export function formatOrderDate(dateStr?: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+
+    const now = new Date();
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+
+    if (isToday) {
+      return `Oggi ${hours}:${minutes}`;
+    }
+
+    return `${day}/${month}/${d.getFullYear()} ${hours}:${minutes}`;
+  } catch {
+    return "";
+  }
+}
+
 type AppointmentRecord = {
   id: string;
   customerName: string;
@@ -3120,7 +3147,14 @@ export function AppointmentsBrowser({
                                     </span>
                                   )}
                                 </span>
-                                <span className="text-xs font-black text-[#D96B94]">{order.orderName}</span>
+                                <div className="flex items-center gap-2">
+                                  {order.createdAt && (
+                                    <span className="text-[10px] font-extrabold text-[#B83D7F]/80 bg-[#FFF0F6] px-1.5 py-0.5 rounded-md border border-[#F6C6DE]/60">
+                                      {formatOrderDate(order.createdAt)}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-black text-[#D96B94]">{order.orderName}</span>
+                                </div>
                               </div>
                               <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
                                 <span className="truncate max-w-[220px]">{order.serviceTitle || "Servizio Shopify"}</span>
@@ -3261,13 +3295,17 @@ export function AppointmentsBrowser({
                       <ExternalLink className="size-3.5" />
                     </a>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#F6C6DE]/60">
+                  <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-[#F6C6DE]/60">
                     <div>
-                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO ACCONTO</span>
-                      <span className="font-extrabold text-[#1F1F1F]">{selectedOrderDetails.serviceTitle || "Acconto Booking"}</span>
+                      <span className="text-black/50 text-[10px] font-bold block">DATA ORDINE</span>
+                      <span className="font-extrabold text-[#1F1F1F] block text-xs">{formatOrderDate(selectedOrderDetails.createdAt) || "N/A"}</span>
                     </div>
                     <div>
-                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO ACCONTO</span>
+                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO ACCONTO</span>
+                      <span className="font-extrabold text-[#1F1F1F] block text-xs truncate max-w-[140px]">{selectedOrderDetails.serviceTitle || "Acconto Booking"}</span>
+                    </div>
+                    <div>
+                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO</span>
                       <span className="text-[#D96B94] font-black block text-xs">€{selectedOrderDetails.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
@@ -3296,13 +3334,17 @@ export function AppointmentsBrowser({
                       <ExternalLink className="size-3.5" />
                     </a>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-[#B83D7F]/30">
+                  <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-[#B83D7F]/30">
                     <div>
-                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO SALONE (TOTALE)</span>
-                      <span className="font-extrabold text-[#1F1F1F]">{secondOrderDetails.serviceTitle || "Servizio Salone"}</span>
+                      <span className="text-black/50 text-[10px] font-bold block">DATA ORDINE</span>
+                      <span className="font-extrabold text-[#1F1F1F] block text-xs">{formatOrderDate(secondOrderDetails.createdAt) || "N/A"}</span>
                     </div>
                     <div>
-                      <span className="text-black/50 text-[10px] font-bold block">IMPORTO PAGATO IN SALONE</span>
+                      <span className="text-black/50 text-[10px] font-bold block">SERVIZIO SALONE</span>
+                      <span className="font-extrabold text-[#1F1F1F] block text-xs truncate max-w-[140px]">{secondOrderDetails.serviceTitle || "Servizio Salone"}</span>
+                    </div>
+                    <div>
+                      <span className="text-black/50 text-[10px] font-bold block">PAGATO IN SALONE</span>
                       <span className="text-[#B83D7F] font-black block text-xs">€{secondOrderDetails.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
