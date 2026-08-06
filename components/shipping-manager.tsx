@@ -253,9 +253,6 @@ export function ShippingManager({
     setPhotoUrl(order.photoUrl || null);
     setSavingStatus("");
     setBarcodeInput("");
-    setTimeout(() => {
-      barcodeInputRef.current?.focus();
-    }, 100);
   }
 
   // Handle Manual Sync with Shopify
