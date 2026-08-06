@@ -15,12 +15,17 @@ import {
   Clock,
   ExternalLink,
   FileCheck2,
+  FileText,
+  FileUp,
+  Image as ImageIcon,
   LayoutGrid,
+  Link as LinkIcon,
   Mail,
   MailPlus,
   Megaphone,
   MessageSquareText,
   Newspaper,
+  Paperclip,
   PencilLine,
   Pin,
   Search,
@@ -28,6 +33,7 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  UploadCloud,
   User,
   X,
 } from "lucide-react";
@@ -50,6 +56,7 @@ type NotificationItem = {
 type Recipient = { id: string; name: string; locationId: string | null; locationName: string };
 type LocationOption = { id: string; name: string };
 type Filter = "ALL" | "IMPORTANT" | "UNREAD";
+type SectionTab = "BLOG" | "ATTENDANCE" | "ALL";
 
 const typeStyles: Record<string, { icon: typeof Megaphone; bg: string; pill: string; label: string }> = {
   COMUNICAZIONE: { icon: Megaphone, bg: "bg-pink-100 text-[#C66170]", pill: "bg-pink-100 text-[#C66170]", label: "Comunicazione" },
@@ -79,6 +86,11 @@ function shortDateLabel(value: string) {
     minute: "2-digit",
     timeZone: "Europe/Rome",
   }).format(new Date(value));
+}
+
+function isAttendanceAlert(item: NotificationItem) {
+  const text = `${item.title} ${item.message} ${item.type}`.toLowerCase();
+  return item.type === "TIMBRATURA" || /superamento limite pausa|pausa|uscit|timbram|timbratura/.test(text);
 }
 
 function isImportant(item: NotificationItem) {
@@ -120,18 +132,31 @@ export function NotificationManager({
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const [viewMode, setViewMode] = useState<"BLOG" | "LIST">("BLOG");
+  const [sectionTab, setSectionTab] = useState<SectionTab>("BLOG");
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState(role === "RESPONSABILE" ? "location" : "all");
   const [targetId, setTargetId] = useState(locations[0]?.id ?? recipients[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [customLinkUrl, setCustomLinkUrl] = useState("");
+  const [customButtonText, setCustomButtonText] = useState("");
+  
+  // File Upload to Drive state
+  const [attachedFileUrl, setAttachedFileUrl] = useState("");
+  const [attachedFileName, setAttachedFileName] = useState("");
+  const [uploadingFile, setUploadingFile] = useState(false);
+
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
   const [items, setItems] = useState(notifications);
 
-  // Active communication for the Blog Reader view (defaults to latest)
-  const [activeItem, setActiveItem] = useState<NotificationItem | null>(() => notifications[0] ?? null);
+  // Active communication for the Blog Reader view (defaults to latest non-attendance post if in blog mode)
+  const initialActive = useMemo(() => {
+    return notifications.find((n) => !isAttendanceAlert(n)) ?? notifications[0] ?? null;
+  }, [notifications]);
+
+  const [activeItem, setActiveItem] = useState<NotificationItem | null>(initialActive);
 
   const [filter, setFilter] = useState<Filter>("ALL");
   const [query, setQuery] = useState("");
@@ -146,9 +171,45 @@ export function NotificationManager({
   useEffect(() => {
     setItems(notifications);
     if (!activeItem && notifications.length > 0) {
-      setActiveItem(notifications[0]);
+      const defaultPost = notifications.find((n) => !isAttendanceAlert(n)) ?? notifications[0];
+      setActiveItem(defaultPost);
     }
   }, [notifications]);
+
+  // Handle Google Drive File Upload
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFile(true);
+    setStatus("Caricamento allegato su Google Drive in corso...");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/notifications/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      setUploadingFile(false);
+
+      if (!res.ok) {
+        setStatus(data.error ?? "Errore durante il caricamento del file.");
+        return;
+      }
+
+      setAttachedFileUrl(data.url);
+      setAttachedFileName(data.name);
+      setStatus("✓ File caricato su Google Drive con successo!");
+    } catch (err) {
+      console.error("Upload error:", err);
+      setUploadingFile(false);
+      setStatus("Errore durante il caricamento.");
+    }
+  }
 
   const stats = useMemo(() => {
     return {
@@ -156,16 +217,23 @@ export function NotificationManager({
       unread: items.filter((item) => !item.read).length,
       sign: items.filter(needsSignature).length,
       urgent: items.filter(isUrgent).length,
+      attendance: items.filter(isAttendanceAlert).length,
+      blog: items.filter((item) => !isAttendanceAlert(item)).length,
     };
   }, [items]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items
+      .filter((item) => {
+        if (sectionTab === "BLOG") return !isAttendanceAlert(item);
+        if (sectionTab === "ATTENDANCE") return isAttendanceAlert(item);
+        return true;
+      })
       .filter((item) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true))
       .filter((item) => !q || `${item.title} ${item.message} ${item.type}`.toLowerCase().includes(q))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [filter, items, query]);
+  }, [filter, items, query, sectionTab]);
 
   async function markRead(notification: NotificationItem) {
     if (notification.read) return;
@@ -202,15 +270,27 @@ export function NotificationManager({
     if (viewMode === "LIST") {
       setViewMode("BLOG");
     }
-  }
-
-  async function send() {
+  }  async function send() {
     setSending(true);
     setStatus("Invio comunicazione in corso...");
+
+    const finalActionUrl = customLinkUrl.trim() || attachedFileUrl || "/notifications";
+    let finalMessage = message.trim();
+    if (attachedFileUrl && attachedFileName) {
+      finalMessage += `\n\n📄 ALLEGATO DRIVE: [${attachedFileName}](${attachedFileUrl})`;
+    }
+
     const response = await fetch("/api/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target, targetId, title, message, type: "COMUNICAZIONE" }),
+      body: JSON.stringify({
+        target,
+        targetId,
+        title,
+        message: finalMessage,
+        type: "COMUNICAZIONE",
+        actionUrl: finalActionUrl,
+      }),
     });
     const data = await response.json();
     setSending(false);
@@ -221,17 +301,21 @@ export function NotificationManager({
     const newPost: NotificationItem = {
       id: String(Date.now()),
       title,
-      message,
+      message: finalMessage,
       type: "COMUNICAZIONE",
       page: 1,
       read: true,
-      actionUrl: "/notifications",
+      actionUrl: finalActionUrl,
       createdAt: new Date().toISOString(),
     };
     setItems((prev) => [newPost, ...prev]);
     setActiveItem(newPost);
     setTitle("");
     setMessage("");
+    setCustomLinkUrl("");
+    setCustomButtonText("");
+    setAttachedFileUrl("");
+    setAttachedFileName("");
     setStatus(`✓ Comunicazione pubblicata con successo ed inviata a ${data.sent} destinatari.`);
     setTimeout(() => {
       setOpen(false);
@@ -303,13 +387,48 @@ export function NotificationManager({
           </div>
         </div>
 
+        {/* Section Tabs (Blog vs Timbrature Separati) */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-black/10 pb-3">
+          {[
+            { id: "BLOG", label: "📰 Blog Comunicazioni", count: stats.blog },
+            { id: "ATTENDANCE", label: "⏱️ Avvisi Timbrature & Pause", count: stats.attendance },
+            { id: "ALL", label: "📋 Tutte le Notifiche", count: stats.total },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setSectionTab(tab.id as SectionTab);
+                if (tab.id === "ATTENDANCE") {
+                  const firstAttendance = items.find(isAttendanceAlert);
+                  if (firstAttendance) setActiveItem(firstAttendance);
+                } else if (tab.id === "BLOG") {
+                  const firstBlog = items.find((n) => !isAttendanceAlert(n));
+                  if (firstBlog) setActiveItem(firstBlog);
+                }
+              }}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-black transition active:scale-95",
+                sectionTab === tab.id
+                  ? "bg-white text-[#B83D7F] shadow-sm border border-[#F6C6DE] ring-1 ring-[#B83D7F]/20"
+                  : "bg-neutral-100 text-black/60 hover:bg-neutral-200"
+              )}
+            >
+              <span>{tab.label}</span>
+              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", sectionTab === tab.id ? "bg-[#FFF0F6] text-[#B83D7F]" : "bg-black/10 text-black/60")}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
         {/* Stats Metrics Cards */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
           {[
-            { label: "Totali comunicazioni", value: stats.total, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
+            { label: "Totali comunicazioni", value: stats.blog, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
             { label: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
-            { label: "Da firmare", value: stats.sign, icon: PencilLine, bg: "bg-amber-100 text-amber-700" },
-            { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-rose-100 text-rose-700" },
+            { label: "Avvisi Timbrature", value: stats.attendance, icon: BellRing, bg: "bg-rose-100 text-rose-700" },
+            { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700" },
           ].map((metric) => {
             const Icon = metric.icon;
             return (
@@ -370,11 +489,45 @@ export function NotificationManager({
 
                   {/* Article Content Body */}
                   <div className="p-6 sm:p-8 space-y-6">
-                    <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-6 sm:p-8 shadow-2xs">
+                    <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-6 sm:p-8 shadow-2xs space-y-4">
                       <p className="whitespace-pre-line text-base font-semibold leading-relaxed text-[#2C2C2C]">
                         {activeItem.message}
                       </p>
+
+                      {/* Embedded Image Preview if image link present */}
+                      {activeItem.actionUrl && /\.(jpg|jpeg|png|webp|gif)$/i.test(activeItem.actionUrl) ? (
+                        <div className="mt-4 rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-full aspect-video flex items-center justify-center">
+                          <img src={activeItem.actionUrl} alt="Allegato" className="object-contain size-full" />
+                        </div>
+                      ) : null}
                     </div>
+
+                    {/* Attachment / Action Link Button */}
+                    {activeItem.actionUrl && activeItem.actionUrl !== "/notifications" ? (
+                      <div className="rounded-2xl border border-[#F4D3E2] bg-[#FFF5F9] p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          {activeItem.actionUrl.includes("drive.google.com") || activeItem.actionUrl.endsWith(".pdf") ? (
+                            <FileText className="size-5 text-[#B83D7F]" />
+                          ) : (
+                            <LinkIcon className="size-5 text-[#B83D7F]" />
+                          )}
+                          <span className="text-xs font-bold text-[#1F1F1F]">
+                            {activeItem.actionUrl.includes("drive.google.com") || activeItem.actionUrl.endsWith(".pdf")
+                              ? "Allegato Documento / PDF (Google Drive)"
+                              : "Risorsa / Link Esterno Collegato"}
+                          </span>
+                        </div>
+                        <a
+                          href={activeItem.actionUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-6 py-2.5 text-xs font-black text-white shadow-md hover:opacity-95 transition active:scale-95 w-full sm:w-auto"
+                        >
+                          <span>{activeItem.actionUrl.endsWith(".pdf") ? "Visualizza PDF ↗" : "Apri Risorsa ↗"}</span>
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </div>
+                    ) : null}
 
                     {/* Action Bar */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
@@ -393,16 +546,6 @@ export function NotificationManager({
                           <span>Comunicazione letta</span>
                         </div>
                       )}
-
-                      {activeItem.actionUrl && activeItem.actionUrl !== "/notifications" ? (
-                        <a
-                          href={activeItem.actionUrl}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-black/10 bg-neutral-100 px-5 py-3 text-xs font-black text-black/80 hover:bg-neutral-200 transition active:scale-95 w-full sm:w-auto"
-                        >
-                          <span>Apri dettaglio collegato</span>
-                          <ExternalLink className="size-3.5" />
-                        </a>
-                      ) : null}
                     </div>
                   </div>
 
@@ -435,7 +578,7 @@ export function NotificationManager({
                 </article>
               ) : (
                 <div className="rounded-[32px] border border-dashed border-black/10 bg-white p-12 text-center text-sm font-bold text-black/40">
-                  Nessuna comunicazione selezionata.
+                  Nessuna comunicazione in questa sezione.
                 </div>
               )}
             </div>
@@ -445,7 +588,7 @@ export function NotificationManager({
               <Card className="p-5 border border-black/5 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-black uppercase tracking-wider text-[#B83D7F] flex items-center gap-2">
-                    <Newspaper className="size-4 text-[#D96B94]" /> Tutte le Comunicazioni
+                    <Newspaper className="size-4 text-[#D96B94]" /> Elenco Comunicazioni
                   </h3>
                   <span className="rounded-full bg-[#FFF0F6] px-2.5 py-0.5 text-[10px] font-black text-[#B83D7F]">
                     {filteredItems.length}
@@ -605,7 +748,7 @@ export function NotificationManager({
       {/* NEW COMMUNICATION MODAL */}
       {open ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-xl border border-black/10 shadow-2xl p-6 sm:p-8 rounded-[32px] bg-white">
+          <Card className="w-full max-w-xl border border-black/10 shadow-2xl p-6 sm:p-8 rounded-[32px] bg-white max-h-[90vh] overflow-y-auto">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
@@ -632,7 +775,7 @@ export function NotificationManager({
                       setTargetId(event.target.value === "location" ? locations[0]?.id ?? "" : recipients[0]?.id ?? "");
                     }}
                   >
-                    <option value="all">Tutti lo staff</option>
+                    <option value="all">Tutto lo staff (Tutti i saloni)</option>
                     <option value="location">Specifico salone</option>
                     <option value="user">Singola persona</option>
                   </Select>
@@ -695,12 +838,42 @@ export function NotificationManager({
                 />
               </label>
 
+              {/* Upload file on Google Drive */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-black uppercase tracking-wider text-black/50">Allegato Immagine o PDF (Google Drive)</span>
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-black/70 hover:bg-neutral-100 transition active:scale-95">
+                    <UploadCloud className="size-4 text-[#D96B94]" />
+                    <span>{uploadingFile ? "Caricamento in corso..." : "Carica File (Immagine o PDF)"}</span>
+                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
+                  </label>
+                  {attachedFileName ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-pink-50 border border-pink-200 px-3 py-1.5 text-xs font-bold text-[#B83D7F]">
+                      <Paperclip className="size-3.5" />
+                      <span className="truncate max-w-[180px]">{attachedFileName}</span>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Custom Link & Button */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Link Esterno (opzionale)</span>
+                  <Field value={customLinkUrl} onChange={(event) => setCustomLinkUrl(event.target.value)} placeholder="https://..." />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Testo Pulsante (opzionale)</span>
+                  <Field value={customButtonText} onChange={(event) => setCustomButtonText(event.target.value)} placeholder="Es: Apri documento ↗" />
+                </label>
+              </div>
+
               {status ? <p className="rounded-2xl bg-[#FFF0F6] border border-[#F9D5E7] p-3 text-xs font-black text-[#B83D7F]">{status}</p> : null}
 
               <button
                 type="button"
                 onClick={send}
-                disabled={sending}
+                disabled={sending || uploadingFile}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60 mt-2"
               >
                 <Send className="size-4" />
