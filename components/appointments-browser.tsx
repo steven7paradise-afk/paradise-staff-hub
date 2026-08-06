@@ -1424,6 +1424,32 @@ export function AppointmentsBrowser({
     }
   }
 
+  async function handleSecondShopifyOrderLookup(queryOverride?: string) {
+    const query = (queryOverride ?? clientControlForm.secondShopifyOrder ?? "").trim();
+    if (!query) return;
+
+    try {
+      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data) {
+        setSecondOrderDetails({
+          id: data.id ? String(data.id) : undefined,
+          orderName: data.orderName || query,
+          clientName: data.clientName || clientControlForm.clientName,
+          totalPrice: data.totalPrice || 0,
+          email: data.email || "",
+          phone: data.phone || "",
+          serviceTitle: Array.isArray(data.lineItems) ? data.lineItems.map((i: any) => i.title).join(", ") : "",
+          note: data.note || "",
+          createdAt: data.createdAt || data.created_at || "",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to lookup second Shopify order:", err);
+    }
+  }
+
   const [showTodayOrdersDropdown, setShowTodayOrdersDropdown] = useState(false);
   const [todayOrdersList, setTodayOrdersList] = useState<Array<{
     id: string;
@@ -1916,6 +1942,10 @@ export function AppointmentsBrowser({
     });
 
     if (existingAnswers) {
+      const secOrder = String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || "").trim();
+      if (secOrder) {
+        void handleSecondShopifyOrderLookup(secOrder);
+      }
       if (existingAnswers.custom_grammi) {
         const g = String(existingAnswers.custom_grammi);
         if (["100g", "150g", "200g"].includes(g)) {
@@ -1945,6 +1975,17 @@ export function AppointmentsBrowser({
       }
     }
   }
+
+  useEffect(() => {
+    if (!clientControlOpen) return;
+    if (clientControlForm.secondShopifyOrder) {
+      const cleanSec = clientControlForm.secondShopifyOrder.trim().replace(/^#/, "");
+      const currentLoaded = secondOrderDetails?.orderName ? secondOrderDetails.orderName.replace(/^#/, "") : "";
+      if (cleanSec && cleanSec !== currentLoaded) {
+        void handleSecondShopifyOrderLookup(cleanSec);
+      }
+    }
+  }, [clientControlOpen, clientControlForm.secondShopifyOrder, secondOrderDetails]);
 
   async function submitClientControlForm() {
     setClientControlMessage(null);
