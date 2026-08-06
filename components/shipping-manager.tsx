@@ -96,6 +96,24 @@ function dateLabel(value: string) {
   }).format(new Date(value));
 }
 
+const monthsList = [
+  { value: 1, label: "Gennaio" },
+  { value: 2, label: "Febbraio" },
+  { value: 3, label: "Marzo" },
+  { value: 4, label: "Aprile" },
+  { value: 5, label: "Maggio" },
+  { value: 6, label: "Giugno" },
+  { value: 7, label: "Luglio" },
+  { value: 8, label: "Agosto" },
+  { value: 9, label: "Settembre" },
+  { value: 10, label: "Ottobre" },
+  { value: 11, label: "Novembre" },
+  { value: 12, label: "Dicembre" },
+];
+
+const currentYearNum = new Date().getFullYear();
+const yearsList = Array.from({ length: 3 }, (_, i) => currentYearNum - 1 + i);
+
 export function ShippingManager({
   initialOrders,
   currentUserName,
@@ -107,6 +125,8 @@ export function ShippingManager({
   const [orders, setOrders] = useState<ShipmentOrder[]>(initialOrders);
   const [viewMode, setViewMode] = useState<"KANBAN" | "TABLE">("KANBAN");
   const [query, setQuery] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [syncing, setSyncing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ShipmentOrder | null>(null);
 
@@ -374,26 +394,52 @@ export function ShippingManager({
   // Filtered Orders
   const filteredOrders = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter(
-      (o) =>
-        o.orderName.toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q) ||
-        o.email.toLowerCase().includes(q) ||
-        o.shippingAddress.city?.toLowerCase().includes(q) ||
-        o.lineItems.some((i) => i.title.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q))
-    );
-  }, [orders, query]);
+    
+    return orders.filter((o) => {
+      // 1. Text Query Filter
+      if (q) {
+        const matchesQuery =
+          o.orderName.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q) ||
+          o.email.toLowerCase().includes(q) ||
+          o.shippingAddress.city?.toLowerCase().includes(q) ||
+          o.lineItems.some((i) => i.title.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q));
+
+        if (!matchesQuery) return false;
+      }
+
+      // 2. For SHIPPED orders, filter strictly by selected month & year (auto-resets each month!)
+      if (o.status === "SHIPPED") {
+        const d = new Date(o.createdAt);
+        const itemMonth = d.getMonth() + 1;
+        const itemYear = d.getFullYear();
+
+        if (itemMonth !== selectedMonth || itemYear !== selectedYear) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [orders, query, selectedMonth, selectedYear]);
 
   // Metrics
   const stats = useMemo(() => {
+    const shippedThisMonth = orders.filter((o) => {
+      if (o.status !== "SHIPPED") return false;
+      const d = new Date(o.createdAt);
+      return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+    }).length;
+
     return {
       unfulfilled: orders.filter((o) => o.status === "UNFULFILLED").length,
       packing: orders.filter((o) => o.status === "PACKING").length,
       ready: orders.filter((o) => o.status === "READY").length,
-      shipped: orders.filter((o) => o.status === "SHIPPED").length,
+      shipped: shippedThisMonth,
     };
-  }, [orders]);
+  }, [orders, selectedMonth, selectedYear]);
+
+  const selectedMonthLabel = monthsList.find((m) => m.value === selectedMonth)?.label || "Mese";
 
   return (
     <div className="w-full max-w-none space-y-6 text-left">
@@ -409,7 +455,35 @@ export function ShippingManager({
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap flex-col gap-3 sm:flex-row sm:items-center">
+          {/* Month & Year Selectors */}
+          <div className="flex items-center gap-2 bg-white border border-black/10 rounded-2xl p-1.5 shadow-2xs">
+            <span className="text-[11px] font-black text-black/40 uppercase pl-2">Mese:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="bg-transparent text-xs font-black uppercase text-black/80 outline-none cursor-pointer py-1"
+            >
+              {monthsList.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-transparent text-xs font-black text-black/80 outline-none cursor-pointer py-1 pr-1"
+            >
+              {yearsList.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Sync Button */}
           <button
             type="button"
@@ -459,7 +533,7 @@ export function ShippingManager({
           { label: "Da Preparare (Inevasi)", value: stats.unfulfilled, icon: PackageSearch, bg: "bg-amber-100 text-amber-700" },
           { label: "In Imballaggio", value: stats.packing, icon: Box, bg: "bg-blue-100 text-blue-700" },
           { label: "Pronto Spedizione", value: stats.ready, icon: PackageCheck, bg: "bg-emerald-100 text-emerald-700" },
-          { label: "Spediti / Evasi", value: stats.shipped, icon: Truck, bg: "bg-neutral-100 text-neutral-800" },
+          { label: `Spediti (${selectedMonthLabel} ${selectedYear})`, value: stats.shipped, icon: Truck, bg: "bg-neutral-100 text-neutral-800" },
         ].map((metric) => {
           const Icon = metric.icon;
           return (
