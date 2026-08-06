@@ -320,6 +320,15 @@ export function DashboardRedesignClient({
   const hasActivePromos = activePromos.length > 0;
   const activePromo = hasActivePromos ? activePromos[currentSlideIndex] || activePromos[0] : null;
 
+  const isProductOfMonthActive = !!(
+    productOfMonth &&
+    (productOfMonth as any).active !== false &&
+    productOfMonth.title &&
+    productOfMonth.title.trim() !== "" &&
+    productOfMonth.title.trim() !== "." &&
+    productOfMonth.title !== "PRO-GLOW SERUM"
+  );
+
   const salonPercent = Math.min(100, Math.round((currentSalonPoints / Math.max(1, salonGoal)) * 100));
   const isSuperAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
 
@@ -442,8 +451,6 @@ export function DashboardRedesignClient({
                 <span>Gestione Obiettivi</span>
               </Link>
             )}
-
-            <NotificationsPopover initialUnread={unreadNotifications} />
           </div>
         </div>
 
@@ -524,10 +531,18 @@ export function DashboardRedesignClient({
 
                   <div className="pt-6 flex flex-wrap items-center justify-between gap-4 border-t border-neutral-800/80 relative z-10 mt-6">
                     <div className="flex flex-wrap items-center gap-3">
+                      <Link
+                        href={`/promos/${activePromo.id}`}
+                        className="bg-white hover:bg-neutral-100 text-neutral-900 text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg flex items-center gap-1.5 transition shadow-2xs"
+                      >
+                        <BookOpen size={13} />
+                        <span>SCOPRI E DETTAGLI ↗</span>
+                      </Link>
+
                       {activePromo.ctaUrl && (
                         <Link
                           href={activePromo.ctaUrl}
-                          className="bg-white hover:bg-neutral-100 text-neutral-900 text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg flex items-center gap-1.5 transition"
+                          className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg flex items-center gap-1.5 transition"
                         >
                           <Upload size={13} className="rotate-90" />
                           <span>{activePromo.ctaText || "CONDIVIDI"}</span>
@@ -830,7 +845,10 @@ export function DashboardRedesignClient({
         </div>
 
         {/* SECTION 3: BOTTOM GRID */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={cn(
+          "grid grid-cols-1 gap-6",
+          isProductOfMonthActive ? "lg:grid-cols-3" : "lg:grid-cols-2"
+        )}>
           
           {/* Column 1: COMUNICAZIONI DIREZIONE */}
           <div className="bg-white border border-neutral-200 p-6 space-y-5 rounded-[24px] shadow-2xs text-left">
@@ -896,46 +914,54 @@ export function DashboardRedesignClient({
             </div>
           </div>
 
-          {/* Column 3: PRODOTTO DEL MESE */}
-          <div className="bg-white border border-neutral-200 p-6 space-y-5 rounded-[24px] shadow-2xs flex flex-col justify-between text-left">
-            <div>
-              <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-                <h3 className="text-xs font-serif font-light text-neutral-900 tracking-wide uppercase">
-                  Prodotto Del Mese
-                </h3>
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#dc2626] bg-[#dc2626]/10 px-2 py-0.5 rounded-full border border-[#dc2626]/20">
-                  {productOfMonth?.badge || "RETAIL"}
-                </span>
-              </div>
-
-              {/* Minimal product box */}
-              <div className="mt-4 border border-neutral-200 h-32 bg-neutral-50 flex items-center justify-center relative overflow-hidden rounded-xl">
-                <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(45deg,#000_25%,transparent_25%,transparent_50%,#000_50%,#000_75%,transparent_75%,transparent)] bg-[length:16px_16px]" />
-                <div className="w-8 h-16 border border-neutral-300 rounded-b-lg relative z-10 flex items-center justify-center">
-                  <span className="text-neutral-400 text-[10px] font-black">P</span>
+          {/* Column 3: PRODOTTO DEL MESE (Only rendered if customized and active) */}
+          {isProductOfMonthActive ? (
+            <div className="bg-white border border-neutral-200 p-6 space-y-5 rounded-[24px] shadow-2xs flex flex-col justify-between text-left">
+              <div>
+                <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+                  <h3 className="text-xs font-serif font-light text-neutral-900 tracking-wide uppercase">
+                    Prodotto Del Mese
+                  </h3>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#dc2626] bg-[#dc2626]/10 px-2 py-0.5 rounded-full border border-[#dc2626]/20">
+                    {productOfMonth?.badge || "RETAIL"}
+                  </span>
                 </div>
-              </div>
 
-              <div className="mt-4 text-center space-y-1">
-                <span className="text-[8px] font-black uppercase tracking-widest text-[#dc2626] block">
-                  ◆ {productOfMonth?.subtitle || "CONSIGLIATO · UPSELL"}
-                </span>
-                <h4 className="text-sm font-serif font-light uppercase text-neutral-900 tracking-wider">
-                  {productOfMonth?.title || "PRO-GLOW SERUM"}
-                </h4>
-                <p className="text-[11px] text-neutral-400 font-medium leading-relaxed max-w-xs mx-auto">
-                  {productOfMonth?.description || "Siero termoprotettivo. Perfetto da abbinare a ogni cheratina."}
-                </p>
-
-                <div className="pt-2 flex items-center justify-center gap-3 text-xs font-bold text-neutral-800">
-                  {(productOfMonth?.originalPrice || 0) > 0 && (
-                    <span className="text-neutral-400 line-through">€{productOfMonth?.originalPrice}</span>
+                {/* Minimal product box */}
+                <div className="mt-4 border border-neutral-200 h-32 bg-neutral-50 flex items-center justify-center relative overflow-hidden rounded-xl">
+                  {productOfMonth?.image ? (
+                    <img src={resolveDrivePhotoUrl(productOfMonth.image)} alt={productOfMonth.title} className="w-full h-full object-contain" />
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 opacity-[0.03] bg-[linear-gradient(45deg,#000_25%,transparent_25%,transparent_50%,#000_50%,#000_75%,transparent_75%,transparent)] bg-[length:16px_16px]" />
+                      <div className="w-8 h-16 border border-neutral-300 rounded-b-lg relative z-10 flex items-center justify-center">
+                        <span className="text-neutral-400 text-[10px] font-black">P</span>
+                      </div>
+                    </>
                   )}
-                  <span className="text-neutral-900 text-sm font-mono">€{productOfMonth?.discountPrice || 26}</span>
+                </div>
+
+                <div className="mt-4 text-center space-y-1">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-[#dc2626] block">
+                    ◆ {productOfMonth?.subtitle || "CONSIGLIATO · UPSELL"}
+                  </span>
+                  <h4 className="text-sm font-serif font-light uppercase text-neutral-900 tracking-wider">
+                    {productOfMonth?.title}
+                  </h4>
+                  <p className="text-[11px] text-neutral-400 font-medium leading-relaxed max-w-xs mx-auto">
+                    {productOfMonth?.description}
+                  </p>
+
+                  <div className="pt-2 flex items-center justify-center gap-3 text-xs font-bold text-neutral-800">
+                    {(productOfMonth?.originalPrice || 0) > 0 && (
+                      <span className="text-neutral-400 line-through">€{productOfMonth?.originalPrice}</span>
+                    )}
+                    <span className="text-neutral-900 text-sm font-mono">€{productOfMonth?.discountPrice}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : null}
 
         </div>
 
