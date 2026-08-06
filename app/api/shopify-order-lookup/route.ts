@@ -26,19 +26,72 @@ export async function GET(request: NextRequest) {
       const emailParam = searchParams.get("email")?.trim() || "";
       const phoneParam = searchParams.get("phone")?.trim() || "";
 
-      const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=50&status=any&fields=id,name,customer,total_price,line_items,note,created_at`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
-        },
-      });
+      let rawOrders: any[] = [];
+      const fetchHeaders = {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      };
 
-      if (!res.ok) {
-        return NextResponse.json({ error: "Errore nel caricamento degli ordini recenti." }, { status: res.status });
+      // 1. Try querying Shopify API by email directly across all dates
+      if (emailParam) {
+        try {
+          const emailRes = await fetch(
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,total_price,line_items,note,created_at`,
+            { headers: fetchHeaders }
+          );
+          if (emailRes.ok) {
+            const data = await emailRes.json();
+            if (Array.isArray(data?.orders)) {
+              rawOrders.push(...data.orders);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed email order fetch:", e);
+        }
       }
 
-      const data = await res.json();
-      const rawOrders = data?.orders || [];
+      // 2. Try querying Shopify API by phone directly across all dates
+      if (phoneParam && rawOrders.length < 5) {
+        try {
+          const phoneRes = await fetch(
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,total_price,line_items,note,created_at`,
+            { headers: fetchHeaders }
+          );
+          if (phoneRes.ok) {
+            const data = await phoneRes.json();
+            if (Array.isArray(data?.orders)) {
+              rawOrders.push(...data.orders);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed phone order fetch:", e);
+        }
+      }
+
+      // 3. Also fetch recent 100 orders to find matches by name or recent orders
+      try {
+        const recentRes = await fetch(
+          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=100&fields=id,name,customer,total_price,line_items,note,created_at`,
+          { headers: fetchHeaders }
+        );
+        if (recentRes.ok) {
+          const data = await recentRes.json();
+          if (Array.isArray(data?.orders)) {
+            rawOrders.push(...data.orders);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed recent order fetch:", e);
+      }
+
+      // Deduplicate rawOrders by order.id
+      const uniqueOrderMap = new Map<string, any>();
+      for (const ord of rawOrders) {
+        if (ord && ord.id && !uniqueOrderMap.has(String(ord.id))) {
+          uniqueOrderMap.set(String(ord.id), ord);
+        }
+      }
+      const allFetchedOrders = Array.from(uniqueOrderMap.values());
 
       const cleanPhone = (p?: string | null) => (p || "").replace(/\D/g, "");
       const targetPhone = cleanPhone(phoneParam);
@@ -49,8 +102,8 @@ export async function GET(request: NextRequest) {
         .toLowerCase();
       const nameParts = targetName.split(/\s+/).filter((p) => p.length > 1);
 
-      // First try filtering ONLY for this client's orders
-      let filteredOrders = rawOrders.filter((order: any) => {
+      // Filter ONLY for this client's orders across all dates
+      let filteredOrders = allFetchedOrders.filter((order: any) => {
         const oEmail = (order.customer?.email || "").trim().toLowerCase();
         const oPhone = cleanPhone(order.customer?.phone || order.phone);
         const firstName = (order.customer?.first_name || "").trim().toLowerCase();
@@ -78,10 +131,17 @@ export async function GET(request: NextRequest) {
         return false;
       });
 
-      // If no client-specific orders found or no client info passed, fallback to orders created TODAY
+      // Sort by creation date DESC (newest first)
+      filteredOrders.sort((a: any, b: any) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeB - timeA;
+      });
+
+      // Fallback to today's orders if no client orders found
       if (filteredOrders.length === 0) {
         const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
-        filteredOrders = rawOrders.filter((order: any) => {
+        filteredOrders = allFetchedOrders.filter((order: any) => {
           if (!order.created_at) return false;
           const orderDay = new Date(order.created_at).toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
           return orderDay === todayStr;
@@ -89,7 +149,7 @@ export async function GET(request: NextRequest) {
 
         // Fallback to 10 most recent orders if none today
         if (filteredOrders.length === 0) {
-          filteredOrders = rawOrders.slice(0, 10);
+          filteredOrders = allFetchedOrders.slice(0, 10);
         }
       }
 

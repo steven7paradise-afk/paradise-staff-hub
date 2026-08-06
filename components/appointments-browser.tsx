@@ -1259,6 +1259,7 @@ export function AppointmentsBrowser({
   const [customFasceInput, setCustomFasceInput] = useState("");
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
+  const [isDepositUnlockedManually, setIsDepositUnlockedManually] = useState(false);
 
   function updateShopifyNote(overrides?: {
     grammi?: string;
@@ -1785,6 +1786,7 @@ export function AppointmentsBrowser({
     setCustomFasceInput("");
     setSelectedAtteggiamento("");
     setExtraNoteText("");
+    setIsDepositUnlockedManually(false);
     try {
       const salonName = salonNameForBooking(booking);
       const baseForm: ClientControlAppointmentForm = {
@@ -3030,34 +3032,53 @@ export function AppointmentsBrowser({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Codice Ordine Acconto */}
                   <div className="rounded-2xl border border-black/5 bg-white/80 p-3 shadow-2xs">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-black uppercase text-black/60 tracking-wider">
-                        1° Codice Ordine (Acconto Booking)
-                      </span>
-                      {Boolean(selectedBooking?.bookingStr || clientControlForm.shopifyOrder) && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-[#B83D7F] bg-[#FFF0F6] px-2 py-0.5 rounded-md border border-[#F6C6DE]">
-                          🔒 Bloccato
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={clientControlForm.shopifyOrder}
-                      readOnly={Boolean(selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== ""))}
-                      onChange={(event) => {
-                        if (selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")) return;
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          shopifyOrder: event.target.value,
-                        }));
-                      }}
-                      className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
-                        selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")
-                          ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
-                          : "border-[#F4D3E2] bg-white text-black/90 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20"
-                      }`}
-                      placeholder="N° Acconto (es. 22831)"
-                    />
+                    {(() => {
+                      const isDepositLocked = Boolean(
+                        (selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")) &&
+                          !isDepositUnlockedManually
+                      );
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-black uppercase text-black/60 tracking-wider">
+                              1° Codice Ordine (Acconto Booking)
+                            </span>
+                            {Boolean(selectedBooking?.bookingStr || clientControlForm.shopifyOrder) && (
+                              <button
+                                type="button"
+                                onClick={() => setIsDepositUnlockedManually((prev) => !prev)}
+                                className={`inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-md border transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                  isDepositLocked
+                                    ? "text-[#B83D7F] bg-[#FFF0F6] border-[#F6C6DE]"
+                                    : "text-emerald-700 bg-emerald-50 border-emerald-300 shadow-2xs"
+                                }`}
+                                title={isDepositLocked ? "Clicca per sbloccare e modificare il codice acconto" : "Clicca per ribloccare"}
+                              >
+                                {isDepositLocked ? "🔒 Bloccato" : "🔓 Sbloccato (Clicca per bloccare)"}
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={clientControlForm.shopifyOrder}
+                            readOnly={isDepositLocked}
+                            onChange={(event) => {
+                              if (isDepositLocked) return;
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                shopifyOrder: event.target.value,
+                              }));
+                            }}
+                            className={`h-11 w-full rounded-xl border px-3.5 text-xs font-black outline-none transition shadow-2xs ${
+                              isDepositLocked
+                                ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
+                                : "border-emerald-300 bg-white text-black/90 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                            }`}
+                            placeholder="N° Acconto (es. 22831)"
+                          />
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Codice Ordine Finale (Pagamento Totale) */}
