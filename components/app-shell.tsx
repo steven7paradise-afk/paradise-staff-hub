@@ -42,6 +42,7 @@ const nav = [
   { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/foto", label: "Foto", iconName: "Camera", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },

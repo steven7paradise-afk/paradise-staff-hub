@@ -88,6 +88,7 @@ model User {
   attendance_logs   AttendanceLog[]
   leave_requests    LeaveRequest[]   @relation("UserLeaveRequests")
   approvals         LeaveRequest[]   @relation("LeaveApprover")
+  shipments_packed  ShopifyShipment[] @relation("ShipmentPacker")
   documents         Document[]       @relation("UserDocuments")
   uploadedDocuments Document[]       @relation("DocumentUploader")
   notifications     Notification[]
@@ -631,4 +632,27 @@ model ShopifyOrderComment {
 
   @@index([order_name])
   @@map("shopify_order_comments")
+}
+
+model ShopifyShipment {
+  id                String   @id @default(cuid())
+  shopify_order_id  String   @unique
+  order_name        String
+  customer_name     String?
+  shipping_address  Json?
+  status            String   @default("UNFULFILLED") // UNFULFILLED | PACKING | READY | SHIPPED
+  verified_barcodes Json?    // Scanned barcodes/SKUs
+  photo_url         String?  // Google Drive photo URL
+  notes             String?
+  tracking_number   String?
+  courier           String?
+  packed_by_user_id String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  packed_by         User?    @relation("ShipmentPacker", fields: [packed_by_user_id], references: [id])
+
+  @@index([status])
+  @@index([order_name])
+  @@map("shopify_shipments")
 }
