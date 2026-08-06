@@ -94,6 +94,27 @@ type ClientControlAppointmentForm = {
   bookingId?: string | null;
 };
 
+export function getShopifyAdminOrderUrl(orderNameOrId?: string | null, numericId?: string | number | null): string {
+  const shopDomain = "c1uzax-u0";
+  const numIdStr = numericId ? String(numericId).trim() : "";
+
+  // 1. If numericId is a 10+ digit Shopify order ID (e.g. 8216417370458)
+  if (numIdStr && /^\d{10,}$/.test(numIdStr)) {
+    return `https://admin.shopify.com/store/${shopDomain}/orders/${numIdStr}`;
+  }
+
+  const nameStr = String(orderNameOrId || "").trim().replace(/^#/, "");
+  if (!nameStr) return `https://admin.shopify.com/store/${shopDomain}/orders`;
+
+  // 2. If nameStr itself is a 10+ digit numeric ID
+  if (/^\d{10,}$/.test(nameStr)) {
+    return `https://admin.shopify.com/store/${shopDomain}/orders/${nameStr}`;
+  }
+
+  // 3. Otherwise (e.g. "25311" or "#25311"), search directly by query "#25311"
+  return `https://admin.shopify.com/store/${shopDomain}/orders?query=${encodeURIComponent("#" + nameStr)}`;
+}
+
 type AppointmentRecord = {
   id: string;
   customerName: string;
@@ -2900,7 +2921,7 @@ export function AppointmentsBrowser({
                     <span>Codice Acconto: #{clientControlForm.shopifyOrder || "---"}</span>
                     {clientControlForm.shopifyOrder && (
                       <a
-                        href={`https://admin.shopify.com/store/c1uzax-u0/orders/${clientControlForm.shopifyOrder.replace("#", "")}`}
+                        href={getShopifyAdminOrderUrl(clientControlForm.shopifyOrder, selectedOrderDetails?.id)}
                         target="_blank"
                         rel="noreferrer"
                         className="ml-1 text-[10px] text-[#B83D7F] underline font-extrabold hover:text-black"
@@ -2914,7 +2935,7 @@ export function AppointmentsBrowser({
                       <ShoppingBag className="size-3.5 text-[#D96B94]" />
                       <span>Codice Ordine Finale: #{clientControlForm.secondShopifyOrder}</span>
                       <a
-                        href={`https://admin.shopify.com/store/c1uzax-u0/orders/${clientControlForm.secondShopifyOrder.replace("#", "")}`}
+                        href={getShopifyAdminOrderUrl(clientControlForm.secondShopifyOrder, secondOrderDetails?.id)}
                         target="_blank"
                         rel="noreferrer"
                         className="ml-1 text-[10px] text-[#B83D7F] underline font-extrabold hover:text-black"
@@ -3231,11 +3252,7 @@ export function AppointmentsBrowser({
                       </span>
                     </div>
                     <a
-                      href={
-                        selectedOrderDetails.id
-                          ? `https://admin.shopify.com/store/c1uzax-u0/orders/${selectedOrderDetails.id}`
-                          : `https://admin.shopify.com/store/c1uzax-u0/orders?query=${encodeURIComponent(selectedOrderDetails.orderName)}`
-                      }
+                      href={getShopifyAdminOrderUrl(selectedOrderDetails.orderName, selectedOrderDetails.id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#F6C6DE] px-4 py-1.5 text-xs font-black text-[#D96B94] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"
@@ -3270,11 +3287,7 @@ export function AppointmentsBrowser({
                       </span>
                     </div>
                     <a
-                      href={
-                        secondOrderDetails.id
-                          ? `https://admin.shopify.com/store/c1uzax-u0/orders/${secondOrderDetails.id}`
-                          : `https://admin.shopify.com/store/c1uzax-u0/orders?query=${encodeURIComponent(secondOrderDetails.orderName)}`
-                      }
+                      href={getShopifyAdminOrderUrl(secondOrderDetails.orderName, secondOrderDetails.id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 rounded-full bg-white border border-[#B83D7F]/40 px-4 py-1.5 text-xs font-black text-[#B83D7F] hover:bg-[#FFF0F6] shadow-2xs transition active:scale-95"
