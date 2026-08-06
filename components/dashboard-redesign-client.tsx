@@ -317,17 +317,8 @@ export function DashboardRedesignClient({
     return () => clearInterval(interval);
   }, [activePromos.length]);
 
-  const activePromo = activePromos[currentSlideIndex] || {
-    id: "default-promo",
-    title: "LUGLIO GLOW -20% CHERATINA",
-    subtitle: "PROMO DELLA SETTIMANA",
-    description: "Tutti i trattamenti di cheratina e ristrutturazione a -20%. Proponilo alle clienti con colore o schiariture: massimo effetto, upsell naturale.",
-    badge: "VALIDA FINO AL 31 LUGLIO",
-    ctaText: "CONDIVIDI COL CLIENTE",
-    ctaUrl: "/service-forms",
-    materialeGraficoUrl: "/documents",
-    active: true
-  };
+  const hasActivePromos = activePromos.length > 0;
+  const activePromo = hasActivePromos ? activePromos[currentSlideIndex] || activePromos[0] : null;
 
   const salonPercent = Math.min(100, Math.round((currentSalonPoints / Math.max(1, salonGoal)) * 100));
   const isSuperAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
@@ -492,101 +483,107 @@ export function DashboardRedesignClient({
         )}
 
         {/* SECTION 1: PROMO & CAMPAGNE ATTIVE */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
-            <h2 className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400 text-left">
-              PROMO & CAMPAGNE ATTIVE
-            </h2>
-            <span className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
-              {activePromos.length} ATTIVE · IN CASSA
-            </span>
-          </div>
-
-          <div className={cn(
-            "grid grid-cols-1 gap-6",
-            (isCard1Empty && isCard2Empty) ? "lg:grid-cols-1" : "lg:grid-cols-3"
-          )}>
-            
-            {/* Main Featured Promo Card */}
-            <div className={cn(
-              "bg-neutral-950 text-white p-8 md:p-10 rounded-[24px] flex flex-col justify-between min-h-[290px] relative overflow-hidden shadow-soft",
-              (isCard1Empty && isCard2Empty) ? "lg:col-span-1" : "lg:col-span-2"
-            )}>
-              <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-80 h-80 rounded-full border border-neutral-800 pointer-events-none" />
-
-              <div className="space-y-4 relative z-10 text-left">
-                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.25em] text-[#dc2626]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#dc2626]" />
-                  <span>{activePromo.subtitle || "PROMO DELLA SETTIMANA"}</span>
-                </div>
-
-                <h3 className="text-2xl md:text-3xl font-serif font-light tracking-wide leading-none uppercase">
-                  {renderTitle(activePromo.title || "")}
-                </h3>
-
-                <p className="text-xs md:text-sm text-neutral-400 max-w-xl leading-relaxed font-normal">
-                  {activePromo.description}
-                </p>
-              </div>
-
-              <div className="pt-6 flex flex-wrap items-center justify-between gap-4 border-t border-neutral-800/80 relative z-10 mt-6">
-                <div className="flex flex-wrap items-center gap-3">
-                  {activePromo.ctaUrl && (
-                    <Link
-                      href={activePromo.ctaUrl}
-                      className="bg-white hover:bg-neutral-100 text-neutral-900 text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg flex items-center gap-1.5 transition"
-                    >
-                      <Upload size={13} className="rotate-90" />
-                      <span>{activePromo.ctaText || "CONDIVIDI"}</span>
-                    </Link>
-                  )}
-
-                  {isMatExternal ? (
-                    <a
-                      href={matUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg transition flex items-center gap-1.5"
-                    >
-                      <span>MATERIALE GRAFICO</span>
-                      <ExternalLink size={12} />
-                    </a>
-                  ) : (
-                    <Link
-                      href={matUrl}
-                      className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg transition"
-                    >
-                      MATERIALE GRAFICO
-                    </Link>
-                  )}
-
-                  {activePromo.badge && (
-                    <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-[0.2em] ml-2">
-                      {activePromo.badge}
-                    </span>
-                  )}
-                </div>
-
-                {/* Dashed Slide Indicators */}
-                {activePromos.length > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    {activePromos.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentSlideIndex(i)}
-                        className={`h-0.5 transition-all duration-300 ${
-                          i === currentSlideIndex ? "w-6 bg-white" : "w-2 bg-neutral-700"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+        {(hasActivePromos || !isCard1Empty || !isCard2Empty) && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-2">
+              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400 text-left">
+                PROMO & CAMPAGNE ATTIVE
+              </h2>
+              <span className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                {activePromos.length} ATTIVE · IN CASSA
+              </span>
             </div>
 
-            {/* Right Side Stacked Cards */}
-            {(!isCard1Empty || !isCard2Empty) && (
-              <div className="space-y-4 flex flex-col justify-between">
+            <div className={cn(
+              "grid grid-cols-1 gap-6",
+              !hasActivePromos ? "lg:grid-cols-1" : (isCard1Empty && isCard2Empty) ? "lg:grid-cols-1" : "lg:grid-cols-3"
+            )}>
+              
+              {/* Main Featured Promo Card */}
+              {hasActivePromos && activePromo ? (
+                <div className={cn(
+                  "bg-neutral-950 text-white p-8 md:p-10 rounded-[24px] flex flex-col justify-between min-h-[290px] relative overflow-hidden shadow-soft",
+                  (isCard1Empty && isCard2Empty) ? "lg:col-span-1" : "lg:col-span-2"
+                )}>
+                  <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-80 h-80 rounded-full border border-neutral-800 pointer-events-none" />
+
+                  <div className="space-y-4 relative z-10 text-left">
+                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.25em] text-[#dc2626]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#dc2626]" />
+                      <span>{activePromo.subtitle || "PROMO DELLA SETTIMANA"}</span>
+                    </div>
+
+                    <h3 className="text-2xl md:text-3xl font-serif font-light tracking-wide leading-none uppercase">
+                      {renderTitle(activePromo.title || "")}
+                    </h3>
+
+                    <p className="text-xs md:text-sm text-neutral-400 max-w-xl leading-relaxed font-normal">
+                      {activePromo.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-6 flex flex-wrap items-center justify-between gap-4 border-t border-neutral-800/80 relative z-10 mt-6">
+                    <div className="flex flex-wrap items-center gap-3">
+                      {activePromo.ctaUrl && (
+                        <Link
+                          href={activePromo.ctaUrl}
+                          className="bg-white hover:bg-neutral-100 text-neutral-900 text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg flex items-center gap-1.5 transition"
+                        >
+                          <Upload size={13} className="rotate-90" />
+                          <span>{activePromo.ctaText || "CONDIVIDI"}</span>
+                        </Link>
+                      )}
+
+                      {isMatExternal ? (
+                        <a
+                          href={matUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg transition flex items-center gap-1.5"
+                        >
+                          <span>MATERIALE GRAFICO</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      ) : (
+                        <Link
+                          href={matUrl}
+                          className="border border-neutral-700 hover:border-neutral-500 text-white text-[10px] font-black uppercase tracking-wider px-5 py-3 rounded-lg transition"
+                        >
+                          MATERIALE GRAFICO
+                        </Link>
+                      )}
+
+                      {activePromo.badge && (
+                        <span className="text-[9px] font-bold text-neutral-500 uppercase tracking-[0.2em] ml-2">
+                          {activePromo.badge}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Dashed Slide Indicators */}
+                    {activePromos.length > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        {activePromos.map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setCurrentSlideIndex(i)}
+                            className={`h-0.5 transition-all duration-300 ${
+                              i === currentSlideIndex ? "w-6 bg-white" : "w-2 bg-neutral-700"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Right Side Stacked Cards */}
+              {(!isCard1Empty || !isCard2Empty) && (
+                <div className={cn(
+                  "space-y-4 flex flex-col justify-between",
+                  !hasActivePromos ? "lg:col-span-1 grid grid-cols-1 md:grid-cols-2 gap-4 space-y-0" : ""
+                )}>
                 
                 {/* Card 1: Porta un'amica */}
                 {!isCard1Empty && (
@@ -643,6 +640,7 @@ export function DashboardRedesignClient({
 
           </div>
         </div>
+      )}
 
         {/* SECTION 2: ORE & TARGETS */}
         <div className="space-y-3">

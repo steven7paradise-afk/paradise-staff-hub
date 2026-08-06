@@ -264,9 +264,6 @@ export function NotificationManager({
   // 1-Click action: Select and view in Blog Reader
   function selectCommunication(item: NotificationItem) {
     setActiveItem(item);
-    if (!item.read) {
-      void markRead(item);
-    }
     if (viewMode === "LIST") {
       setViewMode("BLOG");
     }
