@@ -26,63 +26,54 @@ export async function GET(request: NextRequest) {
       const emailParam = searchParams.get("email")?.trim() || "";
       const phoneParam = searchParams.get("phone")?.trim() || "";
 
-      let rawOrders: any[] = [];
       const fetchHeaders = {
         "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
       };
 
-      // 1. Try querying Shopify API by email directly across all dates
+      const fetchWithTimeout = async (url: string) => {
+        try {
+          const res = await fetch(url, {
+            headers: fetchHeaders,
+            signal: AbortSignal.timeout(3500),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            return Array.isArray(data?.orders) ? data.orders : [];
+          }
+        } catch (e) {
+          // ignore timeouts safely
+        }
+        return [];
+      };
+
+      const fetchPromises: Promise<any[]>[] = [];
+
       if (emailParam) {
-        try {
-          const emailRes = await fetch(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,total_price,line_items,note,created_at`,
-            { headers: fetchHeaders }
-          );
-          if (emailRes.ok) {
-            const data = await emailRes.json();
-            if (Array.isArray(data?.orders)) {
-              rawOrders.push(...data.orders);
-            }
-          }
-        } catch (e) {
-          console.warn("Failed email order fetch:", e);
-        }
-      }
-
-      // 2. Try querying Shopify API by phone directly across all dates
-      if (phoneParam && rawOrders.length < 5) {
-        try {
-          const phoneRes = await fetch(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,total_price,line_items,note,created_at`,
-            { headers: fetchHeaders }
-          );
-          if (phoneRes.ok) {
-            const data = await phoneRes.json();
-            if (Array.isArray(data?.orders)) {
-              rawOrders.push(...data.orders);
-            }
-          }
-        } catch (e) {
-          console.warn("Failed phone order fetch:", e);
-        }
-      }
-
-      // 3. Also fetch recent 100 orders to find matches by name or recent orders
-      try {
-        const recentRes = await fetch(
-          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=100&fields=id,name,customer,total_price,line_items,note,created_at`,
-          { headers: fetchHeaders }
+        fetchPromises.push(
+          fetchWithTimeout(
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,total_price,line_items,note,created_at`
+          )
         );
-        if (recentRes.ok) {
-          const data = await recentRes.json();
-          if (Array.isArray(data?.orders)) {
-            rawOrders.push(...data.orders);
-          }
-        }
-      } catch (e) {
-        console.warn("Failed recent order fetch:", e);
       }
+
+      if (phoneParam) {
+        fetchPromises.push(
+          fetchWithTimeout(
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,total_price,line_items,note,created_at`
+          )
+        );
+      }
+
+      // Also fetch recent 40 orders in parallel
+      fetchPromises.push(
+        fetchWithTimeout(
+          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=40&fields=id,name,customer,total_price,line_items,note,created_at`
+        )
+      );
+
+      const results = await Promise.all(fetchPromises);
+      const rawOrders = results.flat();
 
       // Deduplicate rawOrders by order.id
       const uniqueOrderMap = new Map<string, any>();
