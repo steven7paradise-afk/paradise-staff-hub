@@ -464,16 +464,23 @@ export function ShippingManager({
                           )}
                         </div>
 
-                        {/* Badges & Actions */}
-                        <div className="flex items-center justify-between pt-1 border-t border-black/5">
-                          <span className="text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                        {/* Badges & Touch Action Button for Tablet */}
+                        <div className="flex items-center justify-between pt-2 border-t border-black/5">
+                          <span className="text-xs font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl font-mono">
                             €{order.totalPrice.toFixed(2)}
                           </span>
 
-                          <span className="inline-flex items-center gap-1 text-xs font-black text-[#B83D7F] group-hover:translate-x-0.5 transition">
-                            <span>Apri pacco</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openPackingModal(order);
+                            }}
+                            className="inline-flex items-center gap-1.5 text-xs font-black text-white bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-2 rounded-xl shadow-2xs hover:opacity-95 transition active:scale-95"
+                          >
+                            <span>Prepara</span>
                             <ChevronRight className="size-4" />
-                          </span>
+                          </button>
                         </div>
                       </Card>
                     ))
