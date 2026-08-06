@@ -275,10 +275,7 @@ export function NotificationManager({
     setStatus("Invio comunicazione in corso...");
 
     const finalActionUrl = customLinkUrl.trim() || attachedFileUrl || "/notifications";
-    let finalMessage = message.trim();
-    if (attachedFileUrl && attachedFileName) {
-      finalMessage += `\n\n📄 ALLEGATO DRIVE: [${attachedFileName}](${attachedFileUrl})`;
-    }
+    const finalMessage = message.trim();
 
     const response = await fetch("/api/notifications", {
       method: "POST",
@@ -489,17 +486,40 @@ export function NotificationManager({
 
                   {/* Article Content Body */}
                   <div className="p-6 sm:p-8 space-y-6">
-                    <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-6 sm:p-8 shadow-2xs space-y-4">
+                    <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-6 sm:p-8 shadow-2xs space-y-5">
                       <p className="whitespace-pre-line text-base font-semibold leading-relaxed text-[#2C2C2C]">
-                        {activeItem.message}
+                        {activeItem.message
+                          .replace(/\n\n📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
+                          .replace(/📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
+                          .trim()}
                       </p>
 
-                      {/* Embedded Image Preview if image link present */}
-                      {activeItem.actionUrl && /\.(jpg|jpeg|png|webp|gif)$/i.test(activeItem.actionUrl) ? (
-                        <div className="mt-4 rounded-2xl overflow-hidden border border-black/10 bg-black/5 max-w-full aspect-video flex items-center justify-center">
-                          <img src={activeItem.actionUrl} alt="Allegato" className="object-contain size-full" />
-                        </div>
-                      ) : null}
+                      {/* Directly visible embedded image preview */}
+                      {(() => {
+                        const targetUrl = activeItem.actionUrl || activeItem.message;
+                        const driveId = targetUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] || targetUrl.match(/id=([a-zA-Z0-9_-]+)/)?.[1];
+                        const isImg = /\.(png|jpg|jpeg|webp|gif)($|\?|\))/i.test(targetUrl) || /\[.*?\.(png|jpg|jpeg|webp|gif)\]/i.test(activeItem.message) || !!driveId;
+
+                        if (!isImg || (!activeItem.actionUrl && !driveId)) return null;
+
+                        const imgSrc = driveId ? `/api/drive-image?id=${driveId}` : activeItem.actionUrl!;
+
+                        return (
+                          <div className="mt-4 overflow-hidden rounded-2xl border border-[#F4D3E2] bg-neutral-900/5 p-2 shadow-md flex flex-col items-center">
+                            <img
+                              src={imgSrc}
+                              alt="Immagine allegata"
+                              className="w-full max-h-[550px] object-contain rounded-xl bg-white"
+                              onError={(e) => {
+                                // Fallback to direct drive view if proxy fails
+                                if (driveId && e.currentTarget.src.includes("/api/drive-image")) {
+                                  e.currentTarget.src = `https://lh3.googleusercontent.com/d/${driveId}`;
+                                }
+                              }}
+                            />
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Attachment / Action Link Button */}
@@ -512,8 +532,10 @@ export function NotificationManager({
                             <LinkIcon className="size-5 text-[#B83D7F]" />
                           )}
                           <span className="text-xs font-bold text-[#1F1F1F]">
-                            {activeItem.actionUrl.includes("drive.google.com") || activeItem.actionUrl.endsWith(".pdf")
-                              ? "Allegato Documento / PDF (Google Drive)"
+                            {/\.(png|jpg|jpeg|webp|gif)($|\?)/i.test(activeItem.actionUrl) || activeItem.message.toLowerCase().includes(".png")
+                              ? "Allegato Immagine (Google Drive)"
+                              : activeItem.actionUrl.endsWith(".pdf")
+                              ? "Allegato Documento PDF (Google Drive)"
                               : "Risorsa / Link Esterno Collegato"}
                           </span>
                         </div>
@@ -523,7 +545,13 @@ export function NotificationManager({
                           rel="noopener noreferrer"
                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-6 py-2.5 text-xs font-black text-white shadow-md hover:opacity-95 transition active:scale-95 w-full sm:w-auto"
                         >
-                          <span>{activeItem.actionUrl.endsWith(".pdf") ? "Visualizza PDF ↗" : "Apri Risorsa ↗"}</span>
+                          <span>
+                            {/\.(png|jpg|jpeg|webp|gif)($|\?)/i.test(activeItem.actionUrl) || activeItem.message.toLowerCase().includes(".png")
+                              ? "Apri Immagine Originale ↗"
+                              : activeItem.actionUrl.endsWith(".pdf")
+                              ? "Visualizza PDF ↗"
+                              : "Apri Risorsa ↗"}
+                          </span>
                           <ExternalLink className="size-3.5" />
                         </a>
                       </div>
