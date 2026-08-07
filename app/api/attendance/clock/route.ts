@@ -52,12 +52,39 @@ export async function POST(request: NextRequest) {
     orderBy: { timestamp: "desc" },
     select: { type: true, timestamp: true },
   });
-  const todayLogs = await prisma.attendanceLog.findMany({
+  const currentRomeHour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      timeZone: "Europe/Rome",
+    }).format(actualTimestamp)
+  );
+
+  const yesterdayDateOnly = new Date(actualDateOnly);
+  yesterdayDateOnly.setUTCDate(yesterdayDateOnly.getUTCDate() - 1);
+
+  let shiftDateOnly = actualDateOnly;
+  let shiftLogs = await prisma.attendanceLog.findMany({
     where: { user_id: user.id, date: { gte: actualDateOnly, lt: actualTomorrow } },
     orderBy: { timestamp: "asc" },
     select: { type: true, timestamp: true },
   });
-  const currentState = deriveAttendanceState(todayLogs);
+
+  // Early morning (00:00 - 06:00): exits/breaks belong to yesterday if that shift is still open.
+  if (currentRomeHour < 6 && (type === "USCITA" || type === "PAUSA")) {
+    const yesterdayLogs = await prisma.attendanceLog.findMany({
+      where: { user_id: user.id, date: { gte: yesterdayDateOnly, lt: actualDateOnly } },
+      orderBy: { timestamp: "asc" },
+      select: { type: true, timestamp: true },
+    });
+    const yesterdayState = deriveAttendanceState(yesterdayLogs);
+    if (yesterdayState.status === "IN" || yesterdayState.status === "BREAK") {
+      shiftDateOnly = yesterdayDateOnly;
+      shiftLogs = [...yesterdayLogs, ...shiftLogs];
+    }
+  }
+
+  const currentState = deriveAttendanceState(shiftLogs);
   const allowedActions = permittedAttendanceActions(currentState.status) as AttendanceType[];
   if (!allowedActions.includes(type)) {
     return NextResponse.json({ error: "Azione non valida per lo stato attuale del turno" }, { status: 409 });
@@ -87,8 +114,7 @@ export async function POST(request: NextRequest) {
     timestamp = applyExitRounding(actualTimestamp, rule.entranceRoundingMinutes);
   }
 
-  const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(timestamp);
-  const dateOnly = new Date(`${localDate}T00:00:00.000Z`);
+  const dateOnly = shiftDateOnly;
 
   // Same day ENTRATA after USCITA check
   if (type === "ENTRATA") {
@@ -124,8 +150,9 @@ export async function POST(request: NextRequest) {
     : type === "USCITA" && rule.entranceRoundingMinutes > 0 && actualTime !== time
     ? `Ora rilevata ${actualTime}; arrotondamento uscita ${rule.entranceRoundingMinutes} min.`
     : null;
+  const nightNote = shiftDateOnly !== actualDateOnly ? `Timbratura notturna associata al turno del ${new Intl.DateTimeFormat("it-IT").format(shiftDateOnly)}.` : null;
   const tabletNote = `Timbrato su: ${device.device_name} (${device.location.name})`;
-  const storedNote = [note, roundedNote, tabletNote].filter(Boolean).join(" - ") || null;
+  const storedNote = [note, roundedNote, nightNote, tabletNote].filter(Boolean).join(" - ") || null;
 
   const log = await prisma.attendanceLog.create({
     data: {
@@ -134,7 +161,7 @@ export async function POST(request: NextRequest) {
       device_id: device.id,
       type,
       timestamp,
-      date: dateOnly,
+      date: shiftDateOnly,
       time,
       ip_address: ip,
       note: storedNote,

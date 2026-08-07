@@ -71,6 +71,27 @@ const appointmentNoteSuggestions = [
 
 const minFrequentNoteUses = 3;
 
+function romeClockInfo(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: "Europe/Rome",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+  const minute = parts.find((part) => part.type === "minute")?.value ?? "00";
+
+  return {
+    hour,
+    label: `${String(hour).padStart(2, "0")}:${minute}`,
+  };
+}
+
+function isNightClockAction(type: string) {
+  const { hour } = romeClockInfo();
+  return (type === "USCITA" || type === "PAUSA") && hour >= 0 && hour < 6;
+}
+
 type LearnedNoteSuggestion = { text: string; count: number; lastUsed: number };
 
 function normalizeNoteSuggestion(value: string) {
@@ -389,6 +410,9 @@ export function TabletClock({
   // Exit conditions
   const [showEarlyExitConfirm, setShowEarlyExitConfirm] = useState(false);
   const [pendingExitMode, setPendingExitMode] = useState<string | null>(null);
+  const [showNightClockConfirm, setShowNightClockConfirm] = useState(false);
+  const [pendingNightClockType, setPendingNightClockType] = useState<string | null>(null);
+  const [pendingNightClockTime, setPendingNightClockTime] = useState("");
 
   const dashboardFrameRef = useRef<HTMLIFrameElement | null>(null);
   const kioskIdleTimerRef = useRef<any | null>(null);
@@ -1159,8 +1183,15 @@ export function TabletClock({
     );
   }
 
-  async function clock(type: string, bypassEarlyExitCheck = false) {
+  async function clock(type: string, bypassEarlyExitCheck = false, bypassNightClockCheck = false) {
     if (!worker || !/^\d{4,6}$/.test(pin) || !device) return;
+
+    if (!bypassNightClockCheck && isNightClockAction(type)) {
+      setPendingNightClockType(type);
+      setPendingNightClockTime(romeClockInfo().label);
+      setShowNightClockConfirm(true);
+      return;
+    }
     
     if (type === "USCITA" && isShiftDurationPending && !bypassEarlyExitCheck) {
       setPendingExitMode("clock");
@@ -1566,6 +1597,61 @@ export function TabletClock({
   }
 
   // Early Shift Logout Alert Confirm Dialog
+  const nightClockActionLabel = pendingNightClockType === "PAUSA" ? "una PAUSA" : "un'USCITA";
+  const nightClockConfirmLabel = pendingNightClockType === "PAUSA" ? "Conferma pausa" : "Conferma uscita";
+  const nightClockConfirmDialog =
+    showNightClockConfirm && !showDashboard ? (
+      <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+        <div className="w-full max-w-xl rounded-[28px] border border-black/10 bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+          <div className="flex items-start gap-4">
+            <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#fff1f6] text-[#ff2f83]">
+              <Clock className="size-6" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Conferma timbratura notturna</p>
+              <h3 className="mt-1 text-2xl font-black text-[#171717]">Orario notturno rilevato</h3>
+              <p className="mt-2 text-sm font-semibold leading-6 text-black/65">
+                Stai registrando {nightClockActionLabel} alle{" "}
+                <span className="font-black text-[#171717]">{pendingNightClockTime || romeClockInfo().label}</span>.
+                Confermi di volerla registrare sul turno notturno?
+              </p>
+              <p className="mt-3 text-xs font-bold uppercase tracking-[0.16em] text-black/40">
+                Se confermi, la timbratura verra collegata al turno iniziato il giorno precedente quando risulta ancora aperto.
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                setShowNightClockConfirm(false);
+                setPendingNightClockType(null);
+                setPendingNightClockTime("");
+              }}
+              className="rounded-2xl bg-black/[0.05] px-5 py-3 text-sm font-black text-black/65 transition active:scale-95"
+            >
+              Annulla
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const action = pendingNightClockType;
+                setShowNightClockConfirm(false);
+                setPendingNightClockType(null);
+                setPendingNightClockTime("");
+                if (action) {
+                  void clock(action, true, true);
+                }
+              }}
+              className="rounded-2xl bg-[#171717] px-5 py-3 text-sm font-black text-white shadow-lg shadow-black/20 transition active:scale-95"
+            >
+              {nightClockConfirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   const earlyExitConfirmDialog =
     showEarlyExitConfirm && !showDashboard ? (
       <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
@@ -1690,6 +1776,7 @@ export function TabletClock({
             />
           </div>
         </div>
+        {nightClockConfirmDialog}
         {earlyExitConfirmDialog}
       </main>
     );
@@ -3544,6 +3631,9 @@ export function TabletClock({
             </div>
           </div>
         )}
+
+        {/* Night clock and early exit confirm overlay dialogs */}
+        {nightClockConfirmDialog}
 
         {/* Early shift exit confirm overlay dialog */}
         {earlyExitConfirmDialog}
