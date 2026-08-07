@@ -1849,11 +1849,11 @@ export function TabletClock({
 
   // Render Kiosk clock/app screen
   return (
-    <main className="min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
-      <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-black bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:min-h-[calc(100svh-2rem)] sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
+    <main className="min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] min-[600px]:h-[100svh] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:p-4" style={tabletStyle}>
+      <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-black bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] min-[600px]:h-[calc(100svh-2rem)] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
-        <header className="relative z-10 flex items-start justify-between gap-2 border-b border-black/[0.07] pb-3 sm:gap-3 sm:pb-4">
+        <header className="relative z-[80] flex items-start justify-between gap-2 border-b border-black/[0.07] pb-3 sm:gap-3 sm:pb-4">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-lg border border-black/10 bg-[color:var(--tablet-card)]/70 sm:size-10 sm:rounded-xl">
               <MapPin className="size-4 text-[color:var(--tablet-accent)]" />
@@ -1878,29 +1878,42 @@ export function TabletClock({
               </button>
 
               {soundMenuOpen ? (
-                <div className="kiosk-feedback-enter absolute right-0 top-12 z-[60] w-[min(320px,calc(100vw-28px))] rounded-xl border border-black/10 bg-white p-3 text-left shadow-[0_20px_55px_rgba(0,0,0,0.18)]">
-                  <div className="mb-2 flex items-center justify-between gap-3 border-b border-black/[0.06] pb-3">
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6">
+                  <button
+                    type="button"
+                    aria-label="Chiudi selezione suoni"
+                    className="absolute inset-0 cursor-default bg-black/20 backdrop-blur-[2px]"
+                    onClick={() => setSoundMenuOpen(false)}
+                  />
+                  <div className="kiosk-feedback-enter relative z-10 max-h-[calc(100svh-24px)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-xl border border-black/10 bg-white p-4 text-left shadow-[0_24px_70px_rgba(0,0,0,0.28)] touch-manipulation sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3 border-b border-black/[0.06] pb-4">
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--tablet-accent)]">Pacchetto suoni</p>
-                      <p className="mt-0.5 text-xs font-medium normal-case text-black/50">Tastiera, conferma ed errore</p>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-[color:var(--tablet-accent)]">Scegli il suono</p>
+                      <p className="mt-1 text-sm font-medium normal-case text-black/50">Ogni pack include tastiera, conferma ed errore.</p>
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={soundEnabled}
-                      onClick={() => {
-                        const next = !soundEnabled;
-                        setSoundEnabled(next);
-                        window.localStorage.setItem("paradise-tablet-sound", next ? "on" : "off");
-                        if (next) sound("success", true);
-                      }}
-                      className={cn("relative h-7 w-12 rounded-full transition-colors", soundEnabled ? "bg-emerald-500" : "bg-black/15")}
-                    >
-                      <span className={cn("absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform", soundEnabled ? "left-6" : "left-1")} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-label="Attiva o disattiva suoni"
+                        aria-checked={soundEnabled}
+                        onClick={() => {
+                          const next = !soundEnabled;
+                          setSoundEnabled(next);
+                          window.localStorage.setItem("paradise-tablet-sound", next ? "on" : "off");
+                          if (next) sound("success", true);
+                        }}
+                        className={cn("relative h-8 w-14 rounded-full transition-colors", soundEnabled ? "bg-emerald-500" : "bg-black/15")}
+                      >
+                        <span className={cn("absolute top-1 size-6 rounded-full bg-white shadow-sm transition-transform", soundEnabled ? "left-7" : "left-1")} />
+                      </button>
+                      <button type="button" aria-label="Chiudi" onClick={() => setSoundMenuOpen(false)} className="grid size-10 place-items-center rounded-lg border border-black/10 text-black/55 active:scale-95">
+                        <X className="size-5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {soundPacks.map((pack) => {
                       const selected = pack.id === soundPack;
                       return (
@@ -1915,8 +1928,8 @@ export function TabletClock({
                             sound("success", true, pack.id);
                           }}
                           className={cn(
-                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition active:scale-[0.98]",
-                            selected ? "bg-[color:var(--tablet-soft)]/55" : "hover:bg-black/[0.035]"
+                            "flex min-h-[72px] w-full touch-manipulation items-center gap-3 rounded-lg border px-3 py-3 text-left transition active:scale-[0.97]",
+                            selected ? "border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)]/45 shadow-sm" : "border-black/10 hover:bg-black/[0.035]"
                           )}
                         >
                           <span className={cn("grid size-8 shrink-0 place-items-center rounded-full border", selected ? "border-[color:var(--tablet-accent)] bg-white text-[color:var(--tablet-accent)]" : "border-black/10 text-black/35")}>
@@ -1929,7 +1942,18 @@ export function TabletClock({
                           <span className="text-[9px] font-black uppercase tracking-[0.12em] text-black/30">Ascolta</span>
                         </button>
                       );
-                    })}
+                  })}
+                  </div>
+                  <div className="mt-4 flex flex-col gap-3 border-t border-black/[0.06] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-semibold text-black/55">Selezionato: <span className="text-[#171717]">{soundPacks.find((pack) => pack.id === soundPack)?.name}</span></p>
+                    <button
+                      type="button"
+                      onClick={() => setSoundMenuOpen(false)}
+                      className="h-12 rounded-lg bg-[#171717] px-6 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-lg active:scale-[0.98]"
+                    >
+                      Usa questo suono
+                    </button>
+                  </div>
                   </div>
                 </div>
               ) : null}
@@ -2044,7 +2068,7 @@ export function TabletClock({
           </section>
         ) : (
           /* Normal Pin Entry View */
-          <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-visible py-2">
+          <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-visible py-2 min-[600px]:overflow-hidden">
             <div className="mx-auto grid w-full max-w-[1180px] flex-1 items-center gap-6 py-3 transition-all duration-300 min-[900px]:grid-cols-[minmax(360px,0.95fr)_minmax(360px,1.05fr)] lg:gap-8">
               <div className="kiosk-panel-enter mx-auto flex w-full max-w-[470px] flex-col py-2">
                 <div className="kiosk-pin-heading mb-4 text-center sm:mb-5">
@@ -3836,7 +3860,7 @@ export function TabletClock({
           .kiosk-clock-enter { animation: kiosk-clock-enter 520ms 80ms ease-out both; }
           .kiosk-pin-pop { animation: kiosk-pin-pop 240ms ease-out both; }
           .kiosk-feedback-enter { animation: kiosk-feedback-enter 220ms ease-out both; }
-          @media (min-width: 900px) and (max-height: 760px) {
+          @media (min-width: 600px) and (max-height: 850px) {
             .kiosk-pin-heading { margin-bottom: 0.5rem; }
             .kiosk-pin-field { height: 3.5rem; }
             .kiosk-keypad-button { height: 3rem; }
