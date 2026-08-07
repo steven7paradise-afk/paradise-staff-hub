@@ -1936,14 +1936,8 @@ export function TabletClock({
           </section>
         ) : (
           /* Normal Pin Entry View */
-          <div className={cn(
-            "relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden py-2",
-            appointmentsExpanded ? "mb-0" : "mb-2"
-          )}>
-            <div className={cn(
-              "mx-auto grid w-full max-w-[1200px] flex-1 items-center gap-6 md:grid-cols-[440px_1fr] landscape:grid-cols-[440px_1fr] transition-all duration-300",
-              appointmentsExpanded ? "opacity-90 scale-[0.98] py-1" : "py-4"
-            )}>
+          <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-hidden py-2">
+            <div className="mx-auto grid w-full max-w-[1200px] flex-1 items-center gap-6 py-4 transition-all duration-300 md:grid-cols-[440px_1fr] landscape:grid-cols-[440px_1fr]">
               <div className="mx-auto w-full max-w-[440px]">
                 <p className="mb-2 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
                 <PinDots pin={pin} />
@@ -1996,7 +1990,7 @@ export function TabletClock({
 
             {/* Bottom expandable tray showing appointments list */}
             <div className={cn(
-              "relative mt-auto w-full rounded-[24px] border border-[#ff8bb2]/20 bg-white shadow-lg transition-all duration-300 flex flex-col",
+              "hidden relative mt-auto w-full rounded-[24px] border border-[#ff8bb2]/20 bg-white shadow-lg transition-all duration-300 flex-col",
               appointmentsExpanded ? "max-h-[50vh] sm:max-h-[42vh]" : "max-h-[52px]"
             )}>
               {/* Slider Toggle button */}
