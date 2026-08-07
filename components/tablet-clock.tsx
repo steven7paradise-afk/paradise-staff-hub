@@ -2083,13 +2083,13 @@ export function TabletClock({
         ) : (
           /* Normal Pin Entry View */
           <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-visible py-2 min-[600px]:overflow-hidden">
-            <div className="mx-auto grid w-full max-w-[1180px] flex-1 items-center gap-6 py-3 transition-all duration-300 min-[900px]:grid-cols-[minmax(360px,0.95fr)_minmax(360px,1.05fr)] lg:gap-8">
-              <div className="kiosk-panel-enter mx-auto flex w-full max-w-[470px] flex-col py-2">
+            <div className="kiosk-entry-grid mx-auto grid w-full max-w-[1180px] flex-1 items-center gap-6 py-3 transition-all duration-300 min-[900px]:grid-cols-[minmax(360px,0.95fr)_minmax(360px,1.05fr)] lg:gap-8">
+              <div className="kiosk-panel-enter kiosk-entry-panel mx-auto flex w-full max-w-[470px] flex-col py-2">
                 <div className="kiosk-pin-heading mb-4 text-center sm:mb-5">
                   <h1 className="text-2xl font-black tracking-normal text-[#171717] sm:text-3xl lg:text-4xl">Chi sta timbrando?</h1>
                   <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">Inserisci il tuo PIN personale</p>
                 </div>
-                <p className="mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
+                <p className="kiosk-pin-label mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
                 <PinDots pin={pin} />
                 <div className="h-3" />
                 <Keypad
@@ -2117,7 +2117,7 @@ export function TabletClock({
                   <LogIn className="size-4 text-[color:var(--tablet-accent)]" />
                   <span>{identifying ? "Lettura..." : "Invia PIN"}</span>
                 </button>
-                <div className="mt-3 flex h-8 items-center justify-center" aria-live="polite">
+                <div className="kiosk-pin-status mt-3 flex h-8 items-center justify-center" aria-live="polite">
                   {feedback ? (
                     <div
                       className={cn(
@@ -3875,10 +3875,27 @@ export function TabletClock({
           .kiosk-pin-pop { animation: kiosk-pin-pop 240ms ease-out both; }
           .kiosk-feedback-enter { animation: kiosk-feedback-enter 220ms ease-out both; }
           @media (min-width: 600px) and (max-height: 850px) {
-            .kiosk-pin-heading { margin-bottom: 0.5rem; }
+            .kiosk-entry-grid { padding-block: 0.25rem; }
+            .kiosk-entry-panel { padding-block: 0; }
+            .kiosk-pin-heading { margin-bottom: 0.4rem; }
+            .kiosk-pin-heading h1 { font-size: 1.5rem; line-height: 1.15; }
+            .kiosk-pin-heading p { margin-top: 0.25rem; font-size: 0.75rem; line-height: 1rem; }
+            .kiosk-pin-label { margin-bottom: 0.4rem; font-size: 0.625rem; line-height: 0.875rem; }
             .kiosk-pin-field { height: 3.5rem; }
             .kiosk-keypad-button { height: 3rem; }
             .kiosk-submit-button { height: 3rem; margin-top: 0.5rem; }
+            .kiosk-pin-status { height: 1.5rem; margin-top: 0.35rem; font-size: 0.75rem; }
+            .kiosk-pin-status > * { font-size: 0.75rem; }
+          }
+          @media (min-width: 600px) and (max-height: 700px) {
+            .kiosk-pin-heading { margin-bottom: 0.25rem; }
+            .kiosk-pin-heading h1 { font-size: 1.25rem; }
+            .kiosk-pin-heading p { font-size: 0.6875rem; }
+            .kiosk-pin-label { margin-bottom: 0.25rem; }
+            .kiosk-pin-field { height: 2.75rem; }
+            .kiosk-keypad-button { height: 2.5rem; font-size: 1rem; }
+            .kiosk-submit-button { height: 2.5rem; margin-top: 0.375rem; font-size: 0.6875rem; }
+            .kiosk-pin-status { height: 1.25rem; margin-top: 0.25rem; }
           }
           @media (max-height: 640px) {
             .kiosk-pin-heading { margin-bottom: 0.35rem; }
