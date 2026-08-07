@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   BellRing,
   Bookmark,
+  Building2,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
   FileCheck2,
   FileText,
   FileUp,
+  Filter,
   Image as ImageIcon,
   LayoutGrid,
   Link as LinkIcon,
@@ -31,6 +33,7 @@ import {
   Search,
   Send,
   Share2,
+  ShoppingBag,
   Sparkles,
   Trash2,
   UploadCloud,
@@ -41,6 +44,7 @@ import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
+import { parseNotificationMetadata } from "@/lib/notification-metadata";
 
 type NotificationItem = {
   id: string;
@@ -160,6 +164,9 @@ export function NotificationManager({
 
   const [filter, setFilter] = useState<Filter>("ALL");
   const [query, setQuery] = useState("");
+  const [selectedSalon, setSelectedSalon] = useState<string>("ALL");
+  const [selectedPerson, setSelectedPerson] = useState<string>("ALL");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
   const router = useRouter();
 
   const recipientsByLocation = locations.map((location) => ({
@@ -167,6 +174,17 @@ export function NotificationManager({
     recipients: recipients.filter((recipient) => recipient.locationId === location.id),
   }));
   const recipientsWithoutLocation = recipients.filter((recipient) => !recipient.locationId);
+
+  const enrichedItems = useMemo(() => {
+    return items.map((item) => {
+      const meta = parseNotificationMetadata(item, recipients, locations);
+      return { item, meta };
+    });
+  }, [items, recipients, locations]);
+
+  const activeMeta = useMemo(() => {
+    return activeItem ? parseNotificationMetadata(activeItem, recipients, locations) : null;
+  }, [activeItem, recipients, locations]);
 
   useEffect(() => {
     setItems(notifications);
@@ -219,21 +237,35 @@ export function NotificationManager({
       urgent: items.filter(isUrgent).length,
       attendance: items.filter(isAttendanceAlert).length,
       blog: items.filter((item) => !isAttendanceAlert(item)).length,
+      orders: enrichedItems.filter(({ meta }) => meta.category.isOrder).length,
     };
-  }, [items]);
+  }, [items, enrichedItems]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items
-      .filter((item) => {
+    return enrichedItems
+      .filter(({ item }) => {
         if (sectionTab === "BLOG") return !isAttendanceAlert(item);
         if (sectionTab === "ATTENDANCE") return isAttendanceAlert(item);
         return true;
       })
-      .filter((item) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true))
-      .filter((item) => !q || `${item.title} ${item.message} ${item.type}`.toLowerCase().includes(q))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [filter, items, query, sectionTab]);
+      .filter(({ item }) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true))
+      .filter(({ item, meta }) => {
+        if (selectedSalon !== "ALL" && meta.salonName?.toLowerCase() !== selectedSalon.toLowerCase()) return false;
+        if (selectedPerson !== "ALL" && meta.personName?.toLowerCase() !== selectedPerson.toLowerCase()) return false;
+        if (selectedCategoryFilter === "ORDERS") return meta.category.isOrder;
+        if (selectedCategoryFilter === "FORMS") return item.type === "FORM" && !meta.category.isOrder;
+        if (selectedCategoryFilter === "TIMBRATURA") return isAttendanceAlert(item);
+        if (selectedCategoryFilter === "COMUNICAZIONE") return item.type === "COMUNICAZIONE";
+        return true;
+      })
+      .filter(({ item, meta }) => {
+        if (!q) return true;
+        const haystack = `${item.title} ${item.message} ${item.type} ${meta.personName ?? ""} ${meta.salonName ?? ""} ${meta.category.label}`.toLowerCase();
+        return haystack.includes(q);
+      })
+      .sort((a, b) => new Date(b.item.createdAt).getTime() - new Date(a.item.createdAt).getTime());
+  }, [enrichedItems, filter, query, sectionTab, selectedSalon, selectedPerson, selectedCategoryFilter]);
 
   async function markRead(notification: NotificationItem) {
     if (notification.read) return;
@@ -319,9 +351,9 @@ export function NotificationManager({
   }
 
   // Find next and previous index in filtered list
-  const activeIndex = activeItem ? filteredItems.findIndex((item) => item.id === activeItem.id) : -1;
-  const prevPost = activeIndex > 0 ? filteredItems[activeIndex - 1] : null;
-  const nextPost = activeIndex >= 0 && activeIndex < filteredItems.length - 1 ? filteredItems[activeIndex + 1] : null;
+  const activeIndex = activeItem ? filteredItems.findIndex(({ item }) => item.id === activeItem.id) : -1;
+  const prevPost = activeIndex > 0 ? filteredItems[activeIndex - 1].item : null;
+  const nextPost = activeIndex >= 0 && activeIndex < filteredItems.length - 1 ? filteredItems[activeIndex + 1].item : null;
 
   return (
     <>
@@ -450,15 +482,37 @@ export function NotificationManager({
                   {/* Article Banner Header */}
                   <div className="border-b border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-6 sm:p-8 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {isImportant(activeItem) ? (
                           <span className="rounded-full bg-[#E13D81] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-2xs">
                             Importante
                           </span>
                         ) : null}
-                        <span className="rounded-full bg-white/80 border border-[#F4D3E2] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#B83D7F]">
-                          {typeStyles[activeItem.type]?.label || activeItem.type}
-                        </span>
+                        {activeMeta ? (
+                          <>
+                            <span className={cn("inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-2xs", activeMeta.category.badge)}>
+                              {activeMeta.category.label}
+                            </span>
+                            {activeMeta.salonName && activeMeta.salonColor ? (
+                              <span className={cn("inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider", activeMeta.salonColor.badge)}>
+                                <Building2 className="size-3" />
+                                {activeMeta.salonName}
+                              </span>
+                            ) : null}
+                            {activeMeta.personName && activeMeta.personColor ? (
+                              <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider", activeMeta.personColor.badge)}>
+                                <span className={cn("grid size-4 place-items-center rounded-full text-[9px] font-black", activeMeta.personColor.avatarBg)}>
+                                  {activeMeta.personInitials}
+                                </span>
+                                {activeMeta.personName}
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="rounded-full bg-white/80 border border-[#F4D3E2] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#B83D7F]">
+                            {typeStyles[activeItem.type]?.label || activeItem.type}
+                          </span>
+                        )}
                       </div>
                       <span className={cn("rounded-full px-3 py-1 text-xs font-black", notificationStatus(activeItem).className)}>
                         {notificationStatus(activeItem).label}
@@ -632,8 +686,85 @@ export function NotificationManager({
                   />
                 </div>
 
-                {/* Filter Pills */}
-                <div className="flex items-center gap-1.5">
+                {/* Advanced Multi-Attribute Filters (Salone, Persona, Ordine) */}
+                <div className="space-y-2.5 rounded-2xl border border-black/5 bg-neutral-50/80 p-3 shadow-2xs">
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase text-[#B83D7F]">
+                    <span className="flex items-center gap-1">
+                      <Filter className="size-3" /> Filtri Salone, Persona & Moduli
+                    </span>
+                    {(selectedSalon !== "ALL" || selectedPerson !== "ALL" || selectedCategoryFilter !== "ALL") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSalon("ALL");
+                          setSelectedPerson("ALL");
+                          setSelectedCategoryFilter("ALL");
+                        }}
+                        className="text-[10px] font-bold text-black/50 hover:text-black hover:underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Filter by Salon */}
+                    <select
+                      value={selectedSalon}
+                      onChange={(e) => setSelectedSalon(e.target.value)}
+                      className="h-8 w-full rounded-xl border border-black/10 bg-white px-2 text-[11px] font-bold outline-none focus:border-[#D96B94]"
+                    >
+                      <option value="ALL">🏢 Tutti i Saloni</option>
+                      {locations.map((loc) => (
+                        <option key={loc.id} value={loc.name}>
+                          {loc.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Filter by Person */}
+                    <select
+                      value={selectedPerson}
+                      onChange={(e) => setSelectedPerson(e.target.value)}
+                      className="h-8 w-full rounded-xl border border-black/10 bg-white px-2 text-[11px] font-bold outline-none focus:border-[#D96B94]"
+                    >
+                      <option value="ALL">👤 Tutte le Persone</option>
+                      {recipients.map((rec) => (
+                        <option key={rec.id} value={rec.name}>
+                          {rec.name} ({rec.locationName})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Filter by Category / Modulo Ordine */}
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {[
+                      { id: "ALL", label: "Tutti" },
+                      { id: "ORDERS", label: `📦 Ordini (${stats.orders})` },
+                      { id: "FORMS", label: "📄 Altri Moduli" },
+                      { id: "TIMBRATURA", label: "⏱️ Timbrature" },
+                      { id: "COMUNICAZIONE", label: "📢 Comunicazioni" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCategoryFilter(cat.id)}
+                        className={cn(
+                          "rounded-lg px-2 py-0.5 text-[10px] font-black transition active:scale-95",
+                          selectedCategoryFilter === cat.id
+                            ? "bg-[#7C3AED] text-white shadow-2xs"
+                            : "bg-white border border-black/10 text-black/60 hover:bg-neutral-100"
+                        )}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Filter Pills (Status: All, Important, Unread) */}
+                <div className="flex items-center gap-1.5 pt-1">
                   {[
                     ["ALL", "Tutte"],
                     ["IMPORTANT", "Importanti"],
@@ -660,10 +791,9 @@ export function NotificationManager({
                   {filteredItems.length === 0 ? (
                     <p className="p-4 text-center text-xs font-bold text-black/40">Nessuna comunicazione trovata.</p>
                   ) : (
-                    filteredItems.map((item) => {
+                    filteredItems.map(({ item, meta }) => {
                       const isSelected = activeItem?.id === item.id;
-                      const style = typeStyles[item.type] ?? typeStyles.COMUNICAZIONE;
-                      const Icon = style.icon;
+                      const CategoryIcon = meta.category.Icon;
 
                       return (
                         <button
@@ -671,7 +801,8 @@ export function NotificationManager({
                           type="button"
                           onClick={() => selectCommunication(item)}
                           className={cn(
-                            "w-full text-left p-3.5 rounded-2xl border transition-all duration-150 flex flex-col gap-1.5 active:scale-98 shadow-2xs mt-2",
+                            "w-full text-left p-3.5 rounded-2xl border transition-all duration-150 flex flex-col gap-2 active:scale-98 shadow-2xs mt-2 relative overflow-hidden",
+                            meta.category.borderLeft,
                             isSelected
                               ? "border-[#D96B94] bg-gradient-to-r from-[#FFF0F6] via-[#FFF7FB] to-white ring-2 ring-[#D96B94]/20 shadow-xs"
                               : item.read
@@ -679,27 +810,52 @@ export function NotificationManager({
                               : "border-[#F9D5E7] bg-[#FFF8FB] hover:bg-[#FCE5F3]"
                           )}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className={cn("grid size-7 place-items-center rounded-xl shrink-0", style.bg)}>
-                                <Icon className="size-3.5" />
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <div className={cn("grid size-7 place-items-center rounded-xl shrink-0", meta.category.iconBg)}>
+                                <CategoryIcon className={cn("size-3.5", meta.category.iconText)} />
                               </div>
+                              <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider", meta.category.badge)}>
+                                {meta.category.label}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
                               <span className="text-[10px] font-black uppercase text-black/50">
                                 {shortDateLabel(item.createdAt)}
                               </span>
+                              {!item.read && (
+                                <span className="size-2.5 rounded-full bg-[#E13D81] ring-4 ring-pink-100 animate-pulse" />
+                              )}
                             </div>
-                            {!item.read && (
-                              <span className="size-2.5 rounded-full bg-[#E13D81] ring-4 ring-pink-100 animate-pulse" />
-                            )}
                           </div>
 
                           <h4 className="text-xs font-black text-[#1F1F1F] line-clamp-1 leading-snug">
                             {item.title}
                           </h4>
 
-                          <p className="text-[11px] font-semibold text-black/50 line-clamp-2 leading-normal">
+                          <p className="text-[11px] font-semibold text-black/60 line-clamp-2 leading-normal">
                             {item.message}
                           </p>
+
+                          {/* Salone & Persona Badges */}
+                          {(meta.salonName || meta.personName) && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-black/5">
+                              {meta.salonName && meta.salonColor && (
+                                <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase", meta.salonColor.badge)}>
+                                  <Building2 className="size-2.5" />
+                                  {meta.salonName}
+                                </span>
+                              )}
+                              {meta.personName && meta.personColor && (
+                                <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase", meta.personColor.badge)}>
+                                  <span className={cn("grid size-3.5 place-items-center rounded-full text-[8px] font-black", meta.personColor.avatarBg)}>
+                                    {meta.personInitials}
+                                  </span>
+                                  {meta.personName}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </button>
                       );
                     })
@@ -727,35 +883,56 @@ export function NotificationManager({
               {filteredItems.length === 0 ? (
                 <div className="p-6 text-sm font-semibold text-black/50">Nessuna comunicazione trovata.</div>
               ) : (
-                filteredItems.map((notification) => {
-                  const style = typeStyles[notification.type] ?? typeStyles.COMUNICAZIONE;
-                  const Icon = style.icon;
+                filteredItems.map(({ item: notification, meta }) => {
+                  const CategoryIcon = meta.category.Icon;
                   const statusInfo = notificationStatus(notification);
 
                   return (
                     <button
                       key={notification.id}
-                      className="grid w-full gap-4 p-6 text-left transition hover:bg-[#FAF7F9] md:grid-cols-[64px_1fr_auto] md:items-center"
+                      className={cn(
+                        "grid w-full gap-4 p-6 text-left transition hover:bg-[#FAF7F9] md:grid-cols-[64px_1fr_auto] md:items-center relative border-l-4",
+                        meta.category.borderLeft
+                      )}
                       onClick={() => selectCommunication(notification)}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         void deleteNotification(notification);
                       }}
                     >
-                      <div className={cn("grid size-14 place-items-center rounded-2xl shrink-0", style.bg)}>
-                        <Icon className="size-6" />
+                      <div className={cn("grid size-14 place-items-center rounded-2xl shrink-0", meta.category.iconBg)}>
+                        <CategoryIcon className={cn("size-7", meta.category.iconText)} />
                       </div>
-                      <div className="min-w-0">
-                        {isImportant(notification) ? (
-                          <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-bold uppercase text-[#E13D81] mb-1 inline-block">
-                            Importante
+                      <div className="min-w-0 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isImportant(notification) ? (
+                            <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-bold uppercase text-[#E13D81]">
+                              Importante
+                            </span>
+                          ) : null}
+                          <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider", meta.category.badge)}>
+                            {meta.category.label}
                           </span>
-                        ) : null}
+                          {meta.salonName && meta.salonColor && (
+                            <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase", meta.salonColor.badge)}>
+                              <Building2 className="size-3" />
+                              {meta.salonName}
+                            </span>
+                          )}
+                          {meta.personName && meta.personColor && (
+                            <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase", meta.personColor.badge)}>
+                              <span className={cn("grid size-4 place-items-center rounded-full text-[9px] font-black", meta.personColor.avatarBg)}>
+                                {meta.personInitials}
+                              </span>
+                              {meta.personName}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-base font-black text-[#1F1F1F]">{notification.title}</p>
-                        <p className="mt-1 text-xs font-semibold text-black/50">
-                          {notification.type.toLowerCase()} <span className="mx-2">•</span> {dateLabel(notification.createdAt)}
+                        <p className="text-xs font-semibold text-black/50">
+                          {dateLabel(notification.createdAt)}
                         </p>
-                        <p className="mt-2 line-clamp-1 text-xs font-medium text-black/60 leading-relaxed">{notification.message}</p>
+                        <p className="line-clamp-2 text-xs font-medium text-black/70 leading-relaxed">{notification.message}</p>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={cn("rounded-full px-3 py-1 text-xs font-bold", statusInfo.className)}>{statusInfo.label}</span>

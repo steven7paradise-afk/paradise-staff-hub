@@ -388,7 +388,7 @@ export async function POST(request: NextRequest) {
           recipients.map((r) => ({
             user_id: r.id,
             title: `Modulo Compilato: ${form.name}`,
-            message: `Il dipendente ${sessionUser.name ?? "Dipendente"} ha inviato una risposta per il modulo "${form.name}".`,
+            message: `Il dipendente ${sessionUser.name ?? "Dipendente"}${location?.name ? ` (${location.name})` : ""} ha inviato una risposta per il modulo "${form.name}".`,
             type: "FORM",
             action_url: `/service-forms/responses/${response.id}`,
           }))

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, CheckCheck, ExternalLink } from "lucide-react";
+import { Bell, Building2, CheckCheck, ExternalLink } from "lucide-react";
+import { parseNotificationMetadata } from "@/lib/notification-metadata";
+import { cn } from "@/lib/utils";
 
 type NotificationItem = {
   id: string;
@@ -138,39 +140,72 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
 
           <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
             {items.length > 0 ? (
-              items.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => handleNotificationClick(item)}
-                  className={`group relative rounded-xl p-3 text-left transition cursor-pointer ${
-                    !item.read
-                      ? "bg-[#FFF8FA] border border-[#FAD0E0] dark:bg-white/5"
-                      : "bg-[#FFFDFC] border border-[#E8D8CF]/60 hover:bg-[#FFF7F3] dark:bg-transparent dark:border-white/10"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
+              items.map((item) => {
+                const meta = parseNotificationMetadata(item);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => handleNotificationClick(item)}
+                    className={cn(
+                      "group relative rounded-xl p-3 text-left transition cursor-pointer border-l-4 space-y-1.5",
+                      meta.category.borderLeft,
+                      !item.read
+                        ? "bg-[#FFF8FA] border-t border-r border-b border-[#FAD0E0] dark:bg-white/5"
+                        : "bg-[#FFFDFC] border-t border-r border-b border-[#E8D8CF]/60 hover:bg-[#FFF7F3] dark:bg-transparent dark:border-white/10"
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider", meta.category.badge)}>
+                          {meta.category.label}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-[#8D5E49] dark:text-neutral-400">
+                        {formatTime(item.createdAt)}
+                      </span>
+                    </div>
+
                     <p className={`text-xs font-bold ${!item.read ? "text-[#9E2B4D] dark:text-pink-300" : "text-[#3A2A23] dark:text-white"}`}>
                       {item.title}
                     </p>
-                    <span className="text-[10px] font-semibold text-[#8D5E49] dark:text-neutral-400">
-                      {formatTime(item.createdAt)}
-                    </span>
+
+                    <p className="line-clamp-2 text-xs font-medium text-[#6F625C] dark:text-neutral-300">
+                      {item.message}
+                    </p>
+
+                    {/* Salone & Persona Pills */}
+                    {(meta.salonName || meta.personName) && (
+                      <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-black/5 dark:border-white/5">
+                        {meta.salonName && meta.salonColor && (
+                          <span className={cn("inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[8px] font-extrabold uppercase", meta.salonColor.badge)}>
+                            <Building2 className="size-2.5" />
+                            {meta.salonName}
+                          </span>
+                        )}
+                        {meta.personName && meta.personColor && (
+                          <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-extrabold uppercase", meta.personColor.badge)}>
+                            <span className={cn("grid size-3 place-items-center rounded-full text-[7px] font-black", meta.personColor.avatarBg)}>
+                              {meta.personInitials}
+                            </span>
+                            {meta.personName}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {item.actionUrl && (
+                      <Link
+                        href={item.actionUrl}
+                        onClick={() => setIsOpen(false)}
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-[#B9476D] hover:underline"
+                      >
+                        <span>Apri dettaglio</span>
+                        <ExternalLink className="size-3" />
+                      </Link>
+                    )}
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs font-medium text-[#6F625C] dark:text-neutral-300">
-                    {item.message}
-                  </p>
-                  {item.actionUrl && (
-                    <Link
-                      href={item.actionUrl}
-                      onClick={() => setIsOpen(false)}
-                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-[#B9476D] hover:underline"
-                    >
-                      <span>Apri dettaglio</span>
-                      <ExternalLink className="size-3" />
-                    </Link>
-                  )}
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="py-8 text-center text-xs font-semibold text-[#8D5E49] dark:text-neutral-400">
                 Nessuna notifica recente.
