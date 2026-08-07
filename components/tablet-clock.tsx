@@ -71,6 +71,68 @@ const appointmentNoteSuggestions = [
 
 const minFrequentNoteUses = 3;
 
+type SoundKind = "tap" | "success" | "error";
+type SoundNote = [number, number, number, OscillatorType, number];
+type SoundPackId = "paradise" | "cristallo" | "atelier" | "soft" | "notte";
+
+const soundPacks: Array<{
+  id: SoundPackId;
+  name: string;
+  description: string;
+  sounds: Record<SoundKind, SoundNote[]>;
+}> = [
+  {
+    id: "paradise",
+    name: "Paradise",
+    description: "Caldo e riconoscibile",
+    sounds: {
+      tap: [[620, 0, 0.055, "sine", 0.12]],
+      success: [[523, 0, 0.14, "sine", 0.14], [659, 0.13, 0.18, "sine", 0.16], [880, 0.32, 0.24, "triangle", 0.13]],
+      error: [[260, 0, 0.18, "triangle", 0.15], [196, 0.19, 0.22, "sine", 0.13]],
+    },
+  },
+  {
+    id: "cristallo",
+    name: "Cristallo",
+    description: "Chiaro e luminoso",
+    sounds: {
+      tap: [[988, 0, 0.045, "sine", 0.1]],
+      success: [[784, 0, 0.11, "sine", 0.12], [988, 0.11, 0.14, "sine", 0.13], [1319, 0.24, 0.2, "sine", 0.1]],
+      error: [[392, 0, 0.13, "square", 0.07], [330, 0.14, 0.18, "sine", 0.12]],
+    },
+  },
+  {
+    id: "atelier",
+    name: "Atelier",
+    description: "Morbido ed elegante",
+    sounds: {
+      tap: [[494, 0, 0.06, "triangle", 0.11]],
+      success: [[440, 0, 0.15, "triangle", 0.13], [554, 0.14, 0.18, "sine", 0.14], [659, 0.31, 0.23, "sine", 0.12]],
+      error: [[311, 0, 0.18, "triangle", 0.12], [233, 0.18, 0.22, "triangle", 0.11]],
+    },
+  },
+  {
+    id: "soft",
+    name: "Soft",
+    description: "Discreto per ambienti tranquilli",
+    sounds: {
+      tap: [[698, 0, 0.04, "sine", 0.055]],
+      success: [[587, 0, 0.12, "sine", 0.07], [740, 0.13, 0.18, "sine", 0.075]],
+      error: [[294, 0, 0.16, "sine", 0.075], [247, 0.16, 0.2, "sine", 0.065]],
+    },
+  },
+  {
+    id: "notte",
+    name: "Notte",
+    description: "Profondo e delicato",
+    sounds: {
+      tap: [[392, 0, 0.055, "sine", 0.08]],
+      success: [[330, 0, 0.14, "sine", 0.09], [440, 0.14, 0.2, "triangle", 0.1], [523, 0.32, 0.22, "sine", 0.08]],
+      error: [[220, 0, 0.2, "sine", 0.1], [165, 0.2, 0.24, "triangle", 0.08]],
+    },
+  },
+];
+
 function romeClockInfo(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
@@ -198,7 +260,7 @@ function formatDuration(seconds: number) {
 
 function PinDots({ pin }: { pin: string }) {
   return (
-    <div className="grid h-[72px] grid-cols-6 items-center rounded-lg border border-[color:var(--tablet-accent)]/35 bg-white px-8 shadow-[0_8px_28px_rgba(0,0,0,0.04)] sm:h-20">
+    <div className="kiosk-pin-field grid h-[68px] grid-cols-6 items-center rounded-lg border border-[color:var(--tablet-accent)]/35 bg-white px-4 shadow-[0_8px_28px_rgba(0,0,0,0.04)] sm:h-20 sm:px-8">
       {Array.from({ length: 6 }, (_, index) => (
         <span
           key={index}
@@ -225,7 +287,7 @@ function Keypad({
   disabled?: boolean;
 }) {
   const btnClass =
-    "h-[62px] rounded-lg border border-black/10 bg-white text-2xl font-semibold shadow-[0_5px_16px_rgba(0,0,0,0.045)] transition-all duration-150 hover:border-[color:var(--tablet-accent)]/45 hover:bg-[color:var(--tablet-soft)]/20 active:scale-[0.94] active:bg-[color:var(--tablet-soft)]/55 disabled:cursor-wait disabled:opacity-55 sm:h-[66px] touch-manipulation";
+    "kiosk-keypad-button h-14 rounded-lg border border-black/10 bg-white text-xl font-semibold shadow-[0_5px_16px_rgba(0,0,0,0.045)] transition-all duration-150 hover:border-[color:var(--tablet-accent)]/45 hover:bg-[color:var(--tablet-soft)]/20 active:scale-[0.94] active:bg-[color:var(--tablet-soft)]/55 disabled:cursor-wait disabled:opacity-55 sm:h-[66px] sm:text-2xl touch-manipulation";
 
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -427,6 +489,8 @@ export function TabletClock({
   const [loading, setLoading] = useState<string | null>(null);
   const [identifying, setIdentifying] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundPack, setSoundPack] = useState<SoundPackId>("paradise");
+  const [soundMenuOpen, setSoundMenuOpen] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const [requestType, setRequestType] = useState("FERIE");
@@ -440,6 +504,12 @@ export function TabletClock({
   const [requestMessage, setRequestMessage] = useState("Il PIN gia inserito conferma questa richiesta come firma.");
 
   const [message, setMessage] = useState("Inserisci il tuo codice personale");
+
+  useEffect(() => {
+    setSoundEnabled(window.localStorage.getItem("paradise-tablet-sound") !== "off");
+    const savedPack = window.localStorage.getItem("paradise-tablet-sound-pack") as SoundPackId | null;
+    if (savedPack && soundPacks.some((pack) => pack.id === savedPack)) setSoundPack(savedPack);
+  }, []);
 
   const visibleActions = worker ? clockActions.filter((action) => allowedActionsByStatus[worker.status].includes(action.type)) : [];
 
@@ -1074,25 +1144,15 @@ export function TabletClock({
     }
   };
 
-  function sound(kind: "tap" | "success" | "error", force = false) {
+  function sound(kind: SoundKind, force = false, packOverride?: SoundPackId) {
     if (!soundEnabled && !force) return;
     const AudioContextClass = window.AudioContext ?? (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     const context = audioRef.current ?? new AudioContextClass();
     audioRef.current = context;
     const play = () => {
-      const notes: Array<[number, number, number, OscillatorType, number]> = kind === "tap"
-        ? [[620, 0, 0.055, "sine", 0.35]]
-        : kind === "success"
-          ? [
-              [523, 0, 0.14, "sine", 0.75],
-              [659, 0.13, 0.18, "sine", 0.85],
-              [880, 0.32, 0.24, "triangle", 0.95],
-            ]
-          : [
-              [260, 0, 0.18, "triangle", 0.9],
-              [196, 0.19, 0.22, "sine", 0.95],
-            ];
+      const activePack = soundPacks.find((pack) => pack.id === (packOverride ?? soundPack)) ?? soundPacks[0];
+      const notes = activePack.sounds[kind];
       notes.forEach(([frequency, delay, duration, wave, volume]) => {
         const oscillator = context.createOscillator();
         const gain = context.createGain();
@@ -1789,46 +1849,102 @@ export function TabletClock({
 
   // Render Kiosk clock/app screen
   return (
-    <main className="h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
-      <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col overflow-hidden rounded-[26px] border-[10px] border-black bg-[color:var(--tablet-card)] px-4 py-4 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:px-7 sm:py-6 xl:border-[16px]">
+    <main className="min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
+      <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-black bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:min-h-[calc(100svh-2rem)] sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
-        <header className="relative z-10 flex items-start justify-between gap-3 border-b border-black/[0.07] pb-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="grid size-10 place-items-center rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/70">
+        <header className="relative z-10 flex items-start justify-between gap-2 border-b border-black/[0.07] pb-3 sm:gap-3 sm:pb-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="grid size-9 shrink-0 place-items-center rounded-lg border border-black/10 bg-[color:var(--tablet-card)]/70 sm:size-10 sm:rounded-xl">
               <MapPin className="size-4 text-[color:var(--tablet-accent)]" />
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] sm:text-sm">{device.locationName}</p>
-              <p className="text-xs text-black/60 sm:text-sm">{device.name}</p>
+            <div className="min-w-0">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.1em] sm:text-sm sm:tracking-[0.12em]">{device.locationName}</p>
+              <p className="truncate text-[10px] text-black/60 sm:text-sm">{device.name}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              aria-label={soundEnabled ? "Suono attivo" : "Suono disattivato"}
-              className="flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/78 px-3 text-xs font-bold uppercase text-[color:var(--tablet-accent)] shadow-sm active:scale-95 hover:bg-black/[0.01]"
-              onClick={() => {
-                const nState = !soundEnabled;
-                setSoundEnabled(nState);
-                window.localStorage.setItem("paradise-tablet-sound", nState ? "on" : "off");
-                if (nState) sound("success", true);
-              }}
-            >
-              {soundEnabled ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
-              <span className="hidden sm:inline">{soundEnabled ? "Suono" : "Muto"}</span>
-            </button>
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Impostazioni suono"
+                aria-expanded={soundMenuOpen}
+                className="flex size-9 items-center justify-center rounded-lg border border-black/10 bg-[color:var(--tablet-card)]/78 text-xs font-bold uppercase text-[color:var(--tablet-accent)] shadow-sm active:scale-95 hover:bg-black/[0.01] sm:h-10 sm:w-auto sm:gap-2 sm:rounded-xl sm:px-3"
+                onClick={() => setSoundMenuOpen((open) => !open)}
+              >
+                {soundEnabled ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+                <span className="hidden sm:inline">Suono</span>
+              </button>
 
-            <div className="flex items-center gap-1 rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/78 px-3 py-2 text-xs font-bold uppercase text-emerald-600 sm:text-sm shadow-sm">
+              {soundMenuOpen ? (
+                <div className="kiosk-feedback-enter absolute right-0 top-12 z-[60] w-[min(320px,calc(100vw-28px))] rounded-xl border border-black/10 bg-white p-3 text-left shadow-[0_20px_55px_rgba(0,0,0,0.18)]">
+                  <div className="mb-2 flex items-center justify-between gap-3 border-b border-black/[0.06] pb-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[color:var(--tablet-accent)]">Pacchetto suoni</p>
+                      <p className="mt-0.5 text-xs font-medium normal-case text-black/50">Tastiera, conferma ed errore</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={soundEnabled}
+                      onClick={() => {
+                        const next = !soundEnabled;
+                        setSoundEnabled(next);
+                        window.localStorage.setItem("paradise-tablet-sound", next ? "on" : "off");
+                        if (next) sound("success", true);
+                      }}
+                      className={cn("relative h-7 w-12 rounded-full transition-colors", soundEnabled ? "bg-emerald-500" : "bg-black/15")}
+                    >
+                      <span className={cn("absolute top-1 size-5 rounded-full bg-white shadow-sm transition-transform", soundEnabled ? "left-6" : "left-1")} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1">
+                    {soundPacks.map((pack) => {
+                      const selected = pack.id === soundPack;
+                      return (
+                        <button
+                          key={pack.id}
+                          type="button"
+                          onClick={() => {
+                            setSoundPack(pack.id);
+                            setSoundEnabled(true);
+                            window.localStorage.setItem("paradise-tablet-sound-pack", pack.id);
+                            window.localStorage.setItem("paradise-tablet-sound", "on");
+                            sound("success", true, pack.id);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition active:scale-[0.98]",
+                            selected ? "bg-[color:var(--tablet-soft)]/55" : "hover:bg-black/[0.035]"
+                          )}
+                        >
+                          <span className={cn("grid size-8 shrink-0 place-items-center rounded-full border", selected ? "border-[color:var(--tablet-accent)] bg-white text-[color:var(--tablet-accent)]" : "border-black/10 text-black/35")}>
+                            {selected ? <Check className="size-4" /> : <Volume2 className="size-4" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-bold normal-case text-[#171717]">{pack.name}</span>
+                            <span className="block truncate text-[11px] font-medium normal-case text-black/45">{pack.description}</span>
+                          </span>
+                          <span className="text-[9px] font-black uppercase tracking-[0.12em] text-black/30">Ascolta</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex h-9 items-center gap-1 rounded-lg border border-black/10 bg-[color:var(--tablet-card)]/78 px-2 text-xs font-bold uppercase text-emerald-600 shadow-sm sm:h-10 sm:rounded-xl sm:px-3 sm:text-sm">
               <ShieldCheck className="size-4" />
-              <span>Autorizzato</span>
+              <span className="hidden min-[430px]:inline">Autorizzato</span>
             </div>
           </div>
         </header>
 
         {/* Worker identified detail or Kiosk main keypad */}
         {worker ? (
-          <section className="relative z-10 mx-auto grid min-h-0 w-full max-w-[1250px] flex-1 items-center gap-4 overflow-hidden py-2 md:grid-cols-[minmax(320px,1fr)_300px] landscape:grid-cols-[minmax(320px,1fr)_300px] lg:grid-cols-[minmax(460px,1fr)_340px]">
+          <section className="relative z-10 mx-auto grid min-h-0 w-full max-w-[1250px] flex-1 items-center gap-4 overflow-visible py-3 min-[900px]:grid-cols-[minmax(320px,1fr)_300px] lg:grid-cols-[minmax(460px,1fr)_340px]">
             {/* Shifts Action buttons */}
             <div className="grid min-h-0 grid-cols-2 gap-3">
               <div className="col-span-2 grid gap-3 sm:grid-cols-2">
@@ -1928,11 +2044,11 @@ export function TabletClock({
           </section>
         ) : (
           /* Normal Pin Entry View */
-          <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-hidden py-2">
-            <div className="mx-auto grid w-full max-w-[1180px] flex-1 items-center gap-8 py-3 transition-all duration-300 md:grid-cols-[minmax(390px,0.95fr)_minmax(390px,1.05fr)] landscape:grid-cols-[minmax(390px,0.95fr)_minmax(390px,1.05fr)]">
-              <div className="kiosk-panel-enter mx-auto w-full max-w-[470px]">
-                <div className="mb-5 text-center">
-                  <h1 className="text-3xl font-black tracking-normal text-[#171717] lg:text-4xl">Chi sta timbrando?</h1>
+          <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-visible py-2">
+            <div className="mx-auto grid w-full max-w-[1180px] flex-1 items-center gap-6 py-3 transition-all duration-300 min-[900px]:grid-cols-[minmax(360px,0.95fr)_minmax(360px,1.05fr)] lg:gap-8">
+              <div className="kiosk-panel-enter mx-auto flex w-full max-w-[470px] flex-col py-2">
+                <div className="kiosk-pin-heading mb-4 text-center sm:mb-5">
+                  <h1 className="text-2xl font-black tracking-normal text-[#171717] sm:text-3xl lg:text-4xl">Chi sta timbrando?</h1>
                   <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">Inserisci il tuo PIN personale</p>
                 </div>
                 <p className="mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
@@ -1956,7 +2072,7 @@ export function TabletClock({
                 />
                 
                 <button
-                  className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.2)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:shadow-none"
+                  className="kiosk-submit-button sticky bottom-2 z-10 mt-3 flex h-14 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.2)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:shadow-none"
                   disabled={!/^\d{4,6}$/.test(pin) || identifying}
                   onClick={() => void identifyPin()}
                 >
@@ -1983,7 +2099,7 @@ export function TabletClock({
               </div>
 
               {/* Header Clock block */}
-              <div className="kiosk-clock-enter hidden border-l border-black/[0.08] pl-8 md:block landscape:block lg:pl-14">
+              <div className="kiosk-clock-enter hidden border-l border-black/[0.08] pl-8 min-[900px]:block lg:pl-14">
                 <KioskHeaderClock />
               </div>
             </div>
@@ -2233,14 +2349,14 @@ export function TabletClock({
         )}
 
         {/* Footer info bar */}
-        <footer className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-black/10 pt-4 text-xs text-black/58 sm:text-sm">
+        <footer className="relative z-10 mt-auto flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-3 text-[10px] text-black/58 sm:gap-4 sm:pt-4 sm:text-sm">
           <span className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-[color:var(--tablet-accent)]" />
             <span>Dispositivo autorizzato</span>
           </span>
           <div className="flex items-center gap-2">
             <span>
-              Sincronizzazione:{" "}
+              <span className="hidden min-[430px]:inline">Sincronizzazione: </span>
               <strong>
                 {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now)}
               </strong>
@@ -3720,6 +3836,19 @@ export function TabletClock({
           .kiosk-clock-enter { animation: kiosk-clock-enter 520ms 80ms ease-out both; }
           .kiosk-pin-pop { animation: kiosk-pin-pop 240ms ease-out both; }
           .kiosk-feedback-enter { animation: kiosk-feedback-enter 220ms ease-out both; }
+          @media (min-width: 900px) and (max-height: 760px) {
+            .kiosk-pin-heading { margin-bottom: 0.5rem; }
+            .kiosk-pin-field { height: 3.5rem; }
+            .kiosk-keypad-button { height: 3rem; }
+            .kiosk-submit-button { height: 3rem; margin-top: 0.5rem; }
+          }
+          @media (max-height: 640px) {
+            .kiosk-pin-heading { margin-bottom: 0.35rem; }
+            .kiosk-pin-heading p { margin-top: 0.2rem; }
+            .kiosk-pin-field { height: 3rem; }
+            .kiosk-keypad-button { height: 2.65rem; }
+            .kiosk-submit-button { height: 2.75rem; margin-top: 0.5rem; }
+          }
           @media (prefers-reduced-motion: reduce) {
             .kiosk-panel-enter,
             .kiosk-clock-enter,
