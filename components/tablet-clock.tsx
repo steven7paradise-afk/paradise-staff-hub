@@ -79,12 +79,14 @@ const soundPacks: Array<{
   id: SoundPackId;
   name: string;
   description: string;
+  frameColor: string;
   sounds: Record<SoundKind, SoundNote[]>;
 }> = [
   {
     id: "paradise",
     name: "Paradise",
     description: "Caldo e riconoscibile",
+    frameColor: "#f08fbd",
     sounds: {
       tap: [[620, 0, 0.055, "sine", 0.12]],
       success: [[523, 0, 0.14, "sine", 0.14], [659, 0.13, 0.18, "sine", 0.16], [880, 0.32, 0.24, "triangle", 0.13]],
@@ -95,6 +97,7 @@ const soundPacks: Array<{
     id: "cristallo",
     name: "Cristallo",
     description: "Chiaro e luminoso",
+    frameColor: "#b9e5ed",
     sounds: {
       tap: [[988, 0, 0.045, "sine", 0.1]],
       success: [[784, 0, 0.11, "sine", 0.12], [988, 0.11, 0.14, "sine", 0.13], [1319, 0.24, 0.2, "sine", 0.1]],
@@ -105,6 +108,7 @@ const soundPacks: Array<{
     id: "atelier",
     name: "Atelier",
     description: "Morbido ed elegante",
+    frameColor: "#f5c6d9",
     sounds: {
       tap: [[494, 0, 0.06, "triangle", 0.11]],
       success: [[440, 0, 0.15, "triangle", 0.13], [554, 0.14, 0.18, "sine", 0.14], [659, 0.31, 0.23, "sine", 0.12]],
@@ -115,6 +119,7 @@ const soundPacks: Array<{
     id: "soft",
     name: "Soft",
     description: "Discreto per ambienti tranquilli",
+    frameColor: "#ffffff",
     sounds: {
       tap: [[698, 0, 0.04, "sine", 0.055]],
       success: [[587, 0, 0.12, "sine", 0.07], [740, 0.13, 0.18, "sine", 0.075]],
@@ -125,6 +130,7 @@ const soundPacks: Array<{
     id: "notte",
     name: "Notte",
     description: "Profondo e delicato",
+    frameColor: "#111111",
     sounds: {
       tap: [[392, 0, 0.055, "sine", 0.08]],
       success: [[330, 0, 0.14, "sine", 0.09], [440, 0.14, 0.2, "triangle", 0.1], [523, 0.32, 0.22, "sine", 0.08]],
@@ -632,6 +638,7 @@ export function TabletClock({
     return clientAnalytics.salons.find((s: any) => s.salon === activeAnalyticsSalon) ?? clientAnalytics.salons[0];
   }, [activeAnalyticsSalon, clientAnalytics]);
 
+  const activeSoundPack = soundPacks.find((pack) => pack.id === soundPack) ?? soundPacks[0];
   const tabletStyle = {
     "--tablet-bg": tabletBranding?.background_color || branding?.background_color || "#fbf7f2",
     "--tablet-card": tabletBranding?.card_color || branding?.card_color || "#ffffff",
@@ -639,6 +646,7 @@ export function TabletClock({
     "--tablet-accent": tabletBranding?.accent_color || branding?.gradient_color || "#a77a49",
     "--tablet-soft": tabletBranding?.soft_color || branding?.secondary_color || "#f8ddd7",
     "--tablet-dark": tabletBranding?.button_color || branding?.text_color || "#1c1c1c",
+    "--tablet-frame": activeSoundPack.frameColor,
   } as CSSProperties;
 
   const handleRefresh = async () => {
@@ -1154,6 +1162,7 @@ export function TabletClock({
       const activePack = soundPacks.find((pack) => pack.id === (packOverride ?? soundPack)) ?? soundPacks[0];
       const notes = activePack.sounds[kind];
       notes.forEach(([frequency, delay, duration, wave, volume]) => {
+        const boostedVolume = Math.min(volume * (kind === "tap" ? 2.15 : 1.9), 0.34);
         const oscillator = context.createOscillator();
         const gain = context.createGain();
         const filter = context.createBiquadFilter();
@@ -1161,10 +1170,10 @@ export function TabletClock({
         oscillator.type = wave;
         oscillator.frequency.value = frequency;
         filter.type = "lowpass";
-        filter.frequency.value = 3200;
+        filter.frequency.value = 4200;
         
         gain.gain.setValueAtTime(1e-4, context.currentTime + delay);
-        gain.gain.exponentialRampToValueAtTime(volume, context.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(boostedVolume, context.currentTime + delay + 0.02);
         gain.gain.exponentialRampToValueAtTime(1e-4, context.currentTime + delay + duration);
         
         oscillator.connect(filter).connect(gain).connect(context.destination);
@@ -1201,6 +1210,7 @@ export function TabletClock({
       const data = await response.json();
       if (!response.ok) {
         setWorker(null);
+        setPin("");
         setMessage(data.error ?? "Codice personale non riconosciuto.");
         showFeedback("error", data.error ?? "Codice personale non riconosciuto.");
         sound("error");
@@ -1221,6 +1231,7 @@ export function TabletClock({
       sound("success");
     } catch (error: unknown) {
       const timeoutError = error instanceof DOMException && error.name === "AbortError";
+      setPin("");
       setMessage(timeoutError ? "Lettura lenta. Riprova il PIN." : "Impossibile verificare il codice.");
       showFeedback("error", timeoutError ? "Lettura oltre 3 secondi. Riprova." : "Impossibile verificare il codice.");
       sound("error");
@@ -1783,7 +1794,7 @@ export function TabletClock({
   if (showDashboard) {
     return (
       <main className="h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
-        <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col rounded-[26px] border-[10px] border-black bg-[color:var(--tablet-card)] shadow-[0_20px_70px_rgba(0,0,0,0.2)] xl:border-[16px] overflow-hidden">
+        <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col overflow-hidden rounded-[26px] border-[10px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 xl:border-[16px]">
           {/* Dashboard Private Area Header */}
           <div className="flex items-center justify-between border-b border-black/10 px-6 py-4 bg-[color:var(--tablet-card)] shadow-sm">
             <div className="flex items-center gap-3">
@@ -1850,7 +1861,7 @@ export function TabletClock({
   // Render Kiosk clock/app screen
   return (
     <main className="min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] min-[600px]:h-[100svh] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:p-4" style={tabletStyle}>
-      <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-black bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] min-[600px]:h-[calc(100svh-2rem)] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
+      <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 min-[600px]:h-[calc(100svh-2rem)] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
         <header className="relative z-[80] flex items-start justify-between gap-2 border-b border-black/[0.07] pb-3 sm:gap-3 sm:pb-4">
@@ -1932,7 +1943,10 @@ export function TabletClock({
                             selected ? "border-[color:var(--tablet-accent)] bg-[color:var(--tablet-soft)]/45 shadow-sm" : "border-black/10 hover:bg-black/[0.035]"
                           )}
                         >
-                          <span className={cn("grid size-8 shrink-0 place-items-center rounded-full border", selected ? "border-[color:var(--tablet-accent)] bg-white text-[color:var(--tablet-accent)]" : "border-black/10 text-black/35")}>
+                          <span
+                            className={cn("grid size-8 shrink-0 place-items-center rounded-full border shadow-inner", selected ? "border-black/20 text-black/70" : "border-black/10 text-black/35")}
+                            style={{ backgroundColor: pack.frameColor }}
+                          >
                             {selected ? <Check className="size-4" /> : <Volume2 className="size-4" />}
                           </span>
                           <span className="min-w-0 flex-1">
@@ -2096,7 +2110,7 @@ export function TabletClock({
                 />
                 
                 <button
-                  className="kiosk-submit-button sticky bottom-2 z-10 mt-3 flex h-14 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.2)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:shadow-none"
+                  className="kiosk-submit-button relative z-10 mt-3 flex h-14 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.2)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:shadow-none"
                   disabled={!/^\d{4,6}$/.test(pin) || identifying}
                   onClick={() => void identifyPin()}
                 >
@@ -2373,13 +2387,13 @@ export function TabletClock({
         )}
 
         {/* Footer info bar */}
-        <footer className="relative z-10 mt-auto flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-black/10 pt-3 text-[10px] text-black/58 sm:gap-4 sm:pt-4 sm:text-sm">
+        <footer className="relative z-10 mt-auto flex shrink-0 items-center justify-between gap-2 overflow-hidden border-t border-black/10 px-1 pt-3 text-[10px] text-black/58 sm:gap-4 sm:pt-4 sm:text-sm">
           <span className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-[color:var(--tablet-accent)]" />
             <span>Dispositivo autorizzato</span>
           </span>
-          <div className="flex items-center gap-2">
-            <span>
+          <div className="flex min-w-0 shrink items-center justify-end gap-2">
+            <span className="truncate">
               <span className="hidden min-[430px]:inline">Sincronizzazione: </span>
               <strong>
                 {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now)}
