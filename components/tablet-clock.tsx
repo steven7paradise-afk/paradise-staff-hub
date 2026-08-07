@@ -198,12 +198,14 @@ function formatDuration(seconds: number) {
 
 function PinDots({ pin }: { pin: string }) {
   return (
-    <div className="grid h-16 grid-cols-6 items-center rounded-[22px] border border-[#eadfd6] bg-white/58 px-8 sm:h-20">
+    <div className="grid h-[72px] grid-cols-6 items-center rounded-lg border border-[color:var(--tablet-accent)]/35 bg-white px-8 shadow-[0_8px_28px_rgba(0,0,0,0.04)] sm:h-20">
       {Array.from({ length: 6 }, (_, index) => (
         <span
           key={index}
-          className={`mx-auto size-4 rounded-full border-2 ${
-            pin.length > index ? "border-[#aa7b47] bg-[#aa7b47]" : "border-[#171717]"
+          className={`mx-auto size-4 rounded-full border-2 transition-all duration-200 ${
+            pin.length > index
+              ? "kiosk-pin-pop scale-110 border-[color:var(--tablet-accent)] bg-[color:var(--tablet-accent)] shadow-[0_0_0_5px_color-mix(in_srgb,var(--tablet-accent)_12%,transparent)]"
+              : "scale-100 border-[#171717] bg-transparent"
           }`}
         />
       ))}
@@ -223,10 +225,10 @@ function Keypad({
   disabled?: boolean;
 }) {
   const btnClass =
-    "h-14 rounded-xl border border-[#eadfd6] bg-white/72 text-xl font-semibold shadow-sm transition active:scale-[0.97] disabled:cursor-wait disabled:opacity-55 sm:h-[62px] touch-manipulation";
+    "h-[62px] rounded-lg border border-black/10 bg-white text-2xl font-semibold shadow-[0_5px_16px_rgba(0,0,0,0.045)] transition-all duration-150 hover:border-[color:var(--tablet-accent)]/45 hover:bg-[color:var(--tablet-soft)]/20 active:scale-[0.94] active:bg-[color:var(--tablet-soft)]/55 disabled:cursor-wait disabled:opacity-55 sm:h-[66px] touch-manipulation";
 
   return (
-    <div className="grid grid-cols-3 gap-1.5">
+    <div className="grid grid-cols-3 gap-2">
       {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
         <button
           key={key}
@@ -1577,7 +1579,7 @@ export function TabletClock({
     const logoUrl = tabletBranding?.logo_url || branding?.logo_url || null;
     return (
       <div className="text-center">
-        <div className={cn("mx-auto grid place-items-center overflow-hidden", compact ? "size-16 lg:size-20" : "size-36 lg:size-44")}>
+        <div className={cn("mx-auto grid place-items-center overflow-hidden", compact ? "size-16 lg:size-20" : "size-28 lg:size-36")}>
           {logoUrl ? (
             <img src={logoUrl} alt="Paradise Beauty" className="size-full object-contain" />
           ) : (
@@ -1586,12 +1588,15 @@ export function TabletClock({
             </p>
           )}
         </div>
-        <p className={cn("font-serif leading-none tracking-tight", compact ? "mt-1 text-5xl lg:text-6xl" : "mt-2 text-7xl lg:text-[112px]")}>
+        <p className={cn("font-serif leading-none tracking-tight", compact ? "mt-1 text-5xl lg:text-6xl" : "mt-3 text-7xl lg:text-[104px]")}>
           {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(now)}
         </p>
         <p className={cn("text-black/62", compact ? "mt-1 text-xs" : "mt-2 text-base lg:text-lg")}>
           {new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }).format(now)}
         </p>
+        {!compact ? (
+          <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.3em] text-black/35">Ora di Roma</p>
+        ) : null}
       </div>
     );
   }
@@ -1788,7 +1793,7 @@ export function TabletClock({
       <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col overflow-hidden rounded-[26px] border-[10px] border-black bg-[color:var(--tablet-card)] px-4 py-4 shadow-[0_20px_70px_rgba(0,0,0,0.2)] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
-        <header className="relative z-10 flex items-start justify-between gap-3">
+        <header className="relative z-10 flex items-start justify-between gap-3 border-b border-black/[0.07] pb-4">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="grid size-10 place-items-center rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/70">
               <MapPin className="size-4 text-[color:var(--tablet-accent)]" />
@@ -1800,19 +1805,6 @@ export function TabletClock({
           </div>
 
           <div className="flex items-center gap-2">
-            {clientControlFormId && (
-              <button
-                type="button"
-                aria-label="Appuntamenti"
-                className="flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/78 px-3 text-xs font-bold uppercase text-[color:var(--tablet-accent)] shadow-sm active:scale-95 hover:bg-black/[0.01]"
-                onClick={() => void openClientControl("create")}
-                disabled={loading === "CLIENT_CONTROL"}
-              >
-                <Calendar className="size-5" />
-                <span className="hidden sm:inline">{loading === "CLIENT_CONTROL" ? "Apro..." : "Crea appuntamenti"}</span>
-              </button>
-            )}
-
             <button
               aria-label={soundEnabled ? "Suono attivo" : "Suono disattivato"}
               className="flex h-10 items-center gap-2 rounded-xl border border-black/10 bg-[color:var(--tablet-card)]/78 px-3 text-xs font-bold uppercase text-[color:var(--tablet-accent)] shadow-sm active:scale-95 hover:bg-black/[0.01]"
@@ -1937,13 +1929,15 @@ export function TabletClock({
         ) : (
           /* Normal Pin Entry View */
           <div className="relative z-10 mb-2 flex min-h-0 flex-1 flex-col overflow-hidden py-2">
-            <div className="mx-auto grid w-full max-w-[1200px] flex-1 items-center gap-6 py-4 transition-all duration-300 md:grid-cols-[440px_1fr] landscape:grid-cols-[440px_1fr]">
-              <div className="mx-auto w-full max-w-[440px]">
-                <p className="mb-2 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
+            <div className="mx-auto grid w-full max-w-[1180px] flex-1 items-center gap-8 py-3 transition-all duration-300 md:grid-cols-[minmax(390px,0.95fr)_minmax(390px,1.05fr)] landscape:grid-cols-[minmax(390px,0.95fr)_minmax(390px,1.05fr)]">
+              <div className="kiosk-panel-enter mx-auto w-full max-w-[470px]">
+                <div className="mb-5 text-center">
+                  <h1 className="text-3xl font-black tracking-normal text-[#171717] lg:text-4xl">Chi sta timbrando?</h1>
+                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">Inserisci il tuo PIN personale</p>
+                </div>
+                <p className="mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
                 <PinDots pin={pin} />
-                <p className="my-2 text-center text-sm font-semibold text-black/55">
-                  {identifying ? "Riconoscimento..." : pin.length === 6 ? "Lettura automatica in corso..." : "Inserisci il PIN e premi Invia."}
-                </p>
+                <div className="h-3" />
                 <Keypad
                   onDigit={(digit) => {
                     if (identifying) return;
@@ -1962,29 +1956,35 @@ export function TabletClock({
                 />
                 
                 <button
-                  className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.16em] text-white disabled:cursor-not-allowed disabled:opacity-40 hover:opacity-90 active:scale-95 transition"
+                  className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.2)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-35 disabled:shadow-none"
                   disabled={!/^\d{4,6}$/.test(pin) || identifying}
                   onClick={() => void identifyPin()}
                 >
                   <LogIn className="size-4 text-[color:var(--tablet-accent)]" />
                   <span>{identifying ? "Lettura..." : "Invia PIN"}</span>
                 </button>
+                <div className="mt-3 flex h-8 items-center justify-center" aria-live="polite">
+                  {feedback ? (
+                    <div
+                      className={cn(
+                        "kiosk-feedback-enter flex max-w-full items-center justify-center gap-2 text-sm font-semibold",
+                        feedback.type === "error" ? "text-red-700" : "text-emerald-700"
+                      )}
+                    >
+                      {feedback.type === "error" ? <TriangleAlert className="size-4 shrink-0" /> : <CheckCircle2 className="size-4 shrink-0" />}
+                      <span className="truncate">{feedback.text}</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-medium text-black/42">
+                      {identifying ? "Riconoscimento in corso..." : pin.length === 6 ? "Verifica automatica del PIN..." : "Pronto per la timbratura"}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Header Clock block */}
-              <div className="hidden md:block landscape:block">
+              <div className="kiosk-clock-enter hidden border-l border-black/[0.08] pl-8 md:block landscape:block lg:pl-14">
                 <KioskHeaderClock />
-                <div className="mx-auto mt-5 h-12 max-w-[460px]">
-                  {feedback && (
-                    <div className={cn(
-                      "flex h-12 items-center justify-center gap-3 rounded-2xl border px-4 text-sm font-bold shadow-sm",
-                      feedback.type === "error" ? "border-red-200 bg-red-50 text-red-800" : "border-[#eadfd6] bg-white/70 text-black/70"
-                    )}>
-                      {feedback.type === "error" ? <TriangleAlert className="size-5" /> : <CheckCircle2 className="size-5" />}
-                      <span className="truncate">{feedback.text}</span>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
 
@@ -2233,7 +2233,7 @@ export function TabletClock({
         )}
 
         {/* Footer info bar */}
-        <footer className="relative z-10 flex shrink-0 flex-wrap items-center justify-end gap-6 border-t border-black/10 pt-4 text-xs text-black/58 sm:text-sm">
+        <footer className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-black/10 pt-4 text-xs text-black/58 sm:text-sm">
           <span className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-[color:var(--tablet-accent)]" />
             <span>Dispositivo autorizzato</span>
@@ -3698,6 +3698,35 @@ export function TabletClock({
             </div>
           </div>
         )}
+        <style jsx global>{`
+          @keyframes kiosk-panel-enter {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes kiosk-clock-enter {
+            from { opacity: 0; transform: translateX(16px); }
+            to { opacity: 1; transform: translateX(0); }
+          }
+          @keyframes kiosk-pin-pop {
+            0% { transform: scale(0.7); }
+            55% { transform: scale(1.28); }
+            100% { transform: scale(1.1); }
+          }
+          @keyframes kiosk-feedback-enter {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .kiosk-panel-enter { animation: kiosk-panel-enter 420ms ease-out both; }
+          .kiosk-clock-enter { animation: kiosk-clock-enter 520ms 80ms ease-out both; }
+          .kiosk-pin-pop { animation: kiosk-pin-pop 240ms ease-out both; }
+          .kiosk-feedback-enter { animation: kiosk-feedback-enter 220ms ease-out both; }
+          @media (prefers-reduced-motion: reduce) {
+            .kiosk-panel-enter,
+            .kiosk-clock-enter,
+            .kiosk-pin-pop,
+            .kiosk-feedback-enter { animation: none; }
+          }
+        `}</style>
       </div>
     </main>
   );
