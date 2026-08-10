@@ -3295,24 +3295,59 @@ export function AppointmentsBrowser({
                             </button>
                           )}
                           {secondOrderDetails ? (
-                            <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                              String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
-                              (secondOrderDetails.paymentMethod !== "DA_VERIFICARE" || manualPaymentMethod)
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                : "border-amber-200 bg-amber-50 text-amber-800"
-                            }`}>
-                              {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
-                                ? manualPaymentMethod
-                                  ? `Metodo dichiarato · ${manualPaymentMethod === "CARTA" ? "Carta" : manualPaymentMethod === "SHOPIFY" ? "Shopify" : "Contanti"}`
-                                  : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
-                                : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
-                              {secondOrderDetails.paymentGateways?.length ? (
-                                <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>
+                            <>
+                              <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+                                String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
+                                (secondOrderDetails.paymentMethod !== "DA_VERIFICARE" || manualPaymentMethod)
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                  : "border-amber-200 bg-amber-50 text-amber-800"
+                              }`}>
+                                {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
+                                  ? manualPaymentMethod
+                                    ? `Metodo dichiarato · ${manualPaymentMethod === "CARTA" ? "Carta" : manualPaymentMethod === "SHOPIFY" ? "Shopify" : "Contanti"}`
+                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
+                                  : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
+                                {secondOrderDetails.paymentGateways?.length ? (
+                                  <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>
+                                ) : null}
+                                {secondOrderDetails.paymentReference ? (
+                                  <span className="mt-1 block normal-case tracking-normal opacity-60">ID pagamento: {secondOrderDetails.paymentReference}</span>
+                                ) : null}
+                              </div>
+
+                              {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
+                              !["CARTA", "CASHMATIC"].includes(String(secondOrderDetails.paymentMethod || "")) &&
+                              !manualPaymentMethod ? (
+                                <div className="mt-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF5FA] p-4 shadow-sm">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B83D7F]">
+                                    Metodo di pagamento obbligatorio
+                                  </p>
+                                  <p className="mt-1 text-sm font-black text-[#171717]">
+                                    Come ha pagato la cliente?
+                                  </p>
+                                  <div className="mt-3 grid grid-cols-3 gap-2">
+                                    {([
+                                      { value: "CARTA" as const, label: "Carta", icon: CreditCard },
+                                      { value: "SHOPIFY" as const, label: "Shopify", icon: ShoppingBag },
+                                      { value: "CONTANTI" as const, label: "Contanti", icon: Coins },
+                                    ]).map((option) => {
+                                      const Icon = option.icon;
+                                      return (
+                                        <button
+                                          key={option.value}
+                                          type="button"
+                                          onClick={() => setManualPaymentMethod(option.value)}
+                                          className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-2 py-3 text-center text-[11px] font-black text-[#171717] transition hover:border-[#D96B94] hover:bg-[#FCE5F1] active:scale-[0.98]"
+                                        >
+                                          <Icon className="size-5 text-[#B83D7F]" />
+                                          <span>{option.label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               ) : null}
-                              {secondOrderDetails.paymentReference ? (
-                                <span className="mt-1 block normal-case tracking-normal opacity-60">ID pagamento: {secondOrderDetails.paymentReference}</span>
-                              ) : null}
-                            </div>
+                            </>
                           ) : null}
                         </>
                       );
