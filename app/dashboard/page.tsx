@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { DashboardRedesignClient } from "@/components/dashboard-redesign-client";
+import { ManagementDashboard, type ManagementDashboardData } from "@/components/management-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/app/api/settings/dashboard/route";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
+import { deriveAttendanceState } from "@/lib/attendance-state";
+import { getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,6 +31,27 @@ function romeDate() {
   return new Date(`${day}T00:00:00.000Z`);
 }
 
+function romeInstantStart(calendarDate: Date) {
+  const year = calendarDate.getUTCFullYear();
+  const month = calendarDate.getUTCMonth();
+  const day = calendarDate.getUTCDate();
+  const noon = new Date(Date.UTC(year, month, day, 12));
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(noon);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value || 0);
+  const representedAsUtc = Date.UTC(value("year"), value("month") - 1, value("day"), value("hour"), value("minute"), value("second"));
+  const offset = representedAsUtc - noon.getTime();
+  return new Date(Date.UTC(year, month, day) - offset);
+}
+
 function namesFromAnswer(value: unknown) {
   if (Array.isArray(value)) return value.map(String).map((name) => name.trim()).filter(Boolean);
   const text = String(value ?? "").trim();
@@ -37,6 +61,32 @@ function namesFromAnswer(value: unknown) {
 
 function countsInAnalytics(answers: Record<string, unknown>) {
   return String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] ?? "Da controllare").trim().toLowerCase() !== "errore";
+}
+
+function timeToMinutes(value: string | null | undefined) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function romeTime(date: Date) {
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+
+function romeDateTimeParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return { hour, minute, totalMinutes: hour * 60 + minute };
 }
 
 export default async function DashboardPage() {
@@ -75,6 +125,207 @@ export default async function DashboardPage() {
   const statusToday = romeDate();
   const statusTomorrow = new Date(statusToday);
   statusTomorrow.setUTCDate(statusTomorrow.getUTCDate() + 1);
+
+  const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+  if (managementRoles.has(role)) {
+    const isResponsible = role === "RESPONSABILE";
+    const scopedLocationId = isResponsible ? currentUser.sede_id : null;
+    const userScope = isResponsible
+      ? { sede_id: scopedLocationId || "__RESPONSABILE_WITHOUT_LOCATION__" }
+      : {};
+    const locationScope = scopedLocationId ? { location_id: scopedLocationId } : {};
+    const responseLocationScope = scopedLocationId ? { user_location_id: scopedLocationId } : {};
+    const yesterdayStart = new Date(statusToday);
+    yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
+    const todayInstantStart = romeInstantStart(statusToday);
+    const tomorrowInstantStart = romeInstantStart(statusTomorrow);
+    const yesterdayInstantStart = romeInstantStart(yesterdayStart);
+    const previousMonthDate = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
+    const payrollMonth = previousMonthDate.getUTCMonth() + 1;
+    const payrollYear = previousMonthDate.getUTCFullYear();
+
+    const [
+      managementUsers,
+      attendanceLogs,
+      schedules,
+      leaveRequests,
+      controlForms,
+      todayResponses,
+      payrollDocuments,
+      closings,
+      vaultWithdrawals,
+      latestMonthClose,
+    ] = await Promise.all([
+      safe(prisma.user.findMany({
+        where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] }, ...userScope },
+        include: { location: true },
+        orderBy: { name: "asc" },
+      }), []),
+      safe(prisma.attendanceLog.findMany({
+        where: {
+          date: { gte: statusToday, lt: statusTomorrow },
+          ...locationScope,
+          user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        },
+        include: { user: { include: { location: true } }, location: true },
+        orderBy: { timestamp: "asc" },
+      }), []),
+      safe(prisma.scheduleEntry.findMany({
+        where: { date: { gte: statusToday, lt: statusTomorrow }, ...locationScope },
+        include: { category: true },
+      }), []),
+      safe(prisma.leaveRequest.findMany({
+        where: {
+          status: "APPROVED",
+          type: { in: ["FERIE", "MALATTIA"] },
+          start_date: { lt: statusTomorrow },
+          end_date: { gte: statusToday },
+          user: { active: true, ...userScope },
+        },
+        include: { user: { include: { location: true } } },
+        orderBy: { end_date: "asc" },
+      }), []),
+      safe(prisma.serviceForm.findMany({
+        where: { active: true },
+        select: { id: true, name: true, category: true },
+      }), []),
+      safe(prisma.serviceFormResponse.findMany({
+        where: { created_at: { gte: todayInstantStart, lt: tomorrowInstantStart }, ...responseLocationScope },
+        select: { form_id: true, created_at: true, answers: true, user_location_name: true },
+        orderBy: { created_at: "asc" },
+      }), []),
+      safe(prisma.document.findMany({
+        where: {
+          type: "BUSTA_PAGA",
+          month: payrollMonth,
+          year: payrollYear,
+          user: { active: true, ...userScope },
+        },
+        select: { user_id: true },
+      }), []),
+      safe(prisma.cashClosing.findMany({
+        where: { date: { lt: statusTomorrow }, ...locationScope },
+        orderBy: { created_at: "desc" },
+      }), []),
+      safe(prisma.cashVaultWithdrawal.findMany({
+        where: { date: { lt: statusTomorrow }, ...locationScope },
+        orderBy: { created_at: "desc" },
+      }), []),
+      safe(prisma.cashMonthClose.findFirst({ orderBy: { month: "desc" } }), null),
+    ]);
+
+    const logsByUser = new Map<string, typeof attendanceLogs>();
+    for (const log of attendanceLogs) {
+      const rows = logsByUser.get(log.user_id) || [];
+      rows.push(log);
+      logsByUser.set(log.user_id, rows);
+    }
+    const scheduleByUser = new Map(schedules.map((entry) => [entry.user_id, entry]));
+    const clockedToday = Array.from(logsByUser.entries()).map(([userId, logs]) => {
+      const state = deriveAttendanceState(logs);
+      const firstEntry = state.firstEntry?.timestamp ? new Date(state.firstEntry.timestamp) : null;
+      const schedule = scheduleByUser.get(userId);
+      const shiftStart = schedule?.start_time || schedule?.category?.start_time || null;
+      const actualMinutes = firstEntry ? romeDateTimeParts(firstEntry).totalMinutes : null;
+      const plannedMinutes = timeToMinutes(shiftStart);
+      const lateMinutes = actualMinutes !== null && plannedMinutes !== null ? Math.max(0, actualMinutes - plannedMinutes) : 0;
+      const user = logs[0].user;
+      return {
+        id: userId,
+        name: user.name,
+        photoUrl: user.photo_url,
+        location: logs[0].location?.name || user.location?.name || "Sede non indicata",
+        firstEntry: firstEntry ? romeTime(firstEntry) : "--:--",
+        shiftStart,
+        status: state.status,
+        lateMinutes,
+      };
+    }).sort((a, b) => a.firstEntry.localeCompare(b.firstEntry));
+
+    const controlFormIds = new Set(controlForms.filter((form) => isClientControlFormName(form.name, form.category)).map((form) => form.id));
+    const countedResponses = todayResponses.filter((response) => {
+      if (!controlFormIds.has(response.form_id)) return false;
+      const answers = (response.answers as Record<string, unknown>) || {};
+      const correctness = String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").trim().toLowerCase();
+      return correctness !== "finito" && countsInAnalytics(answers);
+    });
+    const hourlyMap = new Map<string, Map<string, number>>();
+    for (const response of countedResponses) {
+      const hour = `${String(romeDateTimeParts(response.created_at).hour).padStart(2, "0")}:00`;
+      const locationName = response.user_location_name || "Sede non indicata";
+      const locations = hourlyMap.get(hour) || new Map<string, number>();
+      locations.set(locationName, (locations.get(locationName) || 0) + 1);
+      hourlyMap.set(hour, locations);
+    }
+    const hourlyClients = Array.from(hourlyMap.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([hour, locations]) => ({
+      hour,
+      count: Array.from(locations.values()).reduce((sum, value) => sum + value, 0),
+      locations: Array.from(locations.entries()).map(([name, count]) => ({ name, count })),
+    }));
+
+    const paymentRows = await safe(getShopifyPaymentRegister({
+      start: yesterdayInstantStart,
+      end: todayInstantStart,
+      locationId: scopedLocationId,
+    }), []);
+    const yesterdayRevenue = paymentRows.filter((row) => row.verified).reduce((sum, row) => sum + row.amount, 0);
+
+    let openPeriodStart: Date | null = null;
+    if (latestMonthClose?.month) {
+      const [closedYear, closedMonth] = latestMonthClose.month.split("-").map(Number);
+      openPeriodStart = new Date(Date.UTC(closedYear, closedMonth, 1));
+    }
+    const latestClosingByLocationDay = new Map<string, (typeof closings)[number]>();
+    for (const closing of closings) {
+      if (openPeriodStart && closing.date < openPeriodStart) continue;
+      const key = `${closing.location_id}:${closing.date.toISOString().slice(0, 10)}`;
+      if (!latestClosingByLocationDay.has(key)) latestClosingByLocationDay.set(key, closing);
+    }
+    const openClosings = Array.from(latestClosingByLocationDay.values());
+    const openVaultWithdrawals = vaultWithdrawals.filter((row) => !openPeriodStart || row.date >= openPeriodStart);
+    const availableCash = openClosings.reduce((sum, row) => sum + row.withdrawn, 0)
+      - openVaultWithdrawals.reduce((sum, row) => sum + row.amount, 0);
+    const monthExpenses = vaultWithdrawals
+      .filter((row) => row.date >= start && row.date < end)
+      .reduce((sum, row) => sum + row.amount, 0);
+
+    const payrollUserIds = new Set(payrollDocuments.map((document) => document.user_id));
+    const formatDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" }).format(date);
+    const managementData: ManagementDashboardData = {
+      viewerName: currentUser.name || "Direzione",
+      scopeLabel: scopedLocationId ? currentUser.location?.name || "Sede assegnata" : "Tutti i saloni",
+      updatedAt: romeTime(new Date()),
+      presentNow: clockedToday.filter((staff) => staff.status === "IN" || staff.status === "BREAK").length,
+      clockedToday,
+      lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 10),
+      leaves: leaveRequests.map((request) => ({
+        id: request.id,
+        name: request.user.name,
+        photoUrl: request.user.photo_url,
+        location: request.user.location?.name || "Sede non indicata",
+        type: request.type as "FERIE" | "MALATTIA",
+        until: formatDate(request.end_date),
+      })),
+      clientsToday: countedResponses.length,
+      hourlyClients,
+      yesterdayRevenue,
+      availableCash,
+      monthExpenses,
+      missingPayslips: managementUsers.filter((user) => !payrollUserIds.has(user.id)).map((user) => ({
+        id: user.id,
+        name: user.name,
+        photoUrl: user.photo_url,
+        location: user.location?.name || "Sede non indicata",
+      })),
+      payrollMonthLabel: new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" }).format(previousMonthDate),
+    };
+
+    return (
+      <AppShell title="Dashboard" subtitle="Direzione operativa" role={role as any} hideHeader transparentMain>
+        <ManagementDashboard data={managementData} />
+      </AppShell>
+    );
+  }
 
   // Parallel Data Queries
   const [
