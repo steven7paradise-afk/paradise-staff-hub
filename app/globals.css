@@ -129,6 +129,12 @@ textarea {
     justify-content: center;
   }
 
+  .sidebar-collapsed .sidebar-profile {
+    justify-content: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
   .sidebar-collapsed aside {
     background: var(--user-sidebar-color, var(--sidebar)) !important;
     border-right: 1px solid rgba(0, 0, 0, 0.05) !important;
@@ -140,9 +146,9 @@ textarea {
     align-items: center !important;
     width: 2.75rem !important; /* 44px */
     height: 2.75rem !important; /* 44px */
-    border-radius: 9999px !important; /* Perfectly round circle */
+    border-radius: 0.625rem !important;
     padding: 0 !important;
-    margin: 0.375rem auto !important;
+    margin: 0.25rem auto !important;
     border: none !important;
     background: transparent;
     color: var(--sidebar-text) !important;
@@ -187,7 +193,7 @@ textarea {
     align-items: center !important;
     width: 2.75rem !important;
     height: 2.75rem !important;
-    border-radius: 9999px !important;
+    border-radius: 0.625rem !important;
     padding: 0 !important;
     margin: 1.25rem auto 0 auto !important;
     border: none !important;

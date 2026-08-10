@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
 
@@ -51,8 +52,9 @@ export function DesktopSidebarNav({
     return folder?.labels?.[href] || fallback;
   };
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredItems = items.filter((item) =>
-    item.label.toLowerCase().includes(searchQuery.toLowerCase())
+    getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
   );
 
   // Group items by Section or Config Folders
@@ -105,14 +107,17 @@ export function DesktopSidebarNav({
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
   useEffect(() => {
-    setOpenSectionId((current) => current ?? activeSectionId ?? sections[0]?.id ?? null);
-  }, [activeSectionId, sections]);
+    if (activeSectionId) {
+      setOpenSectionId(activeSectionId);
+      return;
+    }
+    setOpenSectionId((current) => current ?? sections[0]?.id ?? null);
+  }, [activeSectionId, pathname]);
 
   return (
     <div className="flex h-full flex-col font-[family-name:var(--sidebar-font)] [--sidebar-icon:var(--dark-sidebar-icon)] [--sidebar-text:var(--dark-sidebar-text)]">
-      {/* 🌸 BRAND LOGO */}
-      <div className="flex items-center gap-3 px-3 py-3 shrink-0 mx-1">
-        <div className="size-10 shrink-0 overflow-hidden rounded-full bg-white/8 flex items-center justify-center ring-1 ring-white/10">
+      <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-white/10 px-2 pb-5 pt-2">
+        <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white/8">
           <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
         </div>
         <div className="sidebar-label text-left min-w-0">
@@ -121,29 +126,39 @@ export function DesktopSidebarNav({
         </div>
       </div>
 
-      {/* 🔍 SEARCH FIELD */}
-      <div className="relative mt-4 mx-1 sidebar-label shrink-0">
+      <div className="sidebar-label relative mx-1 mt-4 shrink-0">
         <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 dark:text-zinc-500">
           <Search size={13} className="opacity-75" />
         </span>
         <input
           type="text"
-          placeholder="Cerca..."
+          placeholder="Cerca una pagina"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-xl border border-white/10 bg-white/[0.055] py-1.5 pl-9 pr-4 text-xs font-bold text-white outline-none placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.075]"
+          className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.055] py-2 pl-9 pr-9 text-xs font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.075]"
         />
+        {searchQuery ? (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="absolute inset-y-0 right-0 grid w-9 place-items-center text-white/45 transition hover:text-white"
+            aria-label="Cancella ricerca"
+          >
+            <X className="size-3.5" />
+          </button>
+        ) : null}
       </div>
 
-      <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto">
-        <div className="space-y-5 px-1 pb-4">
+      <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto" aria-label="Navigazione principale">
+        <div className="space-y-4 px-1 pb-4">
           {sections.map((section) => (
-            <div key={section.id} className="space-y-1.5">
+            <div key={section.id} className="space-y-1">
               {section.title ? (
                 <button
                   type="button"
                   onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                  className="sidebar-label flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.055]"
+                  className="sidebar-label flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left transition hover:bg-white/[0.055]"
+                  aria-expanded={openSectionId === section.id}
                 >
                   <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
                     {section.title}
@@ -153,7 +168,7 @@ export function DesktopSidebarNav({
               ) : null}
 
               {openSectionId === section.id || !section.title || searchQuery.trim() ? (
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {section.items.map((item) => {
                     const isActive = isItemActive(item.href);
                     const displayLabel = getSidebarLabel(item.href, item.label);
@@ -164,7 +179,7 @@ export function DesktopSidebarNav({
                         href={item.href}
                         title={displayLabel}
                         className={cn(
-                          "sidebar-nav-link group flex shrink-0 items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 text-[13px] font-bold tracking-tight transition-all duration-200",
+                          "sidebar-nav-link group relative flex min-h-10 shrink-0 items-center gap-3 rounded-lg border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
                           isActive
                             ? "active border-white/12 bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)] shadow-none"
                             : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-white/[0.065] hover:opacity-100"
@@ -172,8 +187,8 @@ export function DesktopSidebarNav({
                       >
                         <span
                           className={cn(
-                            "grid size-7 shrink-0 place-items-center rounded-xl transition",
-                            isActive ? "bg-white/[0.12] text-[color:var(--sidebar-active-icon)]" : "bg-white/[0.055] text-[color:var(--sidebar-icon)] group-hover:bg-white/[0.08]"
+                            "grid size-7 shrink-0 place-items-center rounded-md transition",
+                            isActive ? "bg-white/[0.12] text-[color:var(--sidebar-active-icon)]" : "text-[color:var(--sidebar-icon)] group-hover:bg-white/[0.06]"
                           )}
                         >
                           <DynamicIcon name={item.iconName} className="size-4 shrink-0" />
@@ -194,12 +209,33 @@ export function DesktopSidebarNav({
           ))}
 
           {sections.length === 0 ? (
-            <div className="sidebar-label rounded-2xl border border-dashed border-black/10 px-3 py-4 text-center text-xs font-bold text-[color:var(--sidebar-text)] opacity-50">
+            <div className="sidebar-label rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs font-bold text-[color:var(--sidebar-text)] opacity-50">
               Nessuna pagina trovata.
             </div>
           ) : null}
         </div>
       </nav>
+
+      <Link
+        href="/profile"
+        title={`${userName} - ${roleLabel}`}
+        className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-3 border-t border-white/10 px-2 pt-4 text-[color:var(--sidebar-text)] transition hover:opacity-80"
+      >
+        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10">
+          {userPhoto ? (
+            <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
+          ) : (
+            <span className="grid size-full place-items-center text-[11px] font-black">
+              {userName.slice(0, 2).toUpperCase()}
+            </span>
+          )}
+          <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />
+        </span>
+        <span className="sidebar-label min-w-0 text-left">
+          <span className="block truncate text-xs font-black">{userName}</span>
+          <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
+        </span>
+      </Link>
     </div>
   );
 }

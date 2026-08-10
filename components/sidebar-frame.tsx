@@ -26,6 +26,19 @@ export function SidebarFrame({
   const isCollapsed = forceCollapsed || collapsed;
 
   useEffect(() => {
+    if (forceCollapsed) return;
+    setCollapsed(window.localStorage.getItem("paradise-sidebar-collapsed") === "1");
+  }, [forceCollapsed]);
+
+  const toggleCollapsed = () => {
+    setCollapsed((value) => {
+      const nextValue = !value;
+      window.localStorage.setItem("paradise-sidebar-collapsed", nextValue ? "1" : "0");
+      return nextValue;
+    });
+  };
+
+  useEffect(() => {
     const tabletRoute = pathname?.startsWith("/tablet-clock") ?? false;
     setIsTablet(tabletRoute);
     if (!tabletRoute) return;
@@ -66,14 +79,14 @@ export function SidebarFrame({
           "relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
           isCollapsed
             ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
-            : "xl:w-[280px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
+            : "xl:w-[264px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
         )}
       >
         {!forceCollapsed ? (
           <button
             type="button"
-            onClick={() => setCollapsed((value) => !value)}
-            className="absolute -right-[18px] bottom-[82px] z-50 hidden size-9 place-items-center rounded-xl border border-black/5 bg-white text-black/60 shadow-sm transition hover:bg-white hover:text-black dark:border-white/10 dark:bg-neutral-800 dark:text-white/80 xl:grid"
+            onClick={toggleCollapsed}
+            className="absolute -right-[15px] top-7 z-50 hidden size-8 place-items-center rounded-full border border-black/10 bg-white text-black/55 shadow-sm transition hover:text-black dark:border-white/10 dark:bg-neutral-900 dark:text-white/75 xl:grid"
             aria-label={isCollapsed ? "Apri menu" : "Chiudi menu"}
             title={isCollapsed ? "Apri menu" : "Chiudi menu"}
           >
@@ -82,7 +95,7 @@ export function SidebarFrame({
         ) : null}
         {aside}
       </div>
-      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", isCollapsed ? "xl:ml-[88px]" : "xl:ml-[280px]")}>
+      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
         <div className="xl:p-5 xl:pl-3 xl:h-screen xl:flex xl:flex-col">
           <div className={cn("app-content-surface xl:rounded-[28px] xl:shadow-sm flex-1 border border-black/5 dark:border-white/10 xl:flex xl:flex-col overflow-hidden", transparentMain ? "bg-transparent" : "bg-[color:var(--card)]")}>
             <div className="flex-1 overflow-y-auto luxury-scroll min-w-0">

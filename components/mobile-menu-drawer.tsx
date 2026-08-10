@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, ArrowLeft, ChevronDown, Menu } from "lucide-react";
+import { Search, ArrowLeft, ChevronDown, Menu, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -42,14 +42,15 @@ export function MobileMenuDrawer({
     };
   }, [isOpen]);
 
-  const filteredItems = items.filter((item) =>
-    item.label.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
     return folder?.labels?.[href] || fallback;
   };
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const filteredItems = items.filter((item) =>
+    getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
+  );
 
   const getRenderSections = () => {
     if (sidebarConfig && sidebarConfig.length > 0) {
@@ -86,8 +87,12 @@ export function MobileMenuDrawer({
 
   useEffect(() => {
     if (!isOpen) return;
-    setOpenSectionId((current) => current ?? activeSectionId ?? sections[0]?.id ?? null);
-  }, [activeSectionId, isOpen, sections]);
+    if (activeSectionId) {
+      setOpenSectionId(activeSectionId);
+      return;
+    }
+    setOpenSectionId((current) => current ?? sections[0]?.id ?? null);
+  }, [activeSectionId, isOpen, pathname]);
 
   return (
     <div className="xl:hidden">
@@ -160,7 +165,6 @@ export function MobileMenuDrawer({
             </button>
           </div>
 
-          {/* Slate Search Bar */}
           <div className="relative mt-6">
             <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-500">
               <Search size={17} />
@@ -170,8 +174,18 @@ export function MobileMenuDrawer({
               placeholder="Cerca pagina..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 w-full rounded-2xl border border-white/8 bg-white/[0.045] py-2 pl-12 pr-4 text-base font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.07]"
+              className="h-12 w-full rounded-lg border border-white/8 bg-white/[0.045] py-2 pl-12 pr-11 text-base font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.07]"
             />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-500 transition hover:text-white"
+                aria-label="Cancella ricerca"
+              >
+                <X className="size-4" />
+              </button>
+            ) : null}
           </div>
 
           {/* Main Navigation links */}
@@ -183,7 +197,8 @@ export function MobileMenuDrawer({
                     <button
                       type="button"
                       onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                      className="mb-3 flex w-full items-center justify-between rounded-2xl px-3 py-1.5 text-left transition hover:bg-white/[0.04]"
+                      className="mb-2 flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left transition hover:bg-white/[0.04]"
+                      aria-expanded={openSectionId === section.id}
                     >
                       <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-400/85">{section.title}</p>
                       <ChevronDown className={cn("size-4 text-slate-500 transition-transform", openSectionId === section.id && "rotate-180")} />
@@ -200,14 +215,14 @@ export function MobileMenuDrawer({
                             href={item.href}
                             onClick={() => setIsOpen(false)}
                             className={cn(
-                            "relative flex min-h-14 items-center justify-between gap-3 rounded-3xl px-4 py-3 text-[17px] font-semibold tracking-tight transition",
+                            "relative flex min-h-12 items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-2.5 text-[16px] font-semibold tracking-tight transition",
                             isActive
                               ? "border border-white/16 bg-white/[0.08] text-white shadow-none"
                               : "text-slate-300 hover:bg-white/[0.055] hover:text-white"
                           )}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                              <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl", isActive ? "text-white" : "text-slate-400")}>
+                              <span className={cn("grid size-9 shrink-0 place-items-center rounded-md", isActive ? "bg-white/10 text-white" : "text-slate-400")}>
                                 <DynamicIcon name={item.iconName} className="size-6 shrink-0" />
                               </span>
                               <span className="truncate">{displayLabel}</span>
