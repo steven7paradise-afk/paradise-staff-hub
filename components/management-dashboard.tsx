@@ -36,7 +36,7 @@ type LeaveRow = {
   photoUrl: string | null;
   location: string;
   type: "FERIE" | "MALATTIA" | "RIPOSO";
-  until: string;
+  periodLabel: string;
 };
 
 export type ManagementDashboardData = {
@@ -202,7 +202,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                 <Avatar name={leave.name} photoUrl={leave.photoUrl} size={40} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">{leave.name}</p>
-                  <p className="text-xs text-[#8d8388]">{leave.location} · fino al {leave.until}</p>
+                  <p className="text-xs text-[#8d8388]">{leave.location} · {leave.periodLabel}</p>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${leave.type === "FERIE" ? "bg-[#f8ebca] text-[#7e5d11]" : leave.type === "MALATTIA" ? "bg-[#fde2e2] text-[#a3323b]" : "bg-[#e8edf7] text-[#405981]"}`}>{leave.type}</span>
               </div>

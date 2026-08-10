@@ -170,7 +170,7 @@ export default async function DashboardPage() {
       }), []),
       safe(prisma.scheduleEntry.findMany({
         where: { date: { gte: statusToday, lt: statusTomorrow }, ...locationScope },
-        include: { category: true },
+        include: { category: true, location: true, user: { include: { location: true } } },
       }), []),
       safe(prisma.leaveRequest.findMany({
         where: {
@@ -291,6 +291,33 @@ export default async function DashboardPage() {
 
     const payrollUserIds = new Set(payrollDocuments.map((document) => document.user_id));
     const formatDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" }).format(date);
+    const leaveRows: ManagementDashboardData["leaves"] = leaveRequests.map((request) => ({
+      id: request.id,
+      name: request.user.name,
+      photoUrl: request.user.photo_url,
+      location: request.user.location?.name || "Sede non indicata",
+      type: request.type as "FERIE" | "MALATTIA" | "RIPOSO",
+      periodLabel: `fino al ${formatDate(request.end_date)}`,
+    }));
+    const leaveKeys = new Set(leaveRequests.map((request) => `${request.user_id}:${request.type}`));
+    for (const schedule of schedules) {
+      const categoryName = schedule.category.name.toLowerCase();
+      const categoryCode = schedule.category.code.toUpperCase();
+      const isRest = categoryName.includes("riposo") || ["R", "RI", "R3", "RIPOSO"].includes(categoryCode);
+      if (!isRest) continue;
+      const duplicateKey = `${schedule.user_id}:RIPOSO`;
+      if (leaveKeys.has(duplicateKey)) continue;
+      leaveKeys.add(duplicateKey);
+      leaveRows.push({
+        id: `schedule-rest-${schedule.id}`,
+        name: schedule.user.name,
+        photoUrl: schedule.user.photo_url,
+        location: schedule.location?.name || schedule.user.location?.name || "Sede non indicata",
+        type: "RIPOSO",
+        periodLabel: "riposo programmato oggi",
+      });
+    }
+
     const managementData: ManagementDashboardData = {
       viewerName: currentUser.name || "Direzione",
       scopeLabel: scopedLocationId ? currentUser.location?.name || "Sede assegnata" : "Tutti i saloni",
@@ -298,14 +325,7 @@ export default async function DashboardPage() {
       presentNow: clockedToday.filter((staff) => staff.status === "IN" || staff.status === "BREAK").length,
       clockedToday,
       lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 10),
-      leaves: leaveRequests.map((request) => ({
-        id: request.id,
-        name: request.user.name,
-        photoUrl: request.user.photo_url,
-        location: request.user.location?.name || "Sede non indicata",
-        type: request.type as "FERIE" | "MALATTIA" | "RIPOSO",
-        until: formatDate(request.end_date),
-      })),
+      leaves: leaveRows,
       clientsToday: countedResponses.length,
       hourlyClients,
       yesterdayCashClosings,
