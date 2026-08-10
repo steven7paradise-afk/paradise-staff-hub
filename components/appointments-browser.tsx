@@ -1413,10 +1413,12 @@ export function AppointmentsBrowser({
 
   const [shopifyLookupLoading, setShopifyLookupLoading] = useState(false);
   const [secondShopifyLookupLoading, setSecondShopifyLookupLoading] = useState(false);
+  const [manualPaymentMethod, setManualPaymentMethod] = useState<ManualPaymentMethod | null>(null);
   const [paymentMethodPrompt, setPaymentMethodPrompt] = useState<{
     open: boolean;
     gateways: string[];
-  }>({ open: false, gateways: [] });
+    resumeSubmit: boolean;
+  }>({ open: false, gateways: [], resumeSubmit: false });
 
   async function handleShopifyOrderLookup(queryOverride?: string) {
     const query = (queryOverride ?? clientControlForm.shopifyOrder ?? clientControlForm.clientName ?? "").trim();
@@ -1466,6 +1468,7 @@ export function AppointmentsBrowser({
     const query = (queryOverride ?? clientControlForm.secondShopifyOrder ?? "").trim();
     if (!query) return;
 
+    setManualPaymentMethod(null);
     setSecondShopifyLookupLoading(true);
     try {
       const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
@@ -1863,7 +1866,8 @@ export function AppointmentsBrowser({
 
   async function openClientControlForBooking(booking: AppointmentRecord) {
     setClientControlMessage(null);
-    setPaymentMethodPrompt({ open: false, gateways: [] });
+    setManualPaymentMethod(null);
+    setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
     setSelectedGrammi("");
     setCustomGrammiInput("");
     setSelectedLunghezza("");
@@ -2035,7 +2039,23 @@ export function AppointmentsBrowser({
     }
   }, [clientControlOpen, clientControlForm.secondShopifyOrder, secondOrderDetails]);
 
-  async function submitClientControlForm(manualPaymentMethod?: ManualPaymentMethod) {
+  useEffect(() => {
+    if (
+      clientControlOpen &&
+      secondOrderDetails &&
+      String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
+      secondOrderDetails.paymentMethod === "DA_VERIFICARE" &&
+      !manualPaymentMethod
+    ) {
+      setPaymentMethodPrompt({
+        open: true,
+        gateways: secondOrderDetails.paymentGateways || [],
+        resumeSubmit: false,
+      });
+    }
+  }, [clientControlOpen, secondOrderDetails, manualPaymentMethod]);
+
+  async function submitClientControlForm(manualPaymentMethodOverride?: ManualPaymentMethod) {
     setClientControlMessage(null);
     if (
       !clientControlForm.salon ||
@@ -2056,7 +2076,7 @@ export function AppointmentsBrowser({
 
       const payload = {
         ...clientControlForm,
-        manualPaymentMethod,
+        manualPaymentMethod: manualPaymentMethodOverride ?? manualPaymentMethod ?? undefined,
         secondShopifyOrder: clientControlForm.secondShopifyOrder || "",
         customGrammi: customGrammiVal || "",
         customLunghezza: selectedLunghezza || "",
@@ -2075,6 +2095,7 @@ export function AppointmentsBrowser({
         setPaymentMethodPrompt({
           open: true,
           gateways: Array.isArray(data?.paymentGateways) ? data.paymentGateways : [],
+          resumeSubmit: true,
         });
         return;
       }
@@ -2099,7 +2120,7 @@ export function AppointmentsBrowser({
         type: "success",
         text: "✓ Scheda controllo salvata! Stato appuntamento: COMPLETATO",
       });
-      setPaymentMethodPrompt({ open: false, gateways: [] });
+      setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
 
       router.refresh();
 
@@ -3247,6 +3268,8 @@ export function AppointmentsBrowser({
                             readOnly={isSecondLocked}
                             onChange={(event) => {
                               if (isSecondLocked) return;
+                              setManualPaymentMethod(null);
+                              setSecondOrderDetails(null);
                               setClientControlForm((prev) => ({
                                 ...prev,
                                 secondShopifyOrder: event.target.value,
@@ -3282,12 +3305,15 @@ export function AppointmentsBrowser({
                           )}
                           {secondOrderDetails ? (
                             <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
-                              String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" && secondOrderDetails.paymentMethod !== "DA_VERIFICARE"
+                              String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
+                              (secondOrderDetails.paymentMethod !== "DA_VERIFICARE" || manualPaymentMethod)
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                                 : "border-amber-200 bg-amber-50 text-amber-800"
                             }`}>
                               {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
-                                ? `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
+                                ? manualPaymentMethod
+                                  ? `Metodo dichiarato · ${manualPaymentMethod === "CARTA" ? "Carta" : manualPaymentMethod === "SHOPIFY" ? "Shopify" : "Contanti"}`
+                                  : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
                                 : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
                               {secondOrderDetails.paymentGateways?.length ? (
                                 <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>
@@ -5638,7 +5664,7 @@ export function AppointmentsBrowser({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPaymentMethodPrompt({ open: false, gateways: [] })}
+                  onClick={() => setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false })}
                   className="grid size-10 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/60 transition hover:bg-black/5 active:scale-95"
                   aria-label="Chiudi scelta metodo pagamento"
                 >
@@ -5665,8 +5691,10 @@ export function AppointmentsBrowser({
                     type="button"
                     disabled={clientControlSubmitting}
                     onClick={() => {
-                      setPaymentMethodPrompt({ open: false, gateways: [] });
-                      void submitClientControlForm(option.value);
+                      const shouldResumeSubmit = paymentMethodPrompt.resumeSubmit;
+                      setManualPaymentMethod(option.value);
+                      setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
+                      if (shouldResumeSubmit) void submitClientControlForm(option.value);
                     }}
                     className="group flex min-h-32 flex-col items-center justify-center rounded-2xl border border-black/10 bg-white px-4 py-5 text-center transition hover:border-[#D96B94] hover:bg-[#FFF5FA] active:scale-[0.98] disabled:opacity-50"
                   >
