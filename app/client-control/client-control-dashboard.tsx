@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, Pencil, Sparkles, FileText, ExternalLink, Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { cn } from "@/lib/utils";
@@ -129,7 +129,7 @@ export function ClientControlDashboard({
   const [responses, setResponses] = useState(initialResponses);
   const [query, setQuery] = useState("");
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
-  const [currentTabFilter, setCurrentTabFilter] = useState<"all" | "discrepancies" | "noshows">("all");
+  const [currentTabFilter, setCurrentTabFilter] = useState<"all" | "pending" | "discrepancies" | "noshows">("all");
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [activeSalon, setActiveSalon] = useState("Tutti");
   const [selected, setSelected] = useState<ResponseItem | null>(null);
@@ -137,6 +137,8 @@ export function ClientControlDashboard({
   const [viewingResponse, setViewingResponse] = useState<any | null>(null);
   const [viewingMetricList, setViewingMetricList] = useState<{ title: string; key: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
@@ -394,6 +396,7 @@ export function ClientControlDashboard({
 
   const tabCounts = useMemo(() => {
     let all = 0;
+    let pending = 0;
     let discrepancies = 0;
     let noshows = 0;
 
@@ -420,6 +423,8 @@ export function ClientControlDashboard({
 
       if (matchesSalon && matchesWorker && matchesQuery) {
         all++;
+        const currentStatus = controlStatus(answers).trim().toLowerCase();
+        if (!currentStatus || currentStatus === "da controllare") pending++;
 
         // Mismatch logic
         const declaredPaid = answers[CLIENT_CONTROL_FIELD_IDS.paid];
@@ -446,7 +451,7 @@ export function ClientControlDashboard({
       }
     });
 
-    return { all, discrepancies, noshows };
+    return { all, pending, discrepancies, noshows };
   }, [monthlyResponses, activeSalon, selectedWorkerName, query, employeeNames]);
 
   const filteredResponses = monthlyResponses.filter((response) => {
@@ -483,7 +488,10 @@ export function ClientControlDashboard({
 
     // Tab Filter
     let matchesTab = true;
-    if (currentTabFilter === "discrepancies") {
+    if (currentTabFilter === "pending") {
+      const currentStatus = controlStatus(answers).trim().toLowerCase();
+      matchesTab = !currentStatus || currentStatus === "da controllare";
+    } else if (currentTabFilter === "discrepancies") {
       matchesTab = hasMismatch;
     } else if (currentTabFilter === "noshows") {
       matchesTab = isNoShow;
@@ -502,6 +510,17 @@ export function ClientControlDashboard({
            matchesTab &&
            haystack.includes(query.trim().toLowerCase());
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredResponses.length / pageSize));
+  const paginatedResponses = filteredResponses.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeSalon, currentTabFilter, query, selectedMonth, selectedWorkerName, selectedYear]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   function openResponse(response: ResponseItem) {
     setSelected(response);
@@ -537,6 +556,27 @@ export function ClientControlDashboard({
     }
     setResponses((prev) => prev.filter((item) => item.id !== response.id));
     if (selected?.id === response.id) setSelected(null);
+  }
+
+  async function updateResponseStatus(response: ResponseItem, newStatus: string) {
+    const answers = response.answers ?? {};
+    try {
+      const res = await fetch(`/api/service-forms/responses/${response.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answers: {
+            ...answers,
+            [CLIENT_CONTROL_FIELD_IDS.correctness]: newStatus,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setResponses((prev) => prev.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
+    } catch {
+      alert("Errore durante l'aggiornamento dello stato.");
+    }
   }
 
   const maxServices = Math.max(...(selectedSalon?.staff ?? []).map((staff) => staff.services), 1);
@@ -611,7 +651,7 @@ export function ClientControlDashboard({
               { label: "Schede", value: selectedSalon?.responses ?? 0 },
               { label: "Incasso registrato", value: money(selectedSalon?.paid ?? 0) },
               { label: "Collaboratori", value: selectedSalon?.staff.length ?? 0 },
-              { label: "Check bonus", value: totalChecks },
+              { label: "Da controllare", value: tabCounts.pending },
             ].map((card) => (
               <div key={card.label} className="rounded-[24px] border border-white/10 bg-white/[0.07] p-5">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/38">{card.label}</p>
@@ -706,7 +746,10 @@ export function ClientControlDashboard({
         <div className="flex flex-col gap-4 border-b border-black/10 p-5 lg:flex-row lg:items-center lg:justify-between pb-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Cronologia</p>
-            <h2 className="text-2xl font-black">Tutti i moduli Controllo Cliente</h2>
+            <h2 className="text-2xl font-black">Controlli cliente</h2>
+            <p className="mt-1 text-xs font-semibold text-black/45">
+              {filteredResponses.length} risultati nel periodo selezionato
+            </p>
           </div>
           <div className="flex flex-col sm:flex-row flex-1 gap-3 lg:max-w-2xl w-full">
             <select
@@ -742,6 +785,19 @@ export function ClientControlDashboard({
             >
               <Layers className={cn("size-3.5", currentTabFilter === "all" ? "text-neutral-800" : "text-neutral-400")} />
               Tutti i moduli ({tabCounts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentTabFilter("pending")}
+              className={cn(
+                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                currentTabFilter === "pending"
+                  ? "bg-white text-amber-700 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03]"
+                  : "text-neutral-500 hover:text-amber-700"
+              )}
+            >
+              <AlertTriangle className={cn("size-3.5", currentTabFilter === "pending" ? "text-amber-600" : "text-neutral-400")} />
+              Da controllare ({tabCounts.pending})
             </button>
             <button
               type="button"
@@ -834,7 +890,85 @@ export function ClientControlDashboard({
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="grid gap-3 p-4 lg:hidden">
+          {paginatedResponses.map((response) => {
+            const answers = response.answers ?? {};
+            const status = controlStatus(answers);
+            const checks = [
+              truthy(answers[CLIENT_CONTROL_FIELD_IDS.notes]),
+              truthy(answers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
+              truthy(answers[CLIENT_CONTROL_FIELD_IDS.afterMedia]),
+              truthy(answers[CLIENT_CONTROL_FIELD_IDS.products]),
+              truthy(answers[CLIENT_CONTROL_FIELD_IDS.review]),
+            ].filter(Boolean).length;
+            const staff = namesFromAnswer(
+              answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff] ||
+              answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner] ||
+              response.user.name,
+            ).map((name) => resolveCanonicalStaffName(name, employeeNames));
+
+            return (
+              <article key={response.id} className="rounded-2xl border border-black/8 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#B94778]">
+                      {new Date(response.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    <h3 className="mt-1 truncate text-lg font-black text-[#171717]">
+                      {answerText(answers[CLIENT_CONTROL_FIELD_IDS.clientName])}
+                    </h3>
+                    <p className="mt-1 text-xs font-bold text-black/45">
+                      Ordine {answerText(answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder])} · {answerText(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name)}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black",
+                    checks === 5 ? "bg-emerald-50 text-emerald-700" : checks >= 3 ? "bg-amber-50 text-amber-700" : "bg-neutral-100 text-neutral-500",
+                  )}>
+                    {checks}/5 check
+                  </span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl bg-[#FAF7F9] p-3">
+                    <p className="font-black uppercase tracking-wide text-black/35">Pagamento</p>
+                    <p className="mt-1 text-sm font-black text-black">{money(answers[CLIENT_CONTROL_FIELD_IDS.paid])}</p>
+                    <p className="mt-0.5 font-semibold text-black/45">Acconto {money(answers[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</p>
+                  </div>
+                  <div className="rounded-xl bg-[#FAF7F9] p-3">
+                    <p className="font-black uppercase tracking-wide text-black/35">Collaboratrice</p>
+                    <p className="mt-1 line-clamp-2 text-sm font-black text-black">{staff.join(", ") || "Non assegnata"}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <select
+                    value={status}
+                    onChange={(event) => void updateResponseStatus(response, event.target.value)}
+                    className={cn(
+                      "h-11 min-w-0 flex-1 rounded-xl border px-3 text-xs font-black outline-none",
+                      status.toLowerCase() === "errore"
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : status.toLowerCase() === "controllato"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700",
+                    )}
+                  >
+                    <option value="Da controllare">Da controllare</option>
+                    <option value="Controllato">Controllato</option>
+                    <option value="Errore">Errore</option>
+                  </select>
+                  <button type="button" onClick={() => setViewingResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-xl bg-black text-white" aria-label="Visualizza dettagli"><Eye className="size-4" /></button>
+                  <button type="button" onClick={() => openResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-xl border border-black/10 bg-white text-black" aria-label="Modifica controllo"><Edit3 className="size-4" /></button>
+                  {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-xl border border-red-100 bg-red-50 text-red-600" aria-label="Elimina controllo"><Trash2 className="size-4" /></button> : null}
+                </div>
+              </article>
+            );
+          })}
+          {!filteredResponses.length ? <p className="p-8 text-center text-sm font-bold text-black/40">Nessun modulo trovato.</p> : null}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-[#fbf7fa] text-[10px] uppercase tracking-[0.18em] text-black/42">
               <tr>
@@ -849,7 +983,7 @@ export function ClientControlDashboard({
               </tr>
             </thead>
             <tbody>
-              {filteredResponses.map((response) => {
+              {paginatedResponses.map((response) => {
                 const answers = response.answers ?? {};
                 const checks = [
                   truthy(answers[CLIENT_CONTROL_FIELD_IDS.notes]),
@@ -924,26 +1058,7 @@ export function ClientControlDashboard({
                     <td className="px-5 py-4">
                       <select
                         value={status}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value;
-                          try {
-                            const res = await fetch(`/api/service-forms/responses/${response.id}`, {
-                              method: "PUT",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                answers: {
-                                  ...answers,
-                                  [CLIENT_CONTROL_FIELD_IDS.correctness]: newStatus
-                                }
-                              }),
-                            });
-                            if (!res.ok) throw new Error();
-                            const updated = await res.json();
-                            setResponses((prev) => prev.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
-                          } catch {
-                            alert("Errore durante l'aggiornamento dello stato.");
-                          }
-                        }}
+                        onChange={(e) => void updateResponseStatus(response, e.target.value)}
                         className={cn(
                           "cursor-pointer rounded-full pl-3 pr-7 py-1 text-xs font-black outline-none border-none appearance-none bg-no-repeat bg-[right_8px_center]",
                           status.toLowerCase() === "errore"
@@ -976,6 +1091,37 @@ export function ClientControlDashboard({
           </table>
           {!filteredResponses.length ? <p className="p-8 text-center text-sm font-bold text-black/40">Nessun modulo trovato.</p> : null}
         </div>
+
+        {filteredResponses.length ? (
+          <div className="flex flex-col gap-3 border-t border-black/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs font-bold text-black/45">
+              Risultati {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredResponses.length)} di {filteredResponses.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="grid size-10 place-items-center rounded-full border border-black/10 bg-white text-black transition hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Pagina precedente"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="min-w-24 text-center text-xs font-black text-black/65">
+                Pagina {currentPage} di {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="grid size-10 place-items-center rounded-full border border-black/10 bg-white text-black transition hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Pagina successiva"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {selected ? (
