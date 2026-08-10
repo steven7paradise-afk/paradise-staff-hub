@@ -34,6 +34,15 @@ function formatMoney(value: number) {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
+function romeDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 function methodLabel(method: string) {
   if (method === "CASHMATIC") return "Cashmatic";
   if (method === "CARTA") return "Carta";
@@ -79,6 +88,14 @@ export default async function ShopifyPaymentsPage(props: {
   const verifiedCashmaticTotal = rows
     .filter((payment) => payment.verified && payment.method === "CASHMATIC")
     .reduce((total, payment) => total + payment.amount, 0);
+  const todayKey = romeDateKey(new Date());
+  const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
+  const todayCardTotal = todayVerifiedRows
+    .filter((payment) => payment.method === "CARTA")
+    .reduce((total, payment) => total + payment.amount, 0);
+  const todayCashmaticTotal = todayVerifiedRows
+    .filter((payment) => payment.method === "CASHMATIC")
+    .reduce((total, payment) => total + payment.amount, 0);
   const pendingPayments = rows
     .filter((payment) => payment.order && !payment.verified)
     .map((payment) => ({ id: payment.id, order: payment.order }));
@@ -95,6 +112,12 @@ export default async function ShopifyPaymentsPage(props: {
   const currentPage = Math.min(requestedPage, totalPages);
   const visibleRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(start);
+  const todayLabel = new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
   const persistentParams = new URLSearchParams({ month: selectedMonth });
   if (query) persistentParams.set("q", query);
   if (method !== "TUTTI") persistentParams.set("method", method);
@@ -109,7 +132,7 @@ export default async function ShopifyPaymentsPage(props: {
       <div className="space-y-5">
         <section className="relative -mx-4 overflow-hidden bg-[#0D0C12] px-5 py-8 text-white sm:mx-0 sm:rounded-[28px] sm:px-8">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(167,71,88,0.34),transparent_34%),linear-gradient(135deg,#0D0C12,#15192A)]" />
-          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="relative flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <Link href={`/cash?month=${selectedMonth}`} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-white/60 hover:text-white">
                 <ArrowLeft className="size-4" />
@@ -124,27 +147,49 @@ export default async function ShopifyPaymentsPage(props: {
                 Qui trovi tutti i pagamenti letti dal secondo ordine finale. Nessun importo di questa pagina viene sommato alla cassa.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className="min-w-[150px] rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Totale carta</p>
-                  <CreditCard className="size-4 text-[#F0A1AF]" />
+            <div className="w-full space-y-4 xl:max-w-[690px]">
+              <div>
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">Oggi · {todayLabel}</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-[#F0A1AF]/40 bg-[#F0A1AF]/15 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta oggi</p>
+                      <CreditCard className="size-4 text-[#F0A1AF]" />
+                    </div>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCardTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[#F7DFA7]/40 bg-[#F7DFA7]/10 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Cashmatic oggi</p>
+                      <Banknote className="size-4 text-[#F7DFA7]" />
+                    </div>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCashmaticTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Verificati oggi</p>
+                      <CheckCircle2 className="size-4 text-emerald-300" />
+                    </div>
+                    <p className="mt-2 text-2xl font-black">{todayVerifiedRows.length}</p>
+                  </div>
                 </div>
-                <p className="mt-2 text-2xl font-black">{formatMoney(verifiedCardTotal)}</p>
-                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-emerald-300">Solo verificati</p>
               </div>
-              <div className="min-w-[150px] rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Totale Cashmatic</p>
-                  <Banknote className="size-4 text-[#F7DFA7]" />
+              <div>
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Totale mese · {monthLabel}</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Carta mese</p>
+                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCardTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Cashmatic mese</p>
+                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashmaticTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti mese</p>
+                    <p className="mt-2 text-xl font-black">{filteredRows.length}</p>
+                  </div>
                 </div>
-                <p className="mt-2 text-2xl font-black">{formatMoney(verifiedCashmaticTotal)}</p>
-                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-emerald-300">Solo verificati</p>
-              </div>
-              <div className="min-w-[150px] rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti visualizzati</p>
-                <p className="mt-2 text-2xl font-black">{filteredRows.length}</p>
-                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-white/35">In base ai filtri</p>
               </div>
             </div>
           </div>
