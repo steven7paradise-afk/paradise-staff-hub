@@ -1419,6 +1419,13 @@ export function AppointmentsBrowser({
     gateways: string[];
     resumeSubmit: boolean;
   }>({ open: false, gateways: [], resumeSubmit: false });
+  const paymentMethodNeedsChoice = Boolean(
+    clientControlOpen &&
+    secondOrderDetails &&
+    String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
+    !["CARTA", "CASHMATIC"].includes(String(secondOrderDetails.paymentMethod || "")) &&
+    !manualPaymentMethod,
+  );
 
   async function handleShopifyOrderLookup(queryOverride?: string) {
     const query = (queryOverride ?? clientControlForm.shopifyOrder ?? clientControlForm.clientName ?? "").trim();
@@ -2038,22 +2045,6 @@ export function AppointmentsBrowser({
       }
     }
   }, [clientControlOpen, clientControlForm.secondShopifyOrder, secondOrderDetails]);
-
-  useEffect(() => {
-    if (
-      clientControlOpen &&
-      secondOrderDetails &&
-      String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
-      secondOrderDetails.paymentMethod === "DA_VERIFICARE" &&
-      !manualPaymentMethod
-    ) {
-      setPaymentMethodPrompt({
-        open: true,
-        gateways: secondOrderDetails.paymentGateways || [],
-        resumeSubmit: false,
-      });
-    }
-  }, [clientControlOpen, secondOrderDetails, manualPaymentMethod]);
 
   async function submitClientControlForm(manualPaymentMethodOverride?: ManualPaymentMethod) {
     setClientControlMessage(null);
@@ -5641,7 +5632,7 @@ export function AppointmentsBrowser({
         </div>
       ) : null}
 
-      {paymentMethodPrompt.open ? (
+      {paymentMethodPrompt.open || paymentMethodNeedsChoice ? (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md">
           <div
             role="dialog"
@@ -5662,18 +5653,24 @@ export function AppointmentsBrowser({
                     Shopify non ha indicato chiaramente il metodo. Scegli quello effettivamente utilizzato per completare il controllo.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false })}
-                  className="grid size-10 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/60 transition hover:bg-black/5 active:scale-95"
-                  aria-label="Chiudi scelta metodo pagamento"
-                >
-                  <X className="size-5" />
-                </button>
+                {!paymentMethodNeedsChoice ? (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false })}
+                    className="grid size-10 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/60 transition hover:bg-black/5 active:scale-95"
+                    aria-label="Chiudi scelta metodo pagamento"
+                  >
+                    <X className="size-5" />
+                  </button>
+                ) : null}
               </div>
-              {paymentMethodPrompt.gateways.length ? (
+              {(paymentMethodPrompt.gateways.length
+                ? paymentMethodPrompt.gateways
+                : secondOrderDetails?.paymentGateways || []).length ? (
                 <p className="mt-4 rounded-xl border border-[#F1BED8] bg-white px-4 py-3 text-xs font-bold text-black/55">
-                  Informazione ricevuta da Shopify: {paymentMethodPrompt.gateways.join(", ")}
+                  Informazione ricevuta da Shopify: {(paymentMethodPrompt.gateways.length
+                    ? paymentMethodPrompt.gateways
+                    : secondOrderDetails?.paymentGateways || []).join(", ")}
                 </p>
               ) : null}
             </div>
