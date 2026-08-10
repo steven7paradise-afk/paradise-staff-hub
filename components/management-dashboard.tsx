@@ -35,7 +35,7 @@ type LeaveRow = {
   name: string;
   photoUrl: string | null;
   location: string;
-  type: "FERIE" | "MALATTIA";
+  type: "FERIE" | "MALATTIA" | "RIPOSO";
   until: string;
 };
 
@@ -193,7 +193,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
 
         <section className="rounded-lg border border-[#eadde3] bg-[#fcfafb] p-5">
           <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
-          <h2 className="mt-1 text-xl font-black">Ferie e malattia</h2>
+          <h2 className="mt-1 text-xl font-black">Ferie, malattia e riposo</h2>
           <div className="mt-4 space-y-3">
             {data.leaves.length === 0 ? (
               <div className="flex items-center gap-3 rounded-md border border-[#e9e2e5] bg-white p-4 text-sm text-[#6f666a]"><CheckCircle2 size={19} className="text-[#16805a]" /> Nessuna assenza registrata oggi.</div>
@@ -204,7 +204,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                   <p className="truncate text-sm font-bold">{leave.name}</p>
                   <p className="text-xs text-[#8d8388]">{leave.location} · fino al {leave.until}</p>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${leave.type === "FERIE" ? "bg-[#f8ebca] text-[#7e5d11]" : "bg-[#fde2e2] text-[#a3323b]"}`}>{leave.type}</span>
+                <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${leave.type === "FERIE" ? "bg-[#f8ebca] text-[#7e5d11]" : leave.type === "MALATTIA" ? "bg-[#fde2e2] text-[#a3323b]" : "bg-[#e8edf7] text-[#405981]"}`}>{leave.type}</span>
               </div>
             ))}
           </div>

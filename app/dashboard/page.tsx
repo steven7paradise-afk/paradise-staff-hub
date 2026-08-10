@@ -175,7 +175,7 @@ export default async function DashboardPage() {
       safe(prisma.leaveRequest.findMany({
         where: {
           status: "APPROVED",
-          type: { in: ["FERIE", "MALATTIA"] },
+          type: { in: ["FERIE", "MALATTIA", "RIPOSO"] },
           start_date: { lt: statusTomorrow },
           end_date: { gte: statusToday },
           user: { active: true, ...userScope },
@@ -303,7 +303,7 @@ export default async function DashboardPage() {
         name: request.user.name,
         photoUrl: request.user.photo_url,
         location: request.user.location?.name || "Sede non indicata",
-        type: request.type as "FERIE" | "MALATTIA",
+        type: request.type as "FERIE" | "MALATTIA" | "RIPOSO",
         until: formatDate(request.end_date),
       })),
       clientsToday: countedResponses.length,
