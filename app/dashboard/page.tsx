@@ -124,6 +124,11 @@ export default async function DashboardPage() {
   const statusToday = romeDate();
   const statusTomorrow = new Date(statusToday);
   statusTomorrow.setUTCDate(statusTomorrow.getUTCDate() + 1);
+  const weekStart = new Date(statusToday);
+  const mondayOffset = (weekStart.getUTCDay() + 6) % 7;
+  weekStart.setUTCDate(weekStart.getUTCDate() - mondayOffset);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
 
   const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
   if (managementRoles.has(role)) {
@@ -353,8 +358,10 @@ export default async function DashboardPage() {
     clientControlForms,
     todayAttendanceLogs,
     todayShiftEntries,
-    activeStaffInSalon,
-    todayServiceResponses,
+    weeklyShiftEntries,
+    monthlyAttendanceLogs,
+    monthlyShiftEntries,
+    upcomingLeaveRequests,
     clockRuleSetting,
     allEmployees,
     unreadCommunications,
@@ -374,20 +381,28 @@ export default async function DashboardPage() {
       },
       include: { user: true, category: true }
     }), []),
-    safe(prisma.user.findMany({
-      where: {
-        active: true,
-        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
-        ...(currentUser.sede_id ? { sede_id: currentUser.sede_id } : {})
-      },
-      select: { id: true, name: true, photo_url: true }
+    safe(prisma.scheduleEntry.findMany({
+      where: { user_id: currentUser.id, date: { gte: weekStart, lt: weekEnd } },
+      include: { category: true },
+      orderBy: { date: "asc" },
     }), []),
-    safe(prisma.serviceFormResponse.findMany({
+    safe(prisma.attendanceLog.findMany({
+      where: { user_id: currentUser.id, date: { gte: start, lt: end } },
+      orderBy: { timestamp: "asc" },
+      select: { date: true, type: true, timestamp: true },
+    }), []),
+    safe(prisma.scheduleEntry.findMany({
+      where: { user_id: currentUser.id, date: { gte: start, lt: end } },
+      include: { category: true },
+    }), []),
+    safe(prisma.leaveRequest.findMany({
       where: {
-        created_at: { gte: statusToday, lt: statusTomorrow }
+        user_id: currentUser.id,
+        end_date: { gte: statusToday },
+        status: { in: ["PENDING", "APPROVED", "FLAGGED"] },
       },
-      include: { form: true, user: true },
-      orderBy: { created_at: "asc" }
+      orderBy: { start_date: "asc" },
+      take: 8,
     }), []),
     currentUser.sede_id
       ? safe(prisma.setting.findUnique({ where: { key: clockRuleKey(currentUser.sede_id) } }), null)
@@ -550,40 +565,56 @@ export default async function DashboardPage() {
   const mins = totalWorkedMinutes % 60;
   const workedHoursFormatted = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 
-  // Appointments / Timeline Items
-  const completedCount = todayServiceResponses.filter((r) => r.status === "APPROVED" || r.status === "COMPLETED").length;
-  const pendingCount = Math.max(0, todayServiceResponses.length - completedCount);
-  
-  const todayAppointmentsCount = {
-    total: todayServiceResponses.length > 0 ? todayServiceResponses.length : 16,
-    completed: todayServiceResponses.length > 0 ? completedCount : 0,
-    pending: todayServiceResponses.length > 0 ? pendingCount : 16,
-  };
+  const firstEntriesByDate = new Map<string, Date>();
+  for (const log of monthlyAttendanceLogs) {
+    if (log.type !== "ENTRATA") continue;
+    const key = log.date.toISOString().slice(0, 10);
+    if (!firstEntriesByDate.has(key)) firstEntriesByDate.set(key, log.timestamp);
+  }
+  let monthlyLateCount = 0;
+  for (const shift of monthlyShiftEntries) {
+    const categoryName = shift.category.name.toLowerCase();
+    if (categoryName.includes("riposo")) continue;
+    const planned = timeToMinutes(shift.start_time || shift.category.start_time);
+    const entry = firstEntriesByDate.get(shift.date.toISOString().slice(0, 10));
+    if (planned === null || !entry) continue;
+    if (romeDateTimeParts(entry).totalMinutes - planned > 10) monthlyLateCount += 1;
+  }
 
-  const appointmentsTimeline = todayServiceResponses.length > 0
-    ? todayServiceResponses.map((r) => {
-        const answers = (r.answers as any) || {};
-        const clientName = String(answers.client_control_client_name || answers.client_name || r.user?.name || "Cliente Salone");
-        const timeStr = new Date(r.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
-        return {
-          id: r.id,
-          time: timeStr,
-          clientName,
-          services: r.form?.name || "Trattamento Salone",
-          status: r.status,
-        };
-      })
-    : [
-        { id: "app-1", time: "11:14", clientName: "ILARIA DEL MONACO", services: "CONTROLLO CLIENTE", status: "SCHEDULED" },
-        { id: "app-2", time: "14:30", clientName: "GIULIA MARINO", services: "TAGLIO + PIEGA • 45 MIN", status: "SCHEDULED" },
-        { id: "app-3", time: "15:30", clientName: "ELENA COSTA", services: "COLORE + CHERATINA", status: "SCHEDULED" },
-      ];
+  const firstTodayEntry = todayAttendanceLogs.find((log) => log.type === "ENTRATA");
+  const plannedTodayMinutes = timeToMinutes(todayShiftStartTime);
+  const todayLateMinutes = firstTodayEntry && plannedTodayMinutes !== null
+    ? Math.max(0, romeDateTimeParts(firstTodayEntry.timestamp).totalMinutes - plannedTodayMinutes)
+    : 0;
 
-  // Team in Turno
-  const teamInTurno = activeStaffInSalon.map((u) => ({
-    id: u.id,
-    name: u.name || "Staff",
-    photo_url: u.photo_url,
+  const weeklyShifts = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setUTCDate(date.getUTCDate() + index);
+    const entry = weeklyShiftEntries.find((shift) => shift.date.toISOString().slice(0, 10) === date.toISOString().slice(0, 10));
+    const categoryName = entry?.category.name || "Non programmato";
+    const isRest = categoryName.toLowerCase().includes("riposo");
+    const shiftStart = entry?.start_time || entry?.category.start_time;
+    const shiftEnd = entry?.end_time || entry?.category.end_time;
+    return {
+      date: date.toISOString(),
+      dayLabel: new Intl.DateTimeFormat("it-IT", { weekday: "short", timeZone: "UTC" }).format(date).replace(".", ""),
+      dayNumber: String(date.getUTCDate()).padStart(2, "0"),
+      categoryName,
+      time: shiftStart && shiftEnd ? `${shiftStart} - ${shiftEnd}` : isRest ? "Riposo" : "--:--",
+      isToday: date.toISOString().slice(0, 10) === statusToday.toISOString().slice(0, 10),
+      isRest,
+    };
+  });
+
+  const formatLeaveDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", timeZone: "UTC" }).format(date);
+  const workerRequests = upcomingLeaveRequests.map((request) => ({
+    id: request.id,
+    type: request.type,
+    status: request.status,
+    period: request.start_date.getTime() === request.end_date.getTime()
+      ? formatLeaveDate(request.start_date)
+      : `${formatLeaveDate(request.start_date)} - ${formatLeaveDate(request.end_date)}`,
+    reason: request.reason,
   }));
 
   return (
@@ -624,15 +655,16 @@ export default async function DashboardPage() {
           createdAt: c.created_at.toISOString()
         }))}
         unreadNotifications={unreadNotificationsCount}
-        todayAppointmentsCount={todayAppointmentsCount}
-        appointmentsTimeline={appointmentsTimeline}
-        teamInTurno={teamInTurno}
         todayShiftTime={todayShiftTime}
         workedHoursFormatted={workedHoursFormatted}
         recentLogs={todayAttendanceLogs}
         breakDurationMinutes={breakDurationMinutes}
         todayShiftStartTime={todayShiftStartTime}
         todayShiftAssignedHours={myTodayShift?.category?.paid_hours ?? 8}
+        weeklyShifts={weeklyShifts}
+        monthlyLateCount={monthlyLateCount}
+        todayLateMinutes={todayLateMinutes}
+        workerRequests={workerRequests}
       />
     </AppShell>
   );
