@@ -74,6 +74,8 @@ type Props = {
   monthlyLateCount?: number;
   todayLateMinutes?: number;
   workerRequests?: WorkerRequest[];
+  todayIsRest?: boolean;
+  nextWorkDayLabel?: string | null;
   [key: string]: unknown;
 };
 
@@ -97,6 +99,8 @@ export function DashboardRedesignClient({
   monthlyLateCount = 0,
   todayLateMinutes = 0,
   workerRequests = [],
+  todayIsRest = false,
+  nextWorkDayLabel = null,
 }: Props) {
   const [communicationsOpen, setCommunicationsOpen] = useState(false);
   const [activeComms, setActiveComms] = useState(unreadCommunications);
@@ -171,7 +175,7 @@ export function DashboardRedesignClient({
   };
 
   return (
-    <div className="min-h-screen bg-[#fff8fc] text-[#171717]">
+    <div className="min-h-screen bg-transparent text-[#171717]">
       <main className="mx-auto w-full max-w-[1420px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
         <header className="flex flex-col gap-5 border border-[#ecc6dc] bg-white px-5 py-5 shadow-[0_12px_40px_rgba(96,30,67,0.06)] sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <div className="flex min-w-0 items-center gap-4">
@@ -179,9 +183,10 @@ export function DashboardRedesignClient({
               {currentUser.photo_url ? <img src={resolveDrivePhotoUrl(currentUser.photo_url)} alt={userName} className="size-full object-cover" /> : initials}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#bd527f]">La mia giornata</p>
-              <h1 className="truncate text-2xl font-black sm:text-3xl">Ciao, {firstName}</h1>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#bd527f]">{todayIsRest ? "Giornata di riposo" : "La mia giornata"}</p>
+              <h1 className="truncate text-2xl font-black sm:text-3xl">{todayIsRest ? `Buon riposo, ${firstName}` : `Ciao, ${firstName}`}</h1>
               <p className="mt-1 flex items-center gap-1.5 text-xs font-bold text-black/50"><MapPin className="size-3.5 text-[#c66170]" />{currentUser.locationName || "Sede non indicata"}</p>
+              {todayIsRest && <p className="mt-2 text-xs font-black text-[#9d3767]">Ci vediamo {nextWorkDayLabel || "al prossimo turno"}.</p>}
             </div>
           </div>
           <button type="button" onClick={() => setCommunicationsOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#e8bfd6] bg-[#fff5fa] px-4 text-xs font-black uppercase text-[#9d3767] transition hover:bg-[#f5c1e2]">
