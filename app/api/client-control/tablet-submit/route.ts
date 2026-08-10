@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS, ensureClientControlForm } from "@/lib/client-control-form";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
-import { appendShopifyOrderNote, updateShopifyOrderMetafields, extractShopifyOrderCodes } from "@/lib/shopify";
+import { appendShopifyOrderNote, updateShopifyOrderMetafields, extractShopifyOrderCodes, isFuzzyNameMatch } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     paid?: string | number;
     staffIds?: string[];
     shopifyOrder?: string;
+    secondShopifyOrder?: string;
     instagramTag?: string;
     notes?: boolean;
     customNoteText?: string;
@@ -73,6 +74,11 @@ export async function POST(request: NextRequest) {
     photoPrimaDietro?: string | null;
     photoDopoFronte?: string | null;
     photoDopoDietro?: string | null;
+    customGrammi?: string;
+    customLunghezza?: string;
+    customFasce?: string;
+    customAtteggiamento?: string;
+    customExtraNote?: string;
   } | null;
 
   const isFinito = !!body?.isFinito;
@@ -136,6 +142,8 @@ export async function POST(request: NextRequest) {
 
   const form = await ensureClientControlForm(submitter.id);
   const shopifyOrder = textValue(body?.shopifyOrder);
+  const secondShopifyOrder = textValue(body?.secondShopifyOrder);
+  const isNoShow = !!body?.isNoShow;
   let productsListStr = "";
   let shopifyClientName: string | null = null;
   let shopifyTotalPrice: number | null = null;
@@ -154,16 +162,57 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const isNoShow = !!body?.isNoShow;
+  const secondOrderDetails = secondShopifyOrder
+    ? await import("@/lib/shopify").then(({ getShopifyOrderDetails }) =>
+        getShopifyOrderDetails(secondShopifyOrder).catch(() => null)
+      )
+    : null;
+  const verifiedPaymentMethod = secondOrderDetails?.paymentMethod ?? "DA_VERIFICARE";
+  const verifiedPaymentStatus = String(secondOrderDetails?.financialStatus ?? "").toLowerCase();
+  const submittedEmail = textValue(body?.email).toLowerCase();
+  const submittedPhone = textValue(body?.phone).replace(/\D/g, "");
+  const orderEmail = textValue(secondOrderDetails?.email).toLowerCase();
+  const orderPhone = textValue(secondOrderDetails?.phone).replace(/\D/g, "");
+  const identityChecks = [
+    Boolean(submittedEmail && orderEmail && submittedEmail === orderEmail),
+    Boolean(submittedPhone && orderPhone && (submittedPhone.endsWith(orderPhone) || orderPhone.endsWith(submittedPhone))),
+    Boolean(clientName && secondOrderDetails?.clientName && isFuzzyNameMatch(secondOrderDetails.clientName, clientName)),
+  ];
+  const hasComparableIdentity = Boolean(
+    (submittedEmail && orderEmail) ||
+    (submittedPhone && orderPhone) ||
+    (clientName && secondOrderDetails?.clientName)
+  );
+  const finalOrderMatchesClient = hasComparableIdentity && identityChecks.some(Boolean);
+  const isFinalPaymentVerified = Boolean(
+    secondOrderDetails &&
+    verifiedPaymentStatus === "paid" &&
+    verifiedPaymentMethod !== "DA_VERIFICARE" &&
+    finalOrderMatchesClient
+  );
+
+  if (!isFinito && !isNoShow) {
+    if (!secondShopifyOrder) {
+      return NextResponse.json({ error: "Inserisci il 2° codice ordine del pagamento finale." }, { status: 400 });
+    }
+    if (!secondOrderDetails) {
+      return NextResponse.json({ error: `Ordine finale ${secondShopifyOrder} non trovato su Shopify.` }, { status: 400 });
+    }
+    if (verifiedPaymentStatus !== "paid") {
+      return NextResponse.json({ error: "Il secondo ordine Shopify non risulta pagato. Il controllo non può essere completato." }, { status: 400 });
+    }
+    if (verifiedPaymentMethod === "DA_VERIFICARE") {
+      return NextResponse.json({
+        error: `Metodo di pagamento non riconosciuto su Shopify (${secondOrderDetails.paymentGateways.join(", ") || "nessun gateway"}). Serve il controllo del responsabile.`,
+      }, { status: 400 });
+    }
+    if (!finalOrderMatchesClient) {
+      return NextResponse.json({ error: "Il secondo ordine Shopify non appartiene alla cliente selezionata. Verifica il numero ordine." }, { status: 400 });
+    }
+  }
 
   // Auto-mark as "Da controllare" if there's a payment mismatch
   let correctnessVal = isNoShow ? "No Show" : isFinito ? "Finito" : "Controllato";
-  if (!isNoShow && shopifyTotalPrice !== null) {
-    const declaredPaid = moneyValue(body?.paid);
-    if (declaredPaid !== null && parseFloat(String(declaredPaid)) !== parseFloat(String(shopifyTotalPrice))) {
-      correctnessVal = "Da controllare";
-    }
-  }
 
   // Upload helper for Google Drive
   const uploadToDriveHelper = async (base64String: string, suffix: string) => {
@@ -255,7 +304,13 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
     [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
-    [CLIENT_CONTROL_FIELD_IDS.paid]: moneyValue(body?.paid) || shopifyTotalPrice,
+    [CLIENT_CONTROL_FIELD_IDS.paid]: secondOrderDetails?.totalPrice ?? (moneyValue(body?.paid) || shopifyTotalPrice),
+    [CLIENT_CONTROL_FIELD_IDS.paymentMethod]: verifiedPaymentMethod,
+    [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: secondOrderDetails?.paymentGateways.join(", ") || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentStatus]: secondOrderDetails?.financialStatus || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentVerified]: isFinalPaymentVerified,
+    [CLIENT_CONTROL_FIELD_IDS.paymentReference]: secondOrderDetails?.paymentReference || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt]: secondOrderDetails?.transactionProcessedAt || "",
     [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,
     [CLIENT_CONTROL_FIELD_IDS.products]: productsListStr !== "",
     [CLIENT_CONTROL_FIELD_IDS.productsList]: productsListStr,
@@ -278,7 +333,13 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
     [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
-    [CLIENT_CONTROL_FIELD_IDS.paid]: moneyValue(body?.paid) || shopifyTotalPrice,
+    [CLIENT_CONTROL_FIELD_IDS.paid]: secondOrderDetails?.totalPrice ?? (moneyValue(body?.paid) || shopifyTotalPrice),
+    [CLIENT_CONTROL_FIELD_IDS.paymentMethod]: verifiedPaymentMethod,
+    [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: secondOrderDetails?.paymentGateways.join(", ") || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentStatus]: secondOrderDetails?.financialStatus || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentVerified]: isFinalPaymentVerified,
+    [CLIENT_CONTROL_FIELD_IDS.paymentReference]: secondOrderDetails?.paymentReference || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt]: secondOrderDetails?.transactionProcessedAt || "",
     [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: staffNames[0],
     [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: staffNames,
     [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,
@@ -297,7 +358,7 @@ export async function POST(request: NextRequest) {
     photo_prima_dietro: answerPhotoPrimaDietro || undefined,
     photo_dopo_fronte: answerPhotoDopoFronte || undefined,
     photo_dopo_dietro: answerPhotoDopoDietro || undefined,
-    second_shopify_order: textValue(body?.secondShopifyOrder),
+    second_shopify_order: secondShopifyOrder,
     custom_grammi: textValue(body?.customGrammi),
     custom_lunghezza: textValue(body?.customLunghezza),
     custom_fasce: textValue(body?.customFasce),

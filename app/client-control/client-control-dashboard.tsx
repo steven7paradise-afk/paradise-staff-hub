@@ -1374,6 +1374,28 @@ export function ClientControlDashboard({
                       <span className="text-black/40 font-semibold text-xs">Saldo Pagato</span>
                       <span className="text-black/80">{money(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paid])}</span>
                     </div>
+                    <div className="flex items-center justify-between border-t border-black/5 pt-2">
+                      <span className="text-black/40 font-semibold text-xs">Metodo verificato</span>
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+                        viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentVerified] === true
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}>
+                        {String(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "Da verificare") === "CASHMATIC"
+                          ? "Cashmatic"
+                          : String(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "Da verificare") === "CARTA"
+                            ? "Carta"
+                            : "Da verificare"}
+                      </span>
+                    </div>
+                    {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentReference] ? (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-black/40 font-semibold text-xs">ID pagamento</span>
+                        <span className="max-w-[180px] truncate text-right text-xs font-bold text-black/65">
+                          {String(viewingResponse.answers[CLIENT_CONTROL_FIELD_IDS.paymentReference])}
+                        </span>
+                      </div>
+                    ) : null}
                     {viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ? (
                       <div className="flex justify-between pt-1 border-t border-black/5">
                         <span className="text-black/40 font-semibold text-xs">1° Ordine Shopify (Acconto)</span>

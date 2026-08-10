@@ -1329,6 +1329,12 @@ export function AppointmentsBrowser({
     serviceTitle: string;
     note: string;
     createdAt?: string;
+    financialStatus?: string | null;
+    paymentGateways?: string[];
+    paymentMethod?: "CARTA" | "CASHMATIC" | "DA_VERIFICARE";
+    paymentReference?: string | null;
+    transactionStatus?: string | null;
+    transactionProcessedAt?: string | null;
   } | null>(null);
 
   const [secondOrderDetails, setSecondOrderDetails] = useState<{
@@ -1341,6 +1347,12 @@ export function AppointmentsBrowser({
     serviceTitle: string;
     note: string;
     createdAt?: string;
+    financialStatus?: string | null;
+    paymentGateways?: string[];
+    paymentMethod?: "CARTA" | "CASHMATIC" | "DA_VERIFICARE";
+    paymentReference?: string | null;
+    transactionStatus?: string | null;
+    transactionProcessedAt?: string | null;
   } | null>(null);
 
   const [toastNotification, setToastNotification] = useState<{
@@ -1379,6 +1391,7 @@ export function AppointmentsBrowser({
   }
 
   const [shopifyLookupLoading, setShopifyLookupLoading] = useState(false);
+  const [secondShopifyLookupLoading, setSecondShopifyLookupLoading] = useState(false);
 
   async function handleShopifyOrderLookup(queryOverride?: string) {
     const query = (queryOverride ?? clientControlForm.shopifyOrder ?? clientControlForm.clientName ?? "").trim();
@@ -1428,6 +1441,7 @@ export function AppointmentsBrowser({
     const query = (queryOverride ?? clientControlForm.secondShopifyOrder ?? "").trim();
     if (!query) return;
 
+    setSecondShopifyLookupLoading(true);
     try {
       const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
       const data = await res.json().catch(() => null);
@@ -1443,10 +1457,23 @@ export function AppointmentsBrowser({
           serviceTitle: Array.isArray(data.lineItems) ? data.lineItems.map((i: any) => i.title).join(", ") : "",
           note: data.note || "",
           createdAt: data.createdAt || data.created_at || "",
+          financialStatus: data.financialStatus || null,
+          paymentGateways: Array.isArray(data.paymentGateways) ? data.paymentGateways : [],
+          paymentMethod: data.paymentMethod || "DA_VERIFICARE",
+          paymentReference: data.paymentReference || null,
+          transactionStatus: data.transactionStatus || null,
+          transactionProcessedAt: data.transactionProcessedAt || null,
         });
+        setClientControlForm((prev) => ({
+          ...prev,
+          secondShopifyOrder: data.orderName ? data.orderName.replace(/^#/, "") : prev.secondShopifyOrder,
+          paid: data.totalPrice != null ? String(data.totalPrice) : prev.paid,
+        }));
       }
     } catch (err) {
       console.error("Failed to lookup second Shopify order:", err);
+    } finally {
+      setSecondShopifyLookupLoading(false);
     }
   }
 
@@ -1517,6 +1544,7 @@ export function AppointmentsBrowser({
           clientName: order.clientName || prev.clientName,
         };
       });
+      void handleSecondShopifyOrderLookup(cleanName);
     } else {
       setSelectedOrderDetails(order);
       setClientControlForm((prev) => {
@@ -1982,7 +2010,8 @@ export function AppointmentsBrowser({
       const cleanSec = clientControlForm.secondShopifyOrder.trim().replace(/^#/, "");
       const currentLoaded = secondOrderDetails?.orderName ? secondOrderDetails.orderName.replace(/^#/, "") : "";
       if (cleanSec && cleanSec !== currentLoaded) {
-        void handleSecondShopifyOrderLookup(cleanSec);
+        const timer = window.setTimeout(() => void handleSecondShopifyOrderLookup(cleanSec), 450);
+        return () => window.clearTimeout(timer);
       }
     }
   }, [clientControlOpen, clientControlForm.secondShopifyOrder, secondOrderDetails]);
@@ -3157,6 +3186,7 @@ export function AppointmentsBrowser({
                   <div className="rounded-2xl border border-[#D96B94]/40 bg-white p-3 shadow-2xs ring-2 ring-[#D96B94]/10">
                     {(() => {
                       const isSecondLocked = Boolean(
+                        secondOrderDetails &&
                         (clientControlForm.secondShopifyOrder && clientControlForm.secondShopifyOrder.trim() !== "") &&
                           !isSecondUnlockedManually
                       );
@@ -3205,6 +3235,9 @@ export function AppointmentsBrowser({
                             }`}
                             placeholder="N° Ordine Finale Salone (es. 25344)"
                           />
+                          {secondShopifyLookupLoading ? (
+                            <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[#B83D7F]">Verifica pagamento Shopify in corso...</p>
+                          ) : null}
                           {suggestedSaldoOrder && (
                             <button
                               type="button"
@@ -3219,6 +3252,23 @@ export function AppointmentsBrowser({
                               <span className="font-extrabold text-xs">€{suggestedSaldoOrder.totalPrice.toFixed(2)}</span>
                             </button>
                           )}
+                          {secondOrderDetails ? (
+                            <div className={`mt-2 rounded-xl border px-3 py-2 text-[10px] font-black uppercase tracking-wide ${
+                              String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" && secondOrderDetails.paymentMethod !== "DA_VERIFICARE"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-amber-200 bg-amber-50 text-amber-800"
+                            }`}>
+                              {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
+                                ? `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
+                                : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
+                              {secondOrderDetails.paymentGateways?.length ? (
+                                <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>
+                              ) : null}
+                              {secondOrderDetails.paymentReference ? (
+                                <span className="mt-1 block normal-case tracking-normal opacity-60">ID pagamento: {secondOrderDetails.paymentReference}</span>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </>
                       );
                     })()}
@@ -3353,14 +3403,9 @@ export function AppointmentsBrowser({
                   <input
                     type="text"
                     value={clientControlForm.paid}
-                    onChange={(event) =>
-                      setClientControlForm((prev) => ({
-                        ...prev,
-                        paid: event.target.value,
-                      }))
-                    }
-                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
-                    placeholder="0.00"
+                    readOnly
+                    className="h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-xs font-black text-[#1F1F1F] outline-none shadow-2xs"
+                    placeholder="Importato dal 2° ordine"
                   />
                 </label>
 
@@ -5360,14 +5405,9 @@ export function AppointmentsBrowser({
                     <input
                       inputMode="decimal"
                       value={clientControlForm.paid}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          paid: event.target.value,
-                        }))
-                      }
-                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
-                      placeholder="0.00"
+                      readOnly
+                      className="mt-1 h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black outline-none"
+                      placeholder="Importato dal 2° ordine"
                     />
                   </label>
                   <label className="block">

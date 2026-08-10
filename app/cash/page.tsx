@@ -2,9 +2,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   AlertTriangle,
+  Banknote,
   Calculator,
   CheckCircle2,
   CircleDollarSign,
+  CreditCard,
   MapPin,
   PenLine,
   ReceiptText,
@@ -29,6 +31,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { cashDateInput } from "@/lib/cash-records";
 import { VAULT_WITHDRAWAL_FIELD_IDS } from "@/lib/vault-withdrawal-form";
 import { calculateClockHours } from "@/lib/work-hours";
+import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 
 export const dynamic = "force-dynamic";
 
@@ -296,6 +299,47 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     }),
     prisma.cashMonthClose.findMany().catch(() => []),
   ]);
+
+  const clientControlForms = await prisma.serviceForm.findMany({
+    where: { active: true },
+    select: { id: true, name: true, category: true },
+  });
+  const clientControlFormIds = clientControlForms
+    .filter((form) => isClientControlFormName(form.name, form.category))
+    .map((form) => form.id);
+  const verifiedPaymentResponses = clientControlFormIds.length
+    ? await prisma.serviceFormResponse.findMany({
+        where: {
+          form_id: { in: clientControlFormIds },
+          created_at: { gte: start, lt: end },
+          ...(isResponsible && session.user.sedeId ? { user_location_id: session.user.sedeId } : {}),
+        },
+        select: {
+          id: true,
+          created_at: true,
+          user_location_name: true,
+          answers: true,
+        },
+        orderBy: { created_at: "desc" },
+      })
+    : [];
+
+  const paymentRows = verifiedPaymentResponses.map((response) => {
+    const answers = response.answers as Record<string, unknown>;
+    const method = String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "DA_VERIFICARE").toUpperCase();
+    const verified = answers?.[CLIENT_CONTROL_FIELD_IDS.paymentVerified] === true;
+    return {
+      ...response,
+      method,
+      verified,
+      amount: moneyValue(answers?.[CLIENT_CONTROL_FIELD_IDS.paid]),
+      order: String(answers?.second_shopify_order || ""),
+      clientName: String(answers?.[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente"),
+      gateway: String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentGateway] || ""),
+      status: String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentStatus] || ""),
+      reference: String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentReference] || ""),
+    };
+  }).filter((payment) => Boolean(payment.order) || payment.verified || payment.method !== "DA_VERIFICARE");
 
   const closingReviewRows = cashClosingRows.length
     ? await prisma.setting.findMany({
@@ -739,6 +783,66 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             />
           </div>
         </section>
+
+        <Card className="-mx-4 rounded-none bg-white p-0 sm:mx-0 sm:rounded-[24px] overflow-hidden">
+          <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Registro separato Shopify</p>
+              <h2 className="mt-1 text-2xl font-black">Pagamenti rilevati</h2>
+              <p className="mt-1 text-sm text-black/45">Registrazione automatica dal 2° ordine finale. Questi importi non modificano i totali della cassa.</p>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-2xl bg-[#111017] px-4 py-3 text-xs font-black text-white">
+              <ShieldCheck className="size-4 text-[#F7DFA7]" />
+              Non incluso nei calcoli
+            </div>
+          </div>
+          <div className="p-5">
+            {paymentRows.length ? (
+              <div className="divide-y divide-black/5 overflow-hidden rounded-2xl border border-black/5">
+                {paymentRows.map((payment) => {
+                  const isCashmatic = payment.method === "CASHMATIC";
+                  const isVerified = payment.verified && payment.method !== "DA_VERIFICARE";
+                  const PaymentIcon = isCashmatic ? Banknote : CreditCard;
+                  return (
+                    <div key={payment.id} className="grid gap-3 bg-white p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                      <div className={`flex size-11 items-center justify-center rounded-xl ${isVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                        <PaymentIcon className="size-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-black">{payment.clientName}</p>
+                          <span className="rounded-full bg-black/5 px-2 py-1 text-[10px] font-black uppercase text-black/50">
+                            Ordine {payment.order ? `#${payment.order}` : "mancante"}
+                          </span>
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${isVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                            {isVerified ? "Verificato" : "Da verificare"}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-xs font-semibold text-black/40">
+                          {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(payment.created_at))}
+                          {payment.user_location_name ? ` · ${payment.user_location_name}` : ""}
+                          {payment.gateway ? ` · Gateway ${payment.gateway}` : ""}
+                        </p>
+                        {payment.reference ? <p className="mt-1 truncate text-[10px] font-semibold text-black/30">Rif. {payment.reference}</p> : null}
+                      </div>
+                      <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
+                        <p className="text-base font-black">{formatMoney(payment.amount)}</p>
+                        <p className={`mt-1 text-[10px] font-black uppercase ${isVerified ? "text-emerald-700" : "text-amber-700"}`}>
+                          {isCashmatic ? "Cashmatic" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAF7F9] px-5 py-8 text-center">
+                <ReceiptText className="mx-auto size-5 text-black/25" />
+                <p className="mt-2 text-sm font-bold text-black/45">Nessun pagamento Shopify registrato nel periodo.</p>
+              </div>
+            )}
+          </div>
+        </Card>
 
         <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-white p-5">
           <div className="mb-4 flex items-center justify-between">

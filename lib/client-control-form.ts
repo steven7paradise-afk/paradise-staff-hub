@@ -10,6 +10,12 @@ export const CLIENT_CONTROL_FIELD_IDS = {
   phone: "client_control_phone",
   depositPaid: "client_control_deposit_paid",
   paid: "client_control_paid",
+  paymentMethod: "client_control_payment_method",
+  paymentGateway: "client_control_payment_gateway",
+  paymentStatus: "client_control_payment_status",
+  paymentVerified: "client_control_payment_verified",
+  paymentReference: "client_control_payment_reference",
+  paymentProcessedAt: "client_control_payment_processed_at",
   serviceOwner: "client_control_service_owner",
   serviceStaff: "client_control_service_staff",
   shopifyOrder: "client_control_shopify_order",
@@ -67,6 +73,14 @@ export const CLIENT_CONTROL_FORM_FIELDS = [
     type: "money",
     required: true,
     description: "Totale pagato o saldo incassato.",
+  },
+  {
+    id: CLIENT_CONTROL_FIELD_IDS.paymentMethod,
+    label: "Metodo pagamento finale",
+    type: "select",
+    required: false,
+    options: ["Carta", "Cashmatic", "Da verificare"],
+    description: "Compilato automaticamente verificando il secondo ordine Shopify.",
   },
   {
     id: CLIENT_CONTROL_FIELD_IDS.serviceOwner,
@@ -176,12 +190,17 @@ export async function ensureClientControlForm(createdById?: string | null) {
     const expectedRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
     const expectedNotifyRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
 
+    const currentFields = Array.isArray(existing.fields) ? existing.fields as Array<{ id?: string }> : [];
+    const currentFieldIds = new Set(currentFields.map((field) => field.id));
+    const hasPaymentVerificationFields = currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.paymentMethod);
+
     const alreadyReady =
       existing.category === CLIENT_CONTROL_FORM_CATEGORY &&
       existing.active &&
       JSON.stringify(roles ?? []) === JSON.stringify(expectedRoles) &&
       JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles) &&
-      Boolean(existing.fields);
+      Boolean(existing.fields) &&
+      hasPaymentVerificationFields;
 
     if (alreadyReady) return existing;
 

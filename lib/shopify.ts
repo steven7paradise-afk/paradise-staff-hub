@@ -738,12 +738,19 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
  * Fetches the details of a Shopify order given its name or ID.
  */
 export async function getShopifyOrderDetails(orderName: string): Promise<{
+  id: string;
   clientName: string | null;
   totalPrice: number | null;
   lineItems: Array<{ title: string; quantity: number; price: number }>;
   note: string | null;
   email: string | null;
   phone: string | null;
+  financialStatus: string | null;
+  paymentGateways: string[];
+  paymentMethod: "CARTA" | "CASHMATIC" | "DA_VERIFICARE";
+  paymentReference: string | null;
+  transactionStatus: string | null;
+  transactionProcessedAt: string | null;
 } | null> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -832,6 +839,33 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const note = orderData.note || null;
       const email = orderData.customer?.email || null;
       const phone = orderData.customer?.phone || null;
+      const financialStatus = orderData.financial_status ? String(orderData.financial_status) : null;
+      let paymentTransaction: any = null;
+      try {
+        const transactionResponse = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderData.id}/transactions.json`, {
+          headers: {
+            "X-Shopify-Access-Token": token,
+            "Content-Type": "application/json",
+          },
+        });
+        if (transactionResponse.ok) {
+          const transactionData = await transactionResponse.json();
+          const transactions = Array.isArray(transactionData?.transactions) ? transactionData.transactions : [];
+          paymentTransaction = transactions.find((transaction: any) =>
+            String(transaction.status).toLowerCase() === "success" &&
+            ["sale", "capture"].includes(String(transaction.kind).toLowerCase())
+          ) ?? transactions.find((transaction: any) => String(transaction.status).toLowerCase() === "success") ?? transactions[0] ?? null;
+        }
+      } catch (transactionError) {
+        console.error(`Error fetching Shopify transactions for ${orderData.id}:`, transactionError);
+      }
+
+      const paymentGateways = Array.isArray(orderData.payment_gateway_names)
+        ? orderData.payment_gateway_names.map((gateway: unknown) => String(gateway).trim()).filter(Boolean)
+        : paymentTransaction?.gateway || orderData.gateway
+          ? [String(paymentTransaction?.gateway || orderData.gateway).trim()]
+          : [];
+      const paymentMethod = classifyShopifyPaymentMethod(paymentGateways);
 
       return {
         id: String(orderData.id),
@@ -840,13 +874,34 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         lineItems,
         note,
         email,
-        phone
+        phone,
+        financialStatus,
+        paymentGateways,
+        paymentMethod,
+        paymentReference: paymentTransaction?.authorization ? String(paymentTransaction.authorization) : paymentTransaction?.id ? String(paymentTransaction.id) : null,
+        transactionStatus: paymentTransaction?.status ? String(paymentTransaction.status) : null,
+        transactionProcessedAt: paymentTransaction?.processed_at ? String(paymentTransaction.processed_at) : paymentTransaction?.created_at ? String(paymentTransaction.created_at) : null,
       };
     }
   } catch (error) {
     console.error("Error fetching Shopify order details:", error);
   }
   return null;
+}
+
+export function classifyShopifyPaymentMethod(gateways: string[]): "CARTA" | "CASHMATIC" | "DA_VERIFICARE" {
+  const normalized = gateways.join(" ").toLowerCase();
+  if (!normalized) return "DA_VERIFICARE";
+
+  if (/cashmatic|cash|contant|selfpay|inpay/.test(normalized)) {
+    return "CASHMATIC";
+  }
+
+  if (/shopify payments|shopify_payments|card|carta|credit|debit|visa|mastercard|amex|stripe|pos|sumup|nexi|klarna|paypal/.test(normalized)) {
+    return "CARTA";
+  }
+
+  return "DA_VERIFICARE";
 }
 
 function getLevenshteinDistance(a: string, b: string): number {
