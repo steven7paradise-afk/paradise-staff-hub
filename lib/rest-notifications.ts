@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { createNotifications } from "@/lib/notifications";
+import { sendPushNotification } from "@/lib/push-sender";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 function isRestCategory(category: { name: string; code: string }) {
   const name = category.name.toLowerCase();
@@ -63,6 +64,27 @@ export async function ensureTomorrowRestNotifications(today: Date) {
       };
     });
 
-  if (notifications.length > 0) await createNotifications(notifications);
+  if (notifications.length > 0) {
+    await prisma.notification.createMany({ data: notifications });
+
+    // External delivery must never delay or break the dashboard response.
+    void Promise.allSettled(notifications.flatMap((notification) => {
+      const entry = tomorrowEntries.find((item) => item.user_id === notification.user_id);
+      return [
+        sendPushNotification(
+          notification.user_id,
+          notification.title,
+          notification.message,
+          notification.action_url,
+        ),
+        sendWhatsAppMessage({
+          to: entry?.user.whatsapp_phone,
+          title: notification.title,
+          message: notification.message,
+          actionUrl: notification.action_url,
+        }),
+      ];
+    })).catch((error) => console.error("Rest reminder delivery error:", error));
+  }
   return { created: notifications.length };
 }
