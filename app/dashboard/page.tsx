@@ -9,6 +9,7 @@ import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { deriveAttendanceState } from "@/lib/attendance-state";
+import { ensureTomorrowRestNotifications } from "@/lib/rest-notifications";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -129,6 +130,8 @@ export default async function DashboardPage() {
   weekStart.setUTCDate(weekStart.getUTCDate() - mondayOffset);
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+  await safe(ensureTomorrowRestNotifications(statusToday), { created: 0 });
 
   const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
   if (managementRoles.has(role)) {
@@ -616,6 +619,17 @@ export default async function DashboardPage() {
       : `${formatLeaveDate(request.start_date)} - ${formatLeaveDate(request.end_date)}`,
     reason: request.reason,
   }));
+  const isRestShift = (entry: (typeof monthlyShiftEntries)[number]) => {
+    const code = entry.category.code.toUpperCase();
+    return entry.category.name.toLowerCase().includes("riposo") || ["R", "RI", "R3", "RIPOSO"].includes(code);
+  };
+  const todayIsRest = Boolean(myTodayShift && isRestShift(myTodayShift));
+  const nextWorkShift = monthlyShiftEntries
+    .filter((entry) => entry.date > statusToday && !isRestShift(entry))
+    .sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+  const nextWorkDayLabel = nextWorkShift
+    ? new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(nextWorkShift.date)
+    : null;
 
   return (
     <AppShell 
@@ -625,8 +639,6 @@ export default async function DashboardPage() {
       hideHeader={true}
       transparentMain={true}
     >
-      <div className="fixed inset-0 -z-10 bg-[#fff8fc] pointer-events-none" />
-
       <DashboardRedesignClient
         currentUser={{
           id: currentUser.id,
@@ -665,6 +677,8 @@ export default async function DashboardPage() {
         monthlyLateCount={monthlyLateCount}
         todayLateMinutes={todayLateMinutes}
         workerRequests={workerRequests}
+        todayIsRest={todayIsRest}
+        nextWorkDayLabel={nextWorkDayLabel}
       />
     </AppShell>
   );
