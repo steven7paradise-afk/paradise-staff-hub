@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
     customFasce?: string;
     customAtteggiamento?: string;
     customExtraNote?: string;
+    manualPaymentMethod?: "CARTA" | "SHOPIFY" | "CONTANTI";
   } | null;
 
   const isFinito = !!body?.isFinito;
@@ -167,7 +168,14 @@ export async function POST(request: NextRequest) {
         getShopifyOrderDetails(secondShopifyOrder).catch(() => null)
       )
     : null;
-  const verifiedPaymentMethod = secondOrderDetails?.paymentMethod ?? "DA_VERIFICARE";
+  const detectedPaymentMethod = secondOrderDetails?.paymentMethod ?? "DA_VERIFICARE";
+  const submittedManualPaymentMethod = textValue(body?.manualPaymentMethod).toUpperCase();
+  const manualPaymentMethod = (["CARTA", "SHOPIFY", "CONTANTI"] as const).find(
+    (method) => method === submittedManualPaymentMethod,
+  );
+  const verifiedPaymentMethod = detectedPaymentMethod === "DA_VERIFICARE"
+    ? manualPaymentMethod ?? "DA_VERIFICARE"
+    : detectedPaymentMethod;
   const verifiedPaymentStatus = String(secondOrderDetails?.financialStatus ?? "").toLowerCase();
   const submittedEmail = textValue(body?.email).toLowerCase();
   const submittedPhone = textValue(body?.phone).replace(/\D/g, "");
@@ -203,8 +211,10 @@ export async function POST(request: NextRequest) {
     }
     if (verifiedPaymentMethod === "DA_VERIFICARE") {
       return NextResponse.json({
-        error: `Metodo di pagamento non riconosciuto su Shopify (${secondOrderDetails.paymentGateways.join(", ") || "nessun gateway"}). Serve il controllo del responsabile.`,
-      }, { status: 400 });
+        code: "PAYMENT_METHOD_REQUIRED",
+        error: "Shopify non ha indicato chiaramente il metodo di pagamento. Seleziona il metodo usato dalla cliente.",
+        paymentGateways: secondOrderDetails.paymentGateways,
+      }, { status: 422 });
     }
     if (!finalOrderMatchesClient) {
       return NextResponse.json({ error: "Il secondo ordine Shopify non appartiene alla cliente selezionata. Verifica il numero ordine." }, { status: 400 });
@@ -298,6 +308,10 @@ export async function POST(request: NextRequest) {
   // Use prima fronte as standard clientPhoto fallback if standard wasn't provided
   const mainPhotoValue = uploadedPhotoAnswer || answerPhotoPrimaFronte || undefined;
 
+  const paymentGatewayAnswer = detectedPaymentMethod === "DA_VERIFICARE" && manualPaymentMethod
+    ? `Dichiarato manualmente: ${manualPaymentMethod}${secondOrderDetails?.paymentGateways.length ? ` · Shopify: ${secondOrderDetails.paymentGateways.join(", ")}` : ""}`
+    : secondOrderDetails?.paymentGateways.join(", ") || "";
+
   const answers = isFinito ? {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isNoShow ? "No Show" : "Finito"),
@@ -306,7 +320,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
     [CLIENT_CONTROL_FIELD_IDS.paid]: secondOrderDetails?.totalPrice ?? (moneyValue(body?.paid) || shopifyTotalPrice),
     [CLIENT_CONTROL_FIELD_IDS.paymentMethod]: verifiedPaymentMethod,
-    [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: secondOrderDetails?.paymentGateways.join(", ") || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: paymentGatewayAnswer,
     [CLIENT_CONTROL_FIELD_IDS.paymentStatus]: secondOrderDetails?.financialStatus || "",
     [CLIENT_CONTROL_FIELD_IDS.paymentVerified]: isFinalPaymentVerified,
     [CLIENT_CONTROL_FIELD_IDS.paymentReference]: secondOrderDetails?.paymentReference || "",
@@ -335,7 +349,7 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
     [CLIENT_CONTROL_FIELD_IDS.paid]: secondOrderDetails?.totalPrice ?? (moneyValue(body?.paid) || shopifyTotalPrice),
     [CLIENT_CONTROL_FIELD_IDS.paymentMethod]: verifiedPaymentMethod,
-    [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: secondOrderDetails?.paymentGateways.join(", ") || "",
+    [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: paymentGatewayAnswer,
     [CLIENT_CONTROL_FIELD_IDS.paymentStatus]: secondOrderDetails?.financialStatus || "",
     [CLIENT_CONTROL_FIELD_IDS.paymentVerified]: isFinalPaymentVerified,
     [CLIENT_CONTROL_FIELD_IDS.paymentReference]: secondOrderDetails?.paymentReference || "",
