@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
   AlertTriangle,
+  ArrowRight,
   Banknote,
   Calculator,
   CheckCircle2,
@@ -31,7 +32,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { cashDateInput } from "@/lib/cash-records";
 import { VAULT_WITHDRAWAL_FIELD_IDS } from "@/lib/vault-withdrawal-form";
 import { calculateClockHours } from "@/lib/work-hours";
-import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
+import { getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 
 export const dynamic = "force-dynamic";
 
@@ -300,46 +301,11 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     prisma.cashMonthClose.findMany().catch(() => []),
   ]);
 
-  const clientControlForms = await prisma.serviceForm.findMany({
-    where: { active: true },
-    select: { id: true, name: true, category: true },
+  const paymentRows = await getShopifyPaymentRegister({
+    start,
+    end,
+    locationId: isResponsible ? session.user.sedeId : null,
   });
-  const clientControlFormIds = clientControlForms
-    .filter((form) => isClientControlFormName(form.name, form.category))
-    .map((form) => form.id);
-  const verifiedPaymentResponses = clientControlFormIds.length
-    ? await prisma.serviceFormResponse.findMany({
-        where: {
-          form_id: { in: clientControlFormIds },
-          created_at: { gte: start, lt: end },
-          ...(isResponsible && session.user.sedeId ? { user_location_id: session.user.sedeId } : {}),
-        },
-        select: {
-          id: true,
-          created_at: true,
-          user_location_name: true,
-          answers: true,
-        },
-        orderBy: { created_at: "desc" },
-      })
-    : [];
-
-  const paymentRows = verifiedPaymentResponses.map((response) => {
-    const answers = response.answers as Record<string, unknown>;
-    const method = String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "DA_VERIFICARE").toUpperCase();
-    const verified = answers?.[CLIENT_CONTROL_FIELD_IDS.paymentVerified] === true;
-    return {
-      ...response,
-      method,
-      verified,
-      amount: moneyValue(answers?.[CLIENT_CONTROL_FIELD_IDS.paid]),
-      order: String(answers?.second_shopify_order || ""),
-      clientName: String(answers?.[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente"),
-      gateway: String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentGateway] || ""),
-      status: String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentStatus] || ""),
-      reference: String(answers?.[CLIENT_CONTROL_FIELD_IDS.paymentReference] || ""),
-    };
-  }).filter((payment) => Boolean(payment.order) || payment.verified || payment.method !== "DA_VERIFICARE");
 
   const closingReviewRows = cashClosingRows.length
     ? await prisma.setting.findMany({
@@ -791,15 +757,24 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               <h2 className="mt-1 text-2xl font-black">Pagamenti rilevati</h2>
               <p className="mt-1 text-sm text-black/45">Registrazione automatica dal 2° ordine finale. Questi importi non modificano i totali della cassa.</p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-2xl bg-[#111017] px-4 py-3 text-xs font-black text-white">
-              <ShieldCheck className="size-4 text-[#F7DFA7]" />
-              Non incluso nei calcoli
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 rounded-2xl bg-[#111017] px-4 py-3 text-xs font-black text-white">
+                <ShieldCheck className="size-4 text-[#F7DFA7]" />
+                Non incluso nei calcoli
+              </div>
+              <Link
+                href={`/cash/shopify-payments?month=${selectedMonth}`}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#A74758] px-4 py-3 text-xs font-black text-white transition hover:bg-[#8E3848]"
+              >
+                Vedi registro completo
+                <ArrowRight className="size-4" />
+              </Link>
             </div>
           </div>
           <div className="p-5">
             {paymentRows.length ? (
               <div className="divide-y divide-black/5 overflow-hidden rounded-2xl border border-black/5">
-                {paymentRows.map((payment) => {
+                {paymentRows.slice(0, 4).map((payment) => {
                   const isCashmatic = payment.method === "CASHMATIC";
                   const isVerified = payment.verified && payment.method !== "DA_VERIFICARE";
                   const PaymentIcon = isCashmatic ? Banknote : CreditCard;
@@ -819,8 +794,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                           </span>
                         </div>
                         <p className="mt-1 truncate text-xs font-semibold text-black/40">
-                          {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(payment.created_at))}
-                          {payment.user_location_name ? ` · ${payment.user_location_name}` : ""}
+                          {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(payment.createdAt)}
+                          {payment.locationName ? ` · ${payment.locationName}` : ""}
                           {payment.gateway ? ` · Gateway ${payment.gateway}` : ""}
                         </p>
                         {payment.reference ? <p className="mt-1 truncate text-[10px] font-semibold text-black/30">Rif. {payment.reference}</p> : null}
