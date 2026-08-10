@@ -39,6 +39,14 @@ function methodLabel(method: string) {
   return "Da verificare";
 }
 
+function gatewayLabel(gateway: string) {
+  const value = gateway.trim();
+  if (!value) return "Gateway non rilevato";
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default async function ShopifyPaymentsPage(props: {
   searchParams: Promise<{ month?: string; q?: string; method?: string; page?: string }>;
 }) {
@@ -64,6 +72,12 @@ export default async function ShopifyPaymentsPage(props: {
     : "TUTTI";
 
   const rows = await getShopifyPaymentRegister({ start, end });
+  const verifiedCardTotal = rows
+    .filter((payment) => payment.verified && payment.method === "CARTA")
+    .reduce((total, payment) => total + payment.amount, 0);
+  const verifiedCashmaticTotal = rows
+    .filter((payment) => payment.verified && payment.method === "CASHMATIC")
+    .reduce((total, payment) => total + payment.amount, 0);
   const filteredRows = rows.filter((payment) => {
     const matchesMethod = method === "TUTTI"
       || (method === "DA_VERIFICARE" ? !payment.verified || payment.method === "DA_VERIFICARE" : payment.method === method);
@@ -106,9 +120,28 @@ export default async function ShopifyPaymentsPage(props: {
                 Qui trovi tutti i pagamenti letti dal secondo ordine finale. Nessun importo di questa pagina viene sommato alla cassa.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti visualizzati</p>
-              <p className="mt-1 text-3xl font-black">{filteredRows.length}</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="min-w-[150px] rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Totale carta</p>
+                  <CreditCard className="size-4 text-[#F0A1AF]" />
+                </div>
+                <p className="mt-2 text-2xl font-black">{formatMoney(verifiedCardTotal)}</p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-emerald-300">Solo verificati</p>
+              </div>
+              <div className="min-w-[150px] rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Totale Cashmatic</p>
+                  <Banknote className="size-4 text-[#F7DFA7]" />
+                </div>
+                <p className="mt-2 text-2xl font-black">{formatMoney(verifiedCashmaticTotal)}</p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-emerald-300">Solo verificati</p>
+              </div>
+              <div className="min-w-[150px] rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti visualizzati</p>
+                <p className="mt-2 text-2xl font-black">{filteredRows.length}</p>
+                <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-white/35">In base ai filtri</p>
+              </div>
             </div>
           </div>
         </section>
@@ -140,7 +173,7 @@ export default async function ShopifyPaymentsPage(props: {
             <span>Data</span>
             <span>Cliente e ordine</span>
             <span>Sede</span>
-            <span>Metodo</span>
+            <span>Metodo e gateway</span>
             <span className="text-right">Importo</span>
           </div>
           {visibleRows.length ? (
@@ -167,6 +200,9 @@ export default async function ShopifyPaymentsPage(props: {
                       </span>
                       <div>
                         <p className="text-xs font-black">{methodLabel(payment.method)}</p>
+                        <p className="mt-0.5 max-w-[150px] truncate text-[10px] font-bold text-black/45">
+                          {gatewayLabel(payment.gateway)}
+                        </p>
                         <p className={`mt-0.5 inline-flex items-center gap-1 text-[9px] font-black uppercase ${isVerified ? "text-emerald-700" : "text-amber-700"}`}>
                           {isVerified ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
                           {isVerified ? "Verificato" : "Da verificare"}
