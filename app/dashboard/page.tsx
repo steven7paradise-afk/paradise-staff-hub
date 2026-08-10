@@ -9,7 +9,6 @@ import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { deriveAttendanceState } from "@/lib/attendance-state";
-import { getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -139,7 +138,6 @@ export default async function DashboardPage() {
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
     const todayInstantStart = romeInstantStart(statusToday);
     const tomorrowInstantStart = romeInstantStart(statusTomorrow);
-    const yesterdayInstantStart = romeInstantStart(yesterdayStart);
     const previousMonthDate = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
     const payrollMonth = previousMonthDate.getUTCMonth() + 1;
     const payrollYear = previousMonthDate.getUTCFullYear();
@@ -263,13 +261,6 @@ export default async function DashboardPage() {
       locations: Array.from(locations.entries()).map(([name, count]) => ({ name, count })),
     }));
 
-    const paymentRows = await safe(getShopifyPaymentRegister({
-      start: yesterdayInstantStart,
-      end: todayInstantStart,
-      locationId: scopedLocationId,
-    }), []);
-    const yesterdayRevenue = paymentRows.filter((row) => row.verified).reduce((sum, row) => sum + row.amount, 0);
-
     let openPeriodStart: Date | null = null;
     if (latestMonthClose?.month) {
       const [closedYear, closedMonth] = latestMonthClose.month.split("-").map(Number);
@@ -282,6 +273,15 @@ export default async function DashboardPage() {
       if (!latestClosingByLocationDay.has(key)) latestClosingByLocationDay.set(key, closing);
     }
     const openClosings = Array.from(latestClosingByLocationDay.values());
+    const yesterdayClosingsByLocation = new Map<string, (typeof closings)[number]>();
+    for (const closing of closings) {
+      if (closing.date < yesterdayStart || closing.date >= statusToday) continue;
+      if (!yesterdayClosingsByLocation.has(closing.location_id)) {
+        yesterdayClosingsByLocation.set(closing.location_id, closing);
+      }
+    }
+    const yesterdayCashClosings = Array.from(yesterdayClosingsByLocation.values())
+      .reduce((sum, closing) => sum + closing.withdrawn, 0);
     const openVaultWithdrawals = vaultWithdrawals.filter((row) => !openPeriodStart || row.date >= openPeriodStart);
     const availableCash = openClosings.reduce((sum, row) => sum + row.withdrawn, 0)
       - openVaultWithdrawals.reduce((sum, row) => sum + row.amount, 0);
@@ -308,7 +308,7 @@ export default async function DashboardPage() {
       })),
       clientsToday: countedResponses.length,
       hourlyClients,
-      yesterdayRevenue,
+      yesterdayCashClosings,
       availableCash,
       monthExpenses,
       missingPayslips: managementUsers.filter((user) => !payrollUserIds.has(user.id)).map((user) => ({
