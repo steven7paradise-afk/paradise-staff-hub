@@ -49,7 +49,7 @@ export type ManagementDashboardData = {
   leaves: LeaveRow[];
   clientsToday: number;
   hourlyClients: Array<{ hour: string; count: number; locations: Array<{ name: string; count: number }> }>;
-  yesterdayRevenue: number;
+  yesterdayCashClosings: number;
   availableCash: number;
   monthExpenses: number;
   missingPayslips: Array<{ id: string; name: string; photoUrl: string | null; location: string }>;
@@ -236,7 +236,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <Link href="/cash" className="text-xs font-black uppercase text-[#9d315f]">Apri cassa</Link>
         </div>
         <div className="grid md:grid-cols-3">
-          <div className="border-b border-[#eee3e8] p-5 md:border-b-0 md:border-r"><TrendingUp size={21} className="text-[#278363]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Incassi verificati ieri</p><p className="mt-1 text-2xl font-black">{money.format(data.yesterdayRevenue)}</p></div>
+          <div className="border-b border-[#eee3e8] p-5 md:border-b-0 md:border-r"><TrendingUp size={21} className="text-[#278363]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Chiusure cassa ieri</p><p className="mt-1 text-2xl font-black">{money.format(data.yesterdayCashClosings)}</p></div>
           <div className="border-b border-[#eee3e8] p-5 md:border-b-0 md:border-r"><WalletCards size={21} className="text-[#a93a69]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Disponibilità in salone</p><p className="mt-1 text-2xl font-black">{money.format(data.availableCash)}</p></div>
           <div className="p-5"><Banknote size={21} className="text-[#966e19]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Spese e prelievi mese</p><p className="mt-1 text-2xl font-black">{money.format(data.monthExpenses)}</p></div>
         </div>
