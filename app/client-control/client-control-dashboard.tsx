@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save } from "lucide-react";
+import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save, Loader2, RotateCcw, ShieldCheck, ClipboardCheck, Users } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { cn } from "@/lib/utils";
@@ -137,6 +137,7 @@ export function ClientControlDashboard({
   const [viewingResponse, setViewingResponse] = useState<any | null>(null);
   const [viewingMetricList, setViewingMetricList] = useState<{ title: string; key: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [updatingResponseId, setUpdatingResponseId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
@@ -560,6 +561,7 @@ export function ClientControlDashboard({
 
   async function updateResponseStatus(response: ResponseItem, newStatus: string) {
     const answers = response.answers ?? {};
+    setUpdatingResponseId(response.id);
     try {
       const res = await fetch(`/api/service-forms/responses/${response.id}`, {
         method: "PUT",
@@ -576,7 +578,18 @@ export function ClientControlDashboard({
       setResponses((prev) => prev.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
     } catch {
       alert("Errore durante l'aggiornamento dello stato.");
+    } finally {
+      setUpdatingResponseId(null);
     }
+  }
+
+  const hasActiveFilters = activeSalon !== "Tutti" || Boolean(selectedWorkerName) || Boolean(query.trim()) || currentTabFilter !== "all";
+
+  function resetOperationalFilters() {
+    setActiveSalon("Tutti");
+    setSelectedWorkerName("");
+    setQuery("");
+    setCurrentTabFilter("all");
   }
 
   const maxServices = Math.max(...(selectedSalon?.staff ?? []).map((staff) => staff.services), 1);
@@ -584,13 +597,18 @@ export function ClientControlDashboard({
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-[34px] border border-black/10 bg-[#0f1014] text-white shadow-2xl">
-        <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr] lg:p-8">
+      <section className="overflow-hidden rounded-lg border border-black/10 bg-[#111114] text-white shadow-[0_20px_55px_rgba(0,0,0,0.14)]">
+        <div className="grid gap-6 p-5 lg:grid-cols-[1.15fr_0.85fr] lg:p-7">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-[#F39BD1]">Paradise analytics</p>
-            <h1 className="mt-3 text-4xl font-black tracking-tight lg:text-5xl">Controllo Cliente</h1>
-            <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-white/58">
-              Dashboard mensile e cronologia completa dei moduli compilati: cliente, pagamento, check operativi, staff coinvolto e stato controllo.
+            <div className="flex items-center gap-3">
+              <div className="grid size-10 place-items-center rounded-md border border-white/10 bg-white/[0.07] text-[#F39BD1]">
+                <ShieldCheck className="size-5" />
+              </div>
+              <p className="text-[10px] font-black uppercase tracking-[0.26em] text-[#F39BD1]">Qualità e controllo operativo</p>
+            </div>
+            <h1 className="mt-4 text-3xl font-black tracking-tight lg:text-[42px]">Controllo Cliente</h1>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-white/60">
+              Verifica pagamenti, documentazione e qualità del servizio da un unico pannello.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
               {["Tutti", ...salons.map((salon) => salon.salon)].map((salon) => (
@@ -599,8 +617,8 @@ export function ClientControlDashboard({
                   type="button"
                   onClick={() => setActiveSalon(salon)}
                   className={cn(
-                    "rounded-full px-4 py-2 text-xs font-black transition",
-                    activeSalon === salon ? "bg-white text-black" : "bg-white/8 text-white/65 hover:bg-white/14"
+                    "rounded-md border px-3.5 py-2 text-xs font-black transition",
+                    activeSalon === salon ? "border-white bg-white text-black" : "border-white/10 bg-white/[0.05] text-white/65 hover:bg-white/10 hover:text-white"
                   )}
                 >
                   {salon}
@@ -614,7 +632,7 @@ export function ClientControlDashboard({
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                  className="bg-[#1c1d24] border border-white/10 text-white text-xs font-black rounded-full px-4 py-2 outline-none cursor-pointer hover:bg-white/14 transition"
+                  className="rounded-md border border-white/10 bg-[#1c1d24] px-3 py-2 text-xs font-black text-white outline-none transition hover:bg-white/10"
                 >
                   {monthsList.map((m) => (
                     <option key={m.value} value={m.value} className="bg-[#1c1d24] text-white">
@@ -626,7 +644,7 @@ export function ClientControlDashboard({
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  className="bg-[#1c1d24] border border-white/10 text-white text-xs font-black rounded-full px-4 py-2 outline-none cursor-pointer hover:bg-white/14 transition"
+                  className="rounded-md border border-white/10 bg-[#1c1d24] px-3 py-2 text-xs font-black text-white outline-none transition hover:bg-white/10"
                 >
                   {yearsList.map((y) => (
                     <option key={y} value={y} className="bg-[#1c1d24] text-white">
@@ -639,23 +657,27 @@ export function ClientControlDashboard({
               <button
                 type="button"
                 onClick={handleDownloadStatement}
-                className="bg-[#F39BD1] hover:bg-[#F39BD1]/95 text-black text-xs font-black rounded-full px-5 py-2.5 outline-none transition shadow-sm flex items-center gap-2 ml-auto"
+                className="ml-auto flex items-center gap-2 rounded-md bg-[#F39BD1] px-4 py-2.5 text-xs font-black text-black shadow-sm transition hover:bg-[#f5add8]"
               >
                 <Download className="size-3.5" />
                 Scarica Estratto Conto PDF
               </button>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-px overflow-hidden rounded-lg border border-white/10 bg-white/10 sm:grid-cols-2">
             {[
-              { label: "Schede", value: selectedSalon?.responses ?? 0 },
-              { label: "Incasso registrato", value: money(selectedSalon?.paid ?? 0) },
-              { label: "Collaboratori", value: selectedSalon?.staff.length ?? 0 },
-              { label: "Da controllare", value: tabCounts.pending },
+              { label: "Schede", value: selectedSalon?.responses ?? 0, icon: ClipboardCheck },
+              { label: "Incasso registrato", value: money(selectedSalon?.paid ?? 0), icon: CreditCard },
+              { label: "Collaboratori", value: selectedSalon?.staff.length ?? 0, icon: Users },
+              { label: "Da controllare", value: tabCounts.pending, icon: AlertTriangle, urgent: true },
             ].map((card) => (
-              <div key={card.label} className="rounded-[24px] border border-white/10 bg-white/[0.07] p-5">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/38">{card.label}</p>
-                <p className="mt-3 text-2xl font-black">{card.value}</p>
+              <div key={card.label} className={cn("bg-[#202024] p-4", card.urgent && tabCounts.pending > 0 && "bg-[#2b211b]")}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/42">{card.label}</p>
+                  <card.icon className={cn("size-4 text-white/35", card.urgent && tabCounts.pending > 0 && "text-amber-400")} />
+                </div>
+                <p className="mt-2 text-2xl font-black">{card.value}</p>
+                {card.urgent && tabCounts.pending > 0 ? <p className="mt-1 text-[10px] font-bold text-amber-300/75">Richiedono verifica</p> : null}
               </div>
             ))}
           </div>
@@ -742,20 +764,20 @@ export function ClientControlDashboard({
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-black/10 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-black/10 p-5 lg:flex-row lg:items-center lg:justify-between pb-3">
+      <section className="overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-black/10 p-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Cronologia</p>
-            <h2 className="text-2xl font-black">Controlli cliente</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Registro operativo</p>
+            <h2 className="mt-1 text-2xl font-black">Controlli cliente</h2>
             <p className="mt-1 text-xs font-semibold text-black/45">
-              {filteredResponses.length} risultati nel periodo selezionato
+              {filteredResponses.length} schede corrispondono ai filtri selezionati
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row flex-1 gap-3 lg:max-w-2xl w-full">
+          <div className="flex w-full flex-1 flex-col gap-2 sm:flex-row lg:max-w-3xl">
             <select
               value={selectedWorkerName}
               onChange={(e) => setSelectedWorkerName(e.target.value)}
-              className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold outline-none cursor-pointer hover:bg-neutral-50 transition"
+              className="h-11 rounded-md border border-black/10 bg-white px-3 text-sm font-semibold outline-none transition hover:bg-neutral-50 focus:border-[#D66CA8]"
             >
               <option value="">Tutti i collaboratori</option>
               {employeeNames.slice().sort((a, b) => a.localeCompare(b)).map((name) => (
@@ -763,24 +785,35 @@ export function ClientControlDashboard({
               ))}
             </select>
 
-            <label className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-black/10 bg-white px-4 h-12">
+            <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md border border-black/10 bg-white px-3 transition focus-within:border-[#D66CA8] focus-within:ring-2 focus-within:ring-[#F39BD1]/15">
               <Search className="size-4 text-black/35" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca cliente, staff, ordine..." className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              {query ? (
+                <button type="button" onClick={() => setQuery("")} className="grid size-7 place-items-center rounded-md text-black/35 transition hover:bg-black/5 hover:text-black" aria-label="Cancella ricerca">
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
             </label>
+            {hasActiveFilters ? (
+              <button type="button" onClick={resetOperationalFilters} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-black/10 px-3 text-xs font-black text-black/55 transition hover:bg-black hover:text-white">
+                <RotateCcw className="size-3.5" />
+                Azzera
+              </button>
+            ) : null}
           </div>
         </div>
         
         {/* Modern Tab Filter Segmented Control */}
-        <div className="px-5 pb-4 border-b border-black/5 bg-white flex flex-wrap gap-2">
-          <div className="inline-flex rounded-full bg-neutral-100 p-1 border border-black/[0.03]">
+        <div className="border-b border-black/5 bg-[#faf8f9] p-3 sm:px-5">
+          <div className="grid w-full grid-cols-2 gap-1 rounded-md border border-black/[0.05] bg-white p-1 lg:grid-cols-4">
             <button
               type="button"
               onClick={() => setCurrentTabFilter("all")}
               className={cn(
-                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "flex min-h-10 items-center justify-center gap-1.5 rounded px-3 py-2 text-xs font-black transition duration-200",
                 currentTabFilter === "all"
-                  ? "bg-white text-neutral-800 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03]"
-                  : "text-neutral-500 hover:text-black"
+                  ? "bg-black text-white shadow-sm"
+                  : "text-neutral-500 hover:bg-neutral-50 hover:text-black"
               )}
             >
               <Layers className={cn("size-3.5", currentTabFilter === "all" ? "text-neutral-800" : "text-neutral-400")} />
@@ -790,10 +823,10 @@ export function ClientControlDashboard({
               type="button"
               onClick={() => setCurrentTabFilter("pending")}
               className={cn(
-                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "flex min-h-10 items-center justify-center gap-1.5 rounded px-3 py-2 text-xs font-black transition duration-200",
                 currentTabFilter === "pending"
-                  ? "bg-white text-amber-700 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03]"
-                  : "text-neutral-500 hover:text-amber-700"
+                  ? "bg-amber-100 text-amber-900 shadow-sm"
+                  : "text-neutral-500 hover:bg-amber-50 hover:text-amber-700"
               )}
             >
               <AlertTriangle className={cn("size-3.5", currentTabFilter === "pending" ? "text-amber-600" : "text-neutral-400")} />
@@ -803,10 +836,10 @@ export function ClientControlDashboard({
               type="button"
               onClick={() => setCurrentTabFilter("discrepancies")}
               className={cn(
-                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "flex min-h-10 items-center justify-center gap-1.5 rounded px-3 py-2 text-xs font-black transition duration-200",
                 currentTabFilter === "discrepancies"
-                  ? "bg-white text-red-600 shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03] font-extrabold"
-                  : "text-neutral-500 hover:text-red-600"
+                  ? "bg-red-100 text-red-700 shadow-sm"
+                  : "text-neutral-500 hover:bg-red-50 hover:text-red-600"
               )}
             >
               <AlertTriangle className={cn("size-3.5", currentTabFilter === "discrepancies" ? "text-red-500" : "text-neutral-400")} />
@@ -816,10 +849,10 @@ export function ClientControlDashboard({
               type="button"
               onClick={() => setCurrentTabFilter("noshows")}
               className={cn(
-                "px-5 py-2.5 rounded-full text-xs font-black transition duration-200 cursor-pointer select-none flex items-center gap-1.5",
+                "flex min-h-10 items-center justify-center gap-1.5 rounded px-3 py-2 text-xs font-black transition duration-200",
                 currentTabFilter === "noshows"
-                  ? "bg-white text-[#C661A0] shadow-[0_2px_8px_rgba(0,0,0,0.06)] border border-black/[0.03] font-extrabold"
-                  : "text-neutral-500 hover:text-[#C661A0]"
+                  ? "bg-[#FCE7F3] text-[#A83E76] shadow-sm"
+                  : "text-neutral-500 hover:bg-[#FFF2F8] hover:text-[#C661A0]"
               )}
             >
               <UserX className={cn("size-3.5", currentTabFilter === "noshows" ? "text-[#C661A0]" : "text-neutral-400")} />
@@ -908,7 +941,12 @@ export function ClientControlDashboard({
             ).map((name) => resolveCanonicalStaffName(name, employeeNames));
 
             return (
-              <article key={response.id} className="rounded-2xl border border-black/8 bg-white p-4 shadow-sm">
+              <article key={response.id} className="overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+                <div className={cn(
+                  "h-1 w-full",
+                  status.toLowerCase() === "errore" ? "bg-red-500" : status.toLowerCase() === "controllato" ? "bg-emerald-500" : "bg-amber-400",
+                )} />
+                <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#B94778]">
@@ -930,37 +968,42 @@ export function ClientControlDashboard({
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-xl bg-[#FAF7F9] p-3">
+                  <div className="rounded-md border border-black/5 bg-[#FAF7F9] p-3">
                     <p className="font-black uppercase tracking-wide text-black/35">Pagamento</p>
                     <p className="mt-1 text-sm font-black text-black">{money(answers[CLIENT_CONTROL_FIELD_IDS.paid])}</p>
                     <p className="mt-0.5 font-semibold text-black/45">Acconto {money(answers[CLIENT_CONTROL_FIELD_IDS.depositPaid])}</p>
                   </div>
-                  <div className="rounded-xl bg-[#FAF7F9] p-3">
+                  <div className="rounded-md border border-black/5 bg-[#FAF7F9] p-3">
                     <p className="font-black uppercase tracking-wide text-black/35">Collaboratrice</p>
                     <p className="mt-1 line-clamp-2 text-sm font-black text-black">{staff.join(", ") || "Non assegnata"}</p>
                   </div>
                 </div>
 
                 <div className="mt-3 flex items-center gap-2">
-                  <select
-                    value={status}
-                    onChange={(event) => void updateResponseStatus(response, event.target.value)}
-                    className={cn(
-                      "h-11 min-w-0 flex-1 rounded-xl border px-3 text-xs font-black outline-none",
-                      status.toLowerCase() === "errore"
-                        ? "border-red-200 bg-red-50 text-red-700"
-                        : status.toLowerCase() === "controllato"
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-amber-200 bg-amber-50 text-amber-700",
-                    )}
-                  >
-                    <option value="Da controllare">Da controllare</option>
-                    <option value="Controllato">Controllato</option>
-                    <option value="Errore">Errore</option>
-                  </select>
-                  <button type="button" onClick={() => setViewingResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-xl bg-black text-white" aria-label="Visualizza dettagli"><Eye className="size-4" /></button>
-                  <button type="button" onClick={() => openResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-xl border border-black/10 bg-white text-black" aria-label="Modifica controllo"><Edit3 className="size-4" /></button>
-                  {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-xl border border-red-100 bg-red-50 text-red-600" aria-label="Elimina controllo"><Trash2 className="size-4" /></button> : null}
+                  <div className="relative min-w-0 flex-1">
+                    <select
+                      value={status}
+                      disabled={updatingResponseId === response.id}
+                      onChange={(event) => void updateResponseStatus(response, event.target.value)}
+                      className={cn(
+                        "h-11 w-full rounded-md border px-3 pr-9 text-xs font-black outline-none disabled:opacity-60",
+                        status.toLowerCase() === "errore"
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : status.toLowerCase() === "controllato"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-amber-200 bg-amber-50 text-amber-700",
+                      )}
+                    >
+                      <option value="Da controllare">Da controllare</option>
+                      <option value="Controllato">Controllato</option>
+                      <option value="Errore">Errore</option>
+                    </select>
+                    {updatingResponseId === response.id ? <Loader2 className="absolute right-3 top-3.5 size-4 animate-spin" /> : null}
+                  </div>
+                  <button type="button" onClick={() => setViewingResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-md bg-black text-white transition active:scale-95" aria-label="Visualizza dettagli"><Eye className="size-4" /></button>
+                  <button type="button" onClick={() => openResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-md border border-black/10 bg-white text-black transition active:scale-95" aria-label="Modifica controllo"><Edit3 className="size-4" /></button>
+                  {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-11 shrink-0 place-items-center rounded-md border border-red-100 bg-red-50 text-red-600 transition active:scale-95" aria-label="Elimina controllo"><Trash2 className="size-4" /></button> : null}
+                </div>
                 </div>
               </article>
             );
@@ -1058,14 +1101,15 @@ export function ClientControlDashboard({
                     <td className="px-5 py-4">
                       <select
                         value={status}
+                        disabled={updatingResponseId === response.id}
                         onChange={(e) => void updateResponseStatus(response, e.target.value)}
                         className={cn(
-                          "cursor-pointer rounded-full pl-3 pr-7 py-1 text-xs font-black outline-none border-none appearance-none bg-no-repeat bg-[right_8px_center]",
+                          "cursor-pointer rounded-md border px-3 py-2 pr-7 text-xs font-black outline-none appearance-none bg-no-repeat bg-[right_8px_center] disabled:cursor-wait disabled:opacity-60",
                           status.toLowerCase() === "errore"
-                            ? "bg-red-50 text-red-700"
+                            ? "border-red-100 bg-red-50 text-red-700"
                             : status.toLowerCase() === "controllato"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-amber-50 text-amber-700"
+                            ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                            : "border-amber-100 bg-amber-50 text-amber-700"
                         )}
                         style={{
                           backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
@@ -1079,9 +1123,9 @@ export function ClientControlDashboard({
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
-                        <button type="button" onClick={() => setViewingResponse(response)} className="grid size-10 place-items-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100" title="Visualizza ordine e dettagli"><Eye className="size-4" /></button>
-                        <button type="button" onClick={() => openResponse(response)} className="grid size-10 place-items-center rounded-full bg-black/[0.04] text-black hover:bg-[#ffe5f5]" title="Modifica"><Edit3 className="size-4" /></button>
-                        {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-10 place-items-center rounded-full bg-red-50 text-red-600 hover:bg-red-100" title="Elimina"><Trash2 className="size-4" /></button> : null}
+                        <button type="button" onClick={() => setViewingResponse(response)} className="grid size-9 place-items-center rounded-md bg-black text-white transition hover:bg-black/80" title="Visualizza ordine e dettagli"><Eye className="size-4" /></button>
+                        <button type="button" onClick={() => openResponse(response)} className="grid size-9 place-items-center rounded-md border border-black/10 bg-white text-black transition hover:bg-[#fff2f8]" title="Modifica"><Edit3 className="size-4" /></button>
+                        {canDelete ? <button type="button" onClick={() => deleteResponse(response)} className="grid size-9 place-items-center rounded-md border border-red-100 bg-red-50 text-red-600 transition hover:bg-red-100" title="Elimina"><Trash2 className="size-4" /></button> : null}
                       </div>
                     </td>
                   </tr>
