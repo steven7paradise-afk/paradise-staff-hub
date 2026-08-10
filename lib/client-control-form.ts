@@ -190,9 +190,20 @@ export async function ensureClientControlForm(createdById?: string | null) {
     const expectedRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
     const expectedNotifyRoles = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
 
-    const currentFields = Array.isArray(existing.fields) ? existing.fields as Array<{ id?: string }> : [];
+    const currentFields = Array.isArray(existing.fields)
+      ? existing.fields as Array<{ id?: string; options?: unknown }>
+      : [];
     const currentFieldIds = new Set(currentFields.map((field) => field.id));
     const hasPaymentVerificationFields = currentFieldIds.has(CLIENT_CONTROL_FIELD_IDS.paymentMethod);
+    const paymentMethodField = currentFields.find(
+      (field) => field.id === CLIENT_CONTROL_FIELD_IDS.paymentMethod,
+    );
+    const paymentMethodOptions = Array.isArray(paymentMethodField?.options)
+      ? paymentMethodField.options.map(String)
+      : [];
+    const hasManualPaymentMethods = ["Carta", "Shopify", "Contanti"].every(
+      (method) => paymentMethodOptions.includes(method),
+    );
 
     const alreadyReady =
       existing.category === CLIENT_CONTROL_FORM_CATEGORY &&
@@ -200,7 +211,8 @@ export async function ensureClientControlForm(createdById?: string | null) {
       JSON.stringify(roles ?? []) === JSON.stringify(expectedRoles) &&
       JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles) &&
       Boolean(existing.fields) &&
-      hasPaymentVerificationFields;
+      hasPaymentVerificationFields &&
+      hasManualPaymentMethods;
 
     if (alreadyReady) return existing;
 
