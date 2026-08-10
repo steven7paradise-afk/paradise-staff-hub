@@ -15,6 +15,7 @@ import { auth } from "@/lib/auth";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
+import { PaymentControlButton } from "./payment-control-button";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,9 @@ export default async function ShopifyPaymentsPage(props: {
   const verifiedCashmaticTotal = rows
     .filter((payment) => payment.verified && payment.method === "CASHMATIC")
     .reduce((total, payment) => total + payment.amount, 0);
+  const pendingPayments = rows
+    .filter((payment) => payment.order && !payment.verified)
+    .map((payment) => ({ id: payment.id, order: payment.order }));
   const filteredRows = rows.filter((payment) => {
     const matchesMethod = method === "TUTTI"
       || (method === "DA_VERIFICARE" ? !payment.verified || payment.method === "DA_VERIFICARE" : payment.method === method);
@@ -143,6 +147,13 @@ export default async function ShopifyPaymentsPage(props: {
                 <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-white/35">In base ai filtri</p>
               </div>
             </div>
+          </div>
+          <div className="relative mt-5 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.14em]">Controllo automatico Shopify</p>
+              <p className="mt-1 text-xs text-white/45">Verifica tutti gli ordini del mese ancora senza metodo confermato.</p>
+            </div>
+            <PaymentControlButton payments={pendingPayments} />
           </div>
         </section>
 
