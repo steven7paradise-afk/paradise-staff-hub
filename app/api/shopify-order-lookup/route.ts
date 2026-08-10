@@ -31,44 +31,55 @@ export async function GET(request: NextRequest) {
         "Content-Type": "application/json",
       };
 
-      const fetchWithTimeout = async (url: string) => {
+      const fetchAllPages = async (initialUrl: string) => {
+        const orders: any[] = [];
+        let nextUrl: string | null = initialUrl;
+        let page = 0;
+
         try {
-          const res = await fetch(url, {
-            headers: fetchHeaders,
-            signal: AbortSignal.timeout(3500),
-          });
-          if (res.ok) {
+          while (nextUrl && page < 4) {
+            const res = await fetch(nextUrl, {
+              headers: fetchHeaders,
+              signal: AbortSignal.timeout(5000),
+            });
+            if (!res.ok) break;
+
             const data = await res.json();
-            return Array.isArray(data?.orders) ? data.orders : [];
+            if (Array.isArray(data?.orders)) orders.push(...data.orders);
+
+            const nextMatch = res.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i);
+            nextUrl = nextMatch?.[1] || null;
+            page += 1;
           }
-        } catch (e) {
-          // ignore timeouts safely
+        } catch {
+          // Return any pages already loaded if Shopify times out.
         }
-        return [];
+
+        return orders;
       };
 
       const fetchPromises: Promise<any[]>[] = [];
 
       if (emailParam) {
         fetchPromises.push(
-          fetchWithTimeout(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,total_price,line_items,note,created_at`
+          fetchAllPages(
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&email=${encodeURIComponent(emailParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,line_items,note,created_at`
           )
         );
       }
 
       if (phoneParam) {
         fetchPromises.push(
-          fetchWithTimeout(
-            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=50&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,total_price,line_items,note,created_at`
+          fetchAllPages(
+            `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&phone=${encodeURIComponent(phoneParam)}&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,line_items,note,created_at`
           )
         );
       }
 
-      // Also fetch recent 40 orders in parallel
+      // The broad feed covers name-only matches when email/phone are unavailable.
       fetchPromises.push(
-        fetchWithTimeout(
-          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=40&fields=id,name,customer,total_price,line_items,note,created_at`
+        fetchAllPages(
+          `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,customer,email,phone,shipping_address,billing_address,total_price,line_items,note,created_at`
         )
       );
 
@@ -129,8 +140,9 @@ export async function GET(request: NextRequest) {
         return timeB - timeA;
       });
 
-      // Fallback to today's orders if no client orders found
-      if (filteredOrders.length === 0) {
+      // The generic "today" mode may fall back to today's feed. Client mode must
+      // never expose orders belonging to another customer.
+      if (mode === "today" && filteredOrders.length === 0) {
         const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" });
         filteredOrders = allFetchedOrders.filter((order: any) => {
           if (!order.created_at) return false;
@@ -149,14 +161,25 @@ export async function GET(request: NextRequest) {
         const lastName = String(order.customer?.last_name || "").trim();
         const clientName = [firstName, lastName].filter(Boolean).join(" ") || "Cliente Shopify";
         const lineSummary = Array.isArray(order.line_items) ? order.line_items.map((i: any) => i.title).join(", ") : "";
+        const address = order.shipping_address || order.billing_address || order.customer?.default_address || null;
+        const addressLine = address
+          ? [address.address1, address.address2].filter(Boolean).join(", ")
+          : "";
 
         return {
           id: String(order.id),
           orderName: order.name,
           clientName,
+          firstName,
+          lastName,
           totalPrice: order.total_price ? parseFloat(order.total_price) : 0,
-          email: order.customer?.email || "",
-          phone: order.customer?.phone || "",
+          email: order.customer?.email || order.email || "",
+          phone: order.customer?.phone || order.phone || address?.phone || "",
+          addressLine,
+          city: address?.city || "",
+          postalCode: address?.zip || "",
+          province: address?.province || "",
+          country: address?.country || "",
           serviceTitle: lineSummary,
           note: order.note || "",
           createdAt: order.created_at,

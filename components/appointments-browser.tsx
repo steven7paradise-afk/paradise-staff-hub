@@ -73,6 +73,25 @@ type ClientControlEmployee = {
   locationName?: string | null;
 };
 
+type ShopifyClientOrder = {
+  id: string;
+  orderName: string;
+  clientName: string;
+  firstName?: string;
+  lastName?: string;
+  totalPrice: number;
+  email: string;
+  phone: string;
+  addressLine?: string;
+  city?: string;
+  postalCode?: string;
+  province?: string;
+  country?: string;
+  serviceTitle: string;
+  note: string;
+  createdAt: string;
+};
+
 type ClientControlAppointmentForm = {
   salon: string;
   clientName: string;
@@ -1478,27 +1497,17 @@ export function AppointmentsBrowser({
   }
 
   const [showTodayOrdersDropdown, setShowTodayOrdersDropdown] = useState(false);
-  const [todayOrdersList, setTodayOrdersList] = useState<Array<{
-    id: string;
-    orderName: string;
-    clientName: string;
-    totalPrice: number;
-    email: string;
-    phone: string;
-    serviceTitle: string;
-    note: string;
-    createdAt: string;
-  }>>([]);
+  const [todayOrdersList, setTodayOrdersList] = useState<ShopifyClientOrder[]>([]);
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
 
-  async function fetchTodayShopifyOrders() {
+  async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string }) {
     setLoadingTodayOrders(true);
     try {
       const params = new URLSearchParams({
         mode: "client_orders",
-        clientName: clientControlForm.clientName || "",
-        email: clientControlForm.email || "",
-        phone: clientControlForm.phone || "",
+        clientName: identity?.clientName ?? clientControlForm.clientName ?? "",
+        email: identity?.email ?? clientControlForm.email ?? "",
+        phone: identity?.phone ?? clientControlForm.phone ?? "",
       });
       const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`);
       const data = await res.json().catch(() => null);
@@ -1513,17 +1522,7 @@ export function AppointmentsBrowser({
   }
 
   function selectShopifyOrderFromList(
-    order: {
-      id?: string;
-      orderName: string;
-      clientName: string;
-      totalPrice: number;
-      email: string;
-      phone: string;
-      serviceTitle: string;
-      note: string;
-      createdAt?: string;
-    },
+    order: ShopifyClientOrder,
     forceTarget?: "first" | "second"
   ) {
     const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
@@ -1653,6 +1652,15 @@ export function AppointmentsBrowser({
       return false;
     });
   }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, todayOrdersList]);
+
+  const clientOrderProfile = useMemo(() => {
+    const order = clientMatchingOrders[0] || sortedTodayOrdersList[0];
+    if (!order) return null;
+    const fullName = [order.firstName, order.lastName].filter(Boolean).join(" ") || order.clientName;
+    const locality = [order.postalCode, order.city, order.province].filter(Boolean).join(" ");
+    const address = [order.addressLine, locality, order.country].filter(Boolean).join(" · ");
+    return { fullName, email: order.email, phone: order.phone, address };
+  }, [clientMatchingOrders, sortedTodayOrdersList]);
 
   // Suggested 1° Ordine (Acconto)
   const suggestedAccontoOrder = useMemo(() => {
@@ -1900,8 +1908,12 @@ export function AppointmentsBrowser({
       setClientControlForm(baseForm);
       setClientControlOpen(true);
 
-      // Fetch today's orders list & perform lookup automatically
-      void fetchTodayShopifyOrders();
+      // Pass the booking identity explicitly: React has not applied baseForm yet.
+      void fetchTodayShopifyOrders({
+        clientName: baseForm.clientName,
+        email: baseForm.email,
+        phone: baseForm.phone,
+      });
       if (booking.bookingStr || booking.customerName) {
         void handleShopifyOrderLookup(booking.bookingStr || booking.customerName);
       }
@@ -3109,10 +3121,10 @@ export function AppointmentsBrowser({
                       if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
                     }}
                     className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black text-white shadow-2xs hover:opacity-95 transition active:scale-95"
-                    title="Mostra gli ordini Shopify arrivati oggi"
+                    title="Mostra tutto lo storico ordini Shopify della cliente"
                   >
                     <Sparkles className="size-3 text-white" />
-                    <span>{loadingTodayOrders ? "Carico..." : "⚡ ORDINI CLIENTE"}</span>
+                    <span>{loadingTodayOrders ? "Carico..." : `TUTTI GLI ORDINI${todayOrdersList.length ? ` (${todayOrdersList.length})` : ""}`}</span>
                   </button>
                 </div>
 
@@ -3277,10 +3289,10 @@ export function AppointmentsBrowser({
 
                 {/* Dropdown list for today's orders */}
                 {showTodayOrdersDropdown && (
-                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[480px] sm:max-w-[500px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
+                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[680px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
                     <div className="flex items-center justify-between pb-2 border-b border-black/5">
                       <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
-                        ORDINI SHOPIFY CLIENTE ({sortedTodayOrdersList.length})
+                        STORICO COMPLETO ORDINI ({sortedTodayOrdersList.length})
                       </p>
                       <button
                         type="button"
@@ -3290,7 +3302,41 @@ export function AppointmentsBrowser({
                         Chiudi ✕
                       </button>
                     </div>
-                    <div className="max-h-72 overflow-y-auto mt-2 space-y-2 pr-0.5">
+                    {clientOrderProfile ? (
+                      <div className="mt-3 rounded-2xl border border-[#F6C6DE] bg-[#FFF8FB] p-3.5">
+                        <div className="flex items-start gap-3">
+                          <div className="grid size-10 shrink-0 place-items-center rounded-full bg-[#D96B94] text-white">
+                            <UserRound className="size-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-black text-[#1F1F1F]">{clientOrderProfile.fullName}</p>
+                            <div className="mt-2 grid gap-1.5 text-[11px] font-bold text-black/55 sm:grid-cols-2">
+                              {clientOrderProfile.email ? (
+                                <p className="flex min-w-0 items-center gap-1.5">
+                                  <Mail className="size-3.5 shrink-0 text-[#D96B94]" />
+                                  <span className="truncate">{clientOrderProfile.email}</span>
+                                </p>
+                              ) : null}
+                              {clientOrderProfile.phone ? (
+                                <p className="flex items-center gap-1.5">
+                                  <Phone className="size-3.5 shrink-0 text-[#D96B94]" />
+                                  <span>{clientOrderProfile.phone}</span>
+                                </p>
+                              ) : null}
+                              {clientOrderProfile.address ? (
+                                <p className="flex items-start gap-1.5 sm:col-span-2">
+                                  <MapPin className="mt-0.5 size-3.5 shrink-0 text-[#D96B94]" />
+                                  <span>{clientOrderProfile.address}</span>
+                                </p>
+                              ) : (
+                                <p className="text-black/35 sm:col-span-2">Indirizzo non presente su Shopify</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="max-h-80 overflow-y-auto mt-3 space-y-2 pr-0.5">
                       {loadingTodayOrders ? (
                         <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
                           Caricamento ordini cliente...
@@ -3344,6 +3390,20 @@ export function AppointmentsBrowser({
                                 <span className="text-sm font-black text-[#D96B94] shrink-0">
                                   €{order.totalPrice.toFixed(2)}
                                 </span>
+                              </div>
+                              <div className="grid gap-1 text-[10px] font-semibold text-black/45 sm:grid-cols-2">
+                                {order.email ? (
+                                  <span className="flex min-w-0 items-center gap-1">
+                                    <Mail className="size-3 shrink-0" />
+                                    <span className="truncate">{order.email}</span>
+                                  </span>
+                                ) : null}
+                                {order.addressLine || order.city ? (
+                                  <span className="flex min-w-0 items-center gap-1">
+                                    <MapPin className="size-3 shrink-0" />
+                                    <span className="truncate">{[order.addressLine, order.city].filter(Boolean).join(" · ")}</span>
+                                  </span>
+                                ) : null}
                               </div>
                               <div className="flex items-center justify-end gap-2 pt-1 border-t border-black/5">
                                 <button
