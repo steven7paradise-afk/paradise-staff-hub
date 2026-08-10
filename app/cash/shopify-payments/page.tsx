@@ -58,7 +58,7 @@ function gatewayLabel(gateway: string) {
 }
 
 export default async function ShopifyPaymentsPage(props: {
-  searchParams: Promise<{ month?: string; q?: string; method?: string; page?: string }>;
+  searchParams: Promise<{ month?: string; q?: string; method?: string; status?: string; page?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const session = await auth();
@@ -80,6 +80,7 @@ export default async function ShopifyPaymentsPage(props: {
   const method = ["CARTA", "CASHMATIC", "DA_VERIFICARE"].includes(String(searchParams.method))
     ? String(searchParams.method)
     : "TUTTI";
+  const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : "VERIFICATI";
 
   const rows = await getShopifyPaymentRegister({ start, end });
   const verifiedCardTotal = rows
@@ -99,11 +100,14 @@ export default async function ShopifyPaymentsPage(props: {
   const pendingPayments = rows
     .filter((payment) => payment.order && !payment.verified)
     .map((payment) => ({ id: payment.id, order: payment.order }));
+  const verifiedCount = rows.filter((payment) => payment.verified).length;
+  const pendingCount = rows.filter((payment) => !payment.verified).length;
   const filteredRows = rows.filter((payment) => {
+    const matchesStatus = status === "DA_CONTROLLARE" ? !payment.verified : payment.verified;
     const matchesMethod = method === "TUTTI"
       || (method === "DA_VERIFICARE" ? !payment.verified || payment.method === "DA_VERIFICARE" : payment.method === method);
     const searchable = `${payment.clientName} ${payment.order} ${payment.locationName || ""} ${payment.gateway}`.toLowerCase();
-    return matchesMethod && (!query || searchable.includes(query));
+    return matchesStatus && matchesMethod && (!query || searchable.includes(query));
   });
 
   const pageSize = 40;
@@ -119,8 +123,19 @@ export default async function ShopifyPaymentsPage(props: {
     month: "long",
   }).format(new Date());
   const persistentParams = new URLSearchParams({ month: selectedMonth });
+  persistentParams.set("status", status);
   if (query) persistentParams.set("q", query);
   if (method !== "TUTTI") persistentParams.set("method", method);
+  const verifiedTabParams = new URLSearchParams({ month: selectedMonth, status: "VERIFICATI" });
+  const pendingTabParams = new URLSearchParams({ month: selectedMonth, status: "DA_CONTROLLARE" });
+  if (query) {
+    verifiedTabParams.set("q", query);
+    pendingTabParams.set("q", query);
+  }
+  if (method !== "TUTTI") {
+    verifiedTabParams.set("method", method);
+    pendingTabParams.set("method", method);
+  }
 
   return (
     <AppShell
@@ -187,7 +202,7 @@ export default async function ShopifyPaymentsPage(props: {
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti mese</p>
-                    <p className="mt-2 text-xl font-black">{filteredRows.length}</p>
+                    <p className="mt-2 text-xl font-black">{rows.length}</p>
                   </div>
                 </div>
               </div>
@@ -203,13 +218,32 @@ export default async function ShopifyPaymentsPage(props: {
         </section>
 
         <section className="-mx-4 bg-white px-4 py-5 sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5 sm:px-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/cash/shopify-payments?month=${monthKey(previousMonth)}`} className="rounded-xl border border-black/10 px-3 py-2 text-xs font-black hover:bg-black/5">Mese prima</Link>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href={`/cash/shopify-payments?month=${monthKey(previousMonth)}&status=${status}`} className="rounded-xl border border-black/10 px-3 py-2 text-xs font-black hover:bg-black/5">Mese prima</Link>
             <span className="rounded-xl bg-[#F6E8EC] px-4 py-2 text-xs font-black capitalize text-[#873647]">{monthLabel}</span>
-            <Link href={`/cash/shopify-payments?month=${monthKey(nextMonth)}`} className="rounded-xl border border-black/10 px-3 py-2 text-xs font-black hover:bg-black/5">Mese dopo</Link>
+              <Link href={`/cash/shopify-payments?month=${monthKey(nextMonth)}&status=${status}`} className="rounded-xl border border-black/10 px-3 py-2 text-xs font-black hover:bg-black/5">Mese dopo</Link>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:min-w-[420px]">
+              <Link
+                href={`/cash/shopify-payments?${verifiedTabParams.toString()}`}
+                className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-4 text-xs font-black transition ${status === "VERIFICATI" ? "border-emerald-600 bg-emerald-600 text-white" : "border-black/10 bg-white text-black hover:bg-emerald-50"}`}
+              >
+                <span className="inline-flex items-center gap-2"><CheckCircle2 className="size-4" /> Verificati</span>
+                <span className={`rounded-full px-2 py-1 text-[10px] ${status === "VERIFICATI" ? "bg-white/20" : "bg-emerald-50 text-emerald-700"}`}>{verifiedCount}</span>
+              </Link>
+              <Link
+                href={`/cash/shopify-payments?${pendingTabParams.toString()}`}
+                className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-4 text-xs font-black transition ${status === "DA_CONTROLLARE" ? "border-amber-500 bg-amber-500 text-black" : "border-black/10 bg-white text-black hover:bg-amber-50"}`}
+              >
+                <span className="inline-flex items-center gap-2"><AlertTriangle className="size-4" /> Da controllare</span>
+                <span className={`rounded-full px-2 py-1 text-[10px] ${status === "DA_CONTROLLARE" ? "bg-black/10" : "bg-amber-50 text-amber-700"}`}>{pendingCount}</span>
+              </Link>
+            </div>
           </div>
           <form action="/cash/shopify-payments" method="get" className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
             <input type="hidden" name="month" value={selectedMonth} />
+            <input type="hidden" name="status" value={status} />
             <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 focus-within:border-[#A74758]">
               <Search className="size-4 text-black/35" />
               <input name="q" defaultValue={searchParams.q || ""} placeholder="Cerca cliente, ordine, sede..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-black/30" />
@@ -225,6 +259,17 @@ export default async function ShopifyPaymentsPage(props: {
         </section>
 
         <section className="-mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5">
+          <div className="flex items-center justify-between gap-4 border-b border-black/5 px-5 py-5">
+            <div>
+              <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${status === "DA_CONTROLLARE" ? "text-amber-700" : "text-emerald-700"}`}>
+                {status === "DA_CONTROLLARE" ? "Coda di controllo" : "Registro confermato"}
+              </p>
+              <h2 className="mt-1 text-xl font-black">{status === "DA_CONTROLLARE" ? "Pagamenti da controllare" : "Pagamenti verificati"}</h2>
+            </div>
+            <span className={`rounded-full px-3 py-2 text-xs font-black ${status === "DA_CONTROLLARE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {filteredRows.length}
+            </span>
+          </div>
           <div className="hidden grid-cols-[110px_minmax(180px,1.4fr)_150px_150px_120px] gap-4 border-b border-black/5 bg-[#F9F5F7] px-5 py-4 text-[10px] font-black uppercase tracking-[0.14em] text-black/40 md:grid">
             <span>Data</span>
             <span>Cliente e ordine</span>
