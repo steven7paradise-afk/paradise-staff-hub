@@ -323,7 +323,7 @@ export default async function DashboardPage() {
       hideHeader={true}
       transparentMain={true}
     >
-      <div className="fixed inset-0 -z-10 bg-[#0f0f11] pointer-events-none" />
+      <div className="fixed inset-0 -z-10 bg-[#fff8fc] pointer-events-none" />
 
       <DashboardRedesignClient
         currentUser={{
