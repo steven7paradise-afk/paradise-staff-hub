@@ -163,24 +163,48 @@
 
 /* Profilo: immagine capelli originale e gerarchia Liquid Glass adattiva. */
 .profile-liquid-page {
+  isolation: isolate;
   background-color: #ead8c4;
-  background-image:
-    linear-gradient(180deg, rgba(248, 235, 220, 0.12), rgba(58, 31, 20, 0.20)),
-    url("/profile-cover-bg.png");
-  background-position: center, center top;
-  background-repeat: no-repeat, no-repeat;
-  background-size: 100% 100%, auto 100dvh;
+  background-image: linear-gradient(180deg, rgba(248, 235, 220, 0.10), rgba(58, 31, 20, 0.14));
+}
+
+.profile-liquid-page::before,
+.profile-liquid-page::after {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  content: "";
+  background-image: url("/profile-cover-bg.png");
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+/* Riempie lo schermo senza mostrare cuciture laterali. */
+.profile-liquid-page::before {
+  inset: -36px;
+  background-size: cover;
+  filter: blur(30px) saturate(92%);
+  opacity: 0.34;
+  transform: scale(1.04);
+}
+
+/* Mantiene visibile l'immagine originale completa, senza zoom. */
+.profile-liquid-page::after {
+  z-index: -1;
+  background-size: auto 100dvh;
+  opacity: 0.92;
 }
 
 .profile-liquid-page > :not([class*="fixed"]) {
   width: 100%;
-  max-width: 72rem;
+  max-width: 88rem;
   margin-inline: auto;
 }
 
 .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
-  background-color: rgba(255, 252, 248, 0.78) !important;
-  border-color: rgba(255, 255, 255, 0.58) !important;
+  background-color: color-mix(in srgb, rgb(255, 252, 248) var(--glass-opacity), transparent) !important;
+  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     0 18px 55px rgba(47, 25, 15, 0.16);
@@ -189,8 +213,8 @@
 }
 
 .profile-liquid-page [class~="bg-neutral-50"] {
-  background-color: rgba(255, 252, 248, 0.48) !important;
-  border-color: rgba(255, 255, 255, 0.50) !important;
+  background-color: color-mix(in srgb, rgb(255, 252, 248) var(--glass-opacity), transparent) !important;
+  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
@@ -200,22 +224,28 @@
 }
 
 .dark .app-content-surface .profile-liquid-page {
-  background-image:
-    linear-gradient(180deg, rgba(8, 6, 5, 0.28), rgba(8, 6, 5, 0.52)),
-    url("/profile-cover-bg.png");
+  background-image: linear-gradient(180deg, rgba(8, 6, 5, 0.28), rgba(8, 6, 5, 0.52));
+}
+
+.dark .app-content-surface .profile-liquid-page::before {
+  opacity: 0.24;
+}
+
+.dark .app-content-surface .profile-liquid-page::after {
+  opacity: 0.62;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
-  background-color: rgba(28, 24, 23, 0.78) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  background-color: color-mix(in srgb, rgb(28, 24, 23) var(--glass-opacity), transparent) !important;
+  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 22px 65px rgba(0, 0, 0, 0.34);
 }
 
 .dark .app-content-surface .profile-liquid-page [class~="bg-neutral-50"] {
-  background-color: rgba(48, 42, 40, 0.68) !important;
-  border-color: rgba(255, 255, 255, 0.13) !important;
+  background-color: color-mix(in srgb, rgb(48, 42, 40) var(--glass-opacity), transparent) !important;
+  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class*="text-neutral-9"], [class*="text-neutral-8"], [class*="text-neutral-7"]) {
@@ -230,9 +260,14 @@
   border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
-@media (min-width: 1024px) {
-  .profile-liquid-page {
-    background-attachment: fixed, fixed;
+@media (max-width: 767px) {
+  .profile-liquid-page::before {
+    inset: -20px;
+    filter: blur(22px) saturate(92%);
+  }
+
+  .profile-liquid-page::after {
+    background-size: 100% auto;
   }
 }
 

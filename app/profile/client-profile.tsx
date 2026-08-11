@@ -141,7 +141,7 @@ export function ClientProfile({
     <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-8 overflow-hidden px-4 pb-20 pt-[calc(env(safe-area-inset-top)+88px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:px-6 lg:px-10 xl:pt-24">
       
       {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="profile-identity-glass mx-auto max-w-6xl space-y-8 rounded-[36px] border border-white/55 bg-white/75 p-6 shadow-[0_24px_80px_rgba(44,24,15,0.22)] backdrop-blur-2xl md:p-10">
+      <div className="profile-identity-glass mx-auto max-w-none space-y-8 rounded-[36px] border border-white/55 bg-white/75 p-6 shadow-[0_24px_80px_rgba(44,24,15,0.22)] backdrop-blur-2xl md:p-10">
         <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
           
           {/* Left Side: Avatar & Name */}
