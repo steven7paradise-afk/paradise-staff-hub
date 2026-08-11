@@ -371,6 +371,7 @@ export function OrderManager({
   const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
   const [visibleMobileCount, setVisibleMobileCount] = useState(18);
   const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(null);
+  const requestedStatus = searchParams.get("status")?.toUpperCase() ?? null;
 
   useEffect(() => {
     const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
@@ -432,8 +433,12 @@ export function OrderManager({
       result = result.filter(order => getOrderTaskType(order) === selectedTaskType);
     }
 
+    if (requestedStatus && ORDER_COLUMNS.some((column) => column.id === requestedStatus)) {
+      result = result.filter((order) => (order.status || "NEW") === requestedStatus);
+    }
+
     return result;
-  }, [orders, query, selectedMonth, selectedYear, selectedTaskType]);
+  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, requestedStatus]);
 
   const mobileOrders = useMemo(() => {
     if (mobileStatus === "ALL") return filteredOrders;

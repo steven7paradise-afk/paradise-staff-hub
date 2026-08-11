@@ -160,6 +160,7 @@ export default async function DashboardPage() {
       payrollDocuments,
       closings,
       vaultWithdrawals,
+      weekClosings,
       latestMonthClose,
     ] = await Promise.all([
       safe(prisma.user.findMany({
@@ -216,6 +217,9 @@ export default async function DashboardPage() {
       safe(prisma.cashVaultWithdrawal.findMany({
         where: { date: { lt: statusTomorrow }, ...locationScope },
         orderBy: { created_at: "desc" },
+      }), []),
+      safe(prisma.setting.findMany({
+        where: { key: { startsWith: "cash_week_close:" } },
       }), []),
       safe(prisma.cashMonthClose.findFirst({ orderBy: { month: "desc" } }), null),
     ]);
@@ -296,6 +300,25 @@ export default async function DashboardPage() {
     const monthExpenses = vaultWithdrawals
       .filter((row) => row.date >= start && row.date < end)
       .reduce((sum, row) => sum + row.amount, 0);
+    const monthWeekClosings = weekClosings.filter((setting) => {
+      const value = setting.value as { weekKey?: string; locationId?: string } | null;
+      if (!value?.weekKey) return false;
+      if (scopedLocationId && value.locationId !== scopedLocationId) return false;
+      const [rangeStart, rangeEnd] = value.weekKey.split(":");
+      const endDate = new Date(`${rangeEnd || rangeStart}T00:00:00.000Z`);
+      if (!rangeEnd) endDate.setUTCDate(endDate.getUTCDate() + 6);
+      return endDate >= start && endDate < end;
+    });
+    const monthDeposits = monthWeekClosings.reduce((sum, setting) => {
+      const value = setting.value as { bank_deposit?: number } | null;
+      const amount = Number(value?.bank_deposit || 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+    const monthWithdrawals = monthWeekClosings.reduce((sum, setting) => {
+      const value = setting.value as { withdrawals?: number } | null;
+      const amount = Number(value?.withdrawals || 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
 
     const payrollUserIds = new Set(payrollDocuments.map((document) => document.user_id));
     const formatDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" }).format(date);
@@ -338,7 +361,10 @@ export default async function DashboardPage() {
       hourlyClients,
       yesterdayCashClosings,
       availableCash,
+      monthDeposits,
+      monthWithdrawals,
       monthExpenses,
+      financialPeriodLabel: new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" }).format(start),
       missingPayslips: managementUsers.filter((user) => !payrollUserIds.has(user.id)).map((user) => ({
         id: user.id,
         name: user.name,

@@ -8,11 +8,11 @@ import {
   Banknote,
   CalendarDays,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   FileWarning,
   HeartPulse,
   RefreshCw,
-  TrendingUp,
   Umbrella,
   Users,
   WalletCards,
@@ -51,7 +51,10 @@ export type ManagementDashboardData = {
   hourlyClients: Array<{ hour: string; count: number; locations: Array<{ name: string; count: number }> }>;
   yesterdayCashClosings: number;
   availableCash: number;
+  monthDeposits: number;
+  monthWithdrawals: number;
   monthExpenses: number;
+  financialPeriodLabel: string;
   missingPayslips: Array<{ id: string; name: string; photoUrl: string | null; location: string }>;
   payrollMonthLabel: string;
 };
@@ -77,12 +80,14 @@ function Avatar({ name, photoUrl, size = 44 }: { name: string; photoUrl: string 
   );
 }
 
-function Metric({ label, value, note, icon: Icon, tone = "pink" }: {
+function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, onClick }: {
   label: string;
   value: string;
   note: string;
   icon: typeof Users;
   tone?: "pink" | "green" | "gold" | "red";
+  active?: boolean;
+  onClick: () => void;
 }) {
   const colors = {
     pink: "bg-[#f9dbe8] text-[#9f2f60]",
@@ -91,20 +96,26 @@ function Metric({ label, value, note, icon: Icon, tone = "pink" }: {
     red: "bg-[#fde3e3] text-[#a83636]",
   }[tone];
   return (
-    <div className="min-w-0 border-r border-white/10 px-4 py-2 last:border-r-0">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`group min-w-0 border-r border-white/10 px-4 py-2 text-left transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#ee86b3] last:border-r-0 ${active ? "bg-white/[0.09] shadow-[inset_0_-3px_0_#ee86b3]" : ""}`}
+    >
       <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase text-white/60">
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full ${colors}`}><Icon size={16} /></span>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-full transition group-hover:scale-110 ${colors}`}><Icon size={16} /></span>
         {label}
       </div>
       <p className="text-3xl font-black text-white">{value}</p>
-      <p className="mt-1 text-xs text-white/55">{note}</p>
-    </div>
+      <p className="mt-1 flex items-center gap-1 text-xs text-white/55">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5" /></p>
+    </button>
   );
 }
 
 export function ManagementDashboard({ data }: { data: ManagementDashboardData }) {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const [personnelView, setPersonnelView] = useState<"PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
   const maxHourly = useMemo(() => Math.max(1, ...data.hourlyClients.map((item) => item.count)), [data.hourlyClients]);
 
   useEffect(() => {
@@ -120,6 +131,36 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
 
   const holidays = data.leaves.filter((item) => item.type === "FERIE");
   const sickness = data.leaves.filter((item) => item.type === "MALATTIA");
+  const visibleStaff = personnelView === "LATE"
+    ? data.lateStaff
+    : personnelView === "PRESENT"
+      ? data.clockedToday.filter((item) => item.status === "IN" || item.status === "BREAK")
+      : data.clockedToday;
+  const visibleLeaves = personnelView === "HOLIDAYS"
+    ? holidays
+    : personnelView === "SICKNESS"
+      ? sickness
+      : data.leaves;
+  const financialItems = [
+    { label: "Disponibilità", value: data.availableCash, color: "#d75489", soft: "bg-[#fff0f6]", text: "text-[#a92f63]" },
+    { label: "Versamenti", value: data.monthDeposits, color: "#28a37a", soft: "bg-emerald-50", text: "text-emerald-700" },
+    { label: "Prelievi", value: data.monthWithdrawals, color: "#d69a32", soft: "bg-amber-50", text: "text-amber-700" },
+    { label: "Spese", value: data.monthExpenses, color: "#e05b62", soft: "bg-red-50", text: "text-red-700" },
+  ];
+  const financialMax = Math.max(1, ...financialItems.map((item) => Math.abs(item.value)));
+  const movementSum = data.monthDeposits + data.monthWithdrawals + data.monthExpenses;
+  const movementTotal = Math.max(1, movementSum);
+  const depositEnd = data.monthDeposits / movementTotal * 100;
+  const withdrawalEnd = depositEnd + data.monthWithdrawals / movementTotal * 100;
+  const netMovement = data.monthDeposits - data.monthWithdrawals - data.monthExpenses;
+
+  function showPersonnelSection(view: "PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
+    setPersonnelView(view);
+    const sectionId = view === "HOLIDAYS" || view === "SICKNESS" ? "assenze-attive" : "personale-oggi";
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1680px] space-y-5 pb-10">
@@ -135,10 +176,10 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           </button>
         </div>
         <div className="grid grid-cols-2 gap-y-4 py-4 md:grid-cols-4">
-          <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" />
-          <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" />
-          <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" />
-          <Metric label="Ritardi" value={String(data.lateStaff.length)} note="oltre 10 minuti" icon={Clock3} />
+          <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} onClick={() => showPersonnelSection("PRESENT")} />
+          <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} onClick={() => showPersonnelSection("HOLIDAYS")} />
+          <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} onClick={() => showPersonnelSection("SICKNESS")} />
+          <Metric label="Ritardi" value={String(data.lateStaff.length)} note="oltre 10 minuti" icon={Clock3} active={personnelView === "LATE"} onClick={() => showPersonnelSection("LATE")} />
         </div>
       </section>
 
@@ -156,18 +197,18 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       )}
 
       <div className="grid gap-5 xl:grid-cols-[1.55fr_0.95fr]">
-        <section className="rounded-lg border border-[#eadde3] bg-white">
+        <section id="personale-oggi" className="scroll-mt-5 rounded-lg border border-[#eadde3] bg-white">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
-              <h2 className="mt-1 text-xl font-black text-[#19151a]">Presenze e puntualità</h2>
+              <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "PRESENT" ? "Personale presente ora" : "Presenze e puntualità"}</h2>
             </div>
             <Link href="/attendance" className="text-xs font-black uppercase text-[#9d315f]">Apri presenze</Link>
           </div>
           <div className="divide-y divide-[#f0e7eb]">
-            {data.clockedToday.length === 0 ? (
-              <p className="p-8 text-center text-sm text-[#8d8589]">Nessuna timbratura registrata oggi.</p>
-            ) : data.clockedToday.map((staff) => (
+            {visibleStaff.length === 0 ? (
+              <p className="p-8 text-center text-sm text-[#8d8589]">Nessuna persona in questa sezione.</p>
+            ) : visibleStaff.map((staff) => (
               <div key={staff.id} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-3 sm:grid-cols-[minmax(220px,1fr)_130px_130px]">
                 <div className="flex min-w-0 items-center gap-3">
                   <Avatar name={staff.name} photoUrl={staff.photoUrl} />
@@ -191,13 +232,13 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           </div>
         </section>
 
-        <section className="rounded-lg border border-[#eadde3] bg-[#fcfafb] p-5">
+        <section id="assenze-attive" className="scroll-mt-5 rounded-lg border border-[#eadde3] bg-[#fcfafb] p-5">
           <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
-          <h2 className="mt-1 text-xl font-black">Ferie, malattia e riposo</h2>
+          <h2 className="mt-1 text-xl font-black">{personnelView === "HOLIDAYS" ? "Personale in ferie" : personnelView === "SICKNESS" ? "Personale in malattia" : "Ferie, malattia e riposo"}</h2>
           <div className="mt-4 space-y-3">
-            {data.leaves.length === 0 ? (
+            {visibleLeaves.length === 0 ? (
               <div className="flex items-center gap-3 rounded-md border border-[#e9e2e5] bg-white p-4 text-sm text-[#6f666a]"><CheckCircle2 size={19} className="text-[#16805a]" /> Nessuna assenza registrata oggi.</div>
-            ) : data.leaves.map((leave) => (
+            ) : visibleLeaves.map((leave) => (
               <div key={leave.id} className="flex items-center gap-3 rounded-md border border-[#e9e2e5] bg-white p-3">
                 <Avatar name={leave.name} photoUrl={leave.photoUrl} size={40} />
                 <div className="min-w-0 flex-1">
@@ -215,30 +256,77 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
-            <h2 className="mt-1 text-xl font-black">Clienti completati per ora</h2>
+            <button type="button" onClick={() => router.push("/orders?status=COMPLETED")} className="mt-1 text-left text-xl font-black transition hover:text-[#9d315f] hover:underline">Clienti completati per ora</button>
           </div>
-          <div className="text-left sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#8b8186]">clienti oggi</p></div>
+          <button type="button" onClick={() => router.push("/orders?status=COMPLETED")} className="rounded-md text-left transition hover:bg-[#fff0f6] sm:p-2 sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#8b8186]">clienti oggi · apri ordini</p></button>
         </div>
         <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {data.hourlyClients.length === 0 ? <p className="text-sm text-[#8d8589]">Nessun controllo cliente completato oggi.</p> : data.hourlyClients.map((item) => (
-            <div key={item.hour} className="rounded-md border border-[#eee4e8] p-3">
+            <button key={item.hour} type="button" onClick={() => router.push("/orders?status=COMPLETED")} className="rounded-md border border-[#eee4e8] p-3 text-left transition hover:-translate-y-0.5 hover:border-[#d75489] hover:bg-[#fff8fb] hover:shadow-sm">
               <div className="flex items-center justify-between"><span className="font-black">{item.hour}</span><strong>{item.count}</strong></div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#f2e9ed]"><div className="h-full rounded-full bg-[#d75489]" style={{ width: `${Math.max(8, item.count / maxHourly * 100)}%` }} /></div>
               <p className="mt-2 truncate text-[10px] text-[#8d8388]">{item.locations.map((loc) => `${loc.name} ${loc.count}`).join(" · ")}</p>
-            </div>
+            </button>
           ))}
         </div>
       </section>
 
-      <section className="rounded-lg border border-[#eadde3] bg-white">
-        <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
-          <div><p className="text-[10px] font-black uppercase text-[#c4467d]">Controllo economico</p><h2 className="mt-1 text-xl font-black">Cassa e incassi</h2></div>
-          <Link href="/cash" className="text-xs font-black uppercase text-[#9d315f]">Apri cassa</Link>
+      <section className="overflow-hidden rounded-lg border border-[#2a2631] bg-[#111018] text-white shadow-[0_18px_45px_rgba(20,11,16,0.12)]">
+        <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-7">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>
+            <h2 className="mt-1 text-xl font-black">Andamento finanziario</h2>
+            <p className="mt-1 text-xs font-semibold capitalize text-white/45">{data.financialPeriodLabel} · disponibilità e movimenti reali</p>
+          </div>
+          <Link href="/cash" className="inline-flex items-center gap-2 rounded-md border border-white/15 px-4 py-2 text-xs font-black uppercase transition hover:bg-white/10">Apri cassa <ChevronRight className="size-4" /></Link>
         </div>
-        <div className="grid md:grid-cols-3">
-          <div className="border-b border-[#eee3e8] p-5 md:border-b-0 md:border-r"><TrendingUp size={21} className="text-[#278363]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Chiusure cassa ieri</p><p className="mt-1 text-2xl font-black">{money.format(data.yesterdayCashClosings)}</p></div>
-          <div className="border-b border-[#eee3e8] p-5 md:border-b-0 md:border-r"><WalletCards size={21} className="text-[#a93a69]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Disponibilità in salone</p><p className="mt-1 text-2xl font-black">{money.format(data.availableCash)}</p></div>
-          <div className="p-5"><Banknote size={21} className="text-[#966e19]" /><p className="mt-4 text-[10px] font-black uppercase text-[#8a8085]">Spese e prelievi mese</p><p className="mt-1 text-2xl font-black">{money.format(data.monthExpenses)}</p></div>
+
+        <div className="grid gap-6 p-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:p-7">
+          <Link href="/cash" className="group relative flex min-h-72 flex-col items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] p-6">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(215,84,137,0.16),transparent_42%)]" />
+            <div
+              className="relative grid size-48 place-items-center rounded-full p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]"
+              style={{ background: movementSum > 0 ? `conic-gradient(#28a37a 0 ${depositEnd}%, #d69a32 ${depositEnd}% ${withdrawalEnd}%, #e05b62 ${withdrawalEnd}% 100%)` : "conic-gradient(#35313c 0 100%)" }}
+            >
+              <div className="grid size-full place-items-center rounded-full border border-white/10 bg-[#17151e] text-center shadow-inner">
+                <div>
+                  <WalletCards className="mx-auto size-5 text-[#ee86b3]" />
+                  <p className="mt-3 text-[10px] font-black uppercase tracking-[0.14em] text-white/45">Disponibilità</p>
+                  <p className="mt-1 text-2xl font-black tabular-nums">{money.format(data.availableCash)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="relative mt-5 flex items-center gap-2 text-xs font-bold text-white/55">
+              Movimento netto mese
+              <span className={`rounded-full px-2 py-1 font-black ${netMovement >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-300"}`}>{netMovement >= 0 ? "+" : ""}{money.format(netMovement)}</span>
+            </div>
+          </Link>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {financialItems.map((item) => (
+              <Link key={item.label} href="/cash" className="group rounded-lg border border-white/10 bg-white/[0.045] p-5 transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.07]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/45">{item.label}</p>
+                    <p className="mt-2 text-2xl font-black tabular-nums">{money.format(item.value)}</p>
+                  </div>
+                  <span className={`grid size-9 place-items-center rounded-full ${item.soft} ${item.text}`}><Banknote className="size-4" /></span>
+                </div>
+                <div className="mt-6 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.max(item.value > 0 ? 7 : 0, Math.abs(item.value) / financialMax * 100)}%`, backgroundColor: item.color }} />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-[10px] font-bold text-white/35">
+                  <span>{item.label === "Disponibilità" ? "Saldo attuale" : "Totale del mese"}</span>
+                  <ChevronRight className="size-3.5 transition group-hover:translate-x-0.5" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-white/10 px-5 py-3 text-[10px] font-bold uppercase text-white/35 lg:px-7">
+          <span>Chiusure cassa ieri</span>
+          <strong className="text-sm text-white">{money.format(data.yesterdayCashClosings)}</strong>
         </div>
       </section>
 
