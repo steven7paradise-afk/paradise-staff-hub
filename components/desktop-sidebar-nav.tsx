@@ -135,13 +135,13 @@ export function DesktopSidebarNav({
           placeholder="Cerca una pagina"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.055] py-2 pl-9 pr-9 text-xs font-bold text-white outline-none transition placeholder:text-slate-500 focus:border-white/25 focus:bg-white/[0.075]"
+          className="h-11 w-full rounded-xl border border-white/12 bg-white/[0.07] py-2 pl-9 pr-11 text-xs font-bold text-white outline-none backdrop-blur-xl transition placeholder:text-slate-400 focus:border-white/30 focus:bg-white/[0.11]"
         />
         {searchQuery ? (
           <button
             type="button"
             onClick={() => setSearchQuery("")}
-            className="absolute inset-y-0 right-0 grid w-9 place-items-center text-white/45 transition hover:text-white"
+            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-white/55 transition hover:text-white"
             aria-label="Cancella ricerca"
           >
             <X className="size-3.5" />
@@ -157,7 +157,7 @@ export function DesktopSidebarNav({
                 <button
                   type="button"
                   onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                  className="sidebar-label flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left transition hover:bg-white/[0.055]"
+                  className="sidebar-label flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2.5 py-2 text-left transition hover:bg-white/[0.075]"
                   aria-expanded={openSectionId === section.id}
                 >
                   <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-[color:var(--sidebar-text)] opacity-40">
@@ -179,7 +179,7 @@ export function DesktopSidebarNav({
                         href={item.href}
                         title={displayLabel}
                         className={cn(
-                          "sidebar-nav-link group relative flex min-h-10 shrink-0 items-center gap-3 rounded-lg border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
+                          "sidebar-nav-link group relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-[13px] font-bold tracking-tight transition-all duration-200",
                           isActive
                             ? "active border-white/12 bg-[color:var(--sidebar-active-bg)] text-[color:var(--sidebar-active-text)] shadow-none"
                             : "text-[color:var(--sidebar-text)] opacity-82 hover:bg-white/[0.065] hover:opacity-100"

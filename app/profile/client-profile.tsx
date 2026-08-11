@@ -138,16 +138,16 @@ export function ClientProfile({
   ];
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-8 pb-20 px-4 md:px-0 font-sans antialiased text-neutral-900 selection:bg-neutral-200">
+    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-8 overflow-hidden px-4 pb-20 pt-[calc(env(safe-area-inset-top)+88px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:px-6 lg:px-10 xl:pt-24">
       
       {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="border border-neutral-200 bg-white p-8 md:p-12 rounded-[24px] shadow-2xs space-y-8">
+      <div className="profile-identity-glass mx-auto max-w-6xl space-y-8 rounded-[36px] border border-white/55 bg-white/75 p-6 shadow-[0_24px_80px_rgba(44,24,15,0.22)] backdrop-blur-2xl md:p-10">
         <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
           
           {/* Left Side: Avatar & Name */}
           <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
             <div className="relative group shrink-0">
-              <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border border-neutral-200 bg-neutral-50 flex items-center justify-center text-4xl font-serif text-neutral-800 shadow-sm">
+              <div className="relative flex size-32 items-center justify-center overflow-hidden rounded-[32px] border border-white/70 bg-white/40 text-4xl font-serif text-neutral-800 shadow-[0_16px_40px_rgba(35,18,10,0.20)] md:size-36 md:rounded-[38px]">
                 {userPhoto ? (
                   <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
                 ) : (

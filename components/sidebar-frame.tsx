@@ -76,7 +76,7 @@ export function SidebarFrame({
     >
       <div
         className={cn(
-          "relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
+          "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
           isCollapsed
             ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
             : "xl:w-[264px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
@@ -86,7 +86,7 @@ export function SidebarFrame({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className="absolute -right-[15px] top-7 z-50 hidden size-8 place-items-center rounded-full border border-black/10 bg-white text-black/55 shadow-sm transition hover:text-black dark:border-white/10 dark:bg-neutral-900 dark:text-white/75 xl:grid"
+            className="absolute -right-[22px] top-6 z-50 hidden size-11 place-items-center rounded-full border border-white/45 bg-white/70 text-black/65 shadow-lg backdrop-blur-xl transition hover:bg-white/90 hover:text-black dark:border-white/15 dark:bg-neutral-900/70 dark:text-white/80 xl:grid"
             aria-label={isCollapsed ? "Apri menu" : "Chiudi menu"}
             title={isCollapsed ? "Apri menu" : "Chiudi menu"}
           >

@@ -136,6 +136,80 @@
   background-color: rgba(38, 35, 45, 0.72) !important;
 }
 
+/* Profilo: immagine capelli originale e gerarchia Liquid Glass adattiva. */
+.profile-liquid-page {
+  background-image:
+    linear-gradient(180deg, rgba(248, 235, 220, 0.12), rgba(58, 31, 20, 0.20)),
+    url("/profile-cover-bg.png");
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.profile-liquid-page > :not([class*="fixed"]) {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
+  background-color: rgba(255, 252, 248, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.58) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 18px 55px rgba(47, 25, 15, 0.16);
+  -webkit-backdrop-filter: blur(28px) saturate(145%);
+  backdrop-filter: blur(28px) saturate(145%);
+}
+
+.profile-liquid-page [class~="bg-neutral-50"] {
+  background-color: rgba(255, 252, 248, 0.48) !important;
+  border-color: rgba(255, 255, 255, 0.50) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+
+.profile-liquid-page :is([class~="text-neutral-400"], [class~="text-neutral-500"]) {
+  color: #57534e !important;
+}
+
+.dark .app-content-surface .profile-liquid-page {
+  background-image:
+    linear-gradient(180deg, rgba(8, 6, 5, 0.28), rgba(8, 6, 5, 0.52)),
+    url("/profile-cover-bg.png");
+}
+
+.dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
+  background-color: rgba(28, 24, 23, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 22px 65px rgba(0, 0, 0, 0.34);
+}
+
+.dark .app-content-surface .profile-liquid-page [class~="bg-neutral-50"] {
+  background-color: rgba(48, 42, 40, 0.68) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+.dark .app-content-surface .profile-liquid-page :is([class*="text-neutral-9"], [class*="text-neutral-8"], [class*="text-neutral-7"]) {
+  color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.dark .app-content-surface .profile-liquid-page :is([class*="text-neutral-4"], [class*="text-neutral-5"], [class*="text-neutral-6"]) {
+  color: rgba(255, 255, 255, 0.76) !important;
+}
+
+.dark .app-content-surface .profile-liquid-page :is([class*="border-neutral-1"], [class*="border-neutral-2"]) {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+@media (min-width: 1024px) {
+  .profile-liquid-page {
+    background-attachment: fixed;
+  }
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .app-content-surface .app-liquid-canvas [class*="backdrop-blur"] {
     -webkit-backdrop-filter: none !important;
@@ -148,6 +222,11 @@
 
   .dark .app-content-surface .app-liquid-canvas :is([class~="bg-white"], [class*="bg-white/"]) {
     background-color: #26232d !important;
+  }
+
+  .profile-liquid-page :is([class~="bg-white"], [class*="bg-white/"], [class~="bg-neutral-50"]) {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 }
 
@@ -923,4 +1002,43 @@ textarea {
 /* Hide all requests links when accessed on the salon tablet */
 .tablet-mode a[href="/requests"] {
   display: none !important;
+}
+
+/* Sidebar globale: materiale sottile Liquid Glass, coerente in chiaro e notte. */
+@media (min-width: 1280px) {
+  .app-liquid-sidebar {
+    border-right-color: rgba(255, 255, 255, 0.16) !important;
+    background:
+      linear-gradient(165deg,
+        color-mix(in srgb, var(--sidebar-gradient-from) 78%, transparent),
+        color-mix(in srgb, var(--sidebar-gradient-mid) 74%, transparent) 54%,
+        color-mix(in srgb, var(--sidebar-gradient-to) 80%, transparent)) !important;
+    box-shadow:
+      inset -1px 0 0 rgba(255, 255, 255, 0.10),
+      18px 0 48px rgba(43, 23, 36, 0.12);
+    -webkit-backdrop-filter: blur(30px) saturate(150%);
+    backdrop-filter: blur(30px) saturate(150%);
+  }
+
+  .app-liquid-sidebar > aside,
+  .sidebar-collapsed .app-liquid-sidebar > aside {
+    background: transparent !important;
+  }
+
+  .app-liquid-sidebar .sidebar-nav-link.active {
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 8px 24px rgba(23, 13, 21, 0.14) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) and (min-width: 1280px) {
+  .app-liquid-sidebar {
+    background: var(--user-sidebar-color, var(--sidebar)) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }
