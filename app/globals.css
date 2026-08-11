@@ -285,12 +285,42 @@
 }
 
 @media (max-width: 767px) {
+  .profile-liquid-page {
+    background:
+      linear-gradient(180deg, rgba(248, 232, 215, 0.18) 0%, rgba(234, 216, 196, 0.92) 34rem, #ead8c4 52rem);
+  }
+
   .profile-liquid-page::before {
-    inset: -32px;
-    background-position: 58% center;
-    filter: blur(34px) saturate(88%);
-    opacity: 0.42;
-    transform: scale(1.12);
+    position: absolute;
+    inset: -40px -32px auto;
+    height: min(78dvh, 44rem);
+    background-position: 58% 32%;
+    background-size: cover;
+    filter: blur(30px) saturate(86%);
+    opacity: 0.34;
+    transform: scale(1.06);
+    -webkit-mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 100%);
+    mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 100%);
+  }
+
+  .profile-liquid-page .profile-glass-hero,
+  .profile-liquid-page .profile-glass-section {
+    border-radius: 1.5rem;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.72),
+      0 14px 36px rgba(47, 25, 15, 0.11);
+  }
+
+  .profile-liquid-page .profile-glass-inset {
+    border-radius: 1.125rem;
+  }
+
+  .dark .app-content-surface .profile-liquid-page {
+    background: linear-gradient(180deg, #26201e 0%, #1f1b1a 34rem, #171514 52rem) !important;
+  }
+
+  .dark .app-content-surface .profile-liquid-page::before {
+    opacity: 0.24;
   }
 }
 

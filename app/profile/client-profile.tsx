@@ -138,16 +138,16 @@ export function ClientProfile({
   ];
 
   return (
-    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-8 overflow-hidden px-4 pb-20 pt-[calc(env(safe-area-inset-top)+88px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:px-6 lg:px-10 xl:pt-24">
+    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-5 overflow-hidden px-3 pb-16 pt-[calc(env(safe-area-inset-top)+80px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-8 sm:px-6 sm:pb-20 lg:px-10 xl:pt-24">
       
       {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none space-y-8 rounded-[36px] border border-white/55 bg-white/75 p-6 shadow-[0_24px_80px_rgba(44,24,15,0.18)] backdrop-blur-2xl md:p-10">
-        <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
+      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none space-y-6 rounded-[28px] border border-white/55 bg-white/75 p-5 shadow-[0_24px_80px_rgba(44,24,15,0.18)] backdrop-blur-2xl sm:space-y-8 md:rounded-[36px] md:p-10">
+        <div className="flex flex-col items-center justify-between gap-5 md:flex-row md:items-start md:gap-8">
           
           {/* Left Side: Avatar & Name */}
-          <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+          <div className="flex flex-col items-center gap-4 text-center md:flex-row md:gap-6 md:text-left">
             <div className="relative group shrink-0">
-              <div className="relative flex size-32 items-center justify-center overflow-hidden rounded-[32px] border border-white/70 bg-white/40 text-4xl font-serif text-neutral-800 shadow-[0_16px_40px_rgba(35,18,10,0.20)] md:size-36 md:rounded-[38px]">
+              <div className="relative flex size-24 items-center justify-center overflow-hidden rounded-[26px] border border-white/70 bg-white/40 text-3xl font-serif text-neutral-800 shadow-[0_16px_40px_rgba(35,18,10,0.16)] sm:size-28 md:size-36 md:rounded-[38px] md:text-4xl">
                 {userPhoto ? (
                   <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
@@ -167,11 +167,11 @@ export function ClientProfile({
                 </span>
               </div>
 
-              <h1 className="text-3xl md:text-4xl font-serif font-light text-neutral-900 tracking-wide uppercase">
+              <h1 className="break-words text-2xl font-serif font-light uppercase tracking-wide text-neutral-900 sm:text-3xl md:text-4xl">
                 {user.name}
               </h1>
 
-              <p className="text-[11px] text-neutral-400 font-bold uppercase tracking-[0.2em]">
+              <p className="break-all text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400 sm:text-[11px] sm:tracking-[0.2em]">
                 {user.email}
               </p>
             </div>
@@ -191,7 +191,7 @@ export function ClientProfile({
         </div>
 
         {/* Premium Underlined Navigation Tabs (Dior Style) */}
-        <div className="flex items-center gap-8 border-b border-neutral-200 overflow-x-auto pb-px">
+        <div className="flex items-center gap-5 overflow-x-auto border-b border-neutral-200 pb-px sm:gap-8">
           {[
             { id: "points", label: "Punti & Traguardi" },
             { id: "info", label: "Informazioni & Documenti" },
@@ -203,7 +203,7 @@ export function ClientProfile({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  "min-h-11 py-4 text-xs font-bold uppercase tracking-[0.25em] border-b-2 transition duration-200 whitespace-nowrap -mb-px",
+                  "min-h-11 py-3 text-[10px] font-bold uppercase tracking-[0.18em] border-b-2 transition duration-200 whitespace-nowrap -mb-px sm:py-4 sm:text-xs sm:tracking-[0.25em]",
                   isActive 
                     ? "border-neutral-900 text-neutral-900 font-black" 
                     : "border-transparent text-neutral-400 hover:text-neutral-600"
@@ -218,7 +218,7 @@ export function ClientProfile({
 
       {/* 🔴 TAB 1: PUNTI & TRAGUARDI */}
       {activeTab === "points" && (
-        <div className="space-y-8 animate-in fade-in duration-200">
+        <div className="space-y-5 animate-in fade-in duration-200 sm:space-y-8">
           
           {/* Target Progress Section */}
           <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6">
@@ -238,11 +238,11 @@ export function ClientProfile({
             </div>
 
             {/* Target Progress Cards */}
-            <div className={cn("grid gap-8", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
+            <div className={cn("grid gap-4 md:gap-8", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
               
               {/* OBIETTIVO PERSONALE */}
               <div className="profile-glass-inset p-5 sm:p-6 bg-neutral-50 border border-neutral-200 rounded-[22px] space-y-4 text-left">
-                <div className="flex justify-between items-end">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div className="space-y-0.5">
                     <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">DIPENDENTE</span>
                     <span className="text-sm font-bold uppercase tracking-wider text-neutral-800">
@@ -273,7 +273,7 @@ export function ClientProfile({
               {/* OBIETTIVO SALONE - ONLY visible for non-employees (e.g. admins) */}
               {!isEmployee && (
                 <div className="profile-glass-inset p-5 sm:p-6 bg-neutral-50 border border-neutral-200 rounded-[22px] space-y-4 text-left">
-                  <div className="flex justify-between items-end">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">STRUTTURA</span>
                       <span className="text-sm font-bold uppercase tracking-wider text-neutral-800">
