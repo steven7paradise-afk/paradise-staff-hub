@@ -363,7 +363,8 @@ export function NotificationManager({
 
     if (meta.category.isOrder || isForm || isAttendanceAlert(item)) {
       const fallbackUrl = isAttendanceAlert(item) ? "/attendance" : "/service-forms";
-      window.location.assign(item.actionUrl && item.actionUrl !== "/notifications" ? item.actionUrl : fallbackUrl);
+      const hasOperationalUrl = item.actionUrl && !item.actionUrl.startsWith("/notifications");
+      window.location.assign(hasOperationalUrl ? item.actionUrl : fallbackUrl);
       return;
     }
 
