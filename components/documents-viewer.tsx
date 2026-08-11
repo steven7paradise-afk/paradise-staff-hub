@@ -481,7 +481,7 @@ export function DocumentsViewer({
   const showPersonnelTable = !employeeView && workers.length > 0 && selectedWorkerId === "";
 
   return (
-    <>
+    <div className="operations-liquid-page documents-liquid min-h-[calc(100dvh-12rem)] rounded-[32px] border border-white/70 p-4 shadow-[0_18px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl sm:p-5">
       <style dangerouslySetInnerHTML={{__html: `
         @media (max-width: 1023px) {
           body,
@@ -528,7 +528,7 @@ export function DocumentsViewer({
                 <select
                   value={statusMonth}
                   onChange={(e) => setStatusMonth(Number(e.target.value))}
-                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                  className="h-11 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
                 >
                   {monthNames.map((name, idx) => (
                     <option key={idx} value={idx + 1}>{name}</option>
@@ -537,7 +537,7 @@ export function DocumentsViewer({
                 <select
                   value={statusYear}
                   onChange={(e) => setStatusYear(Number(e.target.value))}
-                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                  className="h-11 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
                 >
                   {[2024, 2025, 2026, 2027, 2028].map((year) => (
                     <option key={year} value={year}>{year}</option>
@@ -611,7 +611,7 @@ export function DocumentsViewer({
                 <select
                   value={selectedType}
                   onChange={(e) => setSelectedType(e.target.value)}
-                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                  className="h-11 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
                 >
                   <option value="ALL">Tutti i tipi</option>
                   <option value="BUSTA_PAGA">Busta paga</option>
@@ -622,7 +622,7 @@ export function DocumentsViewer({
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
-                  className="h-10 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
+                  className="h-11 rounded-xl border border-white/10 bg-[#0A0A0A] text-white px-2.5 text-[11px] font-bold outline-none cursor-pointer"
                 >
                   <option value="ALL">Tutti gli anni</option>
                   {yearsList.map((y) => (
@@ -768,7 +768,7 @@ export function DocumentsViewer({
                     placeholder="Cerca collaboratore..."
                     value={workerSearchQuery}
                     onChange={(e) => setWorkerSearchQuery(e.target.value)}
-                    className="w-full h-10 pl-9 pr-4 rounded-xl border border-black/10 bg-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+                    className="h-11 w-full rounded-xl border border-black/10 bg-white pl-9 pr-4 text-xs font-semibold outline-none transition focus:border-[#B85B68] focus:ring-2 focus:ring-[#B85B68]/20"
                   />
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
                   {workerSearchQuery && (
@@ -782,7 +782,7 @@ export function DocumentsViewer({
                   <select
                     value={statusMonth}
                     onChange={(e) => setStatusMonth(Number(e.target.value))}
-                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                    className="h-11 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
                   >
                     {monthNames.map((name, index) => (
                       <option key={index} value={index + 1}>{name}</option>
@@ -792,7 +792,7 @@ export function DocumentsViewer({
                   <select
                     value={statusYear}
                     onChange={(e) => setStatusYear(Number(e.target.value))}
-                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                    className="h-11 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
                   >
                     {[2024, 2025, 2026, 2027, 2028].map((year) => (
                       <option key={year} value={year}>{year}</option>
@@ -870,7 +870,7 @@ export function DocumentsViewer({
                     placeholder="Cerca per titolo..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-10 pl-9 pr-4 rounded-xl border border-black/10 bg-white text-xs font-semibold outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 transition"
+                    className="h-11 w-full rounded-xl border border-black/10 bg-white pl-9 pr-4 text-xs font-semibold outline-none transition focus:border-[#B85B68] focus:ring-2 focus:ring-[#B85B68]/20"
                   />
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-black/30" />
                   {searchQuery && (
@@ -884,7 +884,7 @@ export function DocumentsViewer({
                   <select
                     value={selectedType}
                     onChange={(e) => setSelectedType(e.target.value)}
-                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                    className="h-11 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
                   >
                     <option value="ALL">Tutti i tipi</option>
                     <option value="BUSTA_PAGA">Busta paga</option>
@@ -895,7 +895,7 @@ export function DocumentsViewer({
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(e.target.value)}
-                    className="h-9 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
+                    className="h-11 rounded-xl border border-black/10 bg-white px-2.5 text-[11px] font-bold outline-none cursor-pointer hover:bg-black/[0.01]"
                   >
                     <option value="ALL">Tutti gli anni</option>
                     {yearsList.map((y) => (
@@ -1073,6 +1073,6 @@ export function DocumentsViewer({
       </div>
 
       {mobilePreview ? <MobilePreviewModal document={mobilePreview} employeeView={employeeView} onClose={() => setMobilePreview(null)} /> : null}
-    </>
+    </div>
   );
 }

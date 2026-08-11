@@ -331,6 +331,15 @@ export default async function DashboardPage() {
     const monthExpenses = vaultWithdrawals
       .filter((row) => row.date >= start && row.date < end)
       .reduce((sum, row) => sum + row.amount, 0);
+    const latestMonthClosingByLocationDay = new Map<string, (typeof closings)[number]>();
+    for (const closing of closings) {
+      if (closing.date < start || closing.date >= end) continue;
+      const dayKey = closing.date.toISOString().slice(0, 10);
+      const key = `${closing.location_id}:${dayKey}`;
+      if (!latestMonthClosingByLocationDay.has(key)) latestMonthClosingByLocationDay.set(key, closing);
+    }
+    const monthRevenue = Array.from(latestMonthClosingByLocationDay.values())
+      .reduce((sum, closing) => sum + closing.withdrawn, 0);
     const monthWeekClosings = weekClosings.filter((setting) => {
       const value = setting.value as { weekKey?: string; locationId?: string } | null;
       if (!value?.weekKey) return false;
@@ -395,6 +404,7 @@ export default async function DashboardPage() {
       monthDeposits,
       monthWithdrawals,
       monthExpenses,
+      monthRevenue,
       financialPeriodLabel: new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric", timeZone: "UTC" }).format(start),
       missingPayslips: managementUsers.filter((user) => !payrollUserIds.has(user.id)).map((user) => ({
         id: user.id,

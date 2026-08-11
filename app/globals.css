@@ -48,6 +48,36 @@
   color-scheme: dark;
 }
 
+/* Sistema visivo globale: ogni pagina eredita lo stesso canvas Liquid Glass. */
+.app-content-surface {
+  background:
+    radial-gradient(circle at 8% 4%, rgba(255, 183, 217, 0.24), transparent 28%),
+    radial-gradient(circle at 93% 10%, rgba(205, 190, 247, 0.22), transparent 26%),
+    linear-gradient(145deg, rgba(252, 249, 251, 0.96), rgba(247, 239, 245, 0.94));
+}
+
+.app-content-surface .app-liquid-canvas :is(
+  [class~="bg-white"],
+  [class~="bg-white/50"],
+  [class~="bg-white/60"],
+  [class~="bg-white/65"],
+  [class~="bg-white/70"],
+  [class~="bg-white/75"],
+  [class~="bg-white/80"],
+  [class~="bg-white/90"],
+  [class~="bg-white/95"]
+) {
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+
+.dark .app-content-surface {
+  background:
+    radial-gradient(circle at 8% 4%, rgba(194, 70, 125, 0.18), transparent 30%),
+    radial-gradient(circle at 93% 10%, rgba(102, 78, 163, 0.20), transparent 28%),
+    linear-gradient(145deg, #17151c 0%, #1d1a24 52%, #18151a 100%);
+}
+
 .dark .app-content-surface :is([class~="text-black"], [class~="text-paradise-noir"], [class~="text-black/80"], [class~="text-black/90"]) {
   color: rgba(255, 255, 255, 0.92) !important;
 }
@@ -56,8 +86,69 @@
   color: rgba(255, 255, 255, 0.58) !important;
 }
 
-.dark .app-content-surface :is([class~="bg-white"], [class~="bg-white/50"], [class~="bg-white/60"], [class~="bg-white/65"], [class~="bg-white/70"], [class~="bg-white/80"], [class~="bg-white/90"], [class~="bg-white/95"], [class*="bg-[#FA"], [class*="bg-[#FB"], [class*="bg-[#F8"], [class*="bg-[#f8"], [class*="bg-[#fb"], [class*="bg-[#faf"], [class*="bg-neutral-50"]) {
+.dark .app-content-surface :is([class~="bg-white"], [class~="bg-white/50"], [class~="bg-white/60"], [class~="bg-white/65"], [class~="bg-white/70"], [class~="bg-white/75"], [class~="bg-white/80"], [class~="bg-white/90"], [class~="bg-white/95"], [class*="bg-[#FA"], [class*="bg-[#FB"], [class*="bg-[#F8"], [class*="bg-[#f8"], [class*="bg-[#fb"], [class*="bg-[#faf"], [class*="bg-neutral-50"]) {
   background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dark .app-content-surface :is(
+  [class*="text-[#191"],
+  [class*="text-[#1f1"],
+  [class*="text-[#241"],
+  [class*="text-[#252"],
+  [class*="text-[#341"]
+) {
+  color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.dark .app-content-surface :is(
+  [class*="text-[#6f"],
+  [class*="text-[#75"],
+  [class*="text-[#77"],
+  [class*="text-[#8d"]
+) {
+  color: rgba(255, 255, 255, 0.68) !important;
+}
+
+.dark .app-content-surface :is(
+  [class*="border-[#e"],
+  [class*="divide-[#e"],
+  [class*="divide-[#f"]
+) {
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+.management-dashboard-liquid {
+  background:
+    radial-gradient(circle at 7% 5%, rgba(255, 183, 217, 0.24), transparent 30%),
+    radial-gradient(circle at 94% 12%, rgba(205, 190, 247, 0.22), transparent 28%),
+    rgba(250, 247, 251, 0.54);
+}
+
+.dark .app-content-surface .management-dashboard-liquid {
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    radial-gradient(circle at 7% 5%, rgba(194, 70, 125, 0.18), transparent 30%),
+    radial-gradient(circle at 94% 12%, rgba(102, 78, 163, 0.20), transparent 28%),
+    rgba(23, 21, 28, 0.72) !important;
+}
+
+.dark .app-content-surface .management-dashboard-liquid :is([class~="bg-white/70"], [class~="bg-white/72"], [class~="bg-white/75"], [class~="bg-white/80"], [class~="bg-white"]) {
+  background-color: rgba(38, 35, 45, 0.72) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-content-surface .app-liquid-canvas [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .app-content-surface .app-liquid-canvas :is([class~="bg-white"], [class*="bg-white/"]) {
+    background-color: rgba(255, 255, 255, 0.96) !important;
+  }
+
+  .dark .app-content-surface .app-liquid-canvas :is([class~="bg-white"], [class*="bg-white/"]) {
+    background-color: #26232d !important;
+  }
 }
 
 .dark .app-content-surface :is([class~="border-black/5"], [class~="border-black/10"], [class~="border-black/15"], [class~="border-black/20"]) {
@@ -120,6 +211,70 @@
   .dark .my-shifts-liquid-modal[class*="backdrop-blur"],
   .dark .my-shifts-liquid-modal [class*="backdrop-blur"] {
     background-color: #26232d !important;
+  }
+}
+
+/* Richieste e Documenti: materiale Liquid Glass condiviso, con variante notte. */
+.operations-liquid-page {
+  background:
+    radial-gradient(circle at 7% 5%, rgba(255, 183, 217, 0.30), transparent 30%),
+    radial-gradient(circle at 94% 12%, rgba(205, 190, 247, 0.28), transparent 28%),
+    rgba(250, 247, 251, 0.76);
+}
+
+.operations-liquid-page :is([class~="bg-white"], [class*="bg-white/"], [class*="bg-neutral-50"], [class*="bg-slate-50"]) {
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+
+.dark .app-content-surface .operations-liquid-page {
+  color: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background:
+    radial-gradient(circle at 7% 5%, rgba(194, 70, 125, 0.20), transparent 30%),
+    radial-gradient(circle at 94% 12%, rgba(102, 78, 163, 0.22), transparent 28%),
+    rgba(23, 21, 28, 0.94) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page :is([class~="bg-white"], [class*="bg-white/"], [class*="bg-neutral-50"], [class*="bg-slate-50"], [class*="bg-[#F8"], [class*="bg-[#f8"], [class*="bg-[#FA"], [class*="bg-[#fa"]) {
+  background-color: rgba(39, 36, 46, 0.72) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page :is([class*="border-white/"], [class*="border-black/"], [class*="border-neutral-"]) {
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page :is([class*="bg-amber-50"], [class*="bg-paradise-gold/"]) {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page [class*="bg-emerald-50"] {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page [class*="bg-rose-50"] {
+  background-color: rgba(244, 63, 94, 0.12) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page :is([class*="text-neutral-8"], [class*="text-neutral-7"], [class*="text-slate-9"], [class*="text-amber-9"], [class*="text-emerald-9"]) {
+  color: rgba(255, 255, 255, 0.90) !important;
+}
+
+.dark .app-content-surface .operations-liquid-page [class*="text-[#B85B68]"] {
+  color: #f0a3c2 !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .operations-liquid-page,
+  .operations-liquid-page [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: #fbf8fa !important;
+  }
+
+  .dark .operations-liquid-page,
+  .dark .operations-liquid-page [class*="backdrop-blur"] {
+    background-color: #211f27 !important;
   }
 }
 

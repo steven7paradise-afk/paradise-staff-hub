@@ -54,6 +54,7 @@ export type ManagementDashboardData = {
   monthDeposits: number;
   monthWithdrawals: number;
   monthExpenses: number;
+  monthRevenue: number;
   financialPeriodLabel: string;
   missingPayslips: Array<{ id: string; name: string; photoUrl: string | null; location: string }>;
   payrollMonthLabel: string;
@@ -154,7 +155,6 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const movementTotal = Math.max(1, movementSum);
   const depositEnd = data.monthDeposits / movementTotal * 100;
   const withdrawalEnd = depositEnd + data.monthWithdrawals / movementTotal * 100;
-  const netMovement = data.monthDeposits - data.monthWithdrawals - data.monthExpenses;
 
   function showPersonnelSection(view: "PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
     setPersonnelView(view);
@@ -166,7 +166,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1680px] space-y-6 pb-12 font-sans antialiased">
+    <div className="management-dashboard-liquid w-full max-w-none space-y-6 rounded-[32px] p-4 pb-12 font-sans antialiased sm:p-6">
       <section className="overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(145deg,rgba(31,27,38,0.98),rgba(17,16,24,0.98))] text-white shadow-[0_20px_60px_rgba(20,11,16,0.18)] backdrop-blur-2xl">
         <div className="flex flex-col gap-5 border-b border-white/10 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div>
@@ -300,8 +300,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
               </div>
             </div>
             <div className="relative mt-5 flex items-center gap-2 text-xs font-bold text-white/70">
-              Movimento netto mese
-              <span className={`rounded-full px-2 py-1 font-black ${netMovement >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-300"}`}>{netMovement >= 0 ? "+" : ""}{money.format(netMovement)}</span>
+              Totale ricavato nel mese
+              <span className="rounded-full bg-emerald-400/15 px-2 py-1 font-black text-emerald-300">{money.format(data.monthRevenue)}</span>
             </div>
           </Link>
 

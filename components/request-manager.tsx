@@ -199,7 +199,7 @@ function RequestDetailPanel({
           </div>
         </div>
         {onClose ? (
-          <button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-2xl border border-black/10 bg-white text-black/55 lg:hidden">
+          <button type="button" onClick={onClose} className="grid size-11 place-items-center rounded-2xl border border-black/10 bg-white text-black/55 lg:hidden" aria-label="Chiudi dettaglio richiesta">
             <X className="size-4" />
           </button>
         ) : null}
@@ -254,7 +254,7 @@ function RequestDetailPanel({
                   value={medicalDraft}
                   placeholder="Codice protocollo medico"
                   onChange={(event) => onMedicalDraftChange(event.target.value)}
-                  className="h-10 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
+                  className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
                 />
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
@@ -265,7 +265,7 @@ function RequestDetailPanel({
                       if (!inputVal) return alert("Inserisci un codice valido.");
                       onUpdateSickness(request.id, { medicalCode: inputVal });
                     }}
-                    className="h-10 rounded-xl bg-rose-600 px-4 text-xs font-black text-white transition hover:bg-rose-700 disabled:opacity-50"
+                    className="h-11 rounded-xl bg-rose-600 px-4 text-xs font-black text-white transition hover:bg-rose-700 disabled:opacity-50"
                   >
                     Salva codice
                   </button>
@@ -273,7 +273,7 @@ function RequestDetailPanel({
                     type="button"
                     disabled={saving === request.id}
                     onClick={() => onUpdateSickness(request.id, { sicknessUnjustified: true })}
-                    className="h-10 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
+                    className="h-11 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
                   >
                     Non giustificata
                   </button>
@@ -319,14 +319,14 @@ function RequestDetailPanel({
                 <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "APPROVED")}
-                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
                 >
                   <Check className="size-3.5" /> Approva
                 </button>
                 <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "REJECTED")}
-                  className="flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
                 >
                   <X className="size-3.5" /> Rifiuta
                 </button>
@@ -336,7 +336,7 @@ function RequestDetailPanel({
               <button
                 disabled={saving === request.id}
                 onClick={() => onChangeStatus(request.id, "FLAGGED")}
-                className="mt-3 flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-paradise-gold/30 bg-paradise-gold/20 text-xs font-black text-amber-800 transition hover:bg-paradise-gold/30 disabled:opacity-50"
+                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-paradise-gold/30 bg-paradise-gold/20 text-xs font-black text-amber-800 transition hover:bg-paradise-gold/30 disabled:opacity-50"
               >
                 <Flag className="size-3.5" /> Segnala ad Admin
               </button>
@@ -400,13 +400,13 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
   const pendingRequests = requests.filter((request) => request.status === "PENDING").length;
-  const requestSections: Array<{ type: RequestRecord["type"]; title: string; description: string; tone: "pink" | "gold" | "green" | "dark"; items: RequestRecord[] }> = [
+  const requestSections = ([
     { type: "PERMESSO", title: "Permessi", description: "Entrate posticipate, uscite anticipate e permessi orari.", tone: "pink", items: [] },
     { type: "FERIE", title: "Ferie", description: "Giorni di ferie richiesti o già approvati.", tone: "gold", items: [] },
     { type: "RIPOSO", title: "Riposo", description: "Riposi programmati e richieste di assenza ordinaria.", tone: "green", items: [] },
     { type: "MALATTIA", title: "Malattia", description: "Malattie già giustificate o segnate come non giustificate.", tone: "pink", items: [] },
     { type: "ALTRO", title: "Altro", description: "Richieste fuori categoria standard.", tone: "dark", items: [] },
-  ].map((section) => ({
+  ] as Array<{ type: RequestRecord["type"]; title: string; description: string; tone: "pink" | "gold" | "green" | "dark"; items: RequestRecord[] }>).map((section) => ({
     ...section,
     items: archiveRequests.filter((request) => request.type === section.type),
   }));
@@ -530,7 +530,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   }
 
   return (
-    <>
+    <div className="operations-liquid-page requests-liquid min-h-[calc(100dvh-12rem)] rounded-[32px] border border-white/70 p-4 shadow-[0_18px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl sm:p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <Button
           onClick={() => setOpenForm((current) => !current)}
@@ -837,6 +837,6 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
           </div>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

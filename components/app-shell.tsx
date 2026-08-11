@@ -451,7 +451,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
  
   const main = (
       <main className={cn(
-        "relative w-full min-w-0 max-w-full overflow-x-hidden bg-transparent",
+        "app-liquid-canvas relative w-full min-w-0 max-w-full overflow-x-hidden bg-transparent",
         edgeToEdgeMain ? "p-0" : "xl:px-10 xl:py-8",
         !edgeToEdgeMain && (hideMobileHeader ? "px-0 py-0" : "px-4 py-5 sm:px-6"),
         transparentMobileHeader && !hideMobileHeader && "pt-[calc(env(safe-area-inset-top)+72px)] xl:pt-8",
