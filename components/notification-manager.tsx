@@ -17,7 +17,6 @@ import {
   ExternalLink,
   FileCheck2,
   FileText,
-  FileUp,
   Filter,
   Image as ImageIcon,
   LayoutGrid,
@@ -37,12 +36,10 @@ import {
   ShoppingBag,
   Sparkles,
   Trash2,
-  UploadCloud,
   User,
   Users,
-  X,
 } from "lucide-react";
-import { Badge, Button, Card, Field, Select } from "@/components/ui";
+import { Badge, Button, Card, Field } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
@@ -170,6 +167,7 @@ export function NotificationManager({
   currentUserId = "",
   currentUserName = "",
   focusNotificationId = null,
+  initialSection = "BLOG",
 }: {
   role: Role;
   notifications: NotificationItem[];
@@ -178,26 +176,12 @@ export function NotificationManager({
   currentUserId?: string;
   currentUserName?: string;
   focusNotificationId?: string | null;
+  initialSection?: SectionTab;
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const [viewMode, setViewMode] = useState<"BLOG" | "LIST">("BLOG");
-  const [sectionTab, setSectionTab] = useState<SectionTab>("BLOG");
+  const [sectionTab, setSectionTab] = useState<SectionTab>(initialSection);
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState("all");
-  const [targetId, setTargetId] = useState(locations[0]?.id ?? recipients[0]?.id ?? "");
-  const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
-  const [customLinkUrl, setCustomLinkUrl] = useState("");
-  const [customButtonText, setCustomButtonText] = useState("");
-  
-  // File Upload to Drive state
-  const [attachedFileUrl, setAttachedFileUrl] = useState("");
-  const [attachedFileName, setAttachedFileName] = useState("");
-  const [uploadingFile, setUploadingFile] = useState(false);
-
-  const [status, setStatus] = useState("");
-  const [sending, setSending] = useState(false);
   const [items, setItems] = useState(notifications);
 
   // Active communication for the Blog Reader view (defaults to latest non-attendance post if in blog mode)
@@ -225,12 +209,6 @@ export function NotificationManager({
   const [commentStatus, setCommentStatus] = useState("");
   const [commentSending, setCommentSending] = useState(false);
   const router = useRouter();
-
-  const recipientsByLocation = locations.map((location) => ({
-    ...location,
-    recipients: recipients.filter((recipient) => recipient.locationId === location.id),
-  }));
-  const recipientsWithoutLocation = recipients.filter((recipient) => !recipient.locationId);
 
   const enrichedItems = useMemo(() => {
     return items.map((item) => {
@@ -274,41 +252,6 @@ export function NotificationManager({
       cancelled = true;
     };
   }, [activeItem?.id]);
-
-  // Handle Google Drive File Upload
-  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setUploadingFile(true);
-    setStatus("Caricamento allegato su Google Drive in corso...");
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("/api/notifications/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      setUploadingFile(false);
-
-      if (!res.ok) {
-        setStatus(data.error ?? "Errore durante il caricamento del file.");
-        return;
-      }
-
-      setAttachedFileUrl(data.url);
-      setAttachedFileName(data.name);
-      setStatus("✓ File caricato su Google Drive con successo!");
-    } catch (err) {
-      console.error("Upload error:", err);
-      setUploadingFile(false);
-      setStatus("Errore durante il caricamento.");
-    }
-  }
 
   const stats = useMemo(() => {
     return {
@@ -408,55 +351,6 @@ export function NotificationManager({
     if (viewMode === "LIST") {
       setViewMode("BLOG");
     }
-  }  async function send() {
-    setSending(true);
-    setStatus("Invio comunicazione in corso...");
-
-    const finalActionUrl = customLinkUrl.trim() || attachedFileUrl || "/notifications";
-    const finalMessage = message.trim();
-
-    const response = await fetch("/api/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        target,
-        targetId,
-        title,
-        message: finalMessage,
-        type: "COMUNICAZIONE",
-        actionUrl: finalActionUrl,
-      }),
-    });
-    const data = await response.json();
-    setSending(false);
-    if (!response.ok) {
-      setStatus(data.error ?? "Comunicazione non inviata.");
-      return;
-    }
-    const newPost: NotificationItem = {
-      id: String(Date.now()),
-      title,
-      message: finalMessage,
-      type: "COMUNICAZIONE",
-      page: 1,
-      read: true,
-      actionUrl: finalActionUrl,
-      createdAt: new Date().toISOString(),
-    };
-    setItems((prev) => [newPost, ...prev]);
-    setActiveItem(newPost);
-    setTitle("");
-    setMessage("");
-    setCustomLinkUrl("");
-    setCustomButtonText("");
-    setAttachedFileUrl("");
-    setAttachedFileName("");
-    setStatus(`✓ Comunicazione pubblicata con successo ed inviata a ${data.sent} destinatari.`);
-    setTimeout(() => {
-      setOpen(false);
-      setStatus("");
-    }, 1200);
-    router.refresh();
   }
 
   // Find next and previous index in filtered list
@@ -734,7 +628,7 @@ export function NotificationManager({
             {canSend ? (
               <button
                 type="button"
-                onClick={() => setOpen(true)}
+                onClick={() => router.push("/notifications/new")}
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-[#17151A] px-6 py-3 text-xs font-black text-white transition hover:bg-black active:scale-95"
               >
                 <MailPlus className="size-4" /> Nuova comunicazione
@@ -1370,145 +1264,6 @@ export function NotificationManager({
           </Card>
         )}
       </div>
-
-      {/* NEW COMMUNICATION MODAL */}
-      {open ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-xl border border-black/10 shadow-2xl p-6 sm:p-8 rounded-[32px] bg-white max-h-[90vh] overflow-y-auto">
-            <div className="mb-6 flex items-start justify-between gap-4">
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
-                  Nuovo Post
-                </span>
-                <h2 className="mt-2 text-2xl font-black text-[#1F1F1F]">Nuova comunicazione</h2>
-                <p className="mt-1 text-xs font-semibold text-black/50">
-                  Pubblica un articolo sul blog aziendale ed invia notifica allo staff.
-                </p>
-              </div>
-              <button className="grid size-10 place-items-center rounded-full border border-black/10 bg-neutral-50 hover:bg-neutral-100 transition" onClick={() => setOpen(false)}>
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <div className="grid gap-4">
-              {canSend ? (
-                <label className="space-y-1.5">
-                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Destinatari</span>
-                  <Select
-                    value={target}
-                    onChange={(event) => {
-                      setTarget(event.target.value);
-                      setTargetId(event.target.value === "location" ? locations[0]?.id ?? "" : recipients[0]?.id ?? "");
-                    }}
-                  >
-                    <option value="all">{role === "RESPONSABILE" ? "Tutto il personale del mio salone" : "Tutto lo staff (tutti i saloni)"}</option>
-                    {role !== "RESPONSABILE" ? <option value="location">Specifico salone</option> : null}
-                    <option value="user">Singola persona</option>
-                  </Select>
-                </label>
-              ) : null}
-
-              {target === "location" ? (
-                <label className="space-y-1.5">
-                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Salone</span>
-                  <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-                    {locations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              ) : null}
-
-              {target === "user" ? (
-                <label className="space-y-1.5">
-                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Persona</span>
-                  <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-                    {recipientsByLocation.map((location) =>
-                      location.recipients.length > 0 ? (
-                        <optgroup key={location.id} label={location.name}>
-                          {location.recipients.map((recipient) => (
-                            <option key={recipient.id} value={recipient.id}>
-                              {recipient.name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : null
-                    )}
-                    {recipientsWithoutLocation.length > 0 ? (
-                      <optgroup label="Senza salone">
-                        {recipientsWithoutLocation.map((recipient) => (
-                          <option key={recipient.id} value={recipient.id}>
-                            {recipient.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                  </Select>
-                </label>
-              ) : null}
-
-              <label className="space-y-1.5">
-                <span className="text-xs font-black uppercase tracking-wider text-black/50">Titolo comunicazione</span>
-                <Field value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Es: Nuove direttive per la piega mossa" />
-              </label>
-
-              <label className="space-y-1.5">
-                <span className="text-xs font-black uppercase tracking-wider text-black/50">Testo del messaggio</span>
-                <textarea
-                  className="min-h-36 w-full rounded-2xl border border-black/10 bg-white p-4 text-xs font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition"
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder="Scrivi qui la comunicazione completa..."
-                />
-              </label>
-
-              {/* Upload file on Google Drive */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-black uppercase tracking-wider text-black/50">Allegato Immagine o PDF (Google Drive)</span>
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-black/10 bg-neutral-50 px-4 py-2.5 text-xs font-bold text-black/70 hover:bg-neutral-100 transition active:scale-95">
-                    <UploadCloud className="size-4 text-[#D96B94]" />
-                    <span>{uploadingFile ? "Caricamento in corso..." : "Carica File (Immagine o PDF)"}</span>
-                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileUpload} disabled={uploadingFile} />
-                  </label>
-                  {attachedFileName ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-pink-50 border border-pink-200 px-3 py-1.5 text-xs font-bold text-[#B83D7F]">
-                      <Paperclip className="size-3.5" />
-                      <span className="truncate max-w-[180px]">{attachedFileName}</span>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Custom Link & Button */}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="space-y-1.5">
-                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Link Esterno (opzionale)</span>
-                  <Field value={customLinkUrl} onChange={(event) => setCustomLinkUrl(event.target.value)} placeholder="https://..." />
-                </label>
-                <label className="space-y-1.5">
-                  <span className="text-xs font-black uppercase tracking-wider text-black/50">Testo Pulsante (opzionale)</span>
-                  <Field value={customButtonText} onChange={(event) => setCustomButtonText(event.target.value)} placeholder="Es: Apri documento ↗" />
-                </label>
-              </div>
-
-              {status ? <p className="rounded-2xl bg-[#FFF0F6] border border-[#F9D5E7] p-3 text-xs font-black text-[#B83D7F]">{status}</p> : null}
-
-              <button
-                type="button"
-                onClick={send}
-                disabled={sending || uploadingFile}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60 mt-2"
-              >
-                <Send className="size-4" />
-                <span>{sending ? "Pubblicazione..." : "Pubblica sul Blog ed Invia"}</span>
-              </button>
-            </div>
-          </Card>
-        </div>
-      ) : null}
 
       {selectedResponseIdForModal && (
         <ResponseDetailModal

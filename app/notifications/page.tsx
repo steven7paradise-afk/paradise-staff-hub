@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function NotificationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ communication?: string }>;
+  searchParams: Promise<{ communication?: string; section?: string }>;
 }) {
   const params = await searchParams;
   const session = await auth();
@@ -32,6 +32,7 @@ export default async function NotificationsPage({
         currentUserId={session.user.id}
         currentUserName={session.user.name ?? ""}
         focusNotificationId={params.communication ?? null}
+        initialSection={params.section === "sent" ? "SENT" : "BLOG"}
         notifications={notifications.map((notification) => ({
           id: notification.id,
           title: notification.title,

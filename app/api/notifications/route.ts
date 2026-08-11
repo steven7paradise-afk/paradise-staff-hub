@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   const title = String(payload.title ?? "").trim();
   const message = String(payload.message ?? "").trim();
-  const type = String(payload.type ?? "COMUNICAZIONE").trim() || "COMUNICAZIONE";
+  // This endpoint is the communication publisher. Task creation has its own API.
+  const type = "COMUNICAZIONE";
   const actionUrl = payload.actionUrl ? String(payload.actionUrl) : "/notifications";
   const page = Math.min(3, Math.max(1, Number(payload.page ?? 1) || 1));
   const target = String(payload.target ?? "all");
