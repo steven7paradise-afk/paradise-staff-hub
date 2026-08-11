@@ -295,8 +295,39 @@ export default async function DashboardPage() {
     const yesterdayCashClosings = Array.from(yesterdayClosingsByLocation.values())
       .reduce((sum, closing) => sum + closing.withdrawn, 0);
     const openVaultWithdrawals = vaultWithdrawals.filter((row) => !openPeriodStart || row.date >= openPeriodStart);
+    const weekCloseRange = (setting: (typeof weekClosings)[number]) => {
+      const value = setting.value as { weekKey?: string } | null;
+      if (!value?.weekKey) return null;
+      const [startKey, endKey] = value.weekKey.split(":");
+      const rangeStart = new Date(`${startKey}T00:00:00.000Z`);
+      const rangeEnd = new Date(`${endKey || startKey}T23:59:59.999Z`);
+      if (!endKey) rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 6);
+      return { start: rangeStart, end: rangeEnd, locationId: setting.key.split(":")[1] || null };
+    };
+    const openWeekClosings = weekClosings.filter((setting) => {
+      const range = weekCloseRange(setting);
+      if (!range) return false;
+      if (scopedLocationId && range.locationId !== scopedLocationId) return false;
+      return !openPeriodStart || range.end >= openPeriodStart;
+    });
+    const depositedCash = openWeekClosings.reduce((sum, setting) => {
+      const value = setting.value as { bank_deposit?: number } | null;
+      const amount = Number(value?.bank_deposit || 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+    const recordedWithdrawals = openWeekClosings.reduce((sum, setting) => {
+      const value = setting.value as { withdrawals?: number } | null;
+      const amount = Number(value?.withdrawals || 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+    const unclosedVaultWithdrawals = openVaultWithdrawals.filter((withdrawal) => !openWeekClosings.some((setting) => {
+      const range = weekCloseRange(setting);
+      return Boolean(range && range.locationId === withdrawal.location_id && withdrawal.date >= range.start && withdrawal.date <= range.end);
+    }));
     const availableCash = openClosings.reduce((sum, row) => sum + row.withdrawn, 0)
-      - openVaultWithdrawals.reduce((sum, row) => sum + row.amount, 0);
+      - depositedCash
+      - recordedWithdrawals
+      - unclosedVaultWithdrawals.reduce((sum, row) => sum + row.amount, 0);
     const monthExpenses = vaultWithdrawals
       .filter((row) => row.date >= start && row.date < end)
       .reduce((sum, row) => sum + row.amount, 0);

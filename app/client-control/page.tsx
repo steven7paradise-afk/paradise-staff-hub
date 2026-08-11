@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
-export default async function ClientControlPage() {
+export default async function ClientControlPage({ searchParams }: { searchParams: Promise<{ date?: string; hour?: string }> }) {
+  const params = await searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
@@ -104,6 +105,8 @@ export default async function ClientControlPage() {
         initialResponses={serializedResponses as any}
         canDelete={allowedRoles.has(role)}
         employeeNames={activeStaff.map((employee) => employee.name).filter((name): name is string => Boolean(name?.trim()))}
+        dashboardDateFilter={params.date === "today" ? "today" : null}
+        dashboardHourFilter={/^([01]\d|2[0-3])$/.test(params.hour || "") ? params.hour! : null}
       />
     </AppShell>
   );

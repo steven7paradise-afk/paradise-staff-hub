@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { BarChart3, Camera, Check, Download, Edit3, Eye, Search, ShoppingBag, Star, Trash2, X, MessageCircle, AlertTriangle, UserX, Layers, User, Mail, Phone, CalendarDays, Receipt, AtSign, Coins, CreditCard, ChevronDown, ChevronLeft, ChevronRight, Pencil, Sparkles, FileText, ExternalLink, Save, Loader2, RotateCcw, ShieldCheck, ClipboardCheck, Users } from "lucide-react";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
@@ -121,11 +122,16 @@ export function ClientControlDashboard({
   initialResponses,
   canDelete,
   employeeNames,
+  dashboardDateFilter,
+  dashboardHourFilter,
 }: {
   initialResponses: ResponseItem[];
   canDelete: boolean;
   employeeNames: string[];
+  dashboardDateFilter: "today" | null;
+  dashboardHourFilter: string | null;
 }) {
+  const router = useRouter();
   const [responses, setResponses] = useState(initialResponses);
   const [query, setQuery] = useState("");
   const [selectedWorkerName, setSelectedWorkerName] = useState("");
@@ -167,6 +173,20 @@ export function ClientControlDashboard({
       return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
     });
   }, [responses, selectedMonth, selectedYear]);
+
+  const dashboardFilteredResponses = useMemo(() => {
+    if (!dashboardDateFilter && !dashboardHourFilter) return monthlyResponses;
+    const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" });
+    const hourFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", hour: "2-digit", hourCycle: "h23" });
+
+    return monthlyResponses.filter((response) => {
+      const createdAt = new Date(response.created_at);
+      const matchesDate = dashboardDateFilter !== "today" || dateFormatter.format(createdAt) === todayKey;
+      const matchesHour = !dashboardHourFilter || hourFormatter.format(createdAt) === dashboardHourFilter;
+      return matchesDate && matchesHour && countsInAnalytics(response.answers ?? {});
+    });
+  }, [dashboardDateFilter, dashboardHourFilter, monthlyResponses]);
 
   const analyticsResponses = useMemo(() => monthlyResponses.filter((response) => countsInAnalytics(response.answers ?? {})), [monthlyResponses]);
   const salons = useMemo(() => buildAnalytics(monthlyResponses, employeeNames), [employeeNames, monthlyResponses]);
@@ -341,7 +361,7 @@ export function ClientControlDashboard({
     let totalConsulenze = 0;
     const productsMap = new Map<string, number>();
 
-    monthlyResponses.forEach((response) => {
+    dashboardFilteredResponses.forEach((response) => {
       const answers = response.answers ?? {};
       const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
       const fallbackOwner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
@@ -393,7 +413,7 @@ export function ClientControlDashboard({
       totalConsulenze,
       productsList
     };
-  }, [monthlyResponses, selectedWorkerName, employeeNames]);
+  }, [dashboardFilteredResponses, selectedWorkerName, employeeNames]);
 
   const tabCounts = useMemo(() => {
     let all = 0;
@@ -401,7 +421,7 @@ export function ClientControlDashboard({
     let discrepancies = 0;
     let noshows = 0;
 
-    monthlyResponses.forEach((response) => {
+    dashboardFilteredResponses.forEach((response) => {
       const answers = response.answers ?? {};
       const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
 
@@ -453,9 +473,9 @@ export function ClientControlDashboard({
     });
 
     return { all, pending, discrepancies, noshows };
-  }, [monthlyResponses, activeSalon, selectedWorkerName, query, employeeNames]);
+  }, [dashboardFilteredResponses, activeSalon, selectedWorkerName, query, employeeNames]);
 
-  const filteredResponses = monthlyResponses.filter((response) => {
+  const filteredResponses = dashboardFilteredResponses.filter((response) => {
     const answers = response.answers ?? {};
     const salon = String(answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name || "Senza sede");
 
@@ -517,7 +537,7 @@ export function ClientControlDashboard({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeSalon, currentTabFilter, query, selectedMonth, selectedWorkerName, selectedYear]);
+  }, [activeSalon, currentTabFilter, dashboardDateFilter, dashboardHourFilter, query, selectedMonth, selectedWorkerName, selectedYear]);
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
@@ -583,13 +603,14 @@ export function ClientControlDashboard({
     }
   }
 
-  const hasActiveFilters = activeSalon !== "Tutti" || Boolean(selectedWorkerName) || Boolean(query.trim()) || currentTabFilter !== "all";
+  const hasActiveFilters = activeSalon !== "Tutti" || Boolean(selectedWorkerName) || Boolean(query.trim()) || currentTabFilter !== "all" || Boolean(dashboardDateFilter) || Boolean(dashboardHourFilter);
 
   function resetOperationalFilters() {
     setActiveSalon("Tutti");
     setSelectedWorkerName("");
     setQuery("");
     setCurrentTabFilter("all");
+    if (dashboardDateFilter || dashboardHourFilter) router.replace("/client-control", { scroll: false });
   }
 
   const maxServices = Math.max(...(selectedSalon?.staff ?? []).map((staff) => staff.services), 1);
@@ -770,7 +791,11 @@ export function ClientControlDashboard({
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#C661A0]">Registro operativo</p>
             <h2 className="mt-1 text-2xl font-black">Controlli cliente</h2>
             <p className="mt-1 text-xs font-semibold text-black/45">
-              {filteredResponses.length} schede corrispondono ai filtri selezionati
+              {dashboardHourFilter
+                ? `${filteredResponses.length} schede completate oggi tra le ${dashboardHourFilter}:00 e le ${dashboardHourFilter}:59`
+                : dashboardDateFilter === "today"
+                  ? `${filteredResponses.length} schede completate oggi`
+                  : `${filteredResponses.length} schede corrispondono ai filtri selezionati`}
             </p>
           </div>
           <div className="flex w-full flex-1 flex-col gap-2 sm:flex-row lg:max-w-3xl">
