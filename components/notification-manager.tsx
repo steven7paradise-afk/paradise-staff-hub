@@ -43,6 +43,7 @@ import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
+import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type NotificationItem = {
@@ -59,7 +60,7 @@ type NotificationItem = {
 type Recipient = { id: string; name: string; photoUrl: string | null; locationId: string | null; locationName: string };
 type LocationOption = { id: string; name: string };
 type Filter = "ALL" | "IMPORTANT" | "UNREAD";
-type SectionTab = "BLOG" | "SENT" | "ATTENDANCE" | "ALL";
+type SectionTab = "BLOG" | "SENT" | "ATTENDANCE" | "ORDERS" | "ALL";
 
 type CommunicationReader = { id: string; name: string; photoUrl: string | null };
 type CommunicationComment = {
@@ -271,19 +272,22 @@ export function NotificationManager({
       sign: items.filter(needsSignature).length,
       urgent: items.filter(isUrgent).length,
       attendance: items.filter(isAttendanceAlert).length,
+      attendanceUnread: items.filter((item) => isAttendanceAlert(item) && !item.read).length,
       blog: items.filter((item) => item.type === "COMUNICAZIONE").length,
       communications: items.filter((item) => item.type === "COMUNICAZIONE").length,
       orders: enrichedItems.filter(({ meta }) => meta.category.isOrder).length,
+      ordersUnread: enrichedItems.filter(({ item, meta }) => meta.category.isOrder && !item.read).length,
     };
   }, [items, enrichedItems]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     return enrichedItems
-      .filter(({ item }) => {
+      .filter(({ item, meta }) => {
         if (sectionTab === "BLOG") return item.type === "COMUNICAZIONE";
         if (sectionTab === "SENT") return item.type === "COMUNICAZIONE";
         if (sectionTab === "ATTENDANCE") return isAttendanceAlert(item);
+        if (sectionTab === "ORDERS") return meta.category.isOrder;
         return true;
       })
       .filter(({ item }) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true))
@@ -357,18 +361,10 @@ export function NotificationManager({
   }
 
   // Open operational notifications in their owning page; only communications use the reader.
-  function selectCommunication(item: NotificationItem) {
+  async function selectCommunication(item: NotificationItem) {
     const meta = parseNotificationMetadata(item, recipients, locations);
-    const isForm = item.type === "FORM";
-
-    if (meta.category.isOrder || isForm || isAttendanceAlert(item)) {
-      const fallbackUrl = isAttendanceAlert(item) ? "/attendance" : "/service-forms";
-      const hasOperationalUrl = item.actionUrl && !item.actionUrl.startsWith("/notifications");
-      window.location.assign(hasOperationalUrl ? item.actionUrl : fallbackUrl);
-      return;
-    }
-
-    window.location.assign(`/notifications?communication=${encodeURIComponent(item.id)}&direct=1`);
+    await markRead(item);
+    window.location.assign(resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder }));
   }
 
   // Find next and previous index in filtered list
@@ -630,7 +626,8 @@ export function NotificationManager({
           {[
             { id: "BLOG", label: "Comunicazioni ricevute", count: stats.blog },
             ...(canSend ? [{ id: "SENT", label: "Comunicazioni inviate", count: stats.communications }] : []),
-            { id: "ATTENDANCE", label: "Timbrature e pause", count: stats.attendance },
+            { id: "ATTENDANCE", label: "Timbrature e pause", count: stats.attendanceUnread },
+            { id: "ORDERS", label: "Ordini", count: stats.ordersUnread },
             { id: "ALL", label: "Tutte", count: stats.total },
           ].map((tab) => (
             <button
@@ -641,6 +638,9 @@ export function NotificationManager({
                 if (tab.id === "ATTENDANCE") {
                   const firstAttendance = items.find(isAttendanceAlert);
                   if (firstAttendance) setActiveItem(firstAttendance);
+                } else if (tab.id === "ORDERS") {
+                  const firstOrder = enrichedItems.find(({ meta }) => meta.category.isOrder)?.item;
+                  if (firstOrder) setActiveItem(firstOrder);
                 } else if (tab.id === "BLOG") {
                   const firstBlog = items.find((notification) => notification.type === "COMUNICAZIONE");
                   if (firstBlog) setActiveItem(firstBlog);
@@ -672,7 +672,7 @@ export function NotificationManager({
           {[
             { label: "Totali comunicazioni", value: stats.blog, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
             { label: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
-            { label: "Avvisi Timbrature", value: stats.attendance, icon: BellRing, bg: "bg-rose-100 text-rose-700" },
+            { label: "Timbrature da vedere", value: stats.attendanceUnread, icon: BellRing, bg: "bg-rose-100 text-rose-700" },
             { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700" },
           ].map((metric) => {
             const Icon = metric.icon;
@@ -1175,7 +1175,15 @@ export function NotificationManager({
           <Card className="p-0 border border-black/5 shadow-2xs overflow-hidden">
             <div className="flex flex-col gap-4 border-b border-black/5 p-6 lg:flex-row lg:items-center lg:justify-between bg-white">
               <h3 className="text-lg font-black text-[#1F1F1F]">
-                {filter === "IMPORTANT" ? "Comunicazioni importanti" : filter === "UNREAD" ? "Comunicazioni non lette" : "Tutte le comunicazioni"}
+                {sectionTab === "ORDERS"
+                  ? "Notifiche ordini"
+                  : sectionTab === "ATTENDANCE"
+                    ? "Timbrature e pause"
+                    : filter === "IMPORTANT"
+                      ? "Comunicazioni importanti"
+                      : filter === "UNREAD"
+                        ? "Comunicazioni non lette"
+                        : "Tutte le comunicazioni"}
               </h3>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <label className="relative block sm:w-80">

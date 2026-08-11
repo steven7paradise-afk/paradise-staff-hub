@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, Building2, CheckCheck, ExternalLink } from "lucide-react";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
+import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { cn } from "@/lib/utils";
 
 type NotificationItem = {
@@ -69,15 +70,18 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
 
   async function handleNotificationClick(item: NotificationItem) {
     if (!item.read) {
-      fetch("/api/notifications/read", {
+      await fetch("/api/notifications/read", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id }),
+        keepalive: true,
       }).catch(() => null);
       setUnreadCount((prev) => Math.max(0, prev - 1));
       setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, read: true } : n)));
     }
     setIsOpen(false);
+    const meta = parseNotificationMetadata(item);
+    window.location.assign(resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder }));
   }
 
   function formatTime(iso?: string | null) {
@@ -145,7 +149,7 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
                 return (
                   <div
                     key={item.id}
-                    onClick={() => handleNotificationClick(item)}
+                    onClick={() => void handleNotificationClick(item)}
                     className={cn(
                       "group relative rounded-xl p-3 text-left transition cursor-pointer border-l-4 space-y-1.5",
                       meta.category.borderLeft,
@@ -195,8 +199,12 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
 
                     {(item.actionUrl || item.type === "COMUNICAZIONE") && (
                       <Link
-                        href={item.type === "COMUNICAZIONE" ? `/notifications?communication=${item.id}` : item.actionUrl!}
-                        onClick={() => setIsOpen(false)}
+                        href={resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder })}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleNotificationClick(item);
+                        }}
                         className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-[#B9476D] hover:underline"
                       >
                         <span>Apri dettaglio</span>

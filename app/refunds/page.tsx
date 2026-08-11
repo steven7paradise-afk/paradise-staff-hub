@@ -31,7 +31,7 @@ function formatMoney(value: number) {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
-export default async function RefundsPage(props: { searchParams: Promise<{ month?: string }> }) {
+export default async function RefundsPage(props: { searchParams: Promise<{ month?: string; rimborso?: string; refund?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
@@ -51,13 +51,26 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
 
   const searchParams = await props.searchParams;
   const monthParam = searchParams.month;
+  const focusedRefundId = searchParams.rimborso ?? searchParams.refund ?? null;
+
+  const focusedRefund = focusedRefundId && !monthParam
+    ? await prisma.serviceFormResponse.findFirst({
+        where: {
+          id: focusedRefundId,
+          form: { name: { contains: "rimborso", mode: "insensitive" } },
+        },
+        select: { created_at: true },
+      })
+    : null;
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
   const now = new Date(today);
 
   const currentMonthDate = monthParam && /^\d{4}-\d{2}$/.test(monthParam)
     ? new Date(`${monthParam}-01T00:00:00`)
-    : new Date(now.getFullYear(), now.getMonth(), 1);
+    : focusedRefund
+      ? new Date(focusedRefund.created_at.getFullYear(), focusedRefund.created_at.getMonth(), 1)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
 
   const prevMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
   const nextMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
@@ -208,7 +221,11 @@ export default async function RefundsPage(props: { searchParams: Promise<{ month
                     const notes = answer(res, "refund_notes") || "";
 
                     return (
-                      <tr key={res.id} className="align-top hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
+                      <tr
+                        id={`rimborso-${res.id}`}
+                        key={res.id}
+                        className={`align-top transition-colors hover:bg-black/[0.01] dark:hover:bg-white/[0.01] ${focusedRefundId === res.id ? "bg-rose-50/80 ring-2 ring-inset ring-rose-300 dark:bg-rose-950/30" : ""}`}
+                      >
                         <td className="px-5 py-4 font-bold text-black dark:text-white white-space-nowrap">{dateStr}</td>
                         <td className="px-5 py-4">
                           <div className="flex flex-col gap-0.5">

@@ -6,6 +6,7 @@ import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
 import { isPinValidForUser, identifyWorkerByPin } from "@/lib/pin";
 import { getOperationalUser } from "@/lib/operational-session";
+import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
 
 type FormSessionUser = {
   id: string;
@@ -390,7 +391,7 @@ export async function POST(request: NextRequest) {
             title: form.name,
             message: `Il dipendente ${sessionUser.name ?? "Dipendente"}${location?.name ? ` (${location.name})` : ""} ha inviato una risposta per il modulo "${form.name}".`,
             type: "FORM",
-            action_url: `/service-forms/responses/${response.id}`,
+            action_url: buildServiceFormNotificationActionUrl(form.name, response.id),
           }))
         );
 
