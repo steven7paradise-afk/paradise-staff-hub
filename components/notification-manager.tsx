@@ -9,6 +9,7 @@ import {
   Building2,
   CalendarDays,
   Check,
+  CheckCheck,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -59,7 +60,7 @@ type NotificationItem = {
 
 type Recipient = { id: string; name: string; photoUrl: string | null; locationId: string | null; locationName: string };
 type LocationOption = { id: string; name: string };
-type Filter = "ALL" | "IMPORTANT" | "UNREAD";
+type Filter = "ALL" | "IMPORTANT" | "UNREAD" | "URGENT";
 type SectionTab = "BLOG" | "SENT" | "ATTENDANCE" | "ORDERS" | "ALL";
 
 type CommunicationReader = { id: string; name: string; photoUrl: string | null };
@@ -269,7 +270,7 @@ export function NotificationManager({
     return {
       unread: items.filter((item) => !item.read).length,
       sign: items.filter(needsSignature).length,
-      urgent: items.filter(isUrgent).length,
+      urgent: items.filter((item) => !item.read && isUrgent(item)).length,
       attendance: items.filter(isAttendanceAlert).length,
       attendanceUnread: items.filter((item) => isAttendanceAlert(item) && !item.read).length,
       blogUnread: items.filter((item) => item.type === "COMUNICAZIONE" && !item.read).length,
@@ -288,7 +289,7 @@ export function NotificationManager({
         if (sectionTab === "ORDERS") return meta.category.isOrder;
         return true;
       })
-      .filter(({ item }) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : true))
+      .filter(({ item }) => (filter === "IMPORTANT" ? isImportant(item) : filter === "UNREAD" ? !item.read : filter === "URGENT" ? !item.read && isUrgent(item) : true))
       .filter(({ item, meta }) => {
         if (selectedSalon !== "ALL" && meta.salonName?.toLowerCase() !== selectedSalon.toLowerCase()) return false;
         if (selectedPerson !== "ALL" && meta.personName?.toLowerCase() !== selectedPerson.toLowerCase()) return false;
@@ -316,6 +317,18 @@ export function NotificationManager({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: notification.id }),
+    });
+    router.refresh();
+  }
+
+  async function markAllRead() {
+    if (!stats.unread) return;
+    setItems((current) => current.map((item) => ({ ...item, read: true })));
+    setActiveItem((current) => current ? { ...current, read: true } : current);
+    await fetch("/api/notifications/read", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
     });
     router.refresh();
   }
@@ -595,23 +608,30 @@ export function NotificationManager({
     <>
       <div className="w-full max-w-none space-y-6">
         {/* AppShell mostra gia il titolo pagina: qui restano solo contesto e azioni. */}
-        <div className="flex flex-col gap-4 border-y border-black/10 bg-white px-4 py-4 sm:rounded-md sm:border lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,#17151a_0%,#24202a_70%,#31232b_100%)] px-5 py-6 text-white shadow-[0_18px_55px_rgba(32,18,25,0.16)] sm:px-7 lg:flex lg:items-center lg:justify-between">
+          <div className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-[#d96b94]/15 blur-3xl" />
           <div className="flex items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#F7E2EB] text-[#A74758]">
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-[#f4a8c6] shadow-inner">
               <MessageSquareText className="size-5" />
             </span>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Bacheca interna</p>
-              <p className="mt-0.5 text-sm font-semibold text-black/55">Messaggi ufficiali, conferme di lettura e risposte del team.</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f4a8c6]">Bacheca interna</p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight">Comunicazioni</h1>
+              <p className="mt-1 text-sm font-semibold text-white/60">Messaggi ufficiali, avvisi operativi e conferme di lettura.</p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative mt-5 flex flex-col gap-2 sm:flex-row sm:items-center lg:mt-0">
+            {stats.unread > 0 ? (
+              <button type="button" onClick={() => void markAllRead()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.07] px-4 text-xs font-black text-white transition hover:bg-white/[0.13] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]">
+                <CheckCheck className="size-4" /> Segna tutte lette
+              </button>
+            ) : null}
             {canSend ? (
               <button
                 type="button"
                 onClick={() => router.push("/notifications/new")}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#17151A] px-6 py-3 text-xs font-black text-white transition hover:bg-black active:scale-95"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-5 text-xs font-black text-[#17151A] shadow-sm transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]"
               >
                 <MailPlus className="size-4" /> Nuova comunicazione
               </button>
@@ -620,7 +640,7 @@ export function NotificationManager({
         </div>
 
         {/* Section Tabs (Blog vs Timbrature Separati) */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-black/10 pb-3">
+        <div role="tablist" aria-label="Sezioni comunicazioni" className="flex gap-2 overflow-x-auto rounded-2xl border border-black/[0.07] bg-white/75 p-2 shadow-sm backdrop-blur-xl">
           {[
             { id: "BLOG", label: "Comunicazioni ricevute", count: stats.blogUnread },
             ...(canSend ? [{ id: "SENT", label: "Comunicazioni inviate", count: stats.blogUnread }] : []),
@@ -631,6 +651,8 @@ export function NotificationManager({
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              aria-selected={sectionTab === tab.id}
               onClick={() => {
                 setSectionTab(tab.id as SectionTab);
                 if (tab.id === "ATTENDANCE") {
@@ -651,14 +673,14 @@ export function NotificationManager({
                 }
               }}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-xs font-black transition active:scale-95",
+                "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74758]",
                 sectionTab === tab.id
-                  ? "border border-[#A74758] bg-white text-[#A74758]"
-                  : "bg-neutral-100 text-black/60 hover:bg-neutral-200"
+                  ? "bg-[#17151A] text-white shadow-sm"
+                  : "text-black/55 hover:bg-black/[0.04] hover:text-black"
               )}
             >
               <span>{tab.label}</span>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-black", sectionTab === tab.id ? "bg-[#FFF0F6] text-[#B83D7F]" : "bg-black/10 text-black/60")}>
+              <span className={cn("grid min-w-6 place-items-center rounded-full px-1.5 py-0.5 text-[10px] font-black", sectionTab === tab.id ? "bg-white/15 text-white" : tab.count > 0 ? "bg-[#fff0f6] text-[#a74758]" : "bg-black/[0.06] text-black/40")}>
                 {tab.count}
               </span>
             </button>
@@ -668,14 +690,14 @@ export function NotificationManager({
         {/* Stats Metrics Cards */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
           {[
-            { label: "Comunicazioni da vedere", value: stats.blogUnread, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
-            { label: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
-            { label: "Timbrature da vedere", value: stats.attendanceUnread, icon: BellRing, bg: "bg-rose-100 text-rose-700" },
-            { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700" },
+            { label: "Comunicazioni da vedere", value: stats.blogUnread, icon: MessageSquareText, bg: "bg-pink-100 text-[#A74758]", action: () => { setSectionTab("BLOG"); setFilter("UNREAD"); } },
+            { label: "Totale non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700", action: () => { setSectionTab("ALL"); setFilter("UNREAD"); } },
+            { label: "Timbrature da vedere", value: stats.attendanceUnread, icon: BellRing, bg: "bg-rose-100 text-rose-700", action: () => { setSectionTab("ATTENDANCE"); setFilter("UNREAD"); } },
+            { label: "Urgenti da vedere", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700", action: () => { setSectionTab("ALL"); setFilter("URGENT"); } },
           ].map((metric) => {
             const Icon = metric.icon;
             return (
-              <Card key={metric.label} className="flex items-center gap-3.5 rounded-md border border-black/10 p-4 sm:p-5 shadow-none">
+              <button key={metric.label} type="button" onClick={metric.action} className="flex min-h-24 items-center gap-3.5 rounded-2xl border border-black/[0.07] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#d96b94]/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74758] motion-reduce:transform-none sm:p-5">
                 <div className={cn("grid size-11 place-items-center rounded-md shrink-0", metric.bg)}>
                   <Icon className="size-5" />
                 </div>
@@ -683,7 +705,7 @@ export function NotificationManager({
                   <p className="text-2xl font-black tracking-tight text-[#1F1F1F]">{metric.value}</p>
                   <p className="text-xs font-bold text-black/50 truncate">{metric.label}</p>
                 </div>
-              </Card>
+              </button>
             );
           })}
         </div>
@@ -1170,20 +1192,27 @@ export function NotificationManager({
           </div>
         ) : (
           /* TRADITIONAL LIST VIEW */
-          <Card className="p-0 border border-black/5 shadow-2xs overflow-hidden">
-            <div className="flex flex-col gap-4 border-b border-black/5 p-6 lg:flex-row lg:items-center lg:justify-between bg-white">
-              <h3 className="text-lg font-black text-[#1F1F1F]">
+          <Card className="overflow-hidden rounded-[24px] border border-black/[0.07] bg-white p-0 shadow-[0_16px_45px_rgba(45,25,35,0.07)]">
+            <div className="flex flex-col gap-4 border-b border-black/[0.06] bg-white p-5 lg:flex-row lg:items-center lg:justify-between sm:p-6">
+              <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#a74758]">Registro notifiche</p><h3 className="mt-1 text-xl font-black text-[#1F1F1F]">
                 {sectionTab === "ORDERS"
                   ? "Notifiche ordini"
                   : sectionTab === "ATTENDANCE"
                     ? "Timbrature e pause"
+                  : filter === "URGENT"
+                    ? "Comunicazioni urgenti da vedere"
                     : filter === "IMPORTANT"
                       ? "Comunicazioni importanti"
                       : filter === "UNREAD"
                         ? "Comunicazioni non lette"
                         : "Tutte le comunicazioni"}
-              </h3>
+              </h3><p className="mt-1 text-xs font-semibold text-black/45">{filteredItems.length} risultati nella vista corrente</p></div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex min-h-11 items-center rounded-xl bg-black/[0.04] p-1">
+                  {[["ALL", "Tutte"], ["UNREAD", `Non lette ${stats.unread}`], ["URGENT", `Urgenti ${stats.urgent}`], ["IMPORTANT", "Importanti"]].map(([value, label]) => (
+                    <button key={value} type="button" onClick={() => setFilter(value as Filter)} className={cn("min-h-9 rounded-lg px-3 text-[11px] font-black transition", filter === value ? "bg-white text-[#17151A] shadow-sm" : "text-black/45 hover:text-black")}>{label}</button>
+                  ))}
+                </div>
                 <label className="relative block sm:w-80">
                   <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-black/40" />
                   <Field value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca comunicazione..." className="pl-11" />
@@ -1191,7 +1220,7 @@ export function NotificationManager({
               </div>
             </div>
 
-            <div className="divide-y divide-black/5 bg-white">
+            <div className="space-y-2 bg-[#f8f6f7] p-3 sm:p-4">
               {filteredItems.length === 0 ? (
                 <div className="p-6 text-sm font-semibold text-black/50">Nessuna comunicazione trovata.</div>
               ) : (
@@ -1203,7 +1232,8 @@ export function NotificationManager({
                     <button
                       key={notification.id}
                       className={cn(
-                        "grid w-full gap-4 p-6 text-left transition hover:bg-[#FAF7F9] md:grid-cols-[64px_1fr_auto] md:items-center relative border-l-4",
+                        "relative grid min-h-28 w-full gap-4 rounded-2xl border border-black/[0.06] bg-white p-4 text-left shadow-sm transition hover:border-[#d96b94]/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74758] md:grid-cols-[56px_1fr_auto] md:items-center sm:p-5",
+                        !notification.read && "bg-[#fff9fc] ring-1 ring-[#f3ccdc]",
                         meta.category.borderLeft
                       )}
                       onClick={() => selectCommunication(notification)}
@@ -1212,8 +1242,8 @@ export function NotificationManager({
                         void deleteNotification(notification);
                       }}
                     >
-                      <div className={cn("grid size-14 place-items-center rounded-2xl shrink-0", meta.category.iconBg)}>
-                        <CategoryIcon className={cn("size-7", meta.category.iconText)} />
+                      <div className={cn("grid size-12 place-items-center rounded-xl shrink-0", meta.category.iconBg)}>
+                        <CategoryIcon className={cn("size-5", meta.category.iconText)} />
                       </div>
                       <div className="min-w-0 space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1240,7 +1270,7 @@ export function NotificationManager({
                             </span>
                           )}
                         </div>
-                        <p className="text-base font-black text-[#1F1F1F]">{displayNotificationTitle(notification.title)}</p>
+                        <div className="flex items-center gap-2"><p className="text-base font-black text-[#1F1F1F]">{displayNotificationTitle(notification.title)}</p>{!notification.read ? <span className="size-2 shrink-0 rounded-full bg-[#d94d86]" aria-label="Non letta" /> : null}</div>
                         <p className="text-xs font-semibold text-black/50">
                           {dateLabel(notification.createdAt)}
                         </p>
