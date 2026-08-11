@@ -231,6 +231,16 @@ export function NotificationManager({
   }, [notifications]);
 
   useEffect(() => {
+    if (!focusNotificationId) return;
+
+    const focused = notifications.find((notification) => notification.id === focusNotificationId);
+    if (!focused) return;
+
+    setActiveItem(focused);
+    setFocusedIntroOpen(!openCommunicationDirectly);
+  }, [focusNotificationId, notifications, openCommunicationDirectly]);
+
+  useEffect(() => {
     if (!activeItem || isAttendanceAlert(activeItem)) {
       setEngagement(null);
       return;
