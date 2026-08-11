@@ -3,7 +3,7 @@
 import Papa from "papaparse";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -351,6 +351,8 @@ export function OrderManager({
   currentUserRole: string;
 }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   const [query, setQuery] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
@@ -368,17 +370,36 @@ export function OrderManager({
   const [photoError, setPhotoError] = useState("");
   const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
   const [visibleMobileCount, setVisibleMobileCount] = useState(18);
+  const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(null);
 
   useEffect(() => {
     const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
-    if (!target || selected?.id === target) return;
+    if (!target) {
+      if (dismissedDeepLink) setDismissedDeepLink(null);
+      return;
+    }
+    if (target === dismissedDeepLink || selected?.id === target) return;
     const cleanTarget = target.replace(/^#/, "").trim().toLowerCase();
     const match = orders.find((order) => {
       const cleanNumber = orderNumber(order).replace(/^#/, "").trim().toLowerCase();
       return order.id === target || cleanNumber === cleanTarget;
     });
     if (match) setSelected(match);
-  }, [orders, searchParams, selected?.id]);
+  }, [orders, searchParams, selected?.id, dismissedDeepLink]);
+
+  function closeSelectedOrder() {
+    const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
+    if (target) setDismissedDeepLink(target);
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("ordine");
+    nextParams.delete("order");
+    nextParams.delete("orderId");
+
+    setSelected(null);
+    const nextUrl = nextParams.size > 0 ? `${pathname}?${nextParams.toString()}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  }
 
   const filteredOrders = useMemo(() => {
     const clean = query.trim().toLowerCase();
@@ -871,11 +892,16 @@ export function OrderManager({
       </div>
 
       {selected ? (
-        <div className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4">
+        <div
+          className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeSelectedOrder();
+          }}
+        >
           <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-[30px] bg-white p-3 shadow-2xl lg:max-w-7xl lg:rounded-[28px] lg:p-5">
             <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-black/5 bg-white/95 pb-4 backdrop-blur">
               <div className="flex min-w-0 items-center gap-3">
-                <button onClick={() => setSelected(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition hover:bg-black/[0.03]"><ArrowLeft className="size-5" /></button>
+                <button onClick={closeSelectedOrder} className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition hover:bg-black/[0.03]"><ArrowLeft className="size-5" /></button>
                 <div className="min-w-0">
                   <p className="text-[11px] font-black uppercase tracking-[0.18em] text-black/35">Ordine {orderNumber(selected)}</p>
                   <div className="flex flex-wrap items-center gap-2">
@@ -895,7 +921,7 @@ export function OrderManager({
                 >
                   <Printer className="size-4" /> Stampa
                 </Button>
-                <Button variant="soft" onClick={() => setSelected(null)}><X className="size-4" /> Chiudi</Button>
+                <Button variant="soft" onClick={closeSelectedOrder}><X className="size-4" /> Chiudi</Button>
               </div>
             </div>
             <div className="mb-4 grid gap-3 rounded-[22px] border border-black/5 bg-[#FBF8FA] p-3 md:grid-cols-4">
@@ -1221,7 +1247,7 @@ export function OrderManager({
                         });
                         if (response.ok) {
                           setOrders(current => current.filter(item => item.id !== selected.id));
-                          setSelected(null);
+                          closeSelectedOrder();
                         } else {
                           alert("Errore durante l'eliminazione dell'ordine.");
                         }

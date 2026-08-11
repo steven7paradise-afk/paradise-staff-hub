@@ -267,14 +267,12 @@ export function NotificationManager({
 
   const stats = useMemo(() => {
     return {
-      total: items.length,
       unread: items.filter((item) => !item.read).length,
       sign: items.filter(needsSignature).length,
       urgent: items.filter(isUrgent).length,
       attendance: items.filter(isAttendanceAlert).length,
       attendanceUnread: items.filter((item) => isAttendanceAlert(item) && !item.read).length,
-      blog: items.filter((item) => item.type === "COMUNICAZIONE").length,
-      communications: items.filter((item) => item.type === "COMUNICAZIONE").length,
+      blogUnread: items.filter((item) => item.type === "COMUNICAZIONE" && !item.read).length,
       orders: enrichedItems.filter(({ meta }) => meta.category.isOrder).length,
       ordersUnread: enrichedItems.filter(({ item, meta }) => meta.category.isOrder && !item.read).length,
     };
@@ -624,11 +622,11 @@ export function NotificationManager({
         {/* Section Tabs (Blog vs Timbrature Separati) */}
         <div className="flex flex-wrap items-center gap-2 border-b border-black/10 pb-3">
           {[
-            { id: "BLOG", label: "Comunicazioni ricevute", count: stats.blog },
-            ...(canSend ? [{ id: "SENT", label: "Comunicazioni inviate", count: stats.communications }] : []),
+            { id: "BLOG", label: "Comunicazioni ricevute", count: stats.blogUnread },
+            ...(canSend ? [{ id: "SENT", label: "Comunicazioni inviate", count: stats.blogUnread }] : []),
             { id: "ATTENDANCE", label: "Timbrature e pause", count: stats.attendanceUnread },
             { id: "ORDERS", label: "Ordini", count: stats.ordersUnread },
-            { id: "ALL", label: "Tutte", count: stats.total },
+            { id: "ALL", label: "Tutte", count: stats.unread },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -670,7 +668,7 @@ export function NotificationManager({
         {/* Stats Metrics Cards */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
           {[
-            { label: "Totali comunicazioni", value: stats.blog, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
+            { label: "Comunicazioni da vedere", value: stats.blogUnread, icon: MessageSquareText, bg: "bg-pink-100 text-[#C66170]" },
             { label: "Non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700" },
             { label: "Timbrature da vedere", value: stats.attendanceUnread, icon: BellRing, bg: "bg-rose-100 text-rose-700" },
             { label: "Urgenti", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700" },

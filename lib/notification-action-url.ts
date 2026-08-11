@@ -31,6 +31,10 @@ export function buildServiceFormNotificationActionUrl(formName: string, response
     return `/refunds?rimborso=${encodedId}#rimborso-${encodedId}`;
   }
 
+  if (normalizedName.includes("fattur") || normalizedName.includes("invoice")) {
+    return `/invoices?fattura=${encodedId}`;
+  }
+
   if (normalizedName.includes("ordine") || normalizedName.includes("order")) {
     return `/orders?ordine=${encodedId}`;
   }
@@ -56,6 +60,9 @@ export function resolveNotificationActionUrl(item: NotificationActionItem, optio
     const text = `${item.title} ${item.message}`.toLowerCase();
     if (text.includes("rimbor")) {
       return buildServiceFormNotificationActionUrl("rimborso", responseId);
+    }
+    if (text.includes("fattur") || text.includes("invoice")) {
+      return buildServiceFormNotificationActionUrl("fattura", responseId);
     }
     if (options?.isOrder || text.includes("ordine") || text.includes("order")) {
       return buildServiceFormNotificationActionUrl("ordine", responseId);

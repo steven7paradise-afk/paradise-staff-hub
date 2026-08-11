@@ -34,7 +34,7 @@ function formatMoney(value: number) {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
-export default async function InvoicesPage(props: { searchParams: Promise<{ month?: string }> }) {
+export default async function InvoicesPage(props: { searchParams: Promise<{ month?: string; fattura?: string; invoice?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
@@ -54,13 +54,26 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
 
   const searchParams = await props.searchParams;
   const monthParam = searchParams.month;
+  const focusedInvoiceId = searchParams.fattura ?? searchParams.invoice ?? null;
+
+  const focusedInvoice = focusedInvoiceId && !monthParam
+    ? await prisma.serviceFormResponse.findFirst({
+        where: {
+          id: focusedInvoiceId,
+          form: { name: { contains: "fattura", mode: "insensitive" } },
+        },
+        select: { created_at: true },
+      })
+    : null;
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
   const now = new Date(today);
 
   const currentMonthDate = monthParam && /^\d{4}-\d{2}$/.test(monthParam)
     ? new Date(`${monthParam}-01T00:00:00`)
-    : new Date(now.getFullYear(), now.getMonth(), 1);
+    : focusedInvoice
+      ? new Date(focusedInvoice.created_at.getFullYear(), focusedInvoice.created_at.getMonth(), 1)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
 
   const prevMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1);
   const nextMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1);
@@ -234,7 +247,10 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                   const isCompany = clientType.includes("Azienda");
 
                   return (
-                    <tr key={res.id} className="align-middle hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors">
+                    <tr
+                      key={res.id}
+                      className={`align-middle transition-colors hover:bg-black/[0.01] dark:hover:bg-white/[0.01] ${focusedInvoiceId === res.id ? "bg-cyan-50/80 ring-2 ring-inset ring-cyan-300 dark:bg-cyan-950/30" : ""}`}
+                    >
                       <td className="px-5 py-4 font-bold text-black dark:text-white">{dateStr}</td>
                       <td className="px-5 py-4">
                         <div className="flex flex-col gap-0.5">
@@ -318,7 +334,10 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
               const isCompany = clientType.includes("Azienda");
 
               return (
-                <div key={res.id} className={`pt-4 ${idx === 0 ? "pt-0" : ""}`}>
+                <div
+                  key={res.id}
+                  className={`rounded-2xl pt-4 ${idx === 0 ? "pt-0" : ""} ${focusedInvoiceId === res.id ? "bg-cyan-50 p-3 ring-2 ring-cyan-300 dark:bg-cyan-950/30" : ""}`}
+                >
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-xs text-black/40 dark:text-white/45">{dateStr}</p>
