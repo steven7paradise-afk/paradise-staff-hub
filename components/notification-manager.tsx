@@ -63,7 +63,7 @@ type NotificationItem = {
 type Recipient = { id: string; name: string; photoUrl: string | null; locationId: string | null; locationName: string };
 type LocationOption = { id: string; name: string };
 type Filter = "ALL" | "IMPORTANT" | "UNREAD";
-type SectionTab = "BLOG" | "ATTENDANCE" | "ALL";
+type SectionTab = "BLOG" | "SENT" | "ATTENDANCE" | "ALL";
 
 type CommunicationReader = { id: string; name: string; photoUrl: string | null };
 type CommunicationComment = {
@@ -82,6 +82,10 @@ type CommunicationEngagement = {
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "P";
+}
+
+function displayNotificationTitle(title: string) {
+  return title.replace(/^\s*Modulo\s+Compilato\s*:\s*/i, "").trim();
 }
 
 function ProfileAvatar({ person, size = "md" }: { person: CommunicationReader; size?: "sm" | "md" }) {
@@ -202,7 +206,7 @@ export function NotificationManager({
       const focused = notifications.find((notification) => notification.id === focusNotificationId);
       if (focused) return focused;
     }
-    return notifications.find((n) => !isAttendanceAlert(n)) ?? notifications[0] ?? null;
+    return notifications.find((notification) => notification.type === "COMUNICAZIONE") ?? notifications[0] ?? null;
   }, [focusNotificationId, notifications]);
 
   const [activeItem, setActiveItem] = useState<NotificationItem | null>(initialActive);
@@ -242,7 +246,7 @@ export function NotificationManager({
   useEffect(() => {
     setItems(notifications);
     if (!activeItem && notifications.length > 0) {
-      const defaultPost = notifications.find((n) => !isAttendanceAlert(n)) ?? notifications[0];
+      const defaultPost = notifications.find((notification) => notification.type === "COMUNICAZIONE") ?? notifications[0];
       setActiveItem(defaultPost);
     }
   }, [notifications]);
@@ -313,7 +317,8 @@ export function NotificationManager({
       sign: items.filter(needsSignature).length,
       urgent: items.filter(isUrgent).length,
       attendance: items.filter(isAttendanceAlert).length,
-      blog: items.filter((item) => !isAttendanceAlert(item)).length,
+      blog: items.filter((item) => item.type === "COMUNICAZIONE").length,
+      communications: items.filter((item) => item.type === "COMUNICAZIONE").length,
       orders: enrichedItems.filter(({ meta }) => meta.category.isOrder).length,
     };
   }, [items, enrichedItems]);
@@ -322,7 +327,8 @@ export function NotificationManager({
     const q = query.trim().toLowerCase();
     return enrichedItems
       .filter(({ item }) => {
-        if (sectionTab === "BLOG") return !isAttendanceAlert(item);
+        if (sectionTab === "BLOG") return item.type === "COMUNICAZIONE";
+        if (sectionTab === "SENT") return item.type === "COMUNICAZIONE";
         if (sectionTab === "ATTENDANCE") return isAttendanceAlert(item);
         return true;
       })
@@ -516,7 +522,7 @@ export function NotificationManager({
                   </div>
                   <div className="grid grid-cols-[92px_1fr] gap-4 px-5 py-4">
                     <dt className="font-semibold text-black/45">Oggetto</dt>
-                    <dd className="text-right font-black">{activeItem.title}</dd>
+                    <dd className="text-right font-black">{displayNotificationTitle(activeItem.title)}</dd>
                   </div>
                 </dl>
                 <div className="border-t border-black/10 px-5 py-5">
@@ -571,7 +577,7 @@ export function NotificationManager({
             <div className="border-b border-black/10 bg-[#F7F4F8]">
               <img
                 src={focusedImageSrc}
-                alt={`Allegato: ${activeItem.title}`}
+                alt={`Allegato: ${displayNotificationTitle(activeItem.title)}`}
                 className="max-h-[60vh] w-full object-contain"
                 onError={(event) => {
                   if (focusedDriveId && event.currentTarget.src.includes("/api/drive-image")) {
@@ -591,7 +597,7 @@ export function NotificationManager({
                 {notificationStatus(activeItem).label}
               </span>
             </div>
-            <h1 className="mt-5 text-3xl font-black leading-tight sm:text-4xl">{activeItem.title}</h1>
+            <h1 className="mt-5 text-3xl font-black leading-tight sm:text-4xl">{displayNotificationTitle(activeItem.title)}</h1>
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-black/45">
               <span>Direzione Paradise</span>
               <time>{dateLabel(activeItem.createdAt)}</time>
@@ -740,7 +746,8 @@ export function NotificationManager({
         {/* Section Tabs (Blog vs Timbrature Separati) */}
         <div className="flex flex-wrap items-center gap-2 border-b border-black/10 pb-3">
           {[
-            { id: "BLOG", label: "Comunicazioni", count: stats.blog },
+            { id: "BLOG", label: "Comunicazioni ricevute", count: stats.blog },
+            ...(canSend ? [{ id: "SENT", label: "Comunicazioni inviate", count: stats.communications }] : []),
             { id: "ATTENDANCE", label: "Timbrature e pause", count: stats.attendance },
             { id: "ALL", label: "Tutte", count: stats.total },
           ].map((tab) => (
@@ -753,8 +760,14 @@ export function NotificationManager({
                   const firstAttendance = items.find(isAttendanceAlert);
                   if (firstAttendance) setActiveItem(firstAttendance);
                 } else if (tab.id === "BLOG") {
-                  const firstBlog = items.find((n) => !isAttendanceAlert(n));
+                  const firstBlog = items.find((notification) => notification.type === "COMUNICAZIONE");
                   if (firstBlog) setActiveItem(firstBlog);
+                } else if (tab.id === "SENT") {
+                  setSelectedSalon("ALL");
+                  setSelectedPerson("ALL");
+                  setSelectedCategoryFilter("ALL");
+                  const firstCommunication = items.find((notification) => notification.type === "COMUNICAZIONE");
+                  if (firstCommunication) setActiveItem(firstCommunication);
                 }
               }}
               className={cn(
@@ -844,7 +857,7 @@ export function NotificationManager({
                     </div>
 
                     <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-[#1F1F1F] leading-tight">
-                      {activeItem.title}
+                      {displayNotificationTitle(activeItem.title)}
                     </h2>
 
                     <div className="flex items-center gap-4 text-xs font-bold text-black/60 pt-1 border-t border-black/5">
@@ -952,8 +965,8 @@ export function NotificationManager({
                     </div>
 
                     {!isAttendanceAlert(activeItem) ? (
-                      <section className="border-t border-black/10 pt-6" aria-label="Letture e commenti">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <section className="grid gap-4 border-t border-black/10 pt-6 lg:grid-cols-[minmax(230px,0.75fr)_minmax(0,1.25fr)]" aria-label="Letture e commenti">
+                        <div className="rounded-md border border-black/10 bg-[#FAF8F9] p-4">
                           <div>
                             <div className="flex items-center gap-2">
                               <Users className="size-4 text-[#A74758]" />
@@ -965,7 +978,7 @@ export function NotificationManager({
                                 : `${engagement?.readers.length ?? 0} di ${engagement?.recipientCount ?? 0} persone hanno letto`}
                             </p>
                           </div>
-                          <div className="flex min-h-10 items-center -space-x-2 pl-2">
+                          <div className="mt-4 flex min-h-10 flex-wrap items-center -space-x-2 pl-2">
                             {engagement?.readers.slice(0, 12).map((reader) => (
                               <ProfileAvatar key={reader.id} person={reader} />
                             ))}
@@ -983,7 +996,7 @@ export function NotificationManager({
                           </div>
                         </div>
 
-                        <div className="mt-6 border-t border-black/10 pt-5">
+                        <div className="rounded-md border border-black/10 p-4">
                           <div className="flex items-center gap-2">
                             <MessageCircle className="size-4 text-[#A74758]" />
                             <h3 className="text-sm font-black text-[#17151A]">Commenti</h3>
@@ -1048,7 +1061,7 @@ export function NotificationManager({
                         className="inline-flex items-center gap-1.5 text-xs font-black text-black/60 hover:text-[#B83D7F] transition truncate max-w-[200px]"
                       >
                         <ChevronLeft className="size-4" />
-                        <span className="truncate">Prec: {prevPost.title}</span>
+                        <span className="truncate">Prec: {displayNotificationTitle(prevPost.title)}</span>
                       </button>
                     ) : (
                       <span />
@@ -1060,7 +1073,7 @@ export function NotificationManager({
                         onClick={() => selectCommunication(nextPost)}
                         className="inline-flex items-center gap-1.5 text-xs font-black text-black/60 hover:text-[#B83D7F] transition truncate max-w-[200px]"
                       >
-                        <span className="truncate">Succ: {nextPost.title}</span>
+                        <span className="truncate">Succ: {displayNotificationTitle(nextPost.title)}</span>
                         <ChevronRight className="size-4" />
                       </button>
                     ) : null}
@@ -1241,7 +1254,7 @@ export function NotificationManager({
                           </div>
 
                           <h4 className="text-xs font-black text-[#1F1F1F] line-clamp-1 leading-snug">
-                            {item.title}
+                            {displayNotificationTitle(item.title)}
                           </h4>
 
                           <p className="text-[11px] font-semibold text-black/60 line-clamp-2 leading-normal">
@@ -1339,7 +1352,7 @@ export function NotificationManager({
                             </span>
                           )}
                         </div>
-                        <p className="text-base font-black text-[#1F1F1F]">{notification.title}</p>
+                        <p className="text-base font-black text-[#1F1F1F]">{displayNotificationTitle(notification.title)}</p>
                         <p className="text-xs font-semibold text-black/50">
                           {dateLabel(notification.createdAt)}
                         </p>
