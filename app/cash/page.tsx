@@ -6,6 +6,8 @@ import {
   Banknote,
   Calculator,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   CreditCard,
   MapPin,
@@ -635,6 +637,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   });
 
   const orphanResponses = responses.filter((response) => !response.user_location_id);
+  const missingTodayCount = storeRows.filter((row) => row.today.length === 0).length;
+  const pendingReviewCount = responses.filter((response) => cashReview(response).status === "DA_CONTROLLARE").length;
   const maxTrend = Math.max(...trendMonths.map((month) => Math.abs(month.net)), 1);
   const monthlyMovements = [
     ...responses.map((response) => ({
@@ -672,69 +676,58 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       role={role}
       hideHeader
     >
-      <div className="space-y-6">
-        <section className="relative overflow-hidden -mx-4 rounded-none sm:mx-0 sm:rounded-[36px] bg-[#050608] pt-12 pb-5 px-5 text-white shadow-2xl sm:p-8">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(167,71,88,0.36),transparent_32%),radial-gradient(circle_at_70%_20%,rgba(94,116,255,0.25),transparent_30%),linear-gradient(135deg,#050608,#101726_62%,#07111f)]" />
-          <div className="absolute -left-24 top-8 size-80 rounded-full border border-white/10" />
-          <div className="absolute -left-12 top-16 size-64 rounded-full border border-white/10" />
-          <div className="relative flex flex-col gap-6">
+      <div className="space-y-5">
+        <section className="-mx-4 overflow-hidden border-y border-black/10 bg-white sm:mx-0 sm:rounded-lg sm:border">
+          <div className="grid gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-7">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-[#C66170]">
-                <CircleDollarSign className="size-4 text-[#F7DFA7]" />
-                Cash Control
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-[#A74758]">
+                <CircleDollarSign className="size-4" />
+                Controllo cassa
               </div>
-              <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
-                Dashboard cassa mensile
-              </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58">
-                Controllo specifico per tutti i negozi: importo prelevato, fondo cassa, firme PIN, discrepanze e chiusure registrate nel periodo.
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-[#111017] sm:text-4xl">Cassa e chiusure</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-black/50">
+                Controlla il giorno, individua le sedi mancanti e gestisci il mese senza mescolare i pagamenti Shopify.
               </p>
-              <div className="mt-5 flex flex-wrap items-center gap-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/cash?month=${monthKey(prevMonth)}`} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-white hover:bg-white/15">← Mese prima</Link>
-                  <span className="rounded-2xl bg-white px-4 py-2 text-xs font-black capitalize text-black">{monthLabel}</span>
-                  <Link href={`/cash?month=${monthKey(nextMonth)}`} className="rounded-2xl border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-white hover:bg-white/15">Mese dopo →</Link>
-                </div>
-                <div className="inline-flex items-center gap-2">
-                  <span className="text-xs font-bold text-white/50">Giorno:</span>
-                  <CashDaySelector selectedDay={selectedDayKey} month={selectedMonth} />
-                </div>
-              </div>
             </div>
 
-            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-              <MetricCard label="Disponibilità saloni" value={formatMoney(netCash)} icon={CircleDollarSign} tone="gold" />
-              <MetricCard 
-                label={`Chiusura del ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} 
-                value={formatMoney(selectedDayWithdrawn)} 
-                icon={ReceiptText} 
-                tone="blue" 
-              />
-              <MetricCard label="Uscito cassaforte" value={formatMoney(totalVaultOut)} icon={Calculator} tone="pink" />
-              <MetricCard label="Prelevato mese" value={formatMoney(totalWithdrawn)} icon={ShieldCheck} tone="green" />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="inline-flex h-11 items-center rounded-md border border-black/10 bg-[#FAF7F9] p-1">
+                <Link href={`/cash?month=${monthKey(prevMonth)}`} aria-label="Mese precedente" className="grid size-9 place-items-center rounded text-black/55 hover:bg-white hover:text-black">
+                  <ChevronLeft className="size-4" />
+                </Link>
+                <span className="min-w-32 px-3 text-center text-xs font-black capitalize text-black">{monthLabel}</span>
+                <Link href={`/cash?month=${monthKey(nextMonth)}`} aria-label="Mese successivo" className="grid size-9 place-items-center rounded text-black/55 hover:bg-white hover:text-black">
+                  <ChevronRight className="size-4" />
+                </Link>
+              </div>
+              <CashDaySelector selectedDay={selectedDayKey} month={selectedMonth} />
             </div>
           </div>
-          <div className="relative mt-6 flex flex-col gap-3 border-t border-white/10 pt-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="text-sm text-white/55 flex flex-wrap gap-x-4 gap-y-1">
-              <span>
-                <strong className="text-white">Netto mese:</strong> {formatMoney(netCash)}
-              </span>
-              {monthCloseValue ? (
-                <span className="text-emerald-200">Mese chiuso da {monthCloseValue.closed_by_name}</span>
-              ) : null}
-              {isResponsible ? (
-                weekCloseValue ? (
-                  <span className="text-amber-200">Settimana chiusa da {weekCloseValue.closed_by_name}</span>
-                ) : null
-              ) : (
-                currentWeekCloses.length > 0 ? (
-                  <span className="text-amber-200">
-                    Settimane chiuse: {currentWeekCloses.length} su {locations.length} saloni
-                  </span>
-                ) : null
-              )}
+
+          <div className="grid grid-cols-2 border-t border-black/10 lg:grid-cols-4">
+            <MetricCard label="Disponibilità saloni" value={formatMoney(netCash)} icon={CircleDollarSign} tone="gold" />
+            <MetricCard label={`Chiusure ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} value={formatMoney(selectedDayWithdrawn)} icon={ReceiptText} tone="blue" />
+            <MetricCard label="Uscito cassaforte" value={formatMoney(totalVaultOut)} icon={Calculator} tone="pink" />
+            <MetricCard label="Prelevato nel mese" value={formatMoney(totalWithdrawn)} icon={ShieldCheck} tone="green" />
+          </div>
+
+          <div className="grid border-t border-black/10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="grid grid-cols-2 divide-x divide-black/10 lg:flex lg:divide-x-0">
+              <a href="#chiusure-sedi" className="flex min-h-16 items-center gap-3 px-5 py-3 hover:bg-[#FAF7F9]">
+                <span className={`grid size-9 place-items-center rounded-md ${missingTodayCount ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+                  {missingTodayCount ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}
+                </span>
+                <span><strong className="block text-lg leading-none">{missingTodayCount}</strong><small className="text-[11px] font-bold text-black/45">sedi mancanti oggi</small></span>
+              </a>
+              <a href="#movimenti-cassa" className="flex min-h-16 items-center gap-3 px-5 py-3 hover:bg-[#FAF7F9]">
+                <span className={`grid size-9 place-items-center rounded-md ${pendingReviewCount ? "bg-pink-50 text-[#A74758]" : "bg-emerald-50 text-emerald-700"}`}>
+                  <ShieldCheck className="size-4" />
+                </span>
+                <span><strong className="block text-lg leading-none">{pendingReviewCount}</strong><small className="text-[11px] font-bold text-black/45">controlli aperti</small></span>
+              </a>
             </div>
-            <CashActions
+            <div className="border-t border-black/10 p-4 lg:border-l lg:border-t-0">
+              <CashActions
               month={selectedMonth}
               monthClosed={monthCloseValue}
               weekKey={weekKey}
@@ -745,12 +738,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               vaultWithdrawals={vaultWithdrawalRecords}
               monthWeekCloses={monthWeekCloses.map((setting) => ({ key: setting.key, value: setting.value }))}
               isResponsible={isResponsible}
-              userSedeId={session.user.sedeId}
-            />
+              userSedeId={session.user.sedeId ?? null}
+              />
+            </div>
           </div>
         </section>
 
-        <Card className="-mx-4 rounded-none bg-white p-0 sm:mx-0 sm:rounded-[24px] overflow-hidden">
+        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Registro separato Shopify</p>
@@ -758,13 +752,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               <p className="mt-1 text-sm text-black/45">Registrazione automatica dal 2° ordine finale. Questi importi non modificano i totali della cassa.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-2 rounded-2xl bg-[#111017] px-4 py-3 text-xs font-black text-white">
+              <div className="inline-flex items-center gap-2 rounded-md bg-[#F2FBF6] px-3 py-2.5 text-xs font-black text-emerald-700">
                 <ShieldCheck className="size-4 text-[#F7DFA7]" />
                 Non incluso nei calcoli
               </div>
               <Link
                 href={`/cash/shopify-payments?month=${selectedMonth}`}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#A74758] px-4 py-3 text-xs font-black text-white transition hover:bg-[#8E3848]"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#111017] px-4 py-3 text-xs font-black text-white transition hover:bg-black"
               >
                 Vedi registro completo
                 <ArrowRight className="size-4" />
@@ -773,7 +767,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
           <div className="p-5">
             {paymentRows.length ? (
-              <div className="divide-y divide-black/5 overflow-hidden rounded-2xl border border-black/5">
+              <div className="divide-y divide-black/5 overflow-hidden rounded-md border border-black/10">
                 {paymentRows.slice(0, 4).map((payment) => {
                   const isCashmatic = payment.method === "CASHMATIC";
                   const isVerified = payment.verified && payment.method !== "DA_VERIFICARE";
@@ -819,7 +813,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
         </Card>
 
-        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-white p-5">
+        <Card className="-mx-4 rounded-none border-y border-black/10 bg-white p-5 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Andamento mesi precedenti</p>
@@ -828,7 +822,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
           <div className="grid gap-2 sm:gap-3 grid-cols-3 md:grid-cols-6">
             {trendMonths.map((month) => (
-              <div key={month.key} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3">
+              <div key={month.key} className="rounded-md border border-black/10 bg-[#FAF7F9] p-3">
                 <p className="text-[10px] font-black uppercase text-black/35">{month.label}</p>
                 <p className="mt-2 text-base sm:text-lg font-black">{formatMoney(month.net)}</p>
                 <div className="mt-1 text-[9px] sm:text-[11px] font-bold text-black/45 flex flex-col sm:flex-row sm:gap-1.5 leading-tight">
@@ -836,9 +830,9 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                   <div className="hidden sm:block">·</div>
                   <div>Out {formatMoney(month.vaultTotal)}</div>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/5">
+                <div className="mt-3 h-1.5 overflow-hidden bg-black/5">
                   <div
-                    className="h-full rounded-full bg-[#A74758]"
+                    className="h-full bg-[#A74758]"
                     style={{ width: `${Math.max(8, Math.min(100, (Math.abs(month.net) / maxTrend) * 100))}%` }}
                   />
                 </div>
@@ -851,10 +845,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           weekCloses={monthWeekCloses}
           locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
           isResponsible={isResponsible}
-          userSedeId={session.user.sedeId}
+          userSedeId={session.user.sedeId ?? null}
         />
 
-        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
+        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="border-b border-black/5 p-5">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Dettaglio giorno</p>
             <h2 className="mt-1 text-2xl font-black capitalize">Clicca una data e controlla chiusura + timbrature</h2>
@@ -868,7 +862,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                   <Link
                     key={day.key}
                     href={`/cash?month=${selectedMonth}&day=${day.key}`}
-                    className={`min-w-[82px] rounded-2xl border p-3 text-center transition ${active ? "border-[#A74758] bg-[#A74758] text-white shadow-lg" : "border-black/5 bg-[#FAF7F9] text-black hover:border-[#A74758]/30"}`}
+                    className={`min-w-[82px] rounded-md border p-3 text-center transition ${active ? "border-[#A74758] bg-[#A74758] text-white" : "border-black/10 bg-[#FAF7F9] text-black hover:border-[#A74758]/30"}`}
                   >
                     <p className="text-[10px] font-black uppercase opacity-60">
                       {new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(day.date)}
@@ -1000,8 +994,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </Card>
         </div>
 
-        <section className="grid gap-4 xl:grid-cols-[1fr_380px]">
-          <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
+        <section id="chiusure-sedi" className="grid scroll-mt-6 gap-4 xl:grid-cols-[1fr_380px]">
+          <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
             <div className="border-b border-black/5 p-5">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Tutti i negozi</p>
               <h2 className="mt-1 text-2xl font-black">Accumulo cash per sede</h2>
@@ -1011,7 +1005,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                 <div key={row.location.id} className="flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0 flex-1 lg:max-w-md">
                     <div className="flex items-center gap-3">
-                      <div className="grid size-11 place-items-center rounded-2xl bg-[#F7E9EF] text-[#A74758] shrink-0">
+                      <div className="grid size-11 shrink-0 place-items-center rounded-md bg-[#F7E9EF] text-[#A74758]">
                         <Store className="size-5" />
                       </div>
                       <div className="min-w-0">
@@ -1035,7 +1029,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     <StoreValue label="Cash cassa" value={formatMoney(row.total)} />
                     <StoreValue label="Cassaforte out" value={formatMoney(row.vaultTotal)} />
                     <StoreValue label="Netto sede" value={formatMoney(row.net)} />
-                    <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3 flex flex-col justify-between">
+                    <div className="flex flex-col justify-between rounded-md border border-black/10 bg-[#FAF7F9] p-3">
                       <p className="text-[10px] font-black uppercase text-black/35">Oggi</p>
                       <div className="mt-2 flex flex-col gap-1">
                         <div>
@@ -1061,7 +1055,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             </div>
           </Card>
 
-          <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-[#111017] p-5 text-white">
+          <Card className="-mx-4 rounded-none bg-[#111017] p-5 text-white shadow-none sm:mx-0 sm:rounded-lg">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">Oggi</p>
             <h2 className="mt-1 text-2xl font-black">Chiusure ricevute</h2>
             <div className="mt-5 space-y-3">
@@ -1111,7 +1105,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </Card>
         </section>
 
-        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] overflow-hidden bg-white p-0">
+        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Cassaforte</p>
@@ -1174,7 +1168,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
         </Card>
 
-        <Card className="-mx-4 rounded-none sm:mx-0 sm:rounded-[24px] bg-white p-0 overflow-hidden">
+        <Card id="movimenti-cassa" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="border-b border-black/5 p-5">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
             <h2 className="mt-1 text-2xl font-black">Tutti i movimenti</h2>
@@ -1265,25 +1259,25 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
 function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
   const tones = {
-    gold: "border-[#F7DFA7]/15 bg-gradient-to-br from-[#F7DFA7]/10 to-[#F7DFA7]/2 text-[#F7DFA7]",
-    blue: "border-blue-500/15 bg-gradient-to-br from-blue-500/10 to-blue-500/2 text-blue-200",
-    pink: "border-[#A74758]/20 bg-gradient-to-br from-[#A74758]/12 to-[#A74758]/2 text-[#ff9fbd]",
-    green: "border-emerald-500/15 bg-gradient-to-br from-emerald-500/10 to-emerald-500/2 text-emerald-200",
+    gold: "bg-[#FFF9E9] text-[#8A6A19]",
+    blue: "bg-[#F2F5FF] text-[#4D61A8]",
+    pink: "bg-[#FFF1F5] text-[#A74758]",
+    green: "bg-[#EEFBF5] text-emerald-700",
   };
   return (
-    <div className={`rounded-2xl border ${tones[tone]} p-4 flex flex-col justify-between transition duration-300 hover:scale-[1.02]`}>
+    <div className={`min-h-28 border-b border-black/10 p-4 last:border-b-0 odd:border-r lg:border-b-0 lg:border-r lg:last:border-r-0 ${tones[tone]} sm:p-5`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-black uppercase tracking-[0.16em] opacity-65">{label}</span>
-        <Icon className="size-4 opacity-80" />
+        <span className="text-[10px] font-black uppercase tracking-[0.14em] opacity-70">{label}</span>
+        <Icon className="size-4" />
       </div>
-      <p className="mt-3 text-2xl font-black text-white tracking-tight leading-none">{value}</p>
+      <p className="mt-5 text-xl font-black tracking-tight text-[#111017] sm:text-2xl">{value}</p>
     </div>
   );
 }
 
 function StoreValue({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-3 flex flex-col justify-between">
+    <div className="flex flex-col justify-between rounded-md border border-black/10 bg-[#FAF7F9] p-3">
       <p className="text-[10px] font-black uppercase text-black/35 tracking-wider leading-none">{label}</p>
       <p className="mt-2 text-base font-black text-[#171717] leading-none">{value}</p>
     </div>
@@ -1292,7 +1286,7 @@ function StoreValue({ label, value }: { label: string; value: string }) {
 
 function MiniDark({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-white/5 p-3">
+    <div className="rounded-md bg-white/5 p-3">
       <p className="text-[10px] font-black uppercase text-white/35">{label}</p>
       <p className="mt-1 text-sm font-black text-white">{value}</p>
     </div>

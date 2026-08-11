@@ -14,7 +14,7 @@ export function CashDaySelector({
 
   return (
     <div className="relative inline-flex items-center">
-      <Calendar className="absolute left-3.5 size-4 text-white/60 pointer-events-none" />
+      <Calendar className="pointer-events-none absolute left-3.5 size-4 text-[#A74758]" />
       <input
         type="date"
         value={selectedDay}
@@ -25,7 +25,8 @@ export function CashDaySelector({
             router.push(`/cash?month=${newMonth}&day=${e.target.value}`);
           }
         }}
-        className="h-10 rounded-2xl border border-white/15 bg-white/10 pl-10 pr-4 text-xs font-bold text-white outline-none focus:border-[#B85B68] focus:ring-1 focus:ring-[#B85B68]/30 [color-scheme:dark] transition-colors cursor-pointer hover:bg-white/15"
+        aria-label="Seleziona il giorno da controllare"
+        className="h-11 w-full cursor-pointer rounded-md border border-black/10 bg-white pl-10 pr-3 text-xs font-bold text-[#111017] outline-none transition-colors [color-scheme:light] hover:border-black/20 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/10 sm:w-auto"
       />
     </div>
   );

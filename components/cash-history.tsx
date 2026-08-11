@@ -91,7 +91,7 @@ export function CashHistory({
   }
 
   return (
-    <div className="rounded-[24px] border border-black/5 bg-white p-5 shadow-sm">
+    <div className="-mx-4 border-y border-black/10 bg-white p-5 sm:mx-0 sm:rounded-lg sm:border">
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Storico</p>

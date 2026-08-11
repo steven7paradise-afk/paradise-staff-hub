@@ -340,11 +340,11 @@ export function CashActions({
   }
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
+    <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto">
       <button
         type="button"
         onClick={() => setManualOpen(true)}
-        className="w-full sm:w-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-4 text-sm font-black text-black shadow-lg transition hover:-translate-y-0.5"
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-black/10 bg-white px-3 text-xs font-black text-black transition hover:border-black/25 hover:bg-[#FAF7F9]"
       >
         <FilePlus2 className="size-4" />
         Aggiungi chiusura
@@ -352,7 +352,7 @@ export function CashActions({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full sm:w-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-4 text-sm font-black text-black shadow-lg transition hover:-translate-y-0.5"
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#111017] px-3 text-xs font-black text-white transition hover:bg-black"
       >
         <Plus className="size-4" />
         Preleva cassaforte
@@ -364,10 +364,10 @@ export function CashActions({
           setSelectedWeekCloseLocationId(defaultLocId);
           setWeekCloseModalOpen(true);
         }}
-        className="w-full sm:w-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-black text-white transition hover:bg-white/15"
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-black/10 bg-[#FAF7F9] px-3 text-xs font-black text-black transition hover:border-black/25"
       >
         {(isResponsible && weekClosed.some((wc: any) => wc.locationId === userSedeId)) || (!isResponsible && weekClosed.length === locations.length && locations.length > 0) ? (
-          <CheckCircle2 className="size-4 text-emerald-300" />
+          <CheckCircle2 className="size-4 text-emerald-600" />
         ) : (
           <LockKeyhole className="size-4" />
         )}
@@ -377,9 +377,9 @@ export function CashActions({
         type="button"
         onClick={() => setMonthCloseModalOpen(true)}
         disabled={closing}
-        className="w-full sm:w-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-black text-white transition hover:bg-white/15 disabled:opacity-50"
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-black/10 bg-[#FAF7F9] px-3 text-xs font-black text-black transition hover:border-black/25 disabled:opacity-50"
       >
-        {monthClosed ? <CheckCircle2 className="size-4 text-emerald-300" /> : closing ? <Loader2 className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}
+        {monthClosed ? <CheckCircle2 className="size-4 text-emerald-600" /> : closing ? <Loader2 className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}
         {monthClosed ? "Mese chiuso" : "Chiusura mese"}
       </button>
 
