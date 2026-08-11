@@ -96,8 +96,11 @@ export function SidebarFrame({
         {aside}
       </div>
       <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
-        <div className="xl:p-5 xl:pl-3 xl:h-screen xl:flex xl:flex-col">
-          <div className={cn("app-content-surface xl:rounded-[28px] xl:shadow-sm flex-1 border border-black/5 dark:border-white/10 xl:flex xl:flex-col overflow-hidden", transparentMain ? "bg-transparent" : "bg-[color:var(--card)]")}>
+        <div className="xl:flex xl:h-screen xl:flex-col">
+          <div className={cn(
+            "app-content-surface flex-1 overflow-hidden border-0 shadow-none xl:flex xl:flex-col",
+            transparentMain ? "bg-transparent" : "bg-[color:var(--card)]",
+          )}>
             <div className="flex-1 overflow-y-auto luxury-scroll min-w-0">
               {main}
             </div>

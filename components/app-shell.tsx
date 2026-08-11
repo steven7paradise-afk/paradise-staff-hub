@@ -138,7 +138,7 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, edgeToEdgeMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; edgeToEdgeMain?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const isPcCassa = pcMode;
   const pcProfileChooserHref = "/appointments/buenos-aires?choose=1";
@@ -451,12 +451,13 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
  
   const main = (
       <main className={cn(
-        "w-full min-w-0 max-w-full overflow-x-hidden bg-transparent xl:px-10 xl:py-8", 
-        hideMobileHeader ? "px-0 py-0" : "px-4 py-5 sm:px-6",
+        "relative w-full min-w-0 max-w-full overflow-x-hidden bg-transparent",
+        edgeToEdgeMain ? "p-0" : "xl:px-10 xl:py-8",
+        !edgeToEdgeMain && (hideMobileHeader ? "px-0 py-0" : "px-4 py-5 sm:px-6"),
         transparentMobileHeader && !hideMobileHeader && "pt-[calc(env(safe-area-inset-top)+72px)] xl:pt-8",
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
-        <div className="mb-5 hidden justify-end xl:flex">
+        <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
           <TopControls
             unread={unreadNotifications}
             name={displayUser?.name ?? session?.user?.name ?? "Paradise"}
@@ -486,7 +487,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         <div className="flex-1">
           {children}
         </div>
-        <footer className="mt-16 border-t border-black/5 dark:border-white/5 pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-black/35 dark:text-white/35">
+        <footer className={cn("mt-16 border-t border-black/5 dark:border-white/5 pt-6 pb-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-black/35 dark:text-white/35", edgeToEdgeMain && "hidden")}>
           <span suppressHydrationWarning>© {new Date().getFullYear()} Paradise Beauty. Tutti i diritti riservati.</span>
           <span className="font-medium">Staff Hub v{pkg.version}</span>
         </footer>
