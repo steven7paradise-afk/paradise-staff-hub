@@ -474,7 +474,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
 
   return (
     <AppShell title="I miei turni" role={sessionUser.role} hideHeader>
-      <div className="relative mx-auto w-full max-w-7xl space-y-5 overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_8%_4%,rgba(255,190,222,0.38),transparent_30%),radial-gradient(circle_at_92%_18%,rgba(218,197,255,0.34),transparent_28%),linear-gradient(145deg,#fff9fc_0%,#f8f5fb_52%,#fff8f2_100%)] p-4 pb-8 sm:p-6 lg:p-8">
+      <div className="my-shifts-liquid relative min-h-[calc(100dvh-9rem)] w-full max-w-none space-y-5 overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_8%_4%,rgba(255,190,222,0.38),transparent_30%),radial-gradient(circle_at_92%_18%,rgba(218,197,255,0.34),transparent_28%),linear-gradient(145deg,#fff9fc_0%,#f8f5fb_52%,#fff8f2_100%)] p-4 pb-8 sm:p-6 lg:p-7">
       <div className="pointer-events-none absolute left-[30%] top-52 size-72 rounded-full bg-white/45 blur-3xl" aria-hidden="true" />
       <div className="relative mt-1 flex flex-col gap-4 rounded-[28px] border border-white/80 bg-white/58 p-5 shadow-[0_16px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/48 sm:flex-row sm:items-start sm:justify-between sm:p-6">
         <div className="min-w-0">

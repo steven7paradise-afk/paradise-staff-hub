@@ -70,6 +70,59 @@
   background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
+/* I miei turni: Liquid Glass con materiali distinti e leggibili anche in modalità notte. */
+.dark .app-content-surface .my-shifts-liquid {
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    radial-gradient(circle at 8% 4%, rgba(194, 70, 125, 0.22), transparent 30%),
+    radial-gradient(circle at 92% 18%, rgba(117, 87, 178, 0.20), transparent 28%),
+    linear-gradient(145deg, #17151c 0%, #1d1a24 52%, #18151a 100%) !important;
+}
+
+.dark .app-content-surface .my-shifts-liquid [class*="bg-white/"],
+.dark .my-shifts-liquid-modal[class*="bg-white/"],
+.dark .my-shifts-liquid-modal [class*="bg-white/"] {
+  background-color: rgba(38, 35, 45, 0.72) !important;
+}
+
+.dark .app-content-surface .my-shifts-liquid [class*="border-white/"],
+.dark .my-shifts-liquid-modal[class*="border-white/"],
+.dark .my-shifts-liquid-modal [class*="border-white/"] {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.dark .app-content-surface .my-shifts-liquid [class*="from-white"],
+.dark .my-shifts-liquid-modal [class*="from-white"] {
+  background-image: none !important;
+  background-color: rgba(38, 35, 45, 0.78) !important;
+}
+
+.dark .app-content-surface .my-shifts-liquid :is([class*="text-neutral-8"], [class*="text-neutral-7"], [class*="text-neutral-6"]),
+.dark .my-shifts-liquid-modal :is([class*="text-neutral-8"], [class*="text-neutral-7"], [class*="text-neutral-6"], [class~="text-paradise-noir"]) {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.dark .app-content-surface .my-shifts-liquid [class*="text-[#B85B68]"],
+.dark .my-shifts-liquid-modal [class*="text-[#B85B68]"] {
+  color: #f0a3c2 !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .my-shifts-liquid [class*="backdrop-blur"],
+  .my-shifts-liquid-modal[class*="backdrop-blur"],
+  .my-shifts-liquid-modal [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-color: rgba(255, 255, 255, 0.96) !important;
+  }
+
+  .dark .my-shifts-liquid [class*="backdrop-blur"],
+  .dark .my-shifts-liquid-modal[class*="backdrop-blur"],
+  .dark .my-shifts-liquid-modal [class*="backdrop-blur"] {
+    background-color: #26232d !important;
+  }
+}
+
 .dark .app-content-surface :is(input, textarea)::placeholder {
   color: rgba(255, 255, 255, 0.42) !important;
 }

@@ -537,7 +537,7 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/60 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-sm sm:items-start sm:px-4 sm:pb-8 sm:pt-8 lg:pt-10">
       <div 
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-white/80 bg-white/82 shadow-luxury backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:max-h-[calc(100dvh-4rem)] sm:rounded-3xl sm:zoom-in-95"
+        className="my-shifts-liquid-modal flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-white/80 bg-white/82 shadow-luxury backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:max-h-[calc(100dvh-4rem)] sm:rounded-3xl sm:zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
