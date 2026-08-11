@@ -356,13 +356,18 @@ export function NotificationManager({
     router.refresh();
   }
 
-  // 1-Click action: Select and view in Blog Reader
+  // Open operational notifications in their owning page; only communications use the reader.
   function selectCommunication(item: NotificationItem) {
-    if (!isAttendanceAlert(item)) {
-      window.location.assign(`/notifications?communication=${encodeURIComponent(item.id)}&direct=1`);
+    const meta = parseNotificationMetadata(item, recipients, locations);
+    const isForm = item.type === "FORM";
+
+    if (meta.category.isOrder || isForm || isAttendanceAlert(item)) {
+      const fallbackUrl = isAttendanceAlert(item) ? "/attendance" : "/service-forms";
+      window.location.assign(item.actionUrl && item.actionUrl !== "/notifications" ? item.actionUrl : fallbackUrl);
       return;
     }
-    setActiveItem(item);
+
+    window.location.assign(`/notifications?communication=${encodeURIComponent(item.id)}&direct=1`);
   }
 
   // Find next and previous index in filtered list
