@@ -141,7 +141,7 @@ export function ClientProfile({
     <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-8 overflow-hidden px-4 pb-20 pt-[calc(env(safe-area-inset-top)+88px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:px-6 lg:px-10 xl:pt-24">
       
       {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="profile-identity-glass mx-auto max-w-none space-y-8 rounded-[36px] border border-white/55 bg-white/75 p-6 shadow-[0_24px_80px_rgba(44,24,15,0.22)] backdrop-blur-2xl md:p-10">
+      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none space-y-8 rounded-[36px] border border-white/55 bg-white/75 p-6 shadow-[0_24px_80px_rgba(44,24,15,0.18)] backdrop-blur-2xl md:p-10">
         <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8">
           
           {/* Left Side: Avatar & Name */}
@@ -203,7 +203,7 @@ export function ClientProfile({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  "py-4 text-xs font-bold uppercase tracking-[0.25em] border-b-2 transition duration-200 whitespace-nowrap -mb-px",
+                  "min-h-11 py-4 text-xs font-bold uppercase tracking-[0.25em] border-b-2 transition duration-200 whitespace-nowrap -mb-px",
                   isActive 
                     ? "border-neutral-900 text-neutral-900 font-black" 
                     : "border-transparent text-neutral-400 hover:text-neutral-600"
@@ -221,7 +221,7 @@ export function ClientProfile({
         <div className="space-y-8 animate-in fade-in duration-200">
           
           {/* Target Progress Section */}
-          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6">
+          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-neutral-100">
               <div className="space-y-1.5 text-left">
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">OBIETTIVI MENSILI</span>
@@ -241,7 +241,7 @@ export function ClientProfile({
             <div className={cn("grid gap-8", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
               
               {/* OBIETTIVO PERSONALE */}
-              <div className="p-6 bg-neutral-50 border border-neutral-200 rounded-[20px] space-y-4 text-left">
+              <div className="profile-glass-inset p-5 sm:p-6 bg-neutral-50 border border-neutral-200 rounded-[22px] space-y-4 text-left">
                 <div className="flex justify-between items-end">
                   <div className="space-y-0.5">
                     <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">DIPENDENTE</span>
@@ -272,7 +272,7 @@ export function ClientProfile({
 
               {/* OBIETTIVO SALONE - ONLY visible for non-employees (e.g. admins) */}
               {!isEmployee && (
-                <div className="p-6 bg-neutral-50 border border-neutral-200 rounded-[20px] space-y-4 text-left">
+                <div className="profile-glass-inset p-5 sm:p-6 bg-neutral-50 border border-neutral-200 rounded-[22px] space-y-4 text-left">
                   <div className="flex justify-between items-end">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">STRUTTURA</span>
@@ -321,7 +321,7 @@ export function ClientProfile({
           </div>
 
           {/* 📸 GALLERY FEED (INSTAGRAM STYLE LUXURY) */}
-          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6">
+          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6">
             <div className="border-b border-neutral-100 pb-5 text-left">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">GALLERIA IMMAGINI</span>
               <h2 className="text-xl font-serif font-light text-neutral-900 uppercase mt-1">
@@ -371,7 +371,7 @@ export function ClientProfile({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-200">
           
           {/* Personal Info Column (1/3) */}
-          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6 lg:col-span-1 h-fit text-left">
+          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 lg:col-span-1 h-fit text-left">
             <div className="border-b border-neutral-100 pb-4">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">DATI REGISTRATI</span>
               <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
@@ -401,7 +401,7 @@ export function ClientProfile({
           </div>
 
           {/* Documents Column (2/3) */}
-          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6 lg:col-span-2 text-left">
+          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 lg:col-span-2 text-left">
             <div className="border-b border-neutral-100 pb-4">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">ARCHIVIO UFFICIALE</span>
               <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">
@@ -491,7 +491,7 @@ export function ClientProfile({
       {/* 🔒 TAB 3: IMPOSTAZIONI & SICUREZZA */}
       {activeTab === "security" && (
         <div className="space-y-8 animate-in fade-in duration-200">
-          <div className="border border-neutral-200 bg-white p-8 rounded-[24px] shadow-2xs space-y-6 text-left">
+          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6 text-left">
             <div className="border-b border-neutral-100 pb-4">
               <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">PREFERENZE</span>
               <h2 className="text-lg font-serif font-light text-neutral-900 uppercase mt-0.5">

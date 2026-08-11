@@ -168,32 +168,19 @@
   background-image: linear-gradient(180deg, rgba(248, 235, 220, 0.10), rgba(58, 31, 20, 0.14));
 }
 
-.profile-liquid-page::before,
-.profile-liquid-page::after {
+.profile-liquid-page::before {
   position: fixed;
-  inset: 0;
+  inset: -52px;
   z-index: -2;
   pointer-events: none;
   content: "";
   background-image: url("/profile-cover-bg.png");
-  background-position: center top;
+  background-position: center center;
   background-repeat: no-repeat;
-}
-
-/* Riempie lo schermo senza mostrare cuciture laterali. */
-.profile-liquid-page::before {
-  inset: -36px;
   background-size: cover;
-  filter: blur(30px) saturate(92%);
-  opacity: 0.34;
-  transform: scale(1.04);
-}
-
-/* Mantiene visibile l'immagine originale completa, senza zoom. */
-.profile-liquid-page::after {
-  z-index: -1;
-  background-size: auto 100dvh;
-  opacity: 0.92;
+  filter: blur(44px) saturate(88%);
+  opacity: 0.46;
+  transform: scale(1.08);
 }
 
 .profile-liquid-page > :not([class*="fixed"]) {
@@ -219,6 +206,27 @@
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
+/* Gerarchia dei materiali: il contenuto resta leggibile anche sopra la foto. */
+.profile-liquid-page .profile-glass-hero,
+.profile-liquid-page .profile-glass-section {
+  background-color: color-mix(
+    in srgb,
+    color-mix(in srgb, rgb(255, 252, 248) var(--glass-opacity), transparent) 55%,
+    rgb(255, 252, 248) 45%
+  ) !important;
+}
+
+.profile-liquid-page .profile-glass-inset {
+  background-color: color-mix(
+    in srgb,
+    color-mix(in srgb, rgb(255, 252, 248) var(--glass-opacity), transparent) 68%,
+    rgb(255, 252, 248) 32%
+  ) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 10px 30px rgba(59, 37, 25, 0.07);
+}
+
 .profile-liquid-page :is([class~="text-neutral-400"], [class~="text-neutral-500"]) {
   color: #57534e !important;
 }
@@ -228,11 +236,7 @@
 }
 
 .dark .app-content-surface .profile-liquid-page::before {
-  opacity: 0.24;
-}
-
-.dark .app-content-surface .profile-liquid-page::after {
-  opacity: 0.62;
+  opacity: 0.32;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
@@ -246,6 +250,26 @@
 .dark .app-content-surface .profile-liquid-page [class~="bg-neutral-50"] {
   background-color: color-mix(in srgb, rgb(48, 42, 40) var(--glass-opacity), transparent) !important;
   border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
+}
+
+.dark .app-content-surface .profile-liquid-page .profile-glass-hero,
+.dark .app-content-surface .profile-liquid-page .profile-glass-section {
+  background-color: color-mix(
+    in srgb,
+    color-mix(in srgb, rgb(28, 24, 23) var(--glass-opacity), transparent) 60%,
+    rgb(28, 24, 23) 40%
+  ) !important;
+}
+
+.dark .app-content-surface .profile-liquid-page .profile-glass-inset {
+  background-color: color-mix(
+    in srgb,
+    color-mix(in srgb, rgb(48, 42, 40) var(--glass-opacity), transparent) 68%,
+    rgb(48, 42, 40) 32%
+  ) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 14px 34px rgba(0, 0, 0, 0.18);
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class*="text-neutral-9"], [class*="text-neutral-8"], [class*="text-neutral-7"]) {
@@ -262,12 +286,11 @@
 
 @media (max-width: 767px) {
   .profile-liquid-page::before {
-    inset: -20px;
-    filter: blur(22px) saturate(92%);
-  }
-
-  .profile-liquid-page::after {
-    background-size: 100% auto;
+    inset: -32px;
+    background-position: 58% center;
+    filter: blur(34px) saturate(88%);
+    opacity: 0.42;
+    transform: scale(1.12);
   }
 }
 
@@ -1136,17 +1159,26 @@ textarea {
 
 /* Menu telefono: stesso vetro della sidebar desktop, ottimizzato per il tocco. */
 .mobile-liquid-sidebar {
+  isolation: isolate;
   color: var(--dark-sidebar-text);
-  background:
-    linear-gradient(165deg,
-      color-mix(in srgb, var(--sidebar-gradient-from) var(--glass-opacity), transparent),
-      color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent) 54%,
-      color-mix(in srgb, var(--sidebar-gradient-to) var(--glass-opacity), transparent));
+  background: color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent);
+  background-clip: padding-box;
   box-shadow:
-    inset -1px 0 0 rgba(255, 255, 255, 0.12),
-    22px 0 60px rgba(8, 5, 10, 0.36);
+    inset -1px 0 0 color-mix(in srgb, white var(--glass-border-opacity), transparent),
+    10px 0 28px rgba(8, 5, 10, 0.24);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+.mobile-liquid-sidebar::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 8% 3%, rgba(255, 255, 255, 0.11), transparent 30%),
+    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--sidebar-gradient-to) 16%, transparent) 100%);
 }
 
 .mobile-liquid-sidebar input {

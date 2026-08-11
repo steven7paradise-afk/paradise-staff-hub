@@ -119,7 +119,7 @@ export function MobileMenuDrawer({
       {/* Overlay backdrop */}
       <div
         className={cn(
-          "fixed inset-0 z-50 bg-black/70 backdrop-blur-[3px] transition-opacity duration-300",
+          "fixed inset-0 z-50 bg-black/45 transition-opacity duration-300",
           isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={() => setIsOpen(false)}
@@ -127,8 +127,8 @@ export function MobileMenuDrawer({
 
       <div
         className={cn(
-          "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(86vw,340px)] flex-col justify-between border-r border-white/15 p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out",
-          isOpen ? "translate-x-0 shadow-[18px_0_50px_rgba(0,0,0,0.45)]" : "-translate-x-full shadow-none",
+          "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(82vw,320px)] flex-col justify-between overflow-hidden border-r border-white/15 p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out will-change-transform",
+          isOpen ? "translate-x-0 shadow-[10px_0_28px_rgba(0,0,0,0.30)]" : "-translate-x-full shadow-none",
         )}
       >
         <div className="flex min-h-0 flex-1 flex-col">
