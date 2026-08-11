@@ -164,23 +164,11 @@
 /* Profilo: immagine capelli originale e gerarchia Liquid Glass adattiva. */
 .profile-liquid-page {
   isolation: isolate;
-  background-color: #ead8c4;
-  background-image: linear-gradient(180deg, rgba(248, 235, 220, 0.10), rgba(58, 31, 20, 0.14));
-}
-
-.profile-liquid-page::before {
-  position: fixed;
-  inset: -52px;
-  z-index: -2;
-  pointer-events: none;
-  content: "";
-  background-image: url("/profile-cover-bg.png");
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-size: cover;
-  filter: blur(44px) saturate(88%);
-  opacity: 0.46;
-  transform: scale(1.08);
+  background:
+    radial-gradient(ellipse 72% 46% at 0% 0%, color-mix(in srgb, var(--primary) 34%, transparent), transparent 72%),
+    radial-gradient(ellipse 62% 48% at 100% 6%, rgba(198, 158, 124, 0.42), transparent 72%),
+    radial-gradient(ellipse 74% 48% at 48% 100%, color-mix(in srgb, var(--secondary) 42%, transparent), transparent 72%),
+    linear-gradient(145deg, #f8e9ef 0%, #ead9ce 46%, #d7bea8 100%);
 }
 
 .profile-liquid-page > :not([class*="fixed"]) {
@@ -232,11 +220,11 @@
 }
 
 .dark .app-content-surface .profile-liquid-page {
-  background-image: linear-gradient(180deg, rgba(8, 6, 5, 0.28), rgba(8, 6, 5, 0.52));
-}
-
-.dark .app-content-surface .profile-liquid-page::before {
-  opacity: 0.32;
+  background:
+    radial-gradient(ellipse 72% 46% at 0% 0%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 72%),
+    radial-gradient(ellipse 62% 48% at 100% 6%, rgba(162, 119, 84, 0.22), transparent 72%),
+    radial-gradient(ellipse 74% 48% at 48% 100%, color-mix(in srgb, var(--gradient) 14%, transparent), transparent 72%),
+    linear-gradient(145deg, #211c20 0%, #1a1719 48%, #121114 100%) !important;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
@@ -287,20 +275,9 @@
 @media (max-width: 767px) {
   .profile-liquid-page {
     background:
-      linear-gradient(180deg, rgba(248, 232, 215, 0.18) 0%, rgba(234, 216, 196, 0.92) 34rem, #ead8c4 52rem);
-  }
-
-  .profile-liquid-page::before {
-    position: absolute;
-    inset: -40px -32px auto;
-    height: min(78dvh, 44rem);
-    background-position: 58% 32%;
-    background-size: cover;
-    filter: blur(30px) saturate(86%);
-    opacity: 0.34;
-    transform: scale(1.06);
-    -webkit-mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 100%);
-    mask-image: linear-gradient(180deg, black 0%, black 62%, transparent 100%);
+      radial-gradient(circle at 10% 2%, color-mix(in srgb, var(--primary) 36%, transparent), transparent 30rem),
+      radial-gradient(circle at 100% 24rem, rgba(199, 159, 126, 0.32), transparent 34rem),
+      linear-gradient(165deg, #f8e8ef 0%, #ebdcd3 42%, #ddc6b2 100%);
   }
 
   .profile-liquid-page .profile-glass-hero,
@@ -316,11 +293,10 @@
   }
 
   .dark .app-content-surface .profile-liquid-page {
-    background: linear-gradient(180deg, #26201e 0%, #1f1b1a 34rem, #171514 52rem) !important;
-  }
-
-  .dark .app-content-surface .profile-liquid-page::before {
-    opacity: 0.24;
+    background:
+      radial-gradient(circle at 10% 2%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30rem),
+      radial-gradient(circle at 100% 24rem, rgba(157, 111, 80, 0.18), transparent 34rem),
+      linear-gradient(165deg, #231d21 0%, #191619 52%, #121114 100%) !important;
   }
 }
 
