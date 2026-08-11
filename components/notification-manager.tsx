@@ -19,7 +19,6 @@ import {
   FileText,
   Filter,
   Image as ImageIcon,
-  LayoutGrid,
   Link as LinkIcon,
   Mail,
   MailPlus,
@@ -168,6 +167,7 @@ export function NotificationManager({
   currentUserName = "",
   focusNotificationId = null,
   initialSection = "BLOG",
+  openCommunicationDirectly = false,
 }: {
   role: Role;
   notifications: NotificationItem[];
@@ -177,9 +177,10 @@ export function NotificationManager({
   currentUserName?: string;
   focusNotificationId?: string | null;
   initialSection?: SectionTab;
+  openCommunicationDirectly?: boolean;
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
-  const [viewMode, setViewMode] = useState<"BLOG" | "LIST">("BLOG");
+  const showBlogView = false;
   const [sectionTab, setSectionTab] = useState<SectionTab>(initialSection);
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
   const [items, setItems] = useState(notifications);
@@ -195,7 +196,7 @@ export function NotificationManager({
 
   const [activeItem, setActiveItem] = useState<NotificationItem | null>(initialActive);
   const [focusedIntroOpen, setFocusedIntroOpen] = useState(
-    Boolean(focusNotificationId && initialActive?.id === focusNotificationId),
+    Boolean(focusNotificationId && initialActive?.id === focusNotificationId && !openCommunicationDirectly),
   );
 
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -347,10 +348,11 @@ export function NotificationManager({
 
   // 1-Click action: Select and view in Blog Reader
   function selectCommunication(item: NotificationItem) {
-    setActiveItem(item);
-    if (viewMode === "LIST") {
-      setViewMode("BLOG");
+    if (item.type === "COMUNICAZIONE") {
+      router.push(`/notifications?communication=${encodeURIComponent(item.id)}&direct=1`);
+      return;
     }
+    setActiveItem(item);
   }
 
   // Find next and previous index in filtered list
@@ -595,36 +597,6 @@ export function NotificationManager({
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            {/* View Mode Toggle: Blog Reader vs List */}
-            <div className="inline-flex items-center rounded-md border border-black/10 bg-[#FAF8F9] p-1">
-              <button
-                type="button"
-                onClick={() => setViewMode("BLOG")}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded px-4 py-2.5 text-xs font-black transition active:scale-95",
-                  viewMode === "BLOG"
-                    ? "bg-[#17151A] text-white"
-                    : "text-black/60 hover:text-black hover:bg-neutral-50"
-                )}
-              >
-                <Newspaper className="size-4" />
-                <span>Vista Blog</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("LIST")}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded px-4 py-2.5 text-xs font-black transition active:scale-95",
-                  viewMode === "LIST"
-                    ? "bg-[#17151A] text-white"
-                    : "text-black/60 hover:text-black hover:bg-neutral-50"
-                )}
-              >
-                <LayoutGrid className="size-4" />
-                <span>Vista Elenco</span>
-              </button>
-            </div>
-
             {canSend ? (
               <button
                 type="button"
@@ -703,7 +675,7 @@ export function NotificationManager({
         </div>
 
         {/* MAIN CONTENT AREA */}
-        {viewMode === "BLOG" ? (
+        {showBlogView ? (
           /* BLOG READER VIEW (2 Columns) */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* LEFT COLUMN: Featured Main Article (8 Cols) */}

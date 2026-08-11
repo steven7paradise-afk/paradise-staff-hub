@@ -28,7 +28,7 @@ export default async function NewCommunicationPage() {
   ]);
 
   return (
-    <AppShell title="Nuova comunicazione" role={role}>
+    <AppShell title="Nuova comunicazione" role={role} hideHeader>
       <CommunicationComposer
         role={role}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
