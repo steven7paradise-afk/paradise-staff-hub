@@ -71,12 +71,13 @@ export function MonthSelector({
   }
 
   return (
-    <div className="relative inline-flex items-center gap-1 cursor-pointer bg-white/50 border border-black/5 rounded-full px-3 py-1.5 hover:bg-white transition-all shadow-sm">
+    <div className="relative inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full border border-white/90 bg-white/62 px-4 shadow-sm backdrop-blur-2xl transition hover:bg-white/85 focus-within:ring-2 focus-within:ring-[#a74768] supports-[backdrop-filter]:bg-white/50">
       <span className="text-xs font-bold text-paradise-noir tracking-wide uppercase">
         {months[currentMonth]} {currentYear}
       </span>
       <ChevronDown className="size-3.5 text-black/60" />
       <select
+        aria-label="Seleziona mese e anno"
         value={`${currentMonth + 1}-${currentYear}`}
         onChange={handleSelection}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -118,10 +119,10 @@ export function CurrentlyAtWork({ activeClockInTime }: { activeClockInTime: stri
 
   if (!activeClockInTime) {
     return (
-      <div className="rounded-[24px] border border-[#FFA8DD]/30 bg-white p-5 shadow-soft">
+      <div className="rounded-[28px] border border-white/80 bg-white/68 p-5 shadow-[0_14px_40px_rgba(61,35,49,0.09)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-neutral-300 animate-pulse" />
+            <span className="size-2 rounded-full bg-neutral-300 animate-pulse motion-reduce:animate-none" />
             <span className="text-[10px] font-bold tracking-wider text-neutral-400 uppercase">Non al lavoro</span>
           </div>
           <div className="flex size-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-400 bg-neutral-50 shadow-sm">
@@ -135,7 +136,7 @@ export function CurrentlyAtWork({ activeClockInTime }: { activeClockInTime: stri
 
         <Link
           href="/dashboard"
-          className="mt-4 flex w-full items-center justify-center rounded-xl bg-neutral-100 hover:bg-neutral-200/80 py-3 text-xs font-bold text-neutral-700 border border-neutral-200/50 shadow-sm transition active:scale-[0.98]"
+          className="mt-4 flex min-h-11 w-full items-center justify-center rounded-xl border border-white/90 bg-white/70 px-4 text-xs font-bold text-neutral-700 shadow-sm backdrop-blur-xl transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768]"
         >
           Vai alla Dashboard per timbrare
         </Link>
@@ -150,10 +151,10 @@ export function CurrentlyAtWork({ activeClockInTime }: { activeClockInTime: stri
   }).format(new Date(activeClockInTime));
 
   return (
-    <div className="rounded-[24px] border border-[#FFA8DD]/25 bg-gradient-to-br from-white via-white to-paradise-softPink/10 p-5 shadow-soft">
+    <div className="rounded-[28px] border border-white/80 bg-white/68 p-5 shadow-[0_14px_40px_rgba(61,35,49,0.09)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/56">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="size-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="size-2.5 rounded-full bg-emerald-500 animate-pulse motion-reduce:animate-none" />
           <span className="text-[10px] font-bold tracking-wider text-[#B85B68] uppercase">Attualmente al lavoro</span>
         </div>
         <div className="flex size-9 items-center justify-center rounded-full border-2 border-paradise-pink/20 text-[#B85B68] bg-[#FFF0F3] shadow-sm">
@@ -174,7 +175,7 @@ export function CurrentlyAtWork({ activeClockInTime }: { activeClockInTime: stri
 
       <Link
         href="/dashboard"
-        className="mt-4 flex w-full items-center justify-center rounded-xl bg-paradise-pink text-white font-bold py-3 text-xs shadow-soft transition-all duration-200 hover:scale-[1.01] hover:bg-[#F2A3CC] active:scale-[0.99]"
+        className="mt-4 flex min-h-11 w-full items-center justify-center rounded-xl bg-[#a74768] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#8e3657] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] focus-visible:ring-offset-2 motion-reduce:transition-none"
       >
         Vedi timbratura
       </Link>
@@ -400,15 +401,15 @@ export function TodayShiftCountdown({
   }[tone];
 
   return (
-    <div className={cn("rounded-[26px] border bg-gradient-to-br p-5 shadow-soft transition-all duration-300", toneClass)}>
+    <div className={cn("rounded-[28px] border bg-white/68 bg-gradient-to-br p-5 shadow-[0_16px_45px_rgba(61,35,49,0.10)] backdrop-blur-2xl transition duration-300 supports-[backdrop-filter]:bg-white/56 motion-reduce:transition-none", toneClass)}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className={cn(
               "size-2.5 rounded-full transition-colors duration-300",
-              tone === "work" && "bg-emerald-500 animate-pulse",
-              tone === "pause" && (isBreakWarning ? "bg-red-600 animate-ping" : "bg-amber-500 animate-pulse"),
-              tone === "late" && "bg-rose-600 animate-ping",
+              tone === "work" && "bg-emerald-500 animate-pulse motion-reduce:animate-none",
+              tone === "pause" && (isBreakWarning ? "bg-red-600 animate-ping motion-reduce:animate-none" : "bg-amber-500 animate-pulse motion-reduce:animate-none"),
+              tone === "late" && "bg-rose-600 animate-ping motion-reduce:animate-none",
               tone === "done" && "bg-neutral-300",
               tone === "idle" && "bg-paradise-pink"
             )} />
@@ -444,8 +445,8 @@ export function TodayShiftCountdown({
         tone === "late"
           ? "bg-rose-50/70 border border-rose-200/50 ring-rose-500/10"
           : isBreakWarning
-            ? "bg-red-50/70 border border-red-200/50 ring-red-500/10 animate-pulse"
-            : "bg-white/80 ring-black/5"
+            ? "bg-red-50/75 border border-red-200/50 ring-red-500/10 animate-pulse motion-reduce:animate-none"
+            : "bg-white/60 ring-white/80 backdrop-blur-xl"
       )}>
         <p className={cn(
           "text-[9px] font-black uppercase tracking-[0.16em] transition-colors duration-300",
@@ -480,7 +481,7 @@ export function TodayShiftCountdown({
 
       <Link
         href="/dashboard"
-        className="mt-4 flex w-full items-center justify-center rounded-xl bg-paradise-pink py-3 text-xs font-black text-white shadow-soft transition active:scale-[0.98]"
+        className="mt-4 flex min-h-11 w-full items-center justify-center rounded-xl bg-[#a74768] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#8e3657] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] focus-visible:ring-offset-2 motion-reduce:transition-none"
       >
         Apri timbratura
       </Link>
@@ -536,7 +537,7 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/60 px-3 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-sm sm:items-start sm:px-4 sm:pb-8 sm:pt-8 lg:pt-10">
       <div 
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-black/5 bg-white shadow-luxury animate-in fade-in slide-in-from-bottom-4 duration-200 sm:max-h-[calc(100dvh-4rem)] sm:rounded-3xl sm:zoom-in-95"
+        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-white/80 bg-white/82 shadow-luxury backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-4 duration-200 motion-reduce:animate-none sm:max-h-[calc(100dvh-4rem)] sm:rounded-3xl sm:zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -555,7 +556,8 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
           <button
             type="button"
             onClick={props.onClose}
-            className="grid size-8 place-items-center rounded-xl bg-black/[0.04] text-black/50 hover:bg-black/[0.08] active:scale-95 transition"
+            className="grid size-11 place-items-center rounded-full bg-black/[0.04] text-black/60 transition hover:bg-black/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768]"
+            aria-label="Chiudi dettaglio turno"
           >
             <X className="size-4" />
           </button>
@@ -682,7 +684,7 @@ export function DailyDetailModal(props: DailyDetailModalProps) {
           <button
             type="button"
             onClick={props.onClose}
-            className="rounded-xl bg-paradise-pink text-white font-bold px-5 py-2.5 text-xs shadow-soft transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+            className="min-h-11 rounded-xl bg-[#a74768] px-5 text-xs font-bold text-white shadow-sm transition hover:bg-[#8e3657] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] focus-visible:ring-offset-2"
           >
             Chiudi
           </button>
@@ -746,30 +748,30 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
 
   return (
     <>
-      <div className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-soft">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 bg-gradient-to-r from-white via-paradise-softPink/10 to-white px-5 py-4">
+      <div className="overflow-hidden rounded-[30px] border border-white/80 bg-white/62 shadow-[0_18px_55px_rgba(61,35,49,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/52">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/70 bg-white/36 px-5 py-5 backdrop-blur-xl">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B85B68]">Calendario lavorato</p>
             <h2 className="text-lg font-black text-paradise-noir">{monthLabel}</h2>
             <p className="text-xs text-black/45">Clicca un giorno per vedere quello che hai lavorato e quello che era previsto.</p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-black/5">
+            <div className="rounded-2xl bg-white/62 px-3 py-2 ring-1 ring-white/90 backdrop-blur-xl">
               <p className="text-[8px] font-black uppercase tracking-[0.14em] text-black/35">Lavorate</p>
               <p className="text-sm font-black text-paradise-noir">{compactHours(totalWorked)} h</p>
             </div>
-            <div className="rounded-2xl bg-white px-3 py-2 ring-1 ring-black/5">
+            <div className="rounded-2xl bg-white/62 px-3 py-2 ring-1 ring-white/90 backdrop-blur-xl">
               <p className="text-[8px] font-black uppercase tracking-[0.14em] text-black/35">Previste</p>
               <p className="text-sm font-black text-paradise-noir">{compactHours(totalPlanned)} h</p>
             </div>
-            <div className="rounded-2xl bg-[#FFF2F7] px-3 py-2 ring-1 ring-paradise-pink/20">
+            <div className="rounded-2xl bg-[#fff2f7]/72 px-3 py-2 ring-1 ring-paradise-pink/20 backdrop-blur-xl">
               <p className="text-[8px] font-black uppercase tracking-[0.14em] text-[#B85B68]">Saldo</p>
               <p className="text-sm font-black text-[#B85B68]">{difference > 0 ? "+" : ""}{compactHours(difference)} h</p>
             </div>
           </div>
         </div>
 
-        <div className="border-b border-black/5 bg-white px-5 py-3">
+        <div className="border-b border-white/70 bg-white/38 px-5 py-3 backdrop-blur-xl">
           <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-black/40">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
               <span className="size-2 rounded-full bg-emerald-500" /> Completo
@@ -786,7 +788,7 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
           </div>
         </div>
 
-        <div className="hidden grid-cols-7 border-b border-black/5 bg-[#FCF8F9] text-center sm:grid">
+        <div className="hidden grid-cols-7 border-b border-white/70 bg-white/34 text-center backdrop-blur-xl sm:grid">
           {["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"].map((weekday) => (
             <div key={weekday} className="px-2 py-3 text-[10px] font-black uppercase tracking-[0.12em] text-black/35">
               {weekday}
@@ -794,9 +796,9 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
           ))}
         </div>
 
-        <div className="hidden grid-cols-7 bg-white sm:grid">
+        <div className="hidden grid-cols-7 bg-white/30 sm:grid">
           {Array.from({ length: leadingBlanks }).map((_, index) => (
-            <div key={`blank-${index}`} className="min-h-[92px] border-b border-r border-black/[0.04] bg-neutral-50/60" />
+            <div key={`blank-${index}`} className="min-h-[92px] border-b border-r border-white/60 bg-white/24" />
           ))}
 
           {days.map((day) => {
@@ -810,9 +812,9 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
                 type="button"
                 onClick={() => setSelectedDay(day)}
                 className={cn(
-                  "min-h-[120px] border-b border-r border-black/[0.04] bg-white p-3 text-left transition hover:z-10 hover:scale-[1.01] hover:shadow-soft focus:outline-none focus:ring-2 focus:ring-paradise-pink/45 flex flex-col justify-between",
-                  !day.categoryColor && state === "rest" && "bg-neutral-50/60",
-                  !day.categoryColor && state === "empty" && "bg-white"
+                  "min-h-[120px] border-b border-r border-white/65 bg-white/42 p-3 text-left backdrop-blur-lg transition hover:z-10 hover:bg-white/72 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] motion-reduce:transform-none motion-reduce:transition-none flex flex-col justify-between",
+                  !day.categoryColor && state === "rest" && "bg-white/28",
+                  !day.categoryColor && state === "empty" && "bg-white/38"
                 )}
                 style={{ backgroundColor: background, borderColor }}
               >
@@ -895,7 +897,7 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
           })}
         </div>
 
-        <div className="space-y-2.5 bg-white p-3 sm:hidden">
+        <div className="space-y-2.5 bg-white/26 p-3 sm:hidden">
           {days.map((day) => {
             const state = getCalendarDayState(day);
             const diff = day.workedHours - day.plannedHours;
@@ -918,8 +920,8 @@ export function MonthlyWorkCalendar({ monthLabel, days }: { monthLabel: string; 
                 type="button"
                 onClick={() => setSelectedDay(day)}
                 className={cn(
-                  "w-full rounded-2xl border border-black/5 bg-white p-3.5 text-left shadow-2xs transition active:scale-[0.99] flex flex-col gap-2.5",
-                  !day.categoryColor && state === "rest" && "bg-neutral-50/60"
+                  "w-full rounded-2xl border border-white/80 bg-white/56 p-3.5 text-left shadow-sm backdrop-blur-xl transition hover:bg-white/74 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] motion-reduce:transition-none flex flex-col gap-2.5",
+                  !day.categoryColor && state === "rest" && "bg-white/36"
                 )}
                 style={{ backgroundColor: background, borderColor }}
               >

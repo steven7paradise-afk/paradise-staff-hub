@@ -226,7 +226,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
 
   // 1. Worked Hours Card JSX
   const workedHoursCard = (
-    <div className="rounded-[24px] border border-black/5 bg-gradient-to-br from-white via-white to-[#FFA8DD]/10 p-5 shadow-soft">
+    <div className="rounded-[28px] border border-white/80 bg-white/75 p-5 shadow-[0_18px_55px_rgba(61,35,49,0.10)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/62">
       <div className="flex justify-between items-start">
         <div className="flex gap-3">
           <div className="flex size-10.5 items-center justify-center rounded-2xl bg-paradise-pink/15 text-[#B85B68] shadow-sm">
@@ -256,7 +256,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
                 <path d={fillPath} fill="url(#sparkline-grad)" />
                 <path d={dPath} fill="none" stroke="#E0529C" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                 <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="3" fill="#E0529C" />
-                <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="6" fill="#E0529C" fillOpacity="0.25" className="animate-pulse" />
+                <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="6" fill="#E0529C" fillOpacity="0.25" className="animate-pulse motion-reduce:animate-none" />
               </>
             )}
           </svg>
@@ -283,7 +283,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const metricsContainer = (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
       {/* Card 1: Ore previste */}
-      <div className="min-w-0 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+      <div className="min-w-0 rounded-[22px] border border-white/80 bg-white/68 p-5 shadow-[0_12px_36px_rgba(61,35,49,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/58">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-paradise-gold/20 text-[#9E7A3B] shadow-sm">
           <CalendarClock className="size-5" />
         </div>
@@ -299,7 +299,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       </div>
 
       {/* Card 2: Giorni lavorati */}
-      <div className="min-w-0 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+      <div className="min-w-0 rounded-[22px] border border-white/80 bg-white/68 p-5 shadow-[0_12px_36px_rgba(61,35,49,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/58">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 shadow-sm">
           <CalendarCheck className="size-5" />
         </div>
@@ -315,7 +315,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       </div>
 
       {/* Card 3: Assenze / ritardi */}
-      <div className="min-w-0 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+      <div className="min-w-0 rounded-[22px] border border-white/80 bg-white/68 p-5 shadow-[0_12px_36px_rgba(61,35,49,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/58">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#C66170]/10 text-[#C66170] shadow-sm">
           <ShieldCheck className="size-5" />
         </div>
@@ -331,7 +331,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       </div>
 
       {/* Card 4: Pause */}
-      <div className="min-w-0 rounded-2xl border border-black/5 bg-white p-5 shadow-soft">
+      <div className="min-w-0 rounded-[22px] border border-white/80 bg-white/68 p-5 shadow-[0_12px_36px_rgba(61,35,49,0.08)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/58">
         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 shadow-sm">
           <Coffee className="size-5" />
         </div>
@@ -377,13 +377,15 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
         <div className="flex items-center gap-1.5">
           <Link
             href={`/my-shifts?month=${month + 1}&year=${year}&weekOffset=${weekOffset - 1}`}
-            className="grid size-7 place-items-center rounded-lg border border-black/5 bg-white hover:bg-neutral-50 transition active:scale-95 shadow-sm"
+            className="grid size-11 place-items-center rounded-full border border-white/80 bg-white/65 shadow-sm backdrop-blur-xl transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] motion-reduce:transition-none"
+            aria-label="Settimana precedente"
           >
             <ChevronLeft className="size-3.5 text-black/60" />
           </Link>
           <Link
             href={`/my-shifts?month=${month + 1}&year=${year}&weekOffset=${weekOffset + 1}`}
-            className="grid size-7 place-items-center rounded-lg border border-black/5 bg-white hover:bg-neutral-50 transition active:scale-95 shadow-sm"
+            className="grid size-11 place-items-center rounded-full border border-white/80 bg-white/65 shadow-sm backdrop-blur-xl transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] motion-reduce:transition-none"
+            aria-label="Settimana successiva"
           >
             <ChevronRight className="size-3.5 text-black/60" />
           </Link>
@@ -391,7 +393,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       </div>
 
       {/* Weekly strip calendar Card */}
-      <div className="rounded-[24px] border border-black/5 bg-white pt-5 pb-6 px-4.5 shadow-soft">
+      <div className="rounded-[28px] border border-white/80 bg-white/68 px-4.5 pb-6 pt-5 shadow-[0_16px_45px_rgba(61,35,49,0.09)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/58">
         <div className="grid grid-cols-7 gap-1 text-center">
           {weekDaysData.map(({ date, plannedHours, workedHours, schedule }) => {
             const isToday = date.toDateString() === today.toDateString();
@@ -471,9 +473,10 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   );
 
   return (
-    <AppShell title="I miei turni" role={session.user.role} hideHeader>
-      <div className="mx-auto w-full max-w-7xl space-y-5 pb-8">
-      <div className="mt-2 flex items-start justify-between gap-3">
+    <AppShell title="I miei turni" role={sessionUser.role} hideHeader>
+      <div className="relative mx-auto w-full max-w-7xl space-y-5 overflow-hidden rounded-[32px] bg-[radial-gradient(circle_at_8%_4%,rgba(255,190,222,0.38),transparent_30%),radial-gradient(circle_at_92%_18%,rgba(218,197,255,0.34),transparent_28%),linear-gradient(145deg,#fff9fc_0%,#f8f5fb_52%,#fff8f2_100%)] p-4 pb-8 sm:p-6 lg:p-8">
+      <div className="pointer-events-none absolute left-[30%] top-52 size-72 rounded-full bg-white/45 blur-3xl" aria-hidden="true" />
+      <div className="relative mt-1 flex flex-col gap-4 rounded-[28px] border border-white/80 bg-white/58 p-5 shadow-[0_16px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/48 sm:flex-row sm:items-start sm:justify-between sm:p-6">
         <div className="min-w-0">
           <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-black/35">Paradise Beauty</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-paradise-noir sm:text-4xl">
@@ -483,16 +486,16 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
             I tuoi turni, le timbrature e le ore del mese{user.location ? ` in ${user.location.name}` : ""}.
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="shrink-0 self-start">
           <MonthSelector currentMonth={month} currentYear={year} allowedMonths={employeeAllowedMonths} />
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex items-center justify-between rounded-[26px] border border-white/70 bg-gradient-to-r from-paradise-softPink/20 via-white/90 to-paradise-nude/30 p-3 backdrop-blur-xl shadow-soft">
+      <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex items-center justify-between rounded-[28px] border border-white/80 bg-white/58 p-3 shadow-[0_14px_40px_rgba(61,35,49,0.08)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/48">
           {canOpenPreviousMonth ? (
             <Link
-              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
+              className="grid size-11 place-items-center rounded-full border border-white bg-white/72 shadow-sm backdrop-blur-xl transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] motion-reduce:transition-none"
               href={`/my-shifts?month=${previous.getUTCMonth() + 1}&year=${previous.getUTCFullYear()}`}
               aria-label="Mese precedente"
             >
@@ -500,7 +503,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
             </Link>
           ) : (
             <span
-              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white/50 opacity-35 shadow-sm"
+              className="grid size-11 place-items-center rounded-full border border-white/70 bg-white/45 opacity-40 shadow-sm"
               aria-label="Mese precedente non disponibile"
             >
               <ChevronLeft className="size-5 text-paradise-noir/70" />
@@ -516,7 +519,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
 
           {canOpenNextMonth ? (
             <Link
-              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition-all duration-200 hover:bg-paradise-nude hover:scale-105 active:scale-95 hover:border-black/10"
+              className="grid size-11 place-items-center rounded-full border border-white bg-white/72 shadow-sm backdrop-blur-xl transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a74768] motion-reduce:transition-none"
               href={`/my-shifts?month=${next.getUTCMonth() + 1}&year=${next.getUTCFullYear()}`}
               aria-label="Mese successivo"
             >
@@ -524,7 +527,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
             </Link>
           ) : (
             <span
-              className="grid size-11 place-items-center rounded-2xl border border-black/5 bg-white/50 opacity-35 shadow-sm"
+              className="grid size-11 place-items-center rounded-full border border-white/70 bg-white/45 opacity-40 shadow-sm"
               aria-label="Mese successivo non disponibile"
             >
               <ChevronRight className="size-5 text-paradise-noir/70" />
