@@ -115,7 +115,7 @@ export function DesktopSidebarNav({
   }, [activeSectionId, pathname]);
 
   return (
-    <div className="flex h-full flex-col font-[family-name:var(--sidebar-font)] [--sidebar-icon:var(--dark-sidebar-icon)] [--sidebar-text:var(--dark-sidebar-text)]">
+    <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
       <div className="sidebar-brand mx-1 flex shrink-0 items-center gap-3 border-b border-white/10 px-2 pb-5 pt-2">
         <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white/8">
           <img src={logoUrl || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />

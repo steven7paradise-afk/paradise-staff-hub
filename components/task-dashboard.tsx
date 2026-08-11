@@ -1475,9 +1475,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 backdrop-blur-sm md:block md:overflow-y-auto md:bg-[#F8F3F6] md:px-5 md:py-5">
-          <div className="max-h-[94dvh] w-full space-y-3 overflow-y-auto rounded-t-[28px] bg-[#F8F3F6] p-3 pb-28 shadow-2xl md:mx-auto md:max-h-none md:max-w-[1360px] md:overflow-visible md:rounded-none md:bg-transparent md:p-0 md:pb-24 md:shadow-none">
-            <div className="mx-auto mb-2 h-1.5 w-14 rounded-full bg-black/15 md:hidden" />
+        <div className="task-detail-page fixed inset-y-0 right-0 z-30 overflow-y-auto overscroll-contain bg-[#F8F3F6]">
+          <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[calc(env(safe-area-inset-top)+16px)] sm:px-5 md:pb-24 xl:px-7 xl:pt-7">
             <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
               <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
                 <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">

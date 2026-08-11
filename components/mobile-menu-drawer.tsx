@@ -103,7 +103,7 @@ export function MobileMenuDrawer({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="relative flex h-10 w-9 items-center justify-center rounded-r-2xl border border-black/5 bg-zinc-900 text-white transition-all duration-200 hover:w-10 active:scale-95"
+          className="relative flex size-11 items-center justify-center rounded-r-2xl border border-white/20 bg-zinc-900/80 text-white shadow-lg backdrop-blur-xl transition-all duration-200 hover:w-12 active:scale-95"
           aria-label="Apri menu"
         >
           <Menu className="size-5" />
@@ -127,7 +127,7 @@ export function MobileMenuDrawer({
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-full max-w-[302px] flex-col justify-between border-r border-white/8 bg-[#07101F] p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out",
+          "mobile-liquid-sidebar fixed inset-y-0 left-0 z-50 flex w-[min(86vw,340px)] flex-col justify-between border-r border-white/15 p-5 font-[family-name:var(--sidebar-font)] transition-[transform,box-shadow] duration-300 ease-out",
           isOpen ? "translate-x-0 shadow-[18px_0_50px_rgba(0,0,0,0.45)]" : "-translate-x-full shadow-none",
         )}
       >
@@ -146,7 +146,7 @@ export function MobileMenuDrawer({
                     </div>
                   )}
                 </div>
-                <span className="absolute bottom-0 right-0 size-4 rounded-full bg-emerald-400 ring-4 ring-[#07101F]" />
+                <span className="absolute bottom-0 right-0 size-4 rounded-full bg-emerald-400 ring-4 ring-white/15" />
               </div>
               
               <div className="min-w-0 text-left">
@@ -158,7 +158,7 @@ export function MobileMenuDrawer({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="grid size-10 shrink-0 place-items-center rounded-full text-slate-300 transition hover:bg-white/8 active:scale-95"
+              className="grid size-11 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-white/80 transition hover:bg-white/12 hover:text-white active:scale-95"
               aria-label="Chiudi menu"
             >
               <ArrowLeft className="size-6" />
@@ -197,7 +197,7 @@ export function MobileMenuDrawer({
                     <button
                       type="button"
                       onClick={() => setOpenSectionId((current) => current === section.id ? null : section.id)}
-                      className="mb-2 flex w-full items-center justify-between rounded-md px-3 py-1.5 text-left transition hover:bg-white/[0.04]"
+                      className="mb-2 flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left transition hover:bg-white/[0.07]"
                       aria-expanded={openSectionId === section.id}
                     >
                       <p className="text-[12px] font-black uppercase tracking-[0.18em] text-slate-400/85">{section.title}</p>
@@ -215,7 +215,7 @@ export function MobileMenuDrawer({
                             href={item.href}
                             onClick={() => setIsOpen(false)}
                             className={cn(
-                            "relative flex min-h-12 items-center justify-between gap-3 rounded-lg border border-transparent px-3 py-2.5 text-[16px] font-semibold tracking-tight transition",
+                            "relative flex min-h-12 items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-2.5 text-[16px] font-semibold tracking-tight transition",
                             isActive
                               ? "border border-white/16 bg-white/[0.08] text-white shadow-none"
                               : "text-slate-300 hover:bg-white/[0.055] hover:text-white"

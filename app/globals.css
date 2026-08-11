@@ -138,12 +138,13 @@
 
 /* Profilo: immagine capelli originale e gerarchia Liquid Glass adattiva. */
 .profile-liquid-page {
+  background-color: #ead8c4;
   background-image:
     linear-gradient(180deg, rgba(248, 235, 220, 0.12), rgba(58, 31, 20, 0.20)),
     url("/profile-cover-bg.png");
-  background-position: center top;
-  background-repeat: no-repeat;
-  background-size: cover;
+  background-position: center, center top;
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, auto 100dvh;
 }
 
 .profile-liquid-page > :not([class*="fixed"]) {
@@ -206,7 +207,7 @@
 
 @media (min-width: 1024px) {
   .profile-liquid-page {
-    background-attachment: fixed;
+    background-attachment: fixed, fixed;
   }
 }
 
@@ -1010,9 +1011,9 @@ textarea {
     border-right-color: rgba(255, 255, 255, 0.16) !important;
     background:
       linear-gradient(165deg,
-        color-mix(in srgb, var(--sidebar-gradient-from) 78%, transparent),
-        color-mix(in srgb, var(--sidebar-gradient-mid) 74%, transparent) 54%,
-        color-mix(in srgb, var(--sidebar-gradient-to) 80%, transparent)) !important;
+        color-mix(in srgb, var(--sidebar-gradient-from) 88%, transparent),
+        color-mix(in srgb, var(--sidebar-gradient-mid) 86%, transparent) 54%,
+        color-mix(in srgb, var(--sidebar-gradient-to) 90%, transparent)) !important;
     box-shadow:
       inset -1px 0 0 rgba(255, 255, 255, 0.10),
       18px 0 48px rgba(43, 23, 36, 0.12);
@@ -1033,11 +1034,110 @@ textarea {
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     backdrop-filter: blur(16px) saturate(140%);
   }
+
+  .app-liquid-sidebar-nav {
+    --sidebar-text: rgba(255, 255, 255, 0.94);
+    --sidebar-icon: rgba(255, 255, 255, 0.82);
+    color: rgba(255, 255, 255, 0.94);
+  }
+
+  .app-liquid-sidebar-nav .sidebar-nav-link {
+    opacity: 0.92;
+  }
+
+  .app-liquid-sidebar-nav .sidebar-nav-link:hover,
+  .app-liquid-sidebar-nav .sidebar-nav-link.active {
+    color: #ffffff !important;
+    opacity: 1;
+  }
+
+  .app-liquid-sidebar-nav button.sidebar-label :is(p, svg) {
+    opacity: 0.72 !important;
+  }
+
+  .app-liquid-sidebar-nav input {
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.22) !important;
+    background-color: rgba(255, 255, 255, 0.10) !important;
+  }
+
+  .app-liquid-sidebar-nav input::placeholder {
+    color: rgba(255, 255, 255, 0.68) !important;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) and (min-width: 1280px) {
   .app-liquid-sidebar {
     background: var(--user-sidebar-color, var(--sidebar)) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* Menu telefono: stesso vetro della sidebar desktop, ottimizzato per il tocco. */
+.mobile-liquid-sidebar {
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    linear-gradient(165deg,
+      color-mix(in srgb, var(--sidebar-gradient-from) 88%, transparent),
+      color-mix(in srgb, var(--sidebar-gradient-mid) 86%, transparent) 54%,
+      color-mix(in srgb, var(--sidebar-gradient-to) 90%, transparent));
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, 0.12),
+    22px 0 60px rgba(8, 5, 10, 0.36);
+  -webkit-backdrop-filter: blur(30px) saturate(155%);
+  backdrop-filter: blur(30px) saturate(155%);
+}
+
+.mobile-liquid-sidebar input {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+}
+
+.mobile-liquid-sidebar input::placeholder {
+  color: rgba(255, 255, 255, 0.66) !important;
+}
+
+/* Dettaglio Task: pagina autonoma accanto alla sidebar, non più popup. */
+.task-detail-page {
+  left: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 8% 4%, rgba(255, 183, 217, 0.20), transparent 30%),
+    linear-gradient(145deg, #fbf8fa 0%, #f5edf2 100%) !important;
+  color-scheme: light;
+}
+
+.dark .task-detail-page {
+  color: rgba(255, 255, 255, 0.94);
+  background:
+    radial-gradient(circle at 8% 4%, rgba(194, 70, 125, 0.18), transparent 30%),
+    linear-gradient(145deg, #17151c 0%, #1d1a24 100%) !important;
+  color-scheme: dark;
+}
+
+@media (min-width: 1280px) {
+  .task-detail-page {
+    left: 264px;
+  }
+
+  .sidebar-collapsed .task-detail-page {
+    left: 88px;
+  }
+}
+
+.mobile-liquid-sidebar a[aria-current="page"],
+.mobile-liquid-sidebar a:active {
+  border-color: rgba(255, 255, 255, 0.20);
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .mobile-liquid-sidebar {
+    background: var(--dark-sidebar) !important;
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }
