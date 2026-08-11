@@ -16,6 +16,7 @@ import {
   Umbrella,
   Users,
   WalletCards,
+  X,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
@@ -102,6 +103,7 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-expanded={active}
       aria-controls={controls}
       className={`group min-h-28 min-w-0 border-r border-white/10 px-4 py-3 text-left transition duration-200 hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#f0a0c3] motion-reduce:transition-none last:border-r-0 ${active ? "bg-white/[0.09] shadow-[inset_0_-3px_0_#ee86b3]" : ""}`}
     >
@@ -157,12 +159,14 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const withdrawalEnd = depositEnd + data.monthWithdrawals / movementTotal * 100;
 
   function showPersonnelSection(view: "PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
-    setPersonnelView(view);
+    const shouldOpen = personnelView !== view;
+    setPersonnelView(shouldOpen ? view : null);
+    if (!shouldOpen) return;
     const sectionId = view === "HOLIDAYS" || view === "SICKNESS" ? "assenze-attive" : "personale-oggi";
-    window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-    });
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+    }));
   }
 
   return (
@@ -199,14 +203,17 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[1.55fr_0.95fr]">
+      {personnelView === "PRESENT" || personnelView === "LATE" ? (
         <section id="personale-oggi" className="scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
               <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "PRESENT" ? "Personale presente ora" : "Presenze e puntualità"}</h2>
             </div>
-            <Link href="/attendance" className="inline-flex min-h-11 items-center rounded-full px-4 text-xs font-black uppercase text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none">Apri presenze</Link>
+            <div className="flex items-center gap-1">
+              <Link href="/attendance" className="hidden min-h-11 items-center rounded-full px-4 text-xs font-black uppercase text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none sm:inline-flex">Apri presenze</Link>
+              <button type="button" onClick={() => setPersonnelView(null)} className="grid size-11 place-items-center rounded-full text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none" aria-label="Nascondi dettaglio personale" title="Nascondi"><X className="size-5" aria-hidden="true" /></button>
+            </div>
           </div>
           <div className="divide-y divide-[#f0e7eb]">
             {visibleStaff.length === 0 ? (
@@ -234,10 +241,17 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             ))}
           </div>
         </section>
+      ) : null}
 
+      {personnelView === "HOLIDAYS" || personnelView === "SICKNESS" ? (
         <section id="assenze-attive" className="scroll-mt-6 rounded-[24px] border border-white/80 bg-white/72 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl">
-          <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
-          <h2 className="mt-1 text-xl font-black">{personnelView === "HOLIDAYS" ? "Personale in ferie" : personnelView === "SICKNESS" ? "Personale in malattia" : "Ferie, malattia e riposo"}</h2>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase text-[#c4467d]">Assenze attive</p>
+              <h2 className="mt-1 text-xl font-black">{personnelView === "HOLIDAYS" ? "Personale in ferie" : "Personale in malattia"}</h2>
+            </div>
+            <button type="button" onClick={() => setPersonnelView(null)} className="grid size-11 shrink-0 place-items-center rounded-full text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none" aria-label="Nascondi dettaglio assenze" title="Nascondi"><X className="size-5" aria-hidden="true" /></button>
+          </div>
           <div className="mt-4 space-y-3">
             {visibleLeaves.length === 0 ? (
               <div className="flex items-center gap-3 rounded-md border border-[#e9e2e5] bg-white p-4 text-sm text-[#6f666a]"><CheckCircle2 size={19} className="text-[#16805a]" /> Nessuna assenza registrata oggi.</div>
@@ -253,7 +267,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             ))}
           </div>
         </section>
-      </div>
+      ) : null}
 
       <section className="rounded-[24px] border border-white/80 bg-white/80 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl lg:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
