@@ -187,7 +187,17 @@ export function parseNotificationMetadata(
 
   let category: CategoryStyle;
 
-  if (isOrder || (formName && formName.toLowerCase().includes("ordine"))) {
+  if (notification.type === "COMUNICAZIONE") {
+    category = {
+      label: "Comunicazione",
+      isOrder: false,
+      badge: "bg-pink-100 text-[#C66170] border border-pink-300 font-extrabold dark:bg-pink-950 dark:text-pink-200 dark:border-pink-800",
+      borderLeft: "border-l-4 border-l-pink-500",
+      iconBg: "bg-pink-100 text-[#C66170] dark:bg-pink-950 dark:text-pink-200",
+      iconText: "text-[#C66170]",
+      Icon: Megaphone,
+    };
+  } else if (isOrder || (formName && formName.toLowerCase().includes("ordine"))) {
     category = {
       label: formName || "Modulo Ordine",
       isOrder: true,
