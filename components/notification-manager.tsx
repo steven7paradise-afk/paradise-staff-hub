@@ -348,7 +348,7 @@ export function NotificationManager({
 
   // 1-Click action: Select and view in Blog Reader
   function selectCommunication(item: NotificationItem) {
-    if (item.type === "COMUNICAZIONE") {
+    if (!isAttendanceAlert(item)) {
       router.push(`/notifications?communication=${encodeURIComponent(item.id)}&direct=1`);
       return;
     }
