@@ -10,6 +10,8 @@ import {
   Palette,
   RotateCcw,
   Save,
+  SlidersHorizontal,
+  Sparkles,
   Smartphone,
   Sun,
 } from "lucide-react";
@@ -17,7 +19,11 @@ import { Button, Field } from "@/components/ui";
 import type { BrandingTheme } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
-type ColorKey = Exclude<keyof BrandingTheme, "logo_url">;
+type StringThemeKey = {
+  [Key in keyof BrandingTheme]: BrandingTheme[Key] extends string ? Key : never;
+}[keyof BrandingTheme];
+type ColorKey = Exclude<StringThemeKey, "sidebar_font_family">;
+type GlassNumberKey = "glass_opacity" | "glass_blur" | "glass_saturation" | "glass_border_opacity";
 type Mode = "light" | "dark";
 
 type ColorField = {
@@ -73,6 +79,12 @@ const defaults: BrandingTheme = {
   sidebar_icon_color: "#1F1F1F",
   dark_sidebar_text_color: "#F8F3F6",
   dark_sidebar_icon_color: "#F8F3F6",
+  sidebar_gradient_mid_color: "#07101F",
+  glass_enabled: true,
+  glass_opacity: 72,
+  glass_blur: 24,
+  glass_saturation: 140,
+  glass_border_opacity: 16,
   sidebar_active_bg_color: "#FFFFFF",
   sidebar_active_text_color: "#FFFFFF",
   sidebar_active_icon_color: "#FFFFFF",
@@ -177,8 +189,12 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     root.style.setProperty("--secondary", nextForm.secondary_color);
     root.style.setProperty("--gradient", nextForm.gradient_color);
     root.style.setProperty("--sidebar-gradient-from", nextForm.dark_sidebar_color);
-    root.style.setProperty("--sidebar-gradient-mid", "#07101F");
+    root.style.setProperty("--sidebar-gradient-mid", nextForm.sidebar_gradient_mid_color);
     root.style.setProperty("--sidebar-gradient-to", `color-mix(in srgb, ${nextForm.dark_sidebar_color} 78%, ${nextForm.gradient_color} 22%)`);
+    root.style.setProperty("--glass-opacity", nextForm.glass_enabled ? `${nextForm.glass_opacity}%` : "100%");
+    root.style.setProperty("--glass-blur", nextForm.glass_enabled ? `${nextForm.glass_blur}px` : "0px");
+    root.style.setProperty("--glass-saturation", nextForm.glass_enabled ? `${nextForm.glass_saturation}%` : "100%");
+    root.style.setProperty("--glass-border-opacity", nextForm.glass_enabled ? `${nextForm.glass_border_opacity}%` : "0%");
     root.style.setProperty("--sidebar-active-bg", nextForm.sidebar_active_bg_color);
     root.style.setProperty("--sidebar-active-text", nextForm.sidebar_active_text_color);
     root.style.setProperty("--sidebar-active-icon", nextForm.sidebar_active_icon_color);
@@ -252,6 +268,24 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
     });
   }
 
+  function updateGlass(key: GlassNumberKey, value: number) {
+    setStatus("idle");
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      applyLiveTheme(next, mode);
+      return next;
+    });
+  }
+
+  function toggleGlass() {
+    setStatus("idle");
+    setForm((current) => {
+      const next = { ...current, glass_enabled: !current.glass_enabled };
+      applyLiveTheme(next, mode);
+      return next;
+    });
+  }
+
   function changeMode(nextMode: Mode) {
     setMode(nextMode);
     document.documentElement.classList.toggle("dark", nextMode === "dark");
@@ -288,6 +322,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
 
   const sidebarGradientFields: ColorField[] = [
     { key: "dark_sidebar_color", label: "Base menu scura", help: "Parte principale della sidebar desktop." },
+    { key: "sidebar_gradient_mid_color", label: "Centro sfumatura", help: "Colore centrale scuro della sidebar desktop e del menu telefono." },
     { key: "gradient_color", label: "Sfumatura menu", help: "Colore che crea profondita nella sidebar." },
     { key: "dark_sidebar_text_color", label: "Testo menu", help: "Titoli e nomi delle pagine nel menu scuro." },
     { key: "dark_sidebar_icon_color", label: "Icone menu", help: "Icone della sidebar scura." },
@@ -361,6 +396,64 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
               </p>
             ) : null}
             {status === "error" ? <p className="text-sm font-black text-red-600">Errore durante il salvataggio. Riprova.</p> : null}
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.24em] text-pink-500"><Sparkles className="size-4" /> Liquid Glass</p>
+              <h3 className="mt-2 text-2xl font-black text-[color:var(--text)]">Regola il vetro di tutta l’app</h3>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-black/50 dark:text-white/55">Le modifiche controllano card, pannelli, sidebar desktop e menu telefono. L’anteprima si aggiorna immediatamente.</p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleGlass}
+              aria-pressed={form.glass_enabled}
+              className={cn(
+                "inline-flex min-h-11 shrink-0 items-center gap-3 rounded-full border px-4 text-sm font-black transition",
+                form.glass_enabled ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-black/10 bg-black/[0.04] text-black/55 dark:border-white/10 dark:bg-white/5 dark:text-white/60",
+              )}
+            >
+              <span className={cn("relative h-6 w-11 rounded-full transition", form.glass_enabled ? "bg-emerald-500" : "bg-black/20 dark:bg-white/20")}>
+                <span className={cn("absolute top-1 size-4 rounded-full bg-white shadow-sm transition", form.glass_enabled ? "left-6" : "left-1")} />
+              </span>
+              {form.glass_enabled ? "Attivo" : "Disattivato"}
+            </button>
+          </div>
+
+          <div className={cn("mt-6 grid gap-4 md:grid-cols-2", !form.glass_enabled && "pointer-events-none opacity-45")}>
+            {([
+              { key: "glass_opacity", label: "Trasparenza", help: "Più basso = vetro più trasparente.", min: 20, max: 100, suffix: "%" },
+              { key: "glass_blur", label: "Sfocatura", help: "Aumenta la morbidezza dello sfondo.", min: 0, max: 50, suffix: " px" },
+              { key: "glass_saturation", label: "Saturazione", help: "Aumenta la vivacità dei colori sotto il vetro.", min: 100, max: 200, suffix: "%" },
+              { key: "glass_border_opacity", label: "Bordo luminoso", help: "Regola la visibilità dei contorni del vetro.", min: 0, max: 40, suffix: "%" },
+            ] as Array<{ key: GlassNumberKey; label: string; help: string; min: number; max: number; suffix: string }>).map((control) => (
+              <label key={control.key} className="rounded-2xl border border-black/10 bg-white/70 p-4 backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+                <span className="flex items-start justify-between gap-4">
+                  <span>
+                    <span className="block text-sm font-black">{control.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-black/45 dark:text-white/45">{control.help}</span>
+                  </span>
+                  <span className="rounded-full bg-black/[0.05] px-3 py-1 text-xs font-black tabular-nums dark:bg-white/10">{form[control.key]}{control.suffix}</span>
+                </span>
+                <input
+                  type="range"
+                  min={control.min}
+                  max={control.max}
+                  value={form[control.key]}
+                  onChange={(event) => updateGlass(control.key, Number(event.target.value))}
+                  className="mt-5 h-11 w-full cursor-pointer accent-pink-500"
+                  aria-label={control.label}
+                />
+                <span className="flex justify-between text-[10px] font-bold text-black/35 dark:text-white/35"><span>{control.min}{control.suffix}</span><span>{control.max}{control.suffix}</span></span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-4 flex items-start gap-3 rounded-2xl bg-black/[0.035] p-4 text-xs leading-5 text-black/55 dark:bg-white/5 dark:text-white/55">
+            <SlidersHorizontal className="mt-0.5 size-4 shrink-0 text-pink-500" />
+            <p><strong>Consiglio:</strong> usa Trasparenza 65–80%, Sfocatura 20–30 px e Saturazione 130–155% per un effetto professionale e leggibile.</p>
           </div>
         </div>
 
@@ -477,7 +570,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
           <div
             className="rounded-[26px] border border-white/10 p-4 text-[color:var(--dark-sidebar-text)]"
             style={{
-              background: `linear-gradient(165deg, ${form.dark_sidebar_color}, #07101F 54%, color-mix(in srgb, ${form.dark_sidebar_color} 78%, ${form.gradient_color} 22%))`,
+              background: `linear-gradient(165deg, ${form.dark_sidebar_color}, ${form.sidebar_gradient_mid_color} 54%, color-mix(in srgb, ${form.dark_sidebar_color} 78%, ${form.gradient_color} 22%))`,
               fontFamily: `${form.sidebar_font_family}, Inter, sans-serif`,
             }}
           >

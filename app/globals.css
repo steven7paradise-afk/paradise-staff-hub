@@ -13,6 +13,10 @@
   --card: #ffffff;
   --text: #1f1f1f;
   --gradient: #e8c98b;
+  --glass-opacity: 72%;
+  --glass-blur: 24px;
+  --glass-saturation: 140%;
+  --glass-border-opacity: 16%;
 }
 
 .paradise-theme-root {
@@ -67,8 +71,10 @@
   [class~="bg-white/90"],
   [class~="bg-white/95"]
 ) {
-  -webkit-backdrop-filter: blur(22px) saturate(135%);
-  backdrop-filter: blur(22px) saturate(135%);
+  background-color: color-mix(in srgb, var(--card) var(--glass-opacity), transparent) !important;
+  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .dark .app-content-surface {
@@ -86,8 +92,8 @@
 }
 
 .branding-studio > :is(section, aside) > div {
-  -webkit-backdrop-filter: blur(22px) saturate(135%);
-  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -106,7 +112,7 @@
 }
 
 .dark .app-content-surface :is([class~="bg-white"], [class~="bg-white/50"], [class~="bg-white/60"], [class~="bg-white/65"], [class~="bg-white/70"], [class~="bg-white/75"], [class~="bg-white/80"], [class~="bg-white/90"], [class~="bg-white/95"], [class*="bg-[#FA"], [class*="bg-[#FB"], [class*="bg-[#F8"], [class*="bg-[#f8"], [class*="bg-[#fb"], [class*="bg-[#faf"], [class*="bg-neutral-50"]) {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: color-mix(in srgb, var(--card) var(--glass-opacity), transparent) !important;
 }
 
 .dark .app-content-surface :is(
@@ -178,15 +184,15 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.72),
     0 18px 55px rgba(47, 25, 15, 0.16);
-  -webkit-backdrop-filter: blur(28px) saturate(145%);
-  backdrop-filter: blur(28px) saturate(145%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .profile-liquid-page [class~="bg-neutral-50"] {
   background-color: rgba(255, 252, 248, 0.48) !important;
   border-color: rgba(255, 255, 255, 0.50) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(130%);
-  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .profile-liquid-page :is([class~="text-neutral-400"], [class~="text-neutral-500"]) {
@@ -322,8 +328,8 @@
 }
 
 .operations-liquid-page :is([class~="bg-white"], [class*="bg-white/"], [class*="bg-neutral-50"], [class*="bg-slate-50"]) {
-  -webkit-backdrop-filter: blur(22px) saturate(135%);
-  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .dark .app-content-surface .operations-liquid-page {
@@ -975,17 +981,17 @@ textarea {
 }
 
 .luxury-glass {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, white var(--glass-opacity), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid color-mix(in srgb, white var(--glass-border-opacity), transparent);
 }
 
 .dark .luxury-glass {
-  background: rgba(32, 31, 36, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, rgb(32, 31, 36) var(--glass-opacity), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid color-mix(in srgb, white var(--glass-border-opacity), transparent);
 }
 
 .luxury-text-gradient {
@@ -1027,17 +1033,17 @@ textarea {
 /* Sidebar globale: materiale sottile Liquid Glass, coerente in chiaro e notte. */
 @media (min-width: 1280px) {
   .app-liquid-sidebar {
-    border-right-color: rgba(255, 255, 255, 0.16) !important;
+    border-right-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
     background:
       linear-gradient(165deg,
-        color-mix(in srgb, var(--sidebar-gradient-from) 88%, transparent),
-        color-mix(in srgb, var(--sidebar-gradient-mid) 86%, transparent) 54%,
-        color-mix(in srgb, var(--sidebar-gradient-to) 90%, transparent)) !important;
+        color-mix(in srgb, var(--sidebar-gradient-from) var(--glass-opacity), transparent),
+        color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent) 54%,
+        color-mix(in srgb, var(--sidebar-gradient-to) var(--glass-opacity), transparent)) !important;
     box-shadow:
       inset -1px 0 0 rgba(255, 255, 255, 0.10),
       18px 0 48px rgba(43, 23, 36, 0.12);
-    -webkit-backdrop-filter: blur(30px) saturate(150%);
-    backdrop-filter: blur(30px) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   }
 
   .app-liquid-sidebar > aside,
@@ -1046,12 +1052,12 @@ textarea {
   }
 
   .app-liquid-sidebar .sidebar-nav-link.active {
-    border-color: rgba(255, 255, 255, 0.18) !important;
+    border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.12),
       0 8px 24px rgba(23, 13, 21, 0.14) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
-    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   }
 
   .app-liquid-sidebar-nav {
@@ -1098,22 +1104,22 @@ textarea {
   color: var(--dark-sidebar-text);
   background:
     linear-gradient(165deg,
-      color-mix(in srgb, var(--sidebar-gradient-from) 88%, transparent),
-      color-mix(in srgb, var(--sidebar-gradient-mid) 86%, transparent) 54%,
-      color-mix(in srgb, var(--sidebar-gradient-to) 90%, transparent));
+      color-mix(in srgb, var(--sidebar-gradient-from) var(--glass-opacity), transparent),
+      color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent) 54%,
+      color-mix(in srgb, var(--sidebar-gradient-to) var(--glass-opacity), transparent));
   box-shadow:
     inset -1px 0 0 rgba(255, 255, 255, 0.12),
     22px 0 60px rgba(8, 5, 10, 0.36);
-  -webkit-backdrop-filter: blur(30px) saturate(155%);
-  backdrop-filter: blur(30px) saturate(155%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .mobile-liquid-sidebar input {
   color: var(--dark-sidebar-text) !important;
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: color-mix(in srgb, white var(--glass-border-opacity), transparent) !important;
   background-color: rgba(255, 255, 255, 0.10) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
 
 .mobile-liquid-sidebar input::placeholder {

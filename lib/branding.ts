@@ -20,6 +20,12 @@ export type BrandingTheme = {
   sidebar_icon_color: string;
   dark_sidebar_text_color: string;
   dark_sidebar_icon_color: string;
+  sidebar_gradient_mid_color: string;
+  glass_enabled: boolean;
+  glass_opacity: number;
+  glass_blur: number;
+  glass_saturation: number;
+  glass_border_opacity: number;
   sidebar_active_bg_color: string;
   sidebar_active_text_color: string;
   sidebar_active_icon_color: string;
@@ -45,6 +51,12 @@ const fallbackBranding: BrandingTheme = {
   sidebar_icon_color: "#1F1F1F",
   dark_sidebar_text_color: "#F8F3F6",
   dark_sidebar_icon_color: "#F8F3F6",
+  sidebar_gradient_mid_color: "#07101F",
+  glass_enabled: true,
+  glass_opacity: 72,
+  glass_blur: 24,
+  glass_saturation: 140,
+  glass_border_opacity: 16,
   sidebar_active_bg_color: "#FFFFFF",
   sidebar_active_text_color: "#FFFFFF",
   sidebar_active_icon_color: "#FFFFFF",
@@ -72,6 +84,7 @@ export const getBrandingTheme = unstable_cache(
 );
 
 export function brandingCss(theme: BrandingTheme) {
+  const glassEnabled = theme.glass_enabled;
   return {
     "--primary": theme.primary_color,
     "--secondary": theme.secondary_color,
@@ -89,8 +102,12 @@ export function brandingCss(theme: BrandingTheme) {
     "--text": theme.text_color,
     "--gradient": theme.gradient_color,
     "--sidebar-gradient-from": theme.dark_sidebar_color,
-    "--sidebar-gradient-mid": "#07101F",
+    "--sidebar-gradient-mid": theme.sidebar_gradient_mid_color,
     "--sidebar-gradient-to": `color-mix(in srgb, ${theme.dark_sidebar_color} 78%, ${theme.gradient_color} 22%)`,
+    "--glass-opacity": glassEnabled ? `${theme.glass_opacity}%` : "100%",
+    "--glass-blur": glassEnabled ? `${theme.glass_blur}px` : "0px",
+    "--glass-saturation": glassEnabled ? `${theme.glass_saturation}%` : "100%",
+    "--glass-border-opacity": glassEnabled ? `${theme.glass_border_opacity}%` : "0%",
     "--sidebar-active-bg": theme.sidebar_active_bg_color,
     "--sidebar-active-text": theme.sidebar_active_text_color,
     "--sidebar-active-icon": theme.sidebar_active_icon_color,

@@ -360,13 +360,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       .map((item) => item.href === "/appointments" ? { ...item, href: "/appointments/buenos-aires", label: "Appuntamenti" } : item);
     effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms"] }];
   }
-  const dateLabel = new Intl.DateTimeFormat("it-IT", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Rome",
-  }).format(new Date());
-
   const aside = (
       <aside className={cn(
         "z-30 w-full max-w-full border-b-0 border-transparent text-[color:var(--sidebar-text)] xl:border-r xl:border-black/5 xl:px-5 xl:py-4 xl:flex xl:h-dvh xl:flex-col xl:overflow-hidden xl:bg-[color:var(--user-sidebar-color,var(--sidebar))]",
@@ -466,24 +459,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             profileHref={isPcCassa ? "/appointments/buenos-aires?choose=1" : "/profile"}
           />
         </div>
-        {!hideHeader ? <header className={cn("mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", hidePageHeaderOnMobile && "hidden sm:flex")}>
-          <div>
-            <p className={cn("text-sm font-semibold uppercase tracking-[0.18em] text-black/40 dark:text-white/40", currentRole === "DIPENDENTE" && "hidden sm:block")}>Paradise Beauty</p>
-            <h1 className={cn("mt-2 font-bold tracking-tight text-[color:var(--text)]", currentRole === "DIPENDENTE" ? "text-3xl sm:text-4xl" : "text-3xl sm:text-4xl")}>
-              {typeof title === "string" && title.startsWith("Ciao, ") ? (
-                <>
-                  Ciao, <span className="luxury-text-gradient">{title.slice(6)}</span>
-                </>
-              ) : (
-                title
-              )}
-            </h1>
-            {subtitle ? <p className="mt-2 max-w-2xl text-sm leading-6 text-black/55 dark:text-white/55">{subtitle}</p> : null}
-          </div>
-          <div className={cn("rounded-full border border-black/5 bg-white px-4 py-2 text-sm shadow-sm", "dark:border-white/10 dark:bg-white/10", currentRole === "DIPENDENTE" && "hidden sm:block")}>
-            {dateLabel}
-          </div>
-        </header> : null}
+        <div className="sr-only">
+          <h1>{title}</h1>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
         <div className="flex-1">
           {children}
         </div>

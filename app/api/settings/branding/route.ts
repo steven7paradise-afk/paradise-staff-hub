@@ -3,6 +3,11 @@ import { revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(max, Math.max(min, Math.round(number))) : fallback;
+}
+
 export async function PUT(request: NextRequest) {
   const session = await auth();
   if (session?.user?.role !== "ZERO") {
@@ -29,6 +34,12 @@ export async function PUT(request: NextRequest) {
     sidebar_icon_color: String(payload.sidebar_icon_color ?? "#1F1F1F"),
     dark_sidebar_text_color: String(payload.dark_sidebar_text_color ?? "#F8F3F6"),
     dark_sidebar_icon_color: String(payload.dark_sidebar_icon_color ?? "#F8F3F6"),
+    sidebar_gradient_mid_color: String(payload.sidebar_gradient_mid_color ?? "#07101F"),
+    glass_enabled: payload.glass_enabled !== false,
+    glass_opacity: clampNumber(payload.glass_opacity, 20, 100, 72),
+    glass_blur: clampNumber(payload.glass_blur, 0, 50, 24),
+    glass_saturation: clampNumber(payload.glass_saturation, 100, 200, 140),
+    glass_border_opacity: clampNumber(payload.glass_border_opacity, 0, 40, 16),
     sidebar_active_bg_color: String(payload.sidebar_active_bg_color ?? "#FFFFFF"),
     sidebar_active_text_color: String(payload.sidebar_active_text_color ?? "#FFFFFF"),
     sidebar_active_icon_color: String(payload.sidebar_active_icon_color ?? "#FFFFFF"),
