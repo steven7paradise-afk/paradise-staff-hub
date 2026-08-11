@@ -7,7 +7,12 @@ import type { Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-export default async function NotificationsPage() {
+export default async function NotificationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ communication?: string }>;
+}) {
+  const params = await searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
@@ -26,6 +31,7 @@ export default async function NotificationsPage() {
         role={role}
         currentUserId={session.user.id}
         currentUserName={session.user.name ?? ""}
+        focusNotificationId={params.communication ?? null}
         notifications={notifications.map((notification) => ({
           id: notification.id,
           title: notification.title,
@@ -37,7 +43,13 @@ export default async function NotificationsPage() {
           createdAt: notification.created_at.toISOString(),
         }))}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
-          recipients={recipients.map((user) => ({ id: user.id, name: user.name, locationId: user.sede_id, locationName: user.location?.name ?? "Senza salone" }))}
+        recipients={recipients.map((user) => ({
+          id: user.id,
+          name: user.name,
+          photoUrl: user.photo_url,
+          locationId: user.sede_id,
+          locationName: user.location?.name ?? "Senza salone",
+        }))}
       />
     </AppShell>
   );

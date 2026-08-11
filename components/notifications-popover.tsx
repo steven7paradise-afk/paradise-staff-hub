@@ -193,9 +193,9 @@ export function NotificationsPopover({ initialUnread = 0 }: { initialUnread?: nu
                       </div>
                     )}
 
-                    {item.actionUrl && (
+                    {(item.actionUrl || item.type === "COMUNICAZIONE") && (
                       <Link
-                        href={item.actionUrl}
+                        href={item.type === "COMUNICAZIONE" ? `/notifications?communication=${item.id}` : item.actionUrl!}
                         onClick={() => setIsOpen(false)}
                         className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-[#B9476D] hover:underline"
                       >

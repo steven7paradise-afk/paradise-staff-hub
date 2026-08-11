@@ -12,7 +12,7 @@ export async function GET() {
       prisma.notification.findFirst({
         where: { user_id: session.user.id, read: false },
         orderBy: { created_at: "desc" },
-        select: { id: true, title: true, message: true, action_url: true, created_at: true },
+        select: { id: true, title: true, message: true, action_url: true, created_at: true, type: true },
       }),
       prisma.notification.findMany({
         where: { user_id: session.user.id },
@@ -29,7 +29,7 @@ export async function GET() {
             id: latest.id,
             title: latest.title,
             message: latest.message,
-            actionUrl: latest.action_url,
+            actionUrl: latest.type === "COMUNICAZIONE" ? `/notifications?communication=${latest.id}` : latest.action_url,
             createdAt: latest.created_at.toISOString(),
           }
         : null,
@@ -37,7 +37,7 @@ export async function GET() {
         id: item.id,
         title: item.title,
         message: item.message,
-        actionUrl: item.action_url,
+        actionUrl: item.type === "COMUNICAZIONE" ? `/notifications?communication=${item.id}` : item.action_url,
         createdAt: item.created_at.toISOString(),
         read: item.read,
         type: item.type,

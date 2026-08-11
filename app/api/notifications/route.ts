@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
@@ -38,8 +39,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Nessun destinatario trovato." }, { status: 400 });
   }
 
+  const createdAt = new Date();
   await createNotifications(
     users.map((user) => ({
+      id: randomUUID(),
       user_id: user.id,
       title,
       message,
@@ -47,7 +50,12 @@ export async function POST(request: NextRequest) {
       page,
       action_url: actionUrl,
       read: false,
+      created_at: createdAt,
     })),
+    {
+      deliveryActionUrl: (notification) =>
+        type === "COMUNICAZIONE" ? `/notifications?communication=${encodeURIComponent(String(notification.id))}` : undefined,
+    },
   );
 
   return NextResponse.json({ sent: users.length });

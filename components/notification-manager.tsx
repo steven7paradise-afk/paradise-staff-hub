@@ -25,6 +25,7 @@ import {
   Mail,
   MailPlus,
   Megaphone,
+  MessageCircle,
   MessageSquareText,
   Newspaper,
   Paperclip,
@@ -38,6 +39,7 @@ import {
   Trash2,
   UploadCloud,
   User,
+  Users,
   X,
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -45,6 +47,7 @@ import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type NotificationItem = {
   id: string;
@@ -57,10 +60,46 @@ type NotificationItem = {
   createdAt: string;
 };
 
-type Recipient = { id: string; name: string; locationId: string | null; locationName: string };
+type Recipient = { id: string; name: string; photoUrl: string | null; locationId: string | null; locationName: string };
 type LocationOption = { id: string; name: string };
 type Filter = "ALL" | "IMPORTANT" | "UNREAD";
 type SectionTab = "BLOG" | "ATTENDANCE" | "ALL";
+
+type CommunicationReader = { id: string; name: string; photoUrl: string | null };
+type CommunicationComment = {
+  id: string;
+  userId: string;
+  userName: string;
+  photoUrl: string | null;
+  message: string;
+  createdAt: string;
+};
+type CommunicationEngagement = {
+  readers: CommunicationReader[];
+  recipientCount: number;
+  comments: CommunicationComment[];
+};
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "P";
+}
+
+function ProfileAvatar({ person, size = "md" }: { person: CommunicationReader; size?: "sm" | "md" }) {
+  const photo = resolveDrivePhotoUrl(person.photoUrl);
+  return (
+    <span className="group relative inline-flex shrink-0" title={person.name}>
+      <span className={cn(
+        "grid overflow-hidden rounded-full border-2 border-white bg-[#F4D7E4] place-items-center font-black text-[#8E334E] shadow-sm",
+        size === "sm" ? "size-8 text-[10px]" : "size-10 text-xs",
+      )}>
+        {photo ? <img src={photo} alt={person.name} className="size-full object-cover" /> : initials(person.name)}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-[#17151A] px-2.5 py-1.5 text-[10px] font-bold text-white shadow-lg group-hover:block">
+        {person.name}
+      </span>
+    </span>
+  );
+}
 
 const typeStyles: Record<string, { icon: typeof Megaphone; bg: string; pill: string; label: string }> = {
   COMUNICAZIONE: { icon: Megaphone, bg: "bg-pink-100 text-[#C66170]", pill: "bg-pink-100 text-[#C66170]", label: "Comunicazione" },
@@ -126,6 +165,7 @@ export function NotificationManager({
   locations,
   currentUserId = "",
   currentUserName = "",
+  focusNotificationId = null,
 }: {
   role: Role;
   notifications: NotificationItem[];
@@ -133,13 +173,14 @@ export function NotificationManager({
   locations: LocationOption[];
   currentUserId?: string;
   currentUserName?: string;
+  focusNotificationId?: string | null;
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const [viewMode, setViewMode] = useState<"BLOG" | "LIST">("BLOG");
   const [sectionTab, setSectionTab] = useState<SectionTab>("BLOG");
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState(role === "RESPONSABILE" ? "location" : "all");
+  const [target, setTarget] = useState("all");
   const [targetId, setTargetId] = useState(locations[0]?.id ?? recipients[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
@@ -157,16 +198,28 @@ export function NotificationManager({
 
   // Active communication for the Blog Reader view (defaults to latest non-attendance post if in blog mode)
   const initialActive = useMemo(() => {
+    if (focusNotificationId) {
+      const focused = notifications.find((notification) => notification.id === focusNotificationId);
+      if (focused) return focused;
+    }
     return notifications.find((n) => !isAttendanceAlert(n)) ?? notifications[0] ?? null;
-  }, [notifications]);
+  }, [focusNotificationId, notifications]);
 
   const [activeItem, setActiveItem] = useState<NotificationItem | null>(initialActive);
+  const [focusedIntroOpen, setFocusedIntroOpen] = useState(
+    Boolean(focusNotificationId && initialActive?.id === focusNotificationId),
+  );
 
   const [filter, setFilter] = useState<Filter>("ALL");
   const [query, setQuery] = useState("");
   const [selectedSalon, setSelectedSalon] = useState<string>("ALL");
   const [selectedPerson, setSelectedPerson] = useState<string>("ALL");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("ALL");
+  const [engagement, setEngagement] = useState<CommunicationEngagement | null>(null);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [comment, setComment] = useState("");
+  const [commentStatus, setCommentStatus] = useState("");
+  const [commentSending, setCommentSending] = useState(false);
   const router = useRouter();
 
   const recipientsByLocation = locations.map((location) => ({
@@ -193,6 +246,30 @@ export function NotificationManager({
       setActiveItem(defaultPost);
     }
   }, [notifications]);
+
+  useEffect(() => {
+    if (!activeItem || isAttendanceAlert(activeItem)) {
+      setEngagement(null);
+      return;
+    }
+    let cancelled = false;
+    setEngagementLoading(true);
+    fetch(`/api/notifications/${activeItem.id}/engagement`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Impossibile caricare le risposte.");
+        if (!cancelled) setEngagement(data);
+      })
+      .catch(() => {
+        if (!cancelled) setEngagement(null);
+      })
+      .finally(() => {
+        if (!cancelled) setEngagementLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeItem?.id]);
 
   // Handle Google Drive File Upload
   async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -281,6 +358,32 @@ export function NotificationManager({
     router.refresh();
   }
 
+  async function submitComment() {
+    if (!activeItem || !comment.trim() || commentSending) return;
+    setCommentSending(true);
+    setCommentStatus("");
+    if (!activeItem.read) await markRead(activeItem);
+
+    const response = await fetch(`/api/notifications/${activeItem.id}/engagement`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: comment.trim() }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setCommentSending(false);
+    if (!response.ok) {
+      setCommentStatus(data.error || "Commento non inviato.");
+      return;
+    }
+    setEngagement((current) => current ? { ...current, comments: data.comments } : {
+      readers: [],
+      recipientCount: 0,
+      comments: data.comments,
+    });
+    setComment("");
+    setCommentStatus("Commento pubblicato.");
+  }
+
   async function deleteNotification(notification: NotificationItem) {
     const ok = window.confirm("Eliminare questa notifica?");
     if (!ok) return;
@@ -355,31 +458,252 @@ export function NotificationManager({
   const prevPost = activeIndex > 0 ? filteredItems[activeIndex - 1].item : null;
   const nextPost = activeIndex >= 0 && activeIndex < filteredItems.length - 1 ? filteredItems[activeIndex + 1].item : null;
 
+  const focusedMode = Boolean(focusNotificationId && activeItem?.id === focusNotificationId && !isAttendanceAlert(activeItem));
+  const focusedMessage = activeItem?.message
+    .replace(/\n\n📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
+    .replace(/📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
+    .trim() ?? "";
+  const focusedDriveId = activeItem
+    ? (activeItem.actionUrl || activeItem.message).match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1]
+      || (activeItem.actionUrl || activeItem.message).match(/id=([a-zA-Z0-9_-]+)/)?.[1]
+    : null;
+  const focusedHasImage = Boolean(
+    activeItem && (
+      /\.(png|jpg|jpeg|webp|gif)($|\?|\))/i.test(activeItem.actionUrl || activeItem.message)
+      || /\[.*?\.(png|jpg|jpeg|webp|gif)\]/i.test(activeItem.message)
+      || focusedDriveId
+    ),
+  );
+  const focusedImageSrc = activeItem && focusedHasImage
+    ? focusedDriveId
+      ? `/api/drive-image?id=${focusedDriveId}`
+      : activeItem.actionUrl
+    : null;
+
+  if (focusedMode && activeItem) {
+    if (focusedIntroOpen) {
+      return (
+        <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#F8F6FA] text-[#17151A]">
+          <div className="mx-auto flex min-h-full w-full max-w-xl flex-col px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-8">
+            <header className="grid grid-cols-[44px_1fr_44px] items-center py-3">
+              <button
+                type="button"
+                onClick={() => router.push("/notifications")}
+                className="grid size-11 place-items-center rounded-full text-black transition hover:bg-black/5"
+                aria-label="Torna alle comunicazioni"
+              >
+                <ChevronLeft className="size-7" />
+              </button>
+              <p className="text-center text-sm font-bold">Avvisi</p>
+              <span />
+            </header>
+
+            <main className="flex flex-1 flex-col justify-center py-8 sm:py-12">
+              <div className="mx-auto grid size-14 place-items-center rounded-full bg-[#17151A] text-white shadow-sm">
+                <Megaphone className="size-6" />
+              </div>
+              <p className="mt-5 text-center text-[11px] font-black uppercase tracking-[0.2em] text-[#A74758]">Paradise Beauty</p>
+              <h1 className="mx-auto mt-3 max-w-md text-center text-2xl font-black leading-tight sm:text-3xl">
+                Hai una nuova comunicazione
+              </h1>
+              <p className="mt-2 text-center text-sm font-semibold text-black/45">Comunicazione interna ufficiale</p>
+
+              <section className="mt-8 overflow-hidden rounded-lg border border-black/10 bg-white shadow-sm">
+                <dl className="divide-y divide-black/10 text-sm">
+                  <div className="grid grid-cols-[92px_1fr] gap-4 px-5 py-4">
+                    <dt className="font-semibold text-black/45">Mittente</dt>
+                    <dd className="text-right font-black">Direzione Paradise</dd>
+                  </div>
+                  <div className="grid grid-cols-[92px_1fr] gap-4 px-5 py-4">
+                    <dt className="font-semibold text-black/45">Oggetto</dt>
+                    <dd className="text-right font-black">{activeItem.title}</dd>
+                  </div>
+                </dl>
+                <div className="border-t border-black/10 px-5 py-5">
+                  <p className="line-clamp-5 whitespace-pre-line rounded-md bg-[#F7F4F8] p-4 text-sm font-medium leading-6 text-black/65">
+                    {focusedMessage}
+                  </p>
+                </div>
+                <div className="grid grid-cols-[92px_1fr] gap-4 border-t border-black/10 px-5 py-4 text-xs">
+                  <span className="font-semibold text-black/45">Codice avviso</span>
+                  <span className="text-right font-black uppercase tracking-wider">{activeItem.id.slice(0, 12)}</span>
+                </div>
+              </section>
+
+              <p className="mt-5 text-center text-xs font-semibold leading-5 text-black/40">
+                Aprendo il contenuto confermi di aver ricevuto e letto la comunicazione.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  void markRead(activeItem);
+                  setFocusedIntroOpen(false);
+                }}
+                className="mt-7 min-h-14 w-full rounded-md bg-[#17151A] px-6 text-sm font-black text-white transition hover:bg-black active:scale-[0.99]"
+              >
+                Leggi tutta
+              </button>
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 z-[80] overflow-y-auto bg-white text-[#17151A]">
+        <header className="sticky top-0 z-20 border-b border-black/10 bg-white/95 backdrop-blur">
+          <div className="mx-auto grid h-16 w-full max-w-3xl grid-cols-[44px_1fr_44px] items-center px-3 sm:px-6">
+            <button
+              type="button"
+              onClick={() => router.push("/notifications")}
+              className="grid size-11 place-items-center rounded-full transition hover:bg-black/5"
+              aria-label="Torna alle comunicazioni"
+            >
+              <ChevronLeft className="size-7" />
+            </button>
+            <p className="text-center text-sm font-black">Comunicazione</p>
+            <span />
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-3xl pb-[max(3rem,env(safe-area-inset-bottom))]">
+          {focusedImageSrc ? (
+            <div className="border-b border-black/10 bg-[#F7F4F8]">
+              <img
+                src={focusedImageSrc}
+                alt={`Allegato: ${activeItem.title}`}
+                className="max-h-[60vh] w-full object-contain"
+                onError={(event) => {
+                  if (focusedDriveId && event.currentTarget.src.includes("/api/drive-image")) {
+                    event.currentTarget.src = `https://lh3.googleusercontent.com/d/${focusedDriveId}`;
+                  }
+                }}
+              />
+            </div>
+          ) : null}
+
+          <article className="px-5 py-8 sm:px-8 sm:py-10">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded bg-[#F4E5EB] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-[#8E334E]">
+                Comunicazione interna
+              </span>
+              <span className={cn("rounded px-2.5 py-1 text-[10px] font-black", notificationStatus(activeItem).className)}>
+                {notificationStatus(activeItem).label}
+              </span>
+            </div>
+            <h1 className="mt-5 text-3xl font-black leading-tight sm:text-4xl">{activeItem.title}</h1>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-black/45">
+              <span>Direzione Paradise</span>
+              <time>{dateLabel(activeItem.createdAt)}</time>
+            </div>
+            <div className="mt-8 whitespace-pre-line text-base font-medium leading-7 text-black/75 sm:text-lg sm:leading-8">
+              {focusedMessage}
+            </div>
+
+            {activeItem.actionUrl && activeItem.actionUrl !== "/notifications" ? (
+              <a
+                href={activeItem.actionUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-8 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-black/15 bg-white px-5 text-sm font-black hover:bg-black hover:text-white sm:w-auto"
+              >
+                <Paperclip className="size-4" /> Apri allegato
+              </a>
+            ) : null}
+
+            <section className="mt-10 border-t border-black/10 pt-7">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.15em] text-[#A74758]">Conferme di lettura</p>
+                  <p className="mt-1 text-sm font-semibold text-black/45">
+                    {engagement?.readers.length ?? 0} di {engagement?.recipientCount ?? 0} persone
+                  </p>
+                </div>
+                <div className="flex -space-x-2">
+                  {engagement?.readers.slice(0, 8).map((reader) => (
+                    <ProfileAvatar key={reader.id} person={reader} size="sm" />
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="mt-8 border-t border-black/10 pt-7">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="size-5 text-[#A74758]" />
+                <h2 className="text-lg font-black">Risposte</h2>
+                <span className="rounded bg-[#F4E5EB] px-2 py-0.5 text-[10px] font-black text-[#8E334E]">
+                  {engagement?.comments.length ?? 0}
+                </span>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {engagement?.comments.map((entry) => (
+                  <div key={entry.id} className="flex gap-3 rounded-md bg-[#F8F6F7] p-4">
+                    <ProfileAvatar person={{ id: entry.userId, name: entry.userName, photoUrl: entry.photoUrl }} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <p className="text-xs font-black">{entry.userName}</p>
+                        <time className="text-[10px] font-semibold text-black/35">{shortDateLabel(entry.createdAt)}</time>
+                      </div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm font-medium leading-6 text-black/70">{entry.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-md border border-black/10 p-3 focus-within:border-[#A74758]">
+                <textarea
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  maxLength={1000}
+                  placeholder="Scrivi una risposta..."
+                  className="min-h-24 w-full resize-none bg-transparent px-1 py-1 text-sm font-medium outline-none"
+                />
+                <div className="mt-2 flex items-center justify-between gap-3 border-t border-black/10 pt-3">
+                  <span className="text-[10px] font-semibold text-black/35">{comment.length}/1000</span>
+                  <button
+                    type="button"
+                    onClick={submitComment}
+                    disabled={!comment.trim() || commentSending}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[#17151A] px-5 text-xs font-black text-white disabled:opacity-35"
+                  >
+                    <Send className="size-4" /> {commentSending ? "Invio..." : "Invia risposta"}
+                  </button>
+                </div>
+              </div>
+              {commentStatus ? <p className="mt-2 text-xs font-bold text-[#8E334E]">{commentStatus}</p> : null}
+            </section>
+          </article>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="w-full max-w-none space-y-6">
-        {/* Top Header & View Controls */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs mb-1">
-              Blog & Comunicazioni
+        {/* AppShell mostra gia il titolo pagina: qui restano solo contesto e azioni. */}
+        <div className="flex flex-col gap-4 border-y border-black/10 bg-white px-4 py-4 sm:rounded-md sm:border lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#F7E2EB] text-[#A74758]">
+              <MessageSquareText className="size-5" />
             </span>
-            <h1 className="text-3xl font-black tracking-tight text-[#1F1F1F]">Comunicazioni Aziendali</h1>
-            <p className="mt-1 text-xs font-semibold text-black/55">
-              Il blog interno con i messaggi, gli avvisi e le disposizioni ufficiali Paradise.
-            </p>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Bacheca interna</p>
+              <p className="mt-0.5 text-sm font-semibold text-black/55">Messaggi ufficiali, conferme di lettura e risposte del team.</p>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             {/* View Mode Toggle: Blog Reader vs List */}
-            <div className="inline-flex items-center rounded-2xl border border-black/10 bg-white p-1 shadow-2xs">
+            <div className="inline-flex items-center rounded-md border border-black/10 bg-[#FAF8F9] p-1">
               <button
                 type="button"
                 onClick={() => setViewMode("BLOG")}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95",
+                  "inline-flex items-center gap-2 rounded px-4 py-2.5 text-xs font-black transition active:scale-95",
                   viewMode === "BLOG"
-                    ? "bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                    ? "bg-[#17151A] text-white"
                     : "text-black/60 hover:text-black hover:bg-neutral-50"
                 )}
               >
@@ -390,9 +714,9 @@ export function NotificationManager({
                 type="button"
                 onClick={() => setViewMode("LIST")}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95",
+                  "inline-flex items-center gap-2 rounded px-4 py-2.5 text-xs font-black transition active:scale-95",
                   viewMode === "LIST"
-                    ? "bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                    ? "bg-[#17151A] text-white"
                     : "text-black/60 hover:text-black hover:bg-neutral-50"
                 )}
               >
@@ -405,7 +729,7 @@ export function NotificationManager({
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-6 py-3 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#17151A] px-6 py-3 text-xs font-black text-white transition hover:bg-black active:scale-95"
               >
                 <MailPlus className="size-4" /> Nuova comunicazione
               </button>
@@ -416,9 +740,9 @@ export function NotificationManager({
         {/* Section Tabs (Blog vs Timbrature Separati) */}
         <div className="flex flex-wrap items-center gap-2 border-b border-black/10 pb-3">
           {[
-            { id: "BLOG", label: "📰 Blog Comunicazioni", count: stats.blog },
-            { id: "ATTENDANCE", label: "⏱️ Avvisi Timbrature & Pause", count: stats.attendance },
-            { id: "ALL", label: "📋 Tutte le Notifiche", count: stats.total },
+            { id: "BLOG", label: "Comunicazioni", count: stats.blog },
+            { id: "ATTENDANCE", label: "Timbrature e pause", count: stats.attendance },
+            { id: "ALL", label: "Tutte", count: stats.total },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -434,9 +758,9 @@ export function NotificationManager({
                 }
               }}
               className={cn(
-                "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs font-black transition active:scale-95",
+                "inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-xs font-black transition active:scale-95",
                 sectionTab === tab.id
-                  ? "bg-white text-[#B83D7F] shadow-sm border border-[#F6C6DE] ring-1 ring-[#B83D7F]/20"
+                  ? "border border-[#A74758] bg-white text-[#A74758]"
                   : "bg-neutral-100 text-black/60 hover:bg-neutral-200"
               )}
             >
@@ -458,8 +782,8 @@ export function NotificationManager({
           ].map((metric) => {
             const Icon = metric.icon;
             return (
-              <Card key={metric.label} className="flex items-center gap-3.5 p-4 sm:p-5 border border-black/5 shadow-2xs">
-                <div className={cn("grid size-11 place-items-center rounded-2xl shrink-0", metric.bg)}>
+              <Card key={metric.label} className="flex items-center gap-3.5 rounded-md border border-black/10 p-4 sm:p-5 shadow-none">
+                <div className={cn("grid size-11 place-items-center rounded-md shrink-0", metric.bg)}>
                   <Icon className="size-5" />
                 </div>
                 <div className="min-w-0">
@@ -478,9 +802,9 @@ export function NotificationManager({
             {/* LEFT COLUMN: Featured Main Article (8 Cols) */}
             <div className="lg:col-span-8 space-y-4">
               {activeItem ? (
-                <article className="overflow-hidden rounded-[32px] border border-[#F6C6DE] bg-white shadow-xl transition-all">
+                <article className="overflow-hidden rounded-md border border-black/10 bg-white shadow-sm transition-all">
                   {/* Article Banner Header */}
-                  <div className="border-b border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-6 sm:p-8 space-y-4">
+                  <div className="space-y-4 border-b border-black/10 bg-[#FCF7F9] p-6 sm:p-8">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-2">
                         {isImportant(activeItem) ? (
@@ -537,7 +861,7 @@ export function NotificationManager({
 
                   {/* Article Content Body */}
                   <div className="p-6 sm:p-8 space-y-6">
-                    <div className="rounded-3xl border border-black/5 bg-[#FFFDFC] p-6 sm:p-8 shadow-2xs space-y-5">
+                    <div className="space-y-5 border-l-2 border-[#D3879D] bg-[#FFFDFC] p-5 sm:p-6">
                       <p className="whitespace-pre-line text-base font-semibold leading-relaxed text-[#2C2C2C]">
                         {activeItem.message
                           .replace(/\n\n📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
@@ -626,6 +950,93 @@ export function NotificationManager({
                         </div>
                       )}
                     </div>
+
+                    {!isAttendanceAlert(activeItem) ? (
+                      <section className="border-t border-black/10 pt-6" aria-label="Letture e commenti">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Users className="size-4 text-[#A74758]" />
+                              <h3 className="text-sm font-black text-[#17151A]">Conferme di lettura</h3>
+                            </div>
+                            <p className="mt-1 text-xs font-semibold text-black/45">
+                              {engagementLoading
+                                ? "Aggiornamento in corso..."
+                                : `${engagement?.readers.length ?? 0} di ${engagement?.recipientCount ?? 0} persone hanno letto`}
+                            </p>
+                          </div>
+                          <div className="flex min-h-10 items-center -space-x-2 pl-2">
+                            {engagement?.readers.slice(0, 12).map((reader) => (
+                              <ProfileAvatar key={reader.id} person={reader} />
+                            ))}
+                            {(engagement?.readers.length ?? 0) > 12 ? (
+                              <span
+                                className="grid size-10 place-items-center rounded-full border-2 border-white bg-[#17151A] text-[10px] font-black text-white"
+                                title={engagement?.readers.slice(12).map((reader) => reader.name).join(", ")}
+                              >
+                                +{(engagement?.readers.length ?? 0) - 12}
+                              </span>
+                            ) : null}
+                            {!engagementLoading && !engagement?.readers.length ? (
+                              <span className="text-xs font-semibold text-black/35">Nessuna conferma</span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-6 border-t border-black/10 pt-5">
+                          <div className="flex items-center gap-2">
+                            <MessageCircle className="size-4 text-[#A74758]" />
+                            <h3 className="text-sm font-black text-[#17151A]">Commenti</h3>
+                            <span className="rounded bg-[#F4E5EB] px-2 py-0.5 text-[10px] font-black text-[#8E334E]">
+                              {engagement?.comments.length ?? 0}
+                            </span>
+                          </div>
+
+                          <div className="mt-4 space-y-3">
+                            {engagement?.comments.map((entry) => (
+                              <article key={entry.id} className="flex gap-3 rounded-md border border-black/10 bg-[#FAF8F9] p-3.5">
+                                <ProfileAvatar person={{ id: entry.userId, name: entry.userName, photoUrl: entry.photoUrl }} size="sm" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-xs font-black text-[#17151A]">{entry.userName}</p>
+                                    <time className="text-[10px] font-bold text-black/35">{shortDateLabel(entry.createdAt)}</time>
+                                  </div>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm font-medium leading-5 text-black/70">{entry.message}</p>
+                                </div>
+                              </article>
+                            ))}
+                            {!engagementLoading && !engagement?.comments.length ? (
+                              <p className="rounded-md border border-dashed border-black/15 px-4 py-5 text-center text-xs font-semibold text-black/40">
+                                Nessun commento. Puoi lasciare la prima risposta.
+                              </p>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                            <textarea
+                              value={comment}
+                              onChange={(event) => setComment(event.target.value)}
+                              onKeyDown={(event) => {
+                                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submitComment();
+                              }}
+                              maxLength={1000}
+                              placeholder="Scrivi una risposta alla comunicazione..."
+                              className="min-h-12 flex-1 resize-y rounded-md border border-black/10 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/10"
+                            />
+                            <button
+                              type="button"
+                              onClick={submitComment}
+                              disabled={!comment.trim() || commentSending}
+                              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#17151A] px-6 text-xs font-black text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <Send className="size-4" />
+                              {commentSending ? "Invio..." : "Pubblica commento"}
+                            </button>
+                          </div>
+                          {commentStatus ? <p className="mt-2 text-xs font-bold text-[#8E334E]">{commentStatus}</p> : null}
+                        </div>
+                      </section>
+                    ) : null}
                   </div>
 
                   {/* Navigation Footer (Prev / Next Post) */}
@@ -967,7 +1378,7 @@ export function NotificationManager({
             </div>
 
             <div className="grid gap-4">
-              {role !== "RESPONSABILE" ? (
+              {canSend ? (
                 <label className="space-y-1.5">
                   <span className="text-xs font-black uppercase tracking-wider text-black/50">Destinatari</span>
                   <Select
@@ -977,8 +1388,8 @@ export function NotificationManager({
                       setTargetId(event.target.value === "location" ? locations[0]?.id ?? "" : recipients[0]?.id ?? "");
                     }}
                   >
-                    <option value="all">Tutto lo staff (Tutti i saloni)</option>
-                    <option value="location">Specifico salone</option>
+                    <option value="all">{role === "RESPONSABILE" ? "Tutto il personale del mio salone" : "Tutto lo staff (tutti i saloni)"}</option>
+                    {role !== "RESPONSABILE" ? <option value="location">Specifico salone</option> : null}
                     <option value="user">Singola persona</option>
                   </Select>
                 </label>
