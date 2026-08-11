@@ -323,7 +323,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
   }
 
   return (
-    <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="branding-studio grid min-h-dvh min-w-0 w-full gap-6 px-4 pb-16 pt-[calc(env(safe-area-inset-top)+80px)] sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] xl:px-8 xl:pt-24">
       <section className="min-w-0 space-y-5">
         <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -468,7 +468,7 @@ export function BrandingForm({ initial }: { initial: BrandingTheme }) {
         </div>
       </section>
 
-      <aside className="min-w-0 space-y-5 xl:sticky xl:top-6 xl:self-start">
+      <aside className="min-w-0 space-y-5 xl:sticky xl:top-24 xl:self-start">
         <div className="rounded-[28px] border border-black/10 bg-[color:var(--card)] p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <Smartphone className="size-4 text-pink-500" />

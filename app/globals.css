@@ -51,9 +51,9 @@
 /* Sistema visivo globale: ogni pagina eredita lo stesso canvas Liquid Glass. */
 .app-content-surface {
   background:
-    radial-gradient(circle at 8% 4%, rgba(255, 183, 217, 0.24), transparent 28%),
-    radial-gradient(circle at 93% 10%, rgba(205, 190, 247, 0.22), transparent 26%),
-    linear-gradient(145deg, rgba(252, 249, 251, 0.96), rgba(247, 239, 245, 0.94));
+    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 28%),
+    radial-gradient(circle at 93% 10%, color-mix(in srgb, var(--gradient) 20%, transparent), transparent 26%),
+    linear-gradient(145deg, color-mix(in srgb, var(--background) 88%, white), var(--background));
 }
 
 .app-content-surface .app-liquid-canvas :is(
@@ -73,9 +73,28 @@
 
 .dark .app-content-surface {
   background:
-    radial-gradient(circle at 8% 4%, rgba(194, 70, 125, 0.18), transparent 30%),
-    radial-gradient(circle at 93% 10%, rgba(102, 78, 163, 0.20), transparent 28%),
-    linear-gradient(145deg, #17151c 0%, #1d1a24 52%, #18151a 100%);
+    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30%),
+    radial-gradient(circle at 93% 10%, color-mix(in srgb, var(--gradient) 16%, transparent), transparent 28%),
+    linear-gradient(145deg, color-mix(in srgb, var(--background) 90%, #241c28) 0%, var(--background) 100%);
+}
+
+/* Branding Studio a pagina intera con anteprime collegate ai token globali. */
+.branding-studio {
+  background:
+    radial-gradient(circle at 10% 8%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 26%),
+    radial-gradient(circle at 90% 14%, color-mix(in srgb, var(--gradient) 18%, transparent), transparent 24%);
+}
+
+.branding-studio > :is(section, aside) > div {
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(22px) saturate(135%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .branding-studio > :is(section, aside) > div {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
 }
 
 .dark .app-content-surface :is([class~="text-black"], [class~="text-paradise-noir"], [class~="text-black/80"], [class~="text-black/90"]) {
@@ -119,16 +138,16 @@
 
 .management-dashboard-liquid {
   background:
-    radial-gradient(circle at 7% 5%, rgba(255, 183, 217, 0.24), transparent 30%),
-    radial-gradient(circle at 94% 12%, rgba(205, 190, 247, 0.22), transparent 28%),
+    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--primary) 24%, transparent), transparent 30%),
+    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--gradient) 20%, transparent), transparent 28%),
     rgba(250, 247, 251, 0.54);
 }
 
 .dark .app-content-surface .management-dashboard-liquid {
   color: rgba(255, 255, 255, 0.94);
   background:
-    radial-gradient(circle at 7% 5%, rgba(194, 70, 125, 0.18), transparent 30%),
-    radial-gradient(circle at 94% 12%, rgba(102, 78, 163, 0.20), transparent 28%),
+    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30%),
+    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--gradient) 16%, transparent), transparent 28%),
     rgba(23, 21, 28, 0.72) !important;
 }
 
@@ -245,7 +264,7 @@
 .dark .app-content-surface .my-shifts-liquid {
   color: rgba(255, 255, 255, 0.94);
   background:
-    radial-gradient(circle at 8% 4%, rgba(194, 70, 125, 0.22), transparent 30%),
+    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 30%),
     radial-gradient(circle at 92% 18%, rgba(117, 87, 178, 0.20), transparent 28%),
     linear-gradient(145deg, #17151c 0%, #1d1a24 52%, #18151a 100%) !important;
 }
@@ -297,8 +316,8 @@
 /* Richieste e Documenti: materiale Liquid Glass condiviso, con variante notte. */
 .operations-liquid-page {
   background:
-    radial-gradient(circle at 7% 5%, rgba(255, 183, 217, 0.30), transparent 30%),
-    radial-gradient(circle at 94% 12%, rgba(205, 190, 247, 0.28), transparent 28%),
+    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--primary) 30%, transparent), transparent 30%),
+    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--gradient) 24%, transparent), transparent 28%),
     rgba(250, 247, 251, 0.76);
 }
 
@@ -311,8 +330,8 @@
   color: rgba(255, 255, 255, 0.94);
   border-color: rgba(255, 255, 255, 0.12) !important;
   background:
-    radial-gradient(circle at 7% 5%, rgba(194, 70, 125, 0.20), transparent 30%),
-    radial-gradient(circle at 94% 12%, rgba(102, 78, 163, 0.22), transparent 28%),
+    radial-gradient(circle at 7% 5%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 30%),
+    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--gradient) 18%, transparent), transparent 28%),
     rgba(23, 21, 28, 0.94) !important;
 }
 
@@ -1036,9 +1055,9 @@ textarea {
   }
 
   .app-liquid-sidebar-nav {
-    --sidebar-text: rgba(255, 255, 255, 0.94);
-    --sidebar-icon: rgba(255, 255, 255, 0.82);
-    color: rgba(255, 255, 255, 0.94);
+    --sidebar-text: var(--dark-sidebar-text);
+    --sidebar-icon: var(--dark-sidebar-icon);
+    color: var(--dark-sidebar-text);
   }
 
   .app-liquid-sidebar-nav .sidebar-nav-link {
@@ -1056,7 +1075,7 @@ textarea {
   }
 
   .app-liquid-sidebar-nav input {
-    color: #ffffff !important;
+    color: var(--dark-sidebar-text) !important;
     border-color: rgba(255, 255, 255, 0.22) !important;
     background-color: rgba(255, 255, 255, 0.10) !important;
   }
@@ -1076,7 +1095,7 @@ textarea {
 
 /* Menu telefono: stesso vetro della sidebar desktop, ottimizzato per il tocco. */
 .mobile-liquid-sidebar {
-  color: rgba(255, 255, 255, 0.94);
+  color: var(--dark-sidebar-text);
   background:
     linear-gradient(165deg,
       color-mix(in srgb, var(--sidebar-gradient-from) 88%, transparent),
@@ -1090,7 +1109,7 @@ textarea {
 }
 
 .mobile-liquid-sidebar input {
-  color: #ffffff !important;
+  color: var(--dark-sidebar-text) !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
   background-color: rgba(255, 255, 255, 0.10) !important;
   -webkit-backdrop-filter: blur(16px) saturate(140%);
@@ -1106,7 +1125,7 @@ textarea {
   left: 0;
   color: var(--text);
   background:
-    radial-gradient(circle at 8% 4%, rgba(255, 183, 217, 0.20), transparent 30%),
+    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 30%),
     linear-gradient(145deg, #fbf8fa 0%, #f5edf2 100%) !important;
   color-scheme: light;
 }
@@ -1114,7 +1133,7 @@ textarea {
 .dark .task-detail-page {
   color: rgba(255, 255, 255, 0.94);
   background:
-    radial-gradient(circle at 8% 4%, rgba(194, 70, 125, 0.18), transparent 30%),
+    radial-gradient(circle at 8% 4%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30%),
     linear-gradient(145deg, #17151c 0%, #1d1a24 100%) !important;
   color-scheme: dark;
 }
