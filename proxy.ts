@@ -7,15 +7,9 @@ export function proxy(request: NextRequest) {
 
   if (isPcCassa) {
     const isAllowedPage =
-      pathname === "/appointments" ||
-      pathname.startsWith("/appointments/") ||
-      pathname === "/client-control" ||
-      pathname.startsWith("/client-control/") ||
-      pathname === "/orders" ||
-      pathname.startsWith("/orders/") ||
+      pathname === "/appointments/buenos-aires" ||
       pathname === "/service-forms" ||
-      pathname.startsWith("/service-forms/") ||
-      pathname === "/my-shifts";
+      pathname.startsWith("/service-forms/");
 
     const isAllowedApi =
       pathname.startsWith("/api/appointments") ||
