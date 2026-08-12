@@ -61,7 +61,6 @@
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   isolation: isolate;
-  transform: translateZ(0);
 }
 
 .dark .app-content-surface .shopify-payments-page .shopify-payments-solid {
@@ -1065,6 +1064,26 @@ textarea {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border: 1px solid color-mix(in srgb, white var(--glass-border-opacity), transparent);
+}
+
+/* Deve rimanere dopo le regole Liquid Glass generali: una lista Shopify può
+   superare varie schermate e i filtri compositi di Chrome creano riquadri
+   bianchi durante lo scroll. Manteniamo ogni riga nel normale flusso di
+   rendering, senza layer GPU estesi all'intera tabella. */
+.app-content-surface .shopify-payments-page .shopify-payments-solid,
+.app-content-surface .shopify-payments-page .shopify-payments-solid * {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+.app-content-surface .shopify-payments-page .shopify-payments-solid {
+  background: #ffffff !important;
+  contain: layout paint;
+}
+
+.dark .app-content-surface .shopify-payments-page .shopify-payments-solid {
+  background: #26232d !important;
 }
 
 .dark .luxury-glass {
