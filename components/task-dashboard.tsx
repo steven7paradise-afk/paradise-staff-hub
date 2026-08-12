@@ -31,6 +31,7 @@ import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 
 type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
 type ChecklistItem = { text: string; done: boolean };
@@ -1558,7 +1559,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {selected ? (
-        <div ref={taskDetailPageRef} className="task-detail-page fixed inset-0 z-[70] h-dvh w-screen overflow-y-auto overscroll-contain bg-[#F8F3F6]">
+        <GlobalFullscreenLayer className="bg-[#F8F3F6]">
+        <div ref={taskDetailPageRef} className="task-detail-page h-full w-full overflow-y-auto overscroll-contain bg-[#F8F3F6]">
           <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5 sm:pt-4 md:pb-24 xl:px-7 xl:pt-3">
             <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
               <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
@@ -1942,6 +1944,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             </div>
           </div>
         </div>
+        </GlobalFullscreenLayer>
       ) : null}
 
       {attachmentPreview ? (

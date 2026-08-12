@@ -45,6 +45,7 @@ import {
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { AppointmentSignModal } from "./appointment-sign-modal";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 
 type ViewMode = "day" | "week" | "month";
@@ -807,7 +808,7 @@ function PcStaffLockScreen({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] h-dvh max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
+    <GlobalFullscreenLayer className="max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex h-full min-h-0 flex-col items-center px-5 py-5 md:px-10 lg:px-14">
@@ -1076,7 +1077,7 @@ function PcStaffLockScreen({
           </>
         )}
       </section>
-    </div>
+    </GlobalFullscreenLayer>
   );
 }
 

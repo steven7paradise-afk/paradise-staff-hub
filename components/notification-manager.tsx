@@ -43,6 +43,7 @@ import { Badge, Button, Card, Field } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
 import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -408,7 +409,7 @@ export function NotificationManager({
   if (focusedMode && activeItem) {
     if (focusedIntroOpen) {
       return (
-        <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#F8F6FA] text-[#17151A]">
+        <GlobalFullscreenLayer className="overflow-y-auto bg-[#F8F6FA] text-[#17151A]">
           <div className="mx-auto flex min-h-full w-full max-w-xl flex-col px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-8">
             <header className="grid grid-cols-[44px_1fr_44px] items-center py-3">
               <button
@@ -470,12 +471,12 @@ export function NotificationManager({
               </button>
             </main>
           </div>
-        </div>
+        </GlobalFullscreenLayer>
       );
     }
 
     return (
-      <div className="fixed inset-0 z-[80] overflow-y-auto bg-white text-[#17151A]">
+      <GlobalFullscreenLayer className="overflow-y-auto bg-white text-[#17151A]">
         <header className="sticky top-0 z-20 border-b border-black/10 bg-white/95 backdrop-blur">
           <div className="mx-auto grid h-16 w-full max-w-3xl grid-cols-[44px_1fr_44px] items-center px-3 sm:px-6">
             <button
@@ -600,7 +601,7 @@ export function NotificationManager({
             </section>
           </article>
         </main>
-      </div>
+      </GlobalFullscreenLayer>
     );
   }
 

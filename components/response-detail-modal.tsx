@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { User, MapPin, Calendar, Download, Archive, X, CheckCircle2, Loader2, Pencil, Check } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
@@ -155,8 +155,8 @@ export function ResponseDetailModal({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+  return (
+    <GlobalFullscreenLayer className="flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="flex flex-col max-h-[85vh] w-full max-w-2xl rounded-[28px] bg-white shadow-2xl overflow-hidden border border-black/5 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
           <div>
@@ -472,7 +472,6 @@ export function ResponseDetailModal({
           </Button>
         </div>
       </div>
-    </div>,
-    document.body
+    </GlobalFullscreenLayer>
   );
 }

@@ -8,6 +8,7 @@ import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Ey
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
@@ -897,8 +898,9 @@ export function OrderManager({
       </div>
 
       {selected ? (
+        <GlobalFullscreenLayer className="bg-black/35 backdrop-blur-sm">
         <div
-          className="fixed inset-0 z-50 grid place-items-end bg-black/35 p-0 backdrop-blur-sm lg:place-items-center lg:p-4"
+          className="grid h-full w-full place-items-end p-0 lg:place-items-center lg:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeSelectedOrder();
           }}
@@ -1269,6 +1271,7 @@ export function OrderManager({
             </div>
           </div>
         </div>
+        </GlobalFullscreenLayer>
       ) : null}
     </div>
   );
