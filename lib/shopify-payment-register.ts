@@ -4,6 +4,7 @@ import { classifyShopifyPaymentMethod } from "@/lib/shopify";
 
 export type ShopifyPaymentRegisterRow = {
   id: string;
+  responseId: string;
   createdAt: Date;
   locationName: string | null;
   method: string;
@@ -14,6 +15,8 @@ export type ShopifyPaymentRegisterRow = {
   gateway: string;
   status: string;
   reference: string;
+  declaredAmount: number;
+  declaredMethod: string;
 };
 
 export type ShopifyDailyRevenue = {
@@ -31,6 +34,7 @@ export type ShopifyDailyRevenue = {
     clientName: string;
     amount: number;
     method: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
+    provider: string;
     gateway: string;
     processedAt: string;
   }>;
@@ -63,6 +67,19 @@ function romeOffset(dateKey: string) {
   const value = formatter.formatToParts(new Date(`${dateKey}T12:00:00Z`))
     .find((part) => part.type === "timeZoneName")?.value || "GMT+01:00";
   return value.replace("GMT", "");
+}
+
+function paymentProvider(gateway: unknown, method: string) {
+  const value = String(gateway ?? "").trim().toLowerCase();
+  if (value.includes("scalapay")) return "SCALAPAY";
+  if (value.includes("klarna")) return "KLARNA";
+  if (value.includes("satispay")) return "SATISPAY";
+  if (value.includes("paypal")) return "PAYPAL";
+  if (value.includes("shopify payments") || value.includes("shopify_payments")) return "SHOPIFY_PAYMENTS";
+  if (method === "CONTANTI") return "CONTANTI";
+  if (method === "CASHMATIC") return "CASHMATIC";
+  if (method === "CARTA") return "CARTA";
+  return "ALTRO";
 }
 
 /**
@@ -148,6 +165,7 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
         clientName: [firstName, lastName].filter(Boolean).join(" ") || "Cliente Shopify",
         amount,
         method,
+        provider: paymentProvider(transaction?.gateway, method),
         gateway: String(transaction?.gateway || ""),
         processedAt: processedAt.toISOString(),
       });
@@ -202,8 +220,10 @@ export async function getShopifyPaymentRegister(options: {
       const method = storedMethod === "CASHMATIC" && detectedGatewayMethod === "CONTANTI"
         ? "CONTANTI"
         : storedMethod;
+      const legacyDeclaredMethod = gateway.match(/Dichiarato manualmente:\s*([^·,]+)/i)?.[1]?.trim() || "";
       const baseRow = {
         id: response.id,
+        responseId: response.id,
         // A payment belongs to the day in which Shopify processed the
         // transaction, not to the day in which staff submitted the form.
         createdAt: paymentDate(answers[CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt], response.created_at),
@@ -211,11 +231,13 @@ export async function getShopifyPaymentRegister(options: {
         method,
         verified: answers[CLIENT_CONTROL_FIELD_IDS.paymentVerified] === true,
         amount: moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]),
-        order: String(answers.second_shopify_order || ""),
+        order: String(answers.second_shopify_order || answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || ""),
         clientName: String(answers[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente"),
         gateway,
         status: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentStatus] || ""),
         reference: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentReference] || ""),
+        declaredAmount: moneyValue(answers.client_control_declared_paid ?? answers[CLIENT_CONTROL_FIELD_IDS.paid]),
+        declaredMethod: String(answers.client_control_declared_payment_method || legacyDeclaredMethod || storedMethod || ""),
       };
       const breakdown = Array.isArray(answers.client_control_payment_breakdown)
         ? answers.client_control_payment_breakdown.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")

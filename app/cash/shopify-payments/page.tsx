@@ -19,6 +19,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getShopifyDailyRevenue, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 import { PaymentControlButton } from "./payment-control-button";
+import { ShopifyPaymentsLiveRefresh } from "./live-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +62,26 @@ function gatewayLabel(gateway: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function cleanOrderCode(value: string) {
+  return value.replace(/^#/, "").trim().toLowerCase();
+}
+
+function providerLabel(provider: string) {
+  return ({
+    SHOPIFY_PAYMENTS: "Shopify Payments",
+    SCALAPAY: "Scalapay",
+    KLARNA: "Klarna",
+    SATISPAY: "Satispay",
+    PAYPAL: "PayPal",
+    CONTANTI: "Contanti",
+    CASHMATIC: "Cashmatic",
+    CARTA: "Altra carta / POS",
+    ALTRO: "Altro / da classificare",
+  } as Record<string, string>)[provider] || provider;
+}
+
 export default async function ShopifyPaymentsPage(props: {
-  searchParams: Promise<{ month?: string; date?: string; q?: string; method?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ month?: string; date?: string; q?: string; method?: string; provider?: string; status?: string; page?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const session = await auth();
@@ -87,7 +106,10 @@ export default async function ShopifyPaymentsPage(props: {
   const method = ["CARTA", "CONTANTI", "DA_VERIFICARE"].includes(String(searchParams.method))
     ? String(searchParams.method)
     : "TUTTI";
-  const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : "VERIFICATI";
+  const provider = ["SHOPIFY_PAYMENTS", "SCALAPAY", "KLARNA", "SATISPAY", "PAYPAL", "CONTANTI", "CASHMATIC", "CARTA", "ALTRO"].includes(String(searchParams.provider))
+    ? String(searchParams.provider)
+    : "TUTTI";
+  const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : searchParams.status === "VERIFICATI" ? "VERIFICATI" : "TUTTI";
 
   const rows = await getShopifyPaymentRegister({ start, end });
   const verifiedRevenueTotal = rows
@@ -106,6 +128,7 @@ export default async function ShopifyPaymentsPage(props: {
           ...current,
           amount: current.amount + payment.amount,
           methods: [...new Set([...current.methods, payment.method])],
+          providers: [...new Set([...current.providers, payment.provider])],
           gateways: [...new Set([...current.gateways, payment.gateway].filter(Boolean))],
         }
       : {
@@ -114,6 +137,7 @@ export default async function ShopifyPaymentsPage(props: {
           clientName: payment.clientName,
           amount: payment.amount,
           methods: [payment.method],
+          providers: [payment.provider],
           gateways: payment.gateway ? [payment.gateway] : [],
           processedAt: payment.processedAt,
         });
@@ -124,9 +148,38 @@ export default async function ShopifyPaymentsPage(props: {
     clientName: string;
     amount: number;
     methods: string[];
+    providers: string[];
     gateways: string[];
     processedAt: string;
   }>()).values());
+  const controlsByOrder = new Map<string, typeof rows>();
+  for (const control of rows) {
+    const key = cleanOrderCode(control.order);
+    if (!key) continue;
+    controlsByOrder.set(key, [...(controlsByOrder.get(key) || []), control]);
+  }
+  const reconciledRows = clientPayments.map((payment) => {
+    const controls = controlsByOrder.get(cleanOrderCode(payment.orderName)) || [];
+    const control = controls[0] || null;
+    const declaredAmount = control ? control.declaredAmount : 0;
+    const amountMatches = Boolean(control) && Math.abs(declaredAmount - payment.amount) < 0.01;
+    const declaredMethodText = control?.declaredMethod || "Non dichiarato";
+    const declaredNormalized = declaredMethodText.toLowerCase();
+    const methodMatches = Boolean(control) && (
+      payment.providers.some((item) => declaredNormalized.includes(providerLabel(item).toLowerCase())) ||
+      payment.methods.some((item) => declaredNormalized.includes(methodLabel(item).toLowerCase()))
+    );
+    const state = !control ? "WAITING" : amountMatches && methodMatches ? "CONFIRMED" : "MISMATCH";
+    return { ...payment, control, declaredAmount, declaredMethodText, amountMatches, methodMatches, state };
+  });
+  const providerCounts = liveDailyRevenue.payments.reduce((counts, payment) => counts.set(payment.provider, (counts.get(payment.provider) || 0) + 1), new Map<string, number>());
+  const visibleReconciledRows = reconciledRows.filter((payment) => {
+    const matchesStatus = status === "TUTTI" || (status === "DA_CONTROLLARE" ? payment.state !== "CONFIRMED" : payment.state === "CONFIRMED");
+    const matchesProvider = provider === "TUTTI" || payment.providers.includes(provider);
+    const matchesMethod = method === "TUTTI" || payment.methods.includes(method);
+    const searchable = `${payment.clientName} ${payment.orderName} ${payment.control?.clientName || ""}`.toLowerCase();
+    return matchesStatus && matchesProvider && matchesMethod && (!query || searchable.includes(query));
+  });
   const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
   const todayRevenueTotal = todayVerifiedRows.reduce((total, payment) => total + payment.amount, 0);
   const todayCardTotal = todayVerifiedRows
@@ -143,22 +196,15 @@ export default async function ShopifyPaymentsPage(props: {
       !payment.verified ||
       (payment.method === "CASHMATIC" && payment.gateway.includes(","))
     ))
-    .map((payment) => ({ id: payment.id, order: payment.order }));
-  const verifiedCount = scopedRows.filter((payment) => payment.verified).length;
-  const pendingCount = scopedRows.filter((payment) => !payment.verified).length;
-  const filteredRows = scopedRows.filter((payment) => {
-    const matchesStatus = status === "DA_CONTROLLARE" ? !payment.verified : payment.verified;
-    const matchesMethod = method === "TUTTI"
-      || (method === "DA_VERIFICARE" ? !payment.verified || payment.method === "DA_VERIFICARE" : payment.method === method);
-    const searchable = `${payment.clientName} ${payment.order} ${payment.locationName || ""} ${payment.gateway}`.toLowerCase();
-    return matchesStatus && matchesMethod && (!query || searchable.includes(query));
-  });
+    .map((payment) => ({ id: payment.responseId, order: payment.order }));
+  const verifiedCount = reconciledRows.filter((payment) => payment.state === "CONFIRMED").length;
+  const pendingCount = reconciledRows.filter((payment) => payment.state !== "CONFIRMED").length;
 
   const pageSize = 40;
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(visibleReconciledRows.length / pageSize));
   const requestedPage = Math.max(1, Number.parseInt(searchParams.page || "1", 10) || 1);
   const currentPage = Math.min(requestedPage, totalPages);
-  const visibleRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const visibleRows = visibleReconciledRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(start);
   const summaryDate = dateFilter ? new Date(`${dateFilter}T12:00:00+02:00`) : new Date();
   const todayLabel = new Intl.DateTimeFormat("it-IT", {
@@ -173,19 +219,29 @@ export default async function ShopifyPaymentsPage(props: {
   if (dateFilter) persistentParams.set("date", dateFilter);
   if (query) persistentParams.set("q", query);
   if (method !== "TUTTI") persistentParams.set("method", method);
+  if (provider !== "TUTTI") persistentParams.set("provider", provider);
   const verifiedTabParams = new URLSearchParams({ month: selectedMonth, status: "VERIFICATI" });
   const pendingTabParams = new URLSearchParams({ month: selectedMonth, status: "DA_CONTROLLARE" });
+  const allTabParams = new URLSearchParams({ month: selectedMonth, status: "TUTTI" });
   if (dateFilter) {
     verifiedTabParams.set("date", dateFilter);
     pendingTabParams.set("date", dateFilter);
+    allTabParams.set("date", dateFilter);
   }
   if (query) {
     verifiedTabParams.set("q", query);
     pendingTabParams.set("q", query);
+    allTabParams.set("q", query);
   }
   if (method !== "TUTTI") {
     verifiedTabParams.set("method", method);
     pendingTabParams.set("method", method);
+    allTabParams.set("method", method);
+  }
+  if (provider !== "TUTTI") {
+    verifiedTabParams.set("provider", provider);
+    pendingTabParams.set("provider", provider);
+    allTabParams.set("provider", provider);
   }
 
   return (
@@ -195,6 +251,7 @@ export default async function ShopifyPaymentsPage(props: {
       role={role}
       hideHeader
     >
+      <ShopifyPaymentsLiveRefresh />
       <div className="space-y-5">
         <section className="relative -mx-4 overflow-hidden bg-[#0D0C12] px-5 py-8 text-white sm:mx-0 sm:rounded-[28px] sm:px-8">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(167,71,88,0.34),transparent_34%),linear-gradient(135deg,#0D0C12,#15192A)]" />
@@ -316,7 +373,8 @@ export default async function ShopifyPaymentsPage(props: {
             <span className="rounded-xl bg-[#F6E8EC] px-4 py-2 text-xs font-black capitalize text-[#873647]">{monthLabel}</span>
               <Link href={`/cash/shopify-payments?month=${monthKey(nextMonth)}&status=${status}`} className="rounded-xl border border-black/10 px-3 py-2 text-xs font-black hover:bg-black/5">Mese dopo</Link>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:min-w-[420px]">
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[620px]">
+              <Link href={`/cash/shopify-payments?${allTabParams.toString()}`} className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-4 text-xs font-black transition ${status === "TUTTI" ? "border-[#111017] bg-[#111017] text-white" : "border-black/10 bg-white text-black hover:bg-black/[0.04]"}`}><span className="inline-flex items-center gap-2"><ClipboardList className="size-4" /> Tutti</span><span className={`rounded-full px-2 py-1 text-[10px] ${status === "TUTTI" ? "bg-white/20" : "bg-black/[0.04]"}`}>{reconciledRows.length}</span></Link>
               <Link
                 href={`/cash/shopify-payments?${verifiedTabParams.toString()}`}
                 className={`flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-4 text-xs font-black transition ${status === "VERIFICATI" ? "border-emerald-600 bg-emerald-600 text-white" : "border-black/10 bg-white text-black hover:bg-emerald-50"}`}
@@ -333,7 +391,17 @@ export default async function ShopifyPaymentsPage(props: {
               </Link>
             </div>
           </div>
-          <form action="/cash/shopify-payments" method="get" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_190px_220px_auto]">
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+            {["TUTTI", "SHOPIFY_PAYMENTS", "CONTANTI", "SCALAPAY", "KLARNA", "SATISPAY", "PAYPAL", "CARTA", "ALTRO"].map((item) => {
+              const params = new URLSearchParams({ month: selectedMonth, status });
+              if (dateFilter) params.set("date", dateFilter);
+              if (query) params.set("q", query);
+              if (method !== "TUTTI") params.set("method", method);
+              if (item !== "TUTTI") params.set("provider", item);
+              return <Link key={item} href={`/cash/shopify-payments?${params.toString()}`} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-xs font-black transition ${provider === item ? "border-[#111017] bg-[#111017] text-white" : "border-black/10 bg-white text-black/60 hover:bg-black/[0.04]"}`}>{item === "TUTTI" ? "Tutti i metodi" : providerLabel(item)}<span className={`rounded-full px-2 py-0.5 text-[10px] ${provider === item ? "bg-white/15" : "bg-black/[0.04]"}`}>{item === "TUTTI" ? liveDailyRevenue.transactions : providerCounts.get(item) || 0}</span></Link>;
+            })}
+          </div>
+          <form action="/cash/shopify-payments" method="get" className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_190px_220px_220px_auto]">
             <input type="hidden" name="month" value={selectedMonth} />
             <input type="hidden" name="status" value={status} />
             <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 focus-within:border-[#A74758]">
@@ -357,6 +425,9 @@ export default async function ShopifyPaymentsPage(props: {
               <option value="CONTANTI">Contanti</option>
               <option value="DA_VERIFICARE">Da verificare</option>
             </select>
+            <select name="provider" defaultValue={provider} className="min-h-12 rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 text-sm font-bold outline-none focus:border-[#A74758]">
+              <option value="TUTTI">Tutti i gateway</option><option value="SHOPIFY_PAYMENTS">Shopify Payments</option><option value="CONTANTI">Contanti</option><option value="SCALAPAY">Scalapay</option><option value="KLARNA">Klarna</option><option value="SATISPAY">Satispay</option><option value="PAYPAL">PayPal</option><option value="CARTA">Altra carta / POS</option><option value="ALTRO">Altro / da classificare</option>
+            </select>
             <button type="submit" className="min-h-12 rounded-2xl bg-[#111017] px-6 text-sm font-black text-white hover:bg-black">Filtra</button>
           </form>
           {dateFilter ? (
@@ -375,64 +446,51 @@ export default async function ShopifyPaymentsPage(props: {
           <div className="flex items-center justify-between gap-4 border-b border-black/5 px-5 py-5">
             <div>
               <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${status === "DA_CONTROLLARE" ? "text-amber-700" : "text-emerald-700"}`}>
-                {status === "DA_CONTROLLARE" ? "Coda di controllo" : "Registro confermato"}
+                {status === "DA_CONTROLLARE" ? "Coda di controllo" : status === "VERIFICATI" ? "Registro confermato" : "Riconciliazione completa"}
               </p>
-              <h2 className="mt-1 text-xl font-black">{status === "DA_CONTROLLARE" ? "Pagamenti da controllare" : "Pagamenti verificati"}</h2>
+              <h2 className="mt-1 text-xl font-black">{status === "DA_CONTROLLARE" ? "Ordini in attesa o differenti" : status === "VERIFICATI" ? "Pagamenti verificati" : "Shopify e Controllo Cliente"}</h2>
             </div>
-            <span className={`rounded-full px-3 py-2 text-xs font-black ${status === "DA_CONTROLLARE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
-              {filteredRows.length}
+              <span className={`rounded-full px-3 py-2 text-xs font-black ${status === "DA_CONTROLLARE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+              {visibleReconciledRows.length}
             </span>
           </div>
-          <div className="hidden grid-cols-[110px_minmax(180px,1.4fr)_150px_150px_120px] gap-4 border-b border-black/5 bg-[#F9F5F7] px-5 py-4 text-[10px] font-black uppercase tracking-[0.14em] text-black/40 md:grid">
+          <div className="hidden grid-cols-[100px_minmax(180px,1.25fr)_minmax(170px,1fr)_minmax(170px,1fr)_120px] gap-4 border-b border-black/5 bg-[#F9F5F7] px-5 py-4 text-[10px] font-black uppercase tracking-[0.14em] text-black/40 md:grid">
             <span>Data</span>
             <span>Cliente e ordine</span>
-            <span>Sede</span>
-            <span>Metodo e gateway</span>
-            <span className="text-right">Importo</span>
+            <span>Atteso da Shopify</span>
+            <span>Dichiarato dal salone</span>
+            <span className="text-right">Esito</span>
           </div>
           {visibleRows.length ? (
             <div className="divide-y divide-black/5">
               {visibleRows.map((payment) => {
-                const isCashmatic = payment.method === "CASHMATIC";
-                const isCash = payment.method === "CONTANTI";
-                const isVerified = payment.verified && payment.method !== "DA_VERIFICARE";
-                const PaymentIcon = isCashmatic ? Banknote : isCash ? Coins : CreditCard;
+                const isWaiting = payment.state === "WAITING";
+                const isConfirmed = payment.state === "CONFIRMED";
                 return (
-                  <article key={payment.id} className="grid gap-3 px-5 py-4 md:grid-cols-[110px_minmax(180px,1.4fr)_150px_150px_120px] md:items-center md:gap-4">
+                  <article key={payment.orderId} className="grid gap-4 px-5 py-5 md:grid-cols-[100px_minmax(180px,1.25fr)_minmax(170px,1fr)_minmax(170px,1fr)_120px] md:items-center md:gap-4">
                     <div>
-                      <p className="text-sm font-black">{new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short" }).format(payment.createdAt)}</p>
-                      <p className="mt-1 text-xs font-semibold text-black/40">{new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(payment.createdAt)}</p>
+                      <p className="text-sm font-black">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "short" }).format(new Date(payment.processedAt))}</p>
+                      <p className="mt-1 text-xs font-semibold text-black/40">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(payment.processedAt))}</p>
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black">{payment.clientName}</p>
-                      <p className="mt-1 text-xs font-bold text-black/40">Ordine {payment.order ? `#${payment.order}` : "mancante"}</p>
-                      {payment.reference ? <p className="mt-1 truncate text-[10px] font-semibold text-black/30">Rif. {payment.reference}</p> : null}
-                      <div className="mt-2 flex flex-wrap gap-2">
+                      <p className="mt-1 text-xs font-bold text-black/40">Ordine {payment.orderName.startsWith("#") ? payment.orderName : `#${payment.orderName}`}</p>
+                      {payment.control ? <div className="mt-2 flex flex-wrap gap-2">
                         <Link
-                          href={`/service-forms/responses/${payment.id.split(":")[0]}?from=cash`}
+                          href={`/service-forms/responses/${payment.control.responseId}?from=cash`}
                           className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#F6E8EC] px-3 text-[10px] font-black uppercase text-[#873647] transition hover:bg-[#EFD7DE]"
                         >
                           <ClipboardList className="size-3.5" /> Vedi dettagli
                         </Link>
-                      </div>
+                      </div> : null}
                     </div>
-                    <p className="truncate text-xs font-bold text-black/50">{payment.locationName || "Sede non indicata"}</p>
-                    <div className="flex items-center gap-2">
-                      <span className={`flex size-9 items-center justify-center rounded-xl ${isVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                        <PaymentIcon className="size-4" />
-                      </span>
-                      <div>
-                        <p className="text-xs font-black">{methodLabel(payment.method)}</p>
-                        <p className="mt-0.5 max-w-[150px] truncate text-[10px] font-bold text-black/45">
-                          {gatewayLabel(payment.gateway)}
-                        </p>
-                        <p className={`mt-0.5 inline-flex items-center gap-1 text-[9px] font-black uppercase ${isVerified ? "text-emerald-700" : "text-amber-700"}`}>
-                          {isVerified ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
-                          {isVerified ? "Verificato" : "Da verificare"}
-                        </p>
-                      </div>
+                    <div className="rounded-2xl bg-[#F7F8FA] p-3">
+                      <p className="text-base font-black">{formatMoney(payment.amount)}</p>
+                      <p className="mt-1 text-xs font-black text-[#873647]">{payment.providers.map(providerLabel).join(" + ")}</p>
+                      <p className="mt-1 truncate text-[10px] font-semibold text-black/35">{payment.gateways.map(gatewayLabel).join(" · ")}</p>
                     </div>
-                    <p className="text-lg font-black md:text-right">{formatMoney(payment.amount)}</p>
+                    <div className={`rounded-2xl p-3 ${isWaiting ? "bg-amber-50" : payment.amountMatches && payment.methodMatches ? "bg-emerald-50" : "bg-rose-50"}`}><p className="text-sm font-black">{isWaiting ? "Controllo non ricevuto" : payment.control?.clientName}</p><p className="mt-1 text-xs font-black">{isWaiting ? "—" : formatMoney(payment.declaredAmount)}</p><p className="mt-1 text-[10px] font-semibold text-black/45">{payment.declaredMethodText}</p></div>
+                    <div className="md:text-right"><span className={`inline-flex min-h-9 items-center rounded-full px-3 text-[10px] font-black uppercase ${isConfirmed ? "bg-emerald-100 text-emerald-800" : isWaiting ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"}`}>{isConfirmed ? "Confermato" : isWaiting ? "In attesa" : "Differenza"}</span>{!isWaiting && !isConfirmed ? <p className="mt-2 text-[9px] font-bold leading-4 text-rose-700">{!payment.amountMatches ? "Importo diverso" : ""}{!payment.amountMatches && !payment.methodMatches ? " · " : ""}{!payment.methodMatches ? "Metodo diverso" : ""}</p> : null}</div>
                   </article>
                 );
               })}

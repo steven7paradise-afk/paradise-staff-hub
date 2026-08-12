@@ -942,7 +942,7 @@ export function classifyShopifyPaymentMethod(gateways: string[]): "CARTA" | "CAS
     return "CONTANTI";
   }
 
-  if (/shopify payments|shopify_payments|card|carta|credit|debit|visa|mastercard|amex|stripe|pos|sumup|nexi|klarna|paypal/.test(normalized)) {
+  if (/shopify payments|shopify_payments|card|carta|credit|debit|visa|mastercard|amex|stripe|pos|sumup|nexi|klarna|scalapay|satispay|paypal/.test(normalized)) {
     return "CARTA";
   }
 

@@ -342,6 +342,8 @@ export async function POST(request: NextRequest) {
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,
+    client_control_declared_paid: moneyValue(body?.paid),
+    client_control_declared_payment_method: manualPaymentMethod,
   } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName,
@@ -383,6 +385,8 @@ export async function POST(request: NextRequest) {
     client_control_created_from: "Tablet Clock",
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,
+    client_control_declared_paid: moneyValue(body?.paid),
+    client_control_declared_payment_method: manualPaymentMethod,
   };
 
   const bookingId = textValue(body?.bookingId);
