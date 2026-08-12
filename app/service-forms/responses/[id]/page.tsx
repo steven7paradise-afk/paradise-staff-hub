@@ -4,17 +4,23 @@ import { ResponseDetailView } from "@/components/response-detail-view";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
+import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
+import { getShopifyOrderDetails, getShopifyOrderIdentity } from "@/lib/shopify";
 
 export const dynamic = "force-dynamic";
 
-type PageParams = { params: Promise<{ id: string }> };
+type PageParams = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+};
 
-export default async function ResponseDetailPage({ params }: PageParams) {
+export default async function ResponseDetailPage({ params, searchParams }: PageParams) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role as Role;
 
   const { id } = await params;
+  const query = await searchParams;
 
   // Retrieve the response
   const response = await prisma.serviceFormResponse.findUnique({
@@ -41,6 +47,18 @@ export default async function ResponseDetailPage({ params }: PageParams) {
     redirect("/dashboard");
   }
 
+  const answers = (response.answers as Record<string, unknown>) || {};
+  const isClientControl = isClientControlFormName(response.form?.name || "", response.form?.category || "");
+  const shopifyOrderCode = isClientControl
+    ? String(answers.second_shopify_order || answers.secondShopifyOrder || answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim()
+    : "";
+  const [shopifyDetails, shopifyIdentity] = shopifyOrderCode
+    ? await Promise.all([
+        getShopifyOrderDetails(shopifyOrderCode).catch(() => null),
+        getShopifyOrderIdentity(shopifyOrderCode).catch(() => null),
+      ])
+    : [null, null];
+
   // Serialize dates
   const serializedResponse = {
     ...response,
@@ -60,6 +78,12 @@ export default async function ResponseDetailPage({ params }: PageParams) {
         currentUserName={session.user.name || "Utente"}
         currentUserRole={role}
         isManager={isManager}
+        backUrl={query.from === "cash" ? "/cash/shopify-payments" : undefined}
+        shopifyOrder={shopifyDetails ? {
+          code: shopifyOrderCode,
+          adminUrl: shopifyIdentity?.adminUrl || null,
+          ...shopifyDetails,
+        } : null}
       />
     </AppShell>
   );

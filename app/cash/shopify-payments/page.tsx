@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Banknote,
   CheckCircle2,
+  ClipboardList,
   CreditCard,
   Coins,
   Search,
@@ -91,22 +92,10 @@ export default async function ShopifyPaymentsPage(props: {
   const verifiedCardTotal = rows
     .filter((payment) => payment.verified && payment.method === "CARTA")
     .reduce((total, payment) => total + payment.amount, 0);
-  const verifiedCashmaticTotal = rows
-    .filter((payment) => payment.verified && payment.method === "CASHMATIC")
-    .reduce((total, payment) => total + payment.amount, 0);
-  const verifiedCashTotal = rows
-    .filter((payment) => payment.verified && payment.method === "CONTANTI")
-    .reduce((total, payment) => total + payment.amount, 0);
   const todayKey = dateFilter || romeDateKey(new Date());
   const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
   const todayCardTotal = todayVerifiedRows
     .filter((payment) => payment.method === "CARTA")
-    .reduce((total, payment) => total + payment.amount, 0);
-  const todayCashmaticTotal = todayVerifiedRows
-    .filter((payment) => payment.method === "CASHMATIC")
-    .reduce((total, payment) => total + payment.amount, 0);
-  const todayCashTotal = todayVerifiedRows
-    .filter((payment) => payment.method === "CONTANTI")
     .reduce((total, payment) => total + payment.amount, 0);
   const scopedRows = dateFilter
     ? rows.filter((payment) => romeDateKey(payment.createdAt) === dateFilter)
@@ -189,27 +178,13 @@ export default async function ShopifyPaymentsPage(props: {
             <div className="w-full space-y-4 xl:max-w-[690px]">
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">{dateFilter ? "Giorno selezionato" : "Oggi"} · {todayLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl border border-[#F0A1AF]/40 bg-[#F0A1AF]/15 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta {dayCardSuffix}</p>
                       <CreditCard className="size-4 text-[#F0A1AF]" />
                     </div>
                     <p className="mt-2 text-2xl font-black">{formatMoney(todayCardTotal)}</p>
-                  </div>
-                  <div className="rounded-2xl border border-[#F7DFA7]/40 bg-[#F7DFA7]/10 px-5 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Cashmatic {dayCardSuffix}</p>
-                      <Banknote className="size-4 text-[#F7DFA7]" />
-                    </div>
-                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCashmaticTotal)}</p>
-                  </div>
-                  <div className="rounded-2xl border border-sky-300/30 bg-sky-300/10 px-5 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Contanti {dayCardSuffix}</p>
-                      <Coins className="size-4 text-sky-300" />
-                    </div>
-                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCashTotal)}</p>
                   </div>
                   <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
@@ -222,18 +197,10 @@ export default async function ShopifyPaymentsPage(props: {
               </div>
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Totale mese · {monthLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Carta mese</p>
                     <p className="mt-2 text-xl font-black">{formatMoney(verifiedCardTotal)}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Cashmatic mese</p>
-                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashmaticTotal)}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Contanti mese</p>
-                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashTotal)}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti mese</p>
@@ -351,6 +318,14 @@ export default async function ShopifyPaymentsPage(props: {
                       <p className="truncate text-sm font-black">{payment.clientName}</p>
                       <p className="mt-1 text-xs font-bold text-black/40">Ordine {payment.order ? `#${payment.order}` : "mancante"}</p>
                       {payment.reference ? <p className="mt-1 truncate text-[10px] font-semibold text-black/30">Rif. {payment.reference}</p> : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Link
+                          href={`/service-forms/responses/${payment.id.split(":")[0]}?from=cash`}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#F6E8EC] px-3 text-[10px] font-black uppercase text-[#873647] transition hover:bg-[#EFD7DE]"
+                        >
+                          <ClipboardList className="size-3.5" /> Vedi dettagli
+                        </Link>
+                      </div>
                     </div>
                     <p className="truncate text-xs font-bold text-black/50">{payment.locationName || "Sede non indicata"}</p>
                     <div className="flex items-center gap-2">

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { User, MapPin, Calendar, Download, Archive, ArrowLeft, CheckCircle2, Pencil, Check, X } from "lucide-react";
+import { User, MapPin, Calendar, Download, Archive, ArrowLeft, CheckCircle2, Pencil, Check, X, ExternalLink, ShoppingBag, CreditCard, Coins, History, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
@@ -17,12 +17,27 @@ export function ResponseDetailView({
   currentUserName,
   currentUserRole,
   isManager,
+  backUrl: requestedBackUrl,
+  shopifyOrder,
 }: {
   initialResponse: any;
   currentUserId: string;
   currentUserName: string;
   currentUserRole: string;
   isManager: boolean;
+  backUrl?: string;
+  shopifyOrder?: {
+    code: string;
+    adminUrl: string | null;
+    clientName: string | null;
+    totalPrice: number | null;
+    lineItems: Array<{ title: string; quantity: number; price: number }>;
+    note: string | null;
+    financialStatus: string | null;
+    paymentMethod: string;
+    paymentGateways: string[];
+    paymentBreakdown: Array<{ method: string; gateway: string; amount: number }>;
+  } | null;
 }) {
   const [response, setResponse] = useState(initialResponse);
   const [success, setSuccess] = useState(false);
@@ -102,10 +117,16 @@ export function ResponseDetailView({
     }
   };
 
-  const backUrl = isManager ? "/settings/forms?tab=responses" : "/service-forms";
+  const backUrl = requestedBackUrl || (isManager ? "/settings/forms?tab=responses" : "/service-forms");
+  const internalNoteText = typeof response.internal_notes === "string"
+    ? response.internal_notes
+    : response.internal_notes && typeof response.internal_notes === "object"
+      ? String(response.internal_notes.text || response.internal_notes.note || "")
+      : "";
+  const activityLog = Array.isArray(response.activity_log) ? response.activity_log : [];
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       {/* Back button */}
       <Link
         href={backUrl}
@@ -114,6 +135,72 @@ export function ResponseDetailView({
         <ArrowLeft className="size-4" />
         Torna alla gestione
       </Link>
+
+      {shopifyOrder ? (
+        <section className="overflow-hidden rounded-[28px] border border-black/5 bg-[#111017] text-white shadow-xl">
+          <div className="flex flex-col gap-5 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-start sm:justify-between sm:px-8">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#F0A1AF]">
+                  <ShoppingBag className="size-3.5" /> Ordine Shopify
+                </span>
+                <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[10px] font-black uppercase text-emerald-300">
+                  {String(shopifyOrder.financialStatus || "stato assente") === "paid" ? "Pagato" : shopifyOrder.financialStatus || "Stato assente"}
+                </span>
+              </div>
+              <h2 className="mt-4 text-3xl font-black">Ordine #{shopifyOrder.code.replace(/^#/, "")}</h2>
+              <p className="mt-1 text-sm font-semibold text-white/50">{shopifyOrder.clientName || "Cliente non indicata"}</p>
+            </div>
+            <div className="flex items-center gap-4 sm:text-right">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/40">Totale ordine</p>
+                <p className="mt-1 text-3xl font-black">{(shopifyOrder.totalPrice || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}</p>
+              </div>
+              {shopifyOrder.adminUrl ? (
+                <a href={shopifyOrder.adminUrl} target="_blank" rel="noreferrer" className="grid size-12 place-items-center rounded-2xl bg-white text-black transition hover:bg-[#F0A1AF]" aria-label="Apri ordine su Shopify">
+                  <ExternalLink className="size-5" />
+                </a>
+              ) : null}
+            </div>
+          </div>
+          <div className="grid gap-5 p-6 sm:p-8 lg:grid-cols-[1.25fr_1fr]">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Prodotti e servizi</p>
+              <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+                {shopifyOrder.lineItems.length ? shopifyOrder.lineItems.map((item, index) => (
+                  <div key={`${item.title}-${index}`} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+                    <span className="font-bold">{item.title}{item.quantity > 1 ? ` × ${item.quantity}` : ""}</span>
+                    <span className="font-black">{(item.price * item.quantity).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}</span>
+                  </div>
+                )) : <p className="px-4 py-4 text-sm text-white/45">Nessun prodotto disponibile.</p>}
+              </div>
+              {shopifyOrder.note ? (
+                <div className="mt-4 rounded-2xl border border-[#F0A1AF]/20 bg-[#F0A1AF]/10 p-4">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#F0A1AF]"><StickyNote className="size-4" /> Nota ordine Shopify</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/70">{shopifyOrder.note}</p>
+                </div>
+              ) : null}
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Pagamento rilevato</p>
+              <div className="mt-3 space-y-2">
+                {shopifyOrder.paymentBreakdown.length ? shopifyOrder.paymentBreakdown.map((payment, index) => {
+                  const PaymentIcon = payment.method === "CONTANTI" ? Coins : CreditCard;
+                  return (
+                    <div key={`${payment.gateway}-${index}`} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="grid size-9 place-items-center rounded-xl bg-white/10"><PaymentIcon className="size-4" /></span>
+                        <div><p className="text-sm font-black">{payment.method === "CONTANTI" ? "Contanti" : payment.method === "CASHMATIC" ? "Cashmatic" : "Carta"}</p><p className="text-[10px] font-bold text-white/35">{payment.gateway}</p></div>
+                      </div>
+                      <p className="font-black">{payment.amount.toLocaleString("it-IT", { style: "currency", currency: "EUR" })}</p>
+                    </div>
+                  );
+                }) : <p className="rounded-2xl border border-white/10 px-4 py-4 text-sm text-white/45">Metodo {shopifyOrder.paymentMethod}</p>}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="rounded-[28px] bg-white border border-black/5 shadow-md overflow-hidden">
         <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
@@ -388,6 +475,26 @@ export function ResponseDetailView({
           </div>
 
           {/* Response Comments */}
+          {(internalNoteText || activityLog.length) ? (
+            <div className="grid gap-4 border-t border-black/5 pt-5 md:grid-cols-2">
+              <div className="rounded-2xl border border-black/5 bg-[#FBF7F9] p-4">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-[#A74758]"><StickyNote className="size-4" /> Note interne</p>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-black/65">{internalNoteText || "Nessuna nota interna."}</p>
+              </div>
+              <div className="rounded-2xl border border-black/5 bg-[#FBF7F9] p-4">
+                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.12em] text-[#A74758]"><History className="size-4" /> Cronologia</p>
+                <div className="mt-3 space-y-3">
+                  {activityLog.length ? activityLog.slice().reverse().map((entry: any, index: number) => (
+                    <div key={index} className="border-l-2 border-[#A74758]/25 pl-3 text-xs">
+                      <p className="font-bold text-black/70">{entry.note || entry.type || "Aggiornamento"}</p>
+                      <p className="mt-0.5 text-black/35">{entry.by || "Staff"}{entry.at ? ` · ${new Date(entry.at).toLocaleString("it-IT")}` : ""}</p>
+                    </div>
+                  )) : <p className="text-sm text-black/40">Nessuna attività registrata.</p>}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <ResponseComments
             responseId={response.id}
             initialComments={response.comments}
