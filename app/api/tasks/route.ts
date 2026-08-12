@@ -253,27 +253,33 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
 
-  const updated = await prisma.staffTask.update({
-    where: { id },
-    data: isNotesUpdate
-      ? { notes: notes || null }
-      : isDescriptionImageUpdate
-      ? { photo_url: photoUrl || null, attachment_name: attachmentName || null }
-      : isChecklistUpdate
-      ? { checklist }
-      : isEvaluation
-      ? { evaluation, evaluated_by_id: session.user.id, evaluated_at: new Date() }
-      : {
-          status,
-          timer_seconds: Number.isFinite(timerSeconds) ? Math.max(0, Math.round(timerSeconds)) : task.timer_seconds,
-          started_at: status === "ACTIVE" && !task.started_at ? new Date() : task.started_at,
-          completed_at: status === "COMPLETED" ? new Date() : null,
-          completion_note: status === "COMPLETED" ? completionNote || task.completion_note : task.completion_note,
-          completion_links: status === "COMPLETED" ? completionLinks : task.completion_links,
-          completion_files: status === "COMPLETED" ? completionFiles : task.completion_files,
-        },
-    include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
-  });
+  let updated;
+  try {
+    updated = await prisma.staffTask.update({
+      where: { id },
+      data: isNotesUpdate
+        ? { notes: notes || null }
+        : isDescriptionImageUpdate
+        ? { photo_url: photoUrl || null, attachment_name: attachmentName || null }
+        : isChecklistUpdate
+        ? { checklist }
+        : isEvaluation
+        ? { evaluation, evaluated_by_id: session.user.id, evaluated_at: new Date() }
+        : {
+            status,
+            timer_seconds: Number.isFinite(timerSeconds) ? Math.max(0, Math.round(timerSeconds)) : task.timer_seconds,
+            started_at: status === "ACTIVE" && !task.started_at ? new Date() : task.started_at,
+            completed_at: status === "COMPLETED" ? new Date() : null,
+            completion_note: status === "COMPLETED" ? completionNote || task.completion_note : task.completion_note,
+            completion_links: status === "COMPLETED" ? completionLinks : task.completion_links,
+            completion_files: status === "COMPLETED" ? completionFiles : task.completion_files,
+          },
+      include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
+    });
+  } catch (error) {
+    console.error("Task update failed:", error);
+    return NextResponse.json({ error: "Errore durante il salvataggio della Task. Riprova." }, { status: 500 });
+  }
 
   if (status === "COMPLETED" && task.created_by_id !== session.user.id) {
     await createNotification({
@@ -282,7 +288,7 @@ export async function PATCH(request: NextRequest) {
         message: `${session.user.name} ha completato la task in ${Math.floor((updated.timer_seconds ?? 0) / 60)} min.`,
         type: "TASK",
         action_url: "/tasks",
-    });
+    }).catch((error) => console.error("Task completion notification failed:", error));
   }
   return NextResponse.json(updated);
 }
