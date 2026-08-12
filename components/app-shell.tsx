@@ -356,9 +356,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   let effectiveSidebarConfig = sidebarConfig;
   if (isPcCassa) {
     sidebarItems = sidebarItems
-      .filter(item => item.href === "/appointments" || item.href === "/service-forms")
+      .filter(item => item.href === "/appointments" || item.href === "/service-forms" || item.href === "/orders")
       .map((item) => item.href === "/appointments" ? { ...item, href: "/appointments/buenos-aires", label: "Appuntamenti" } : item);
-    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms"] }];
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms", "/orders"] }];
   }
   const aside = (
       <aside className={cn(

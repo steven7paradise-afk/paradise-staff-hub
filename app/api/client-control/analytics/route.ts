@@ -6,6 +6,7 @@ import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { getOperationalUser } from "@/lib/operational-session";
 
 export const dynamic = "force-dynamic";
 
@@ -39,19 +40,19 @@ function countsInAnalytics(answers: Record<string, unknown>) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
+  const operationalUser = await getOperationalUser(request);
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
   let tabletDevice = null;
-  if (!session?.user?.id && !pcAuth) {
+  if (!operationalUser?.id && !pcAuth) {
     const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
     tabletDevice = requestedDevice
       ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
       : null;
   }
 
-  if (!session?.user?.id && !tabletDevice && !pcAuth) {
+  if (!operationalUser?.id && !tabletDevice && !pcAuth) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 

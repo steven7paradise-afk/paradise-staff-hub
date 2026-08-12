@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { OrderManager } from "@/components/order-manager";
 import { auth } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { ensureOrderForm, ORDER_FORM_CATEGORY } from "@/lib/order-form";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
@@ -41,28 +44,36 @@ function isSartaOrder(response: any) {
 
 export default async function OrdersPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  const cookieStore = await cookies();
+  const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+  const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
+  const isPC = Boolean(pcAuth);
+  if (!session?.user?.id && !pcAuth) redirect("/login");
 
-  const role = session.user.role as Role;
+  const role = (isPC ? "RESPONSABILE" : session!.user.role) as Role;
   const canManageOrders =
-    ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
-    session.user.id === "cmpo4y9900001jr09bg1dnqxs" || // Jessinca Inturri (Jessica)
-    session.user.id === "cmpms4o9h0003l809zof30mni" || // Biy Darwin Ramirez Castillo (Darwin)
-    !!session.user.email?.toLowerCase().includes("jessica") ||
-    !!session.user.email?.toLowerCase().includes("darwin");
+    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
+    session?.user?.id === "cmpo4y9900001jr09bg1dnqxs" || // Jessinca Inturri (Jessica)
+    session?.user?.id === "cmpms4o9h0003l809zof30mni" || // Biy Darwin Ramirez Castillo (Darwin)
+    !!session?.user?.email?.toLowerCase().includes("jessica") ||
+    !!session?.user?.email?.toLowerCase().includes("darwin");
 
   const [dbUser] = await Promise.all([
     prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { mansione: true },
+      where: { id: isPC ? (selectedWorkerId || "PC_CASSA") : session!.user.id },
+      select: { mansione: true, role: true, location: { select: { name: true } } },
     }),
-    ensureOrderForm(session.user.id),
+    ensureOrderForm(isPC ? "u-super-admin" : session!.user.id),
   ]);
+
+  if (!isPC && dbUser && requiresBuenosAiresPcCassa(dbUser.role, dbUser.location?.name)) {
+    redirect("/pc-non-autorizzato");
+  }
 
   const isSarta =
     dbUser?.mansione === "sarta" ||
-    session.user.id === "cmpo4y9900001jr09bg1dnqxs" ||
-    !!session.user.email?.toLowerCase().includes("jessica");
+    session?.user?.id === "cmpo4y9900001jr09bg1dnqxs" ||
+    !!session?.user?.email?.toLowerCase().includes("jessica");
 
   const responses = await prisma.serviceFormResponse.findMany({
     where: {
@@ -91,14 +102,16 @@ export default async function OrdersPage() {
       updated_at: response.updated_at.toISOString(),
     }));
 
-  const orders = allOrders;
+  const orders = isPC && pcAuth
+    ? allOrders.filter((order) => order.user?.sede_id === pcAuth.locationId)
+    : allOrders;
 
   return (
-    <AppShell title="Ordini" subtitle="Pipeline ordini creati dai moduli operativi." role={role} hideHeader>
+    <AppShell title="Ordini" subtitle="Pipeline ordini creati dai moduli operativi." role={role} hideHeader pcMode={isPC}>
       <OrderManager
         initialOrders={orders as any}
         canManage={canManageOrders}
-        currentUserName={session.user.name ?? "Staff"}
+        currentUserName={isPC ? "PC Cassa" : session?.user?.name ?? "Staff"}
         currentUserRole={role}
       />
     </AppShell>

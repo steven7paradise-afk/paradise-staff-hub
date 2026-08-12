@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
+import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
@@ -245,9 +246,13 @@ export default async function AppointmentsPage({
   const accessUser = session?.user
     ? await prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { id: true, role: true, mansione: true, access_list: true },
+        select: { id: true, role: true, mansione: true, access_list: true, location: { select: { name: true } } },
       })
     : null;
+
+  if (!isPC && accessUser && requiresBuenosAiresPcCassa(accessUser.role, accessUser.location?.name)) {
+    redirect("/pc-non-autorizzato");
+  }
 
   let canView = isPC || (accessUser
     ? await canAccessForUser(prisma, "/appointments", accessUser)
@@ -324,7 +329,7 @@ export default async function AppointmentsPage({
 
   const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
-  const [shopifyOrderNames, statusSetting, sheetStatusOverrides] = await Promise.all([
+  const [shopifyOrderNames, statusSetting, rawSheetStatusOverrides] = await Promise.all([
     getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
@@ -351,6 +356,12 @@ export default async function AppointmentsPage({
     statusSetting?.value && typeof statusSetting.value === "object" && !Array.isArray(statusSetting.value)
       ? (statusSetting.value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>)
       : {};
+  const sheetStatusOverrides = rawSheetStatusOverrides as Record<string, {
+    status?: string;
+    sheetNote?: string;
+    updatedAt: string;
+    updatedBy: string;
+  }>;
 
   const serializedBookings = safeBookings
     .map((booking) => {

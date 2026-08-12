@@ -8,19 +8,32 @@ export function proxy(request: NextRequest) {
   if (isPcCassa) {
     const isAllowedPage =
       pathname === "/appointments/buenos-aires" ||
+      pathname === "/orders" ||
       pathname === "/service-forms" ||
       pathname.startsWith("/service-forms/");
 
+    const isOperationalServiceFormsApi =
+      pathname === "/api/service-forms/submit" ||
+      pathname.startsWith("/api/service-forms/responses/");
+    const isOperationalOrdersApi =
+      pathname.startsWith("/api/orders/") &&
+      !pathname.startsWith("/api/orders/import");
     const isAllowedApi =
       pathname.startsWith("/api/appointments") ||
-      pathname.startsWith("/api/client-control") ||
-      pathname.startsWith("/api/orders") ||
-      pathname.startsWith("/api/service-forms") ||
+      pathname === "/api/client-control/analytics" ||
+      pathname === "/api/client-control/polish-note" ||
+      pathname === "/api/client-control/tablet-submit" ||
+      isOperationalOrdersApi ||
+      isOperationalServiceFormsApi ||
       pathname.startsWith("/api/shopify-order-lookup") ||
+      pathname.startsWith("/api/vat-lookup") ||
       pathname.startsWith("/api/drive-image") ||
       pathname.startsWith("/api/auth");
 
     if (!isAllowedPage && !isAllowedApi && pathname !== "/pc-non-autorizzato") {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Funzione non disponibile sul PC Cassa." }, { status: 403 });
+      }
       const url = request.nextUrl.clone();
       url.pathname = "/pc-non-autorizzato";
       url.searchParams.set("from", pathname);

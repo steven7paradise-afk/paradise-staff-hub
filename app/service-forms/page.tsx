@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
+import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { prisma } from "@/lib/prisma";
 import { checkPCAuthorization, appointmentsPcCookieName, appointmentsPcWorkerCookieName } from "@/lib/appointments-pc-auth";
 import type { Role } from "@/lib/roles";
@@ -37,10 +38,9 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   let pcDisplayUser: { name: string; photo_url?: string | null } | null = null;
   const cookieStore = await cookies();
 
-  if (!sessionUser) {
-    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
-    const pcAuth = await checkPCAuthorization(pcToken);
-    if (pcAuth) {
+  const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+  const pcAuth = await checkPCAuthorization(pcToken);
+  if (pcAuth) {
       isPC = true;
       pcLocationId = pcAuth.locationId;
       sessionUser = {
@@ -73,10 +73,18 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
           pcDisplayUser = { name: selectedWorker.name, photo_url: selectedWorker.photo_url };
         }
       }
-    }
   }
 
   if (!sessionUser) redirect("/login");
+  if (!isPC && sessionUser.id) {
+    const accessUser = await prisma.user.findUnique({
+      where: { id: sessionUser.id },
+      select: { role: true, location: { select: { name: true } } },
+    });
+    if (accessUser && requiresBuenosAiresPcCassa(accessUser.role, accessUser.location?.name)) {
+      redirect("/pc-non-autorizzato");
+    }
+  }
   const role = sessionUser.role as Role;
   const targetUserIdForSetup = sessionUser.id === "PC_CASSA" ? "u-super-admin" : sessionUser.id;
 

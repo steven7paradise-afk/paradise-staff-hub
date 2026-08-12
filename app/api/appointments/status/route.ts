@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
+import { getOperationalUser } from "@/lib/operational-session";
 
 const SETTING_KEY = "appointment_status_overrides";
 
@@ -33,21 +34,10 @@ function normalizeStatusMap(value: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  let isAuthorized = Boolean(session?.user?.id);
-  let sessionUserName = session?.user?.name || session?.user?.email || session?.user?.id || "Staff";
-  let sessionUserRole = session?.user?.role || "DIPENDENTE";
-
-  if (!isAuthorized) {
-    const cookieStore = await cookies();
-    const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
-    const pcAuth = await checkPCAuthorization(pcToken);
-    if (pcAuth) {
-      isAuthorized = true;
-      sessionUserName = pcAuth.name;
-      sessionUserRole = "RESPONSABILE";
-    }
-  }
+  const operationalUser = await getOperationalUser(request);
+  const isAuthorized = Boolean(operationalUser?.id);
+  const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
+  const sessionUserRole = operationalUser?.role || "DIPENDENTE";
 
   if (!isAuthorized) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
