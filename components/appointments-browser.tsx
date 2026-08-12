@@ -1088,6 +1088,11 @@ export function AppointmentsBrowser({
   pcLocationId = "",
   initialSalon = "tutti",
   initialPcWorkerName = "",
+  initialView = "day",
+  initialAnchorDate,
+  initialRangeFrom,
+  initialRangeTo,
+  initialScopeAll = false,
   locations = [],
 }: {
   initialBookings: AppointmentRecord[];
@@ -1096,6 +1101,11 @@ export function AppointmentsBrowser({
   pcLocationId?: string;
   initialSalon?: SalonFilter;
   initialPcWorkerName?: string;
+  initialView?: ViewMode;
+  initialAnchorDate?: string;
+  initialRangeFrom?: string;
+  initialRangeTo?: string;
+  initialScopeAll?: boolean;
   locations?: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
@@ -1120,26 +1130,13 @@ export function AppointmentsBrowser({
 
   useEffect(() => {
     if (searchParams.get("refresh") === "true") {
-      router.replace(appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon));
-      setIsRefreshing(false);
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("refresh");
+      const base = appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon);
+      router.replace(params.size ? `${base}?${params.toString()}` : base, { scroll: false });
     }
+    setIsRefreshing(false);
   }, [searchParams, router]);
-
-  // Safe Real-time Auto-polling: re-fetch appointments every 45 seconds when page is active & online
-  useEffect(() => {
-    const doPolling = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible" && typeof navigator !== "undefined" && navigator.onLine) {
-        try {
-          router.refresh();
-        } catch (err) {
-          console.warn("Background refresh skipped safely:", err);
-        }
-      }
-    };
-
-    const interval = setInterval(doPolling, 45000);
-    return () => clearInterval(interval);
-  }, [router]);
 
   useEffect(() => {
     const salonFromUrl = normalizeAppointmentSalonSlug(searchParams.get("salone") || searchParams.get("salon"));
@@ -1148,12 +1145,20 @@ export function AppointmentsBrowser({
 
   function updateSalonFilter(nextSalon: SalonFilter) {
     setSalon(nextSalon);
-    router.replace(appointmentSalonUrl(nextSalon === "tutti" ? null : nextSalon), { scroll: false });
+    navigateToAppointmentRange(view, anchorDate, {
+      salonOverride: nextSalon,
+      from: dateFilter.from,
+      to: dateFilter.to,
+      scopeAll: dateFilter.mode === "all",
+      replace: true,
+    });
   }
 
-  const [view, setView] = useState<ViewMode>("day");
+  const [view, setView] = useState<ViewMode>(initialView);
   const [salon, setSalon] = useState<SalonFilter>(initialSalon);
-  const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [anchorDate, setAnchorDate] = useState(
+    () => dateFromLocalKey(initialAnchorDate) || new Date(),
+  );
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
     null,
   );
@@ -1180,12 +1185,76 @@ export function AppointmentsBrowser({
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState(() => {
     const today = localDateKey(new Date());
+    if (initialScopeAll) {
+      return {
+        mode: "all" as AppointmentDateFilterMode,
+        from: initialRangeFrom || today,
+        to: initialRangeTo || today,
+      };
+    }
+    if (initialView !== "day" && initialRangeFrom && initialRangeTo) {
+      return {
+        mode: "custom" as AppointmentDateFilterMode,
+        from: initialRangeFrom,
+        to: initialRangeTo,
+      };
+    }
     return {
       mode: "today" as AppointmentDateFilterMode,
       from: today,
       to: today,
     };
   });
+
+  function rangeForView(nextView: ViewMode, date: Date) {
+    const start = new Date(date);
+    const end = new Date(date);
+    if (nextView === "week") {
+      const weekStart = startOfWeek(date);
+      start.setTime(weekStart.getTime());
+      end.setTime(weekStart.getTime());
+      end.setDate(end.getDate() + 6);
+    } else if (nextView === "month") {
+      start.setFullYear(date.getFullYear(), date.getMonth(), 1);
+      end.setFullYear(date.getFullYear(), date.getMonth() + 1, 0);
+    }
+    return { from: localDateKey(start), to: localDateKey(end) };
+  }
+
+  function navigateToAppointmentRange(
+    nextView: ViewMode,
+    nextAnchor: Date,
+    options?: {
+      salonOverride?: SalonFilter;
+      from?: string;
+      to?: string;
+      scopeAll?: boolean;
+      forceRefresh?: boolean;
+      replace?: boolean;
+    },
+  ) {
+    const targetSalon = options?.salonOverride ?? salon;
+    const range = options?.from && options?.to
+      ? { from: options.from, to: options.to }
+      : rangeForView(nextView, nextAnchor);
+    const params = new URLSearchParams();
+    params.set("view", nextView);
+    params.set("focus", localDateKey(nextAnchor));
+    if (options?.scopeAll) {
+      params.set("scope", "all");
+    } else {
+      params.set("from", range.from);
+      params.set("to", range.to);
+    }
+    const worker = searchParams.get("worker");
+    if (worker) params.set("worker", worker);
+    if (options?.forceRefresh) params.set("refresh", "true");
+
+    setIsRefreshing(true);
+    const target = `${appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon)}?${params.toString()}`;
+    if (options?.replace) router.replace(target, { scroll: false });
+    else router.push(target, { scroll: false });
+  }
   const [statusByBooking, setStatusByBooking] = useState<
     Record<string, AppointmentStatusValue>
   >(() =>
@@ -1261,6 +1330,25 @@ export function AppointmentsBrowser({
     }
 
     return ids;
+  }
+
+  function matchEmployeeIdForTeammate(
+    teammate: Pick<BookingTeammate, "id" | "name">,
+    employees: ClientControlEmployee[],
+  ) {
+    const normalizedName = normalizeSearchValue(teammate.name);
+    if (!normalizedName) return null;
+    const exact = employees.find(
+      (employee) => normalizeSearchValue(employee.name) === normalizedName,
+    );
+    if (exact) return exact.id;
+
+    const nameParts = normalizedName.split(" ").filter(Boolean);
+    const compatible = employees.filter((employee) => {
+      const employeeName = normalizeSearchValue(employee.name);
+      return nameParts.every((part) => employeeName.split(" ").includes(part));
+    });
+    return compatible.length === 1 ? compatible[0].id : null;
   }
 
   const [clientControlOpen, setClientControlOpen] = useState(false);
@@ -1872,7 +1960,10 @@ export function AppointmentsBrowser({
     }
   }
 
-  async function openClientControlForBooking(booking: AppointmentRecord) {
+  async function openClientControlForBooking(
+    booking: AppointmentRecord,
+    preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
+  ) {
     setClientControlMessage(null);
     setManualPaymentMethod(null);
     setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
@@ -1907,10 +1998,11 @@ export function AppointmentsBrowser({
             ? String(booking.priceAmount)
             : "",
         paid: "",
-        staffIds: matchEmployeeIdsForBooking(
-          booking,
-          clientControlEmployees,
-        ),
+        staffIds: preferredTeammate
+          ? [matchEmployeeIdForTeammate(preferredTeammate, clientControlEmployees)].filter(
+              (id): id is string => Boolean(id),
+            )
+          : matchEmployeeIdsForBooking(booking, clientControlEmployees),
         shopifyOrder: booking.bookingStr
           ? booking.bookingStr.replace(/^#/, "")
           : "",
@@ -1964,13 +2056,18 @@ export function AppointmentsBrowser({
     ]);
 
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
+    const preferredEmployeeId = preferredTeammate
+      ? matchEmployeeIdForTeammate(preferredTeammate, employees)
+      : null;
 
     setClientControlForm((current) => {
       if (current.bookingId !== booking.id) return current;
       if (existingAnswers) {
         return {
           ...current,
-          staffIds: current.staffIds.length
+          staffIds: preferredEmployeeId
+            ? [preferredEmployeeId]
+            : current.staffIds.length
             ? current.staffIds
             : matchEmployeeIdsForBooking(booking, employees),
           secondShopifyOrder: String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || ""),
@@ -1992,13 +2089,22 @@ export function AppointmentsBrowser({
       }
       return {
         ...current,
-        staffIds: current.staffIds.length
+        staffIds: preferredEmployeeId
+          ? [preferredEmployeeId]
+          : current.staffIds.length
           ? current.staffIds
           : matchEmployeeIdsForBooking(booking, employees),
         customNoteText:
           current.customNoteText || bookingNotes?.shopifyNote || "",
       };
     });
+
+    if (preferredTeammate && !preferredEmployeeId) {
+      setClientControlMessage({
+        type: "error",
+        text: `${preferredTeammate.name} non è collegata a un profilo interno. Puoi selezionarla manualmente nel Controllo Cliente.`,
+      });
+    }
 
     if (existingAnswers) {
       const secOrder = String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || "").trim();
@@ -2634,12 +2740,12 @@ export function AppointmentsBrowser({
       alert(
         "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
       );
-      return;
+      return false;
     }
 
     if (!nextTeam.length) {
       alert("Seleziona almeno una collaboratrice del salone Corso.");
-      return;
+      return false;
     }
 
     setTeamByBooking((current) => ({ ...current, [booking.id]: nextTeam }));
@@ -2656,6 +2762,7 @@ export function AppointmentsBrowser({
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare il team.");
       }
+      return true;
     } catch (error) {
       console.error("Failed to save appointment team:", error);
       setTeamByBooking((current) => ({
@@ -2667,24 +2774,27 @@ export function AppointmentsBrowser({
           ? error.message
           : "Non sono riuscito a salvare il team. Riprova.",
       );
+      return false;
     } finally {
       setSavingTeamId(null);
     }
   }
 
-  function handleTeamChange(
+  async function selectCollaboratorAndOpenControl(
     booking: AppointmentRecord,
-    teammateIds: string[],
+    teammate: Pick<BookingTeammate, "id" | "name" | "photoUrl">,
   ) {
-    if (isPC) {
-      if (!pcActiveWorker) {
-        setPcScreenLocked(true);
-        return;
-      }
-      executeTeamChange(booking, teammateIds, pcActiveWorker.name);
-    } else {
-      executeTeamChange(booking, teammateIds);
+    if (isPC && !pcActiveWorker) {
+      setPcScreenLocked(true);
+      return;
     }
+    const saved = await executeTeamChange(
+      booking,
+      [teammate.id],
+      isPC ? pcActiveWorker?.name : undefined,
+    );
+    if (!saved) return;
+    await openClientControlForBooking(booking, teammate);
   }
 
   useEffect(() => {
@@ -2865,76 +2975,75 @@ export function AppointmentsBrowser({
     );
   };
 
-  const TeamControl = ({ booking }: { booking: AppointmentRecord }) => {
-    const currentTeam = getBookingTeam(booking);
-    const [draftIds, setDraftIds] = useState(() =>
-      currentTeam.map((mate) => mate.id),
-    );
-
-    useEffect(() => {
-      setDraftIds(currentTeam.map((mate) => mate.id));
-    }, [booking.id, currentTeam]);
-
-    if (!corsoTeamOptions.length) {
-      return (
-        <p className="mt-3 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3 text-xs font-bold text-black/45">
-          Nessuna collaboratrice trovata in Cowlendar.
-        </p>
-      );
-    }
+  const ClientControlStaffPicker = ({ booking }: { booking: AppointmentRecord }) => {
+    const assignedIds = new Set(getBookingTeam(booking).map((mate) => mate.id));
+    const candidates = corsoTeamOptions.map((option) => ({
+      id: option.id,
+      name: option.name,
+      photoUrl: option.photoUrl,
+    }));
 
     return (
-      <div
-        className="mt-4 rounded-2xl border border-black/5 bg-[#FCFCFC] p-3"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
-          Modifica team
-        </p>
-        <div className="mt-3 grid gap-2">
-          {corsoTeamOptions.map((option) => {
-            const checked = draftIds.includes(option.id);
-            return (
-              <label
-                key={option.id}
-                className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white p-2 text-sm font-bold text-[#171717]"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={savingTeamId === booking.id}
-                  onChange={(event) => {
-                    setDraftIds((current) =>
-                      event.target.checked
-                        ? [...new Set([...current, option.id])]
-                        : current.filter((id) => id !== option.id),
-                    );
-                  }}
-                  className="size-4 accent-[#C66170]"
-                />
-                <Avatar
-                  name={option.name}
-                  photoUrl={option.photoUrl}
-                  size="size-9"
-                />
-                <span className="min-w-0 truncate">{option.name}</span>
-              </label>
-            );
-          })}
+      <div className="rounded-[24px] border border-[#F1D7E2] bg-[#FFF9FC] p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FCE5F1] text-[#B83D7F]">
+            <UsersRound className="size-5" />
+          </span>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#B83D7F]">
+              Controllo Cliente
+            </p>
+            <h4 className="text-lg font-black text-[#171717]">
+              Seleziona la collaboratrice
+            </h4>
+            <p className="mt-1 text-xs font-semibold leading-5 text-black/50">
+              La selezione aggiorna Cowlendar e apre il Controllo Cliente con la stessa collaboratrice già impostata.
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          disabled={savingTeamId === booking.id}
-          onClick={() => handleTeamChange(booking, draftIds)}
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#171717] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
-        >
-          {savingTeamId === booking.id ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <UsersRound className="size-4" />
-          )}
-          {savingTeamId === booking.id ? "Salvataggio..." : "Salva team"}
-        </button>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {candidates.map((mate) => (
+            <button
+              key={mate.id}
+              type="button"
+              disabled={savingTeamId === booking.id}
+              onClick={() => void selectCollaboratorAndOpenControl(booking, mate)}
+              className={[
+                "group flex min-h-16 items-center gap-3 rounded-2xl border bg-white p-3 text-left shadow-sm transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-55",
+                assignedIds.has(mate.id) ? "border-[#E88AC5] ring-2 ring-[#FCE5F1]" : "border-black/5",
+              ].join(" ")}
+            >
+              <Avatar name={mate.name} photoUrl={mate.photoUrl} size="size-11" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-black text-[#171717]">
+                  {mate.name}
+                </span>
+                <span className="mt-0.5 block text-[11px] font-bold text-black/40">
+                  {assignedIds.has(mate.id) ? "Attualmente su Cowlendar" : "Assegna e apri controllo"}
+                </span>
+              </span>
+              {savingTeamId === booking.id ? (
+                <Loader2 className="size-4 shrink-0 animate-spin text-[#B83D7F]" />
+              ) : assignedIds.has(mate.id) ? (
+                <Check className="size-4 shrink-0 text-emerald-600" />
+              ) : (
+                <ChevronRight className="size-4 shrink-0 text-[#B83D7F] transition group-hover:translate-x-0.5" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {!candidates.length ? (
+          <button
+            type="button"
+            onClick={() => void openClientControlForBooking(booking)}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#B83D7F] px-4 py-3 text-sm font-black text-white"
+          >
+            <UserRound className="size-4" />
+            Apri e scegli collaboratrice
+          </button>
+        ) : null}
       </div>
     );
   };
@@ -4160,12 +4269,18 @@ export function AppointmentsBrowser({
                           key={option.mode}
                           type="button"
                           onClick={() => {
-                            setDateFilter({
+                            const nextFilter = {
                               mode: option.mode,
                               from: option.from,
                               to: option.to,
-                            });
+                            };
+                            setDateFilter(nextFilter);
                             setIsDatePickerOpen(false);
+                            navigateToAppointmentRange(view, anchorDate, {
+                              from: option.from,
+                              to: option.to,
+                              scopeAll: option.mode === "all",
+                            });
                           }}
                           className={[
                             "rounded-xl px-3 py-2 text-left text-sm font-black transition",
@@ -4208,7 +4323,13 @@ export function AppointmentsBrowser({
                       />
                       <button
                         type="button"
-                        onClick={() => setIsDatePickerOpen(false)}
+                        onClick={() => {
+                          setIsDatePickerOpen(false);
+                          navigateToAppointmentRange(view, anchorDate, {
+                            from: dateFilter.from,
+                            to: dateFilter.to,
+                          });
+                        }}
                         className="h-11 rounded-xl bg-[#1F1F1F] px-4 text-sm font-black text-white"
                       >
                         Applica periodo
@@ -4343,10 +4464,12 @@ export function AppointmentsBrowser({
                 type="button"
                 disabled={isRefreshing}
                 onClick={() => {
-                  setIsRefreshing(true);
-                  const currentSalonSlug = salon === "tutti" ? null : salon;
-                  const targetUrl = appointmentSalonUrl(currentSalonSlug);
-                  router.push(`${targetUrl}?refresh=true`);
+                  navigateToAppointmentRange(view, anchorDate, {
+                    from: dateFilter.from,
+                    to: dateFilter.to,
+                    scopeAll: dateFilter.mode === "all",
+                    forceRefresh: true,
+                  });
                 }}
                 className="flex h-12 items-center justify-center gap-2 rounded-full border border-black bg-black px-5 text-xs font-black uppercase text-white transition hover:bg-[#D93B8F] disabled:opacity-50"
               >
@@ -4773,7 +4896,7 @@ export function AppointmentsBrowser({
                 ) : null}
 
                 <section className="border-t border-[#E8D8CF] pt-5">
-                  <TeamControl booking={selectedBooking} />
+                  <ClientControlStaffPicker booking={selectedBooking} />
                 </section>
               </div>
             </aside>
@@ -4841,7 +4964,12 @@ export function AppointmentsBrowser({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setView(option.value)}
+                onClick={() => {
+                  setView(option.value);
+                  const range = rangeForView(option.value, anchorDate);
+                  setDateFilter({ mode: "custom", ...range });
+                  navigateToAppointmentRange(option.value, anchorDate, range);
+                }}
                 className={[
                   "rounded-full border px-4 py-2 text-sm font-bold transition",
                   view === option.value
@@ -4859,7 +4987,13 @@ export function AppointmentsBrowser({
           <div className="flex items-center gap-2 self-start rounded-full border border-black/5 bg-[#FCFCFC] p-1">
             <button
               type="button"
-              onClick={() => setAnchorDate(getPrevDate(view, anchorDate))}
+              onClick={() => {
+                const nextDate = getPrevDate(view, anchorDate);
+                const range = rangeForView(view, nextDate);
+                setAnchorDate(nextDate);
+                setDateFilter({ mode: "custom", ...range });
+                navigateToAppointmentRange(view, nextDate, range);
+              }}
               className="grid size-10 place-items-center rounded-full text-black/60 transition hover:bg-white hover:text-black"
             >
               <ChevronLeft className="size-4" />
@@ -4869,7 +5003,13 @@ export function AppointmentsBrowser({
             </div>
             <button
               type="button"
-              onClick={() => setAnchorDate(getNextDate(view, anchorDate))}
+              onClick={() => {
+                const nextDate = getNextDate(view, anchorDate);
+                const range = rangeForView(view, nextDate);
+                setAnchorDate(nextDate);
+                setDateFilter({ mode: "custom", ...range });
+                navigateToAppointmentRange(view, nextDate, range);
+              }}
               className="grid size-10 place-items-center rounded-full text-black/60 transition hover:bg-white hover:text-black"
             >
               <ChevronRight className="size-4" />
@@ -4973,6 +5113,9 @@ export function AppointmentsBrowser({
                             onClick={() => {
                               setAnchorDate(date);
                               setView("day");
+                              const range = rangeForView("day", date);
+                              setDateFilter({ mode: "custom", ...range });
+                              navigateToAppointmentRange("day", date, range);
                             }}
                             className="w-full rounded-[14px] bg-black/[0.04] px-2.5 py-2 text-left text-[11px] font-bold text-black/45 transition hover:bg-black/[0.07]"
                           >
@@ -6144,7 +6287,9 @@ export function AppointmentsBrowser({
                       </div>
                     )}
                   </div>
-                  <TeamControl booking={selectedBooking!} />
+                  <div className="mt-4">
+                    <ClientControlStaffPicker booking={selectedBooking!} />
+                  </div>
                 </div>
 
                 <div className="rounded-[24px] border border-black/5 bg-white p-4">

@@ -8,7 +8,6 @@ import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken }
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
-import { syncCowlendarConsultations } from "@/lib/google-calendar";
 import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
@@ -62,6 +61,40 @@ function toIsoBoundary(date: Date, endOfDay = false) {
   if (endOfDay) copy.setHours(23, 59, 59, 999);
   else copy.setHours(0, 0, 0, 0);
   return copy.toISOString();
+}
+
+function parseLocalDateParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [year, month, day] = raw.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) return null;
+  return parsed;
+}
+
+function resolveAppointmentsRange(params: { [key: string]: string | string[] | undefined }) {
+  const today = new Date();
+  if (params.scope === "all") {
+    return {
+      start: new Date(today.getFullYear(), today.getMonth() - 1, 1),
+      end: new Date(today.getFullYear(), today.getMonth() + 4, 0),
+    };
+  }
+  const defaultStart = new Date(today);
+  const defaultEnd = new Date(today);
+
+  const requestedStart = parseLocalDateParam(params.from);
+  const requestedEnd = parseLocalDateParam(params.to);
+  const start = requestedStart || defaultStart;
+  const end = requestedEnd || requestedStart || defaultEnd;
+
+  return start.getTime() <= end.getTime()
+    ? { start, end }
+    : { start: end, end: start };
 }
 
 function dedupeDetails(items: Array<{ label: string; value: string }>) {
@@ -238,6 +271,10 @@ export default async function AppointmentsPage({
 
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
+  const requestedView = resolvedSearchParams?.view;
+  const initialView = requestedView === "week" || requestedView === "month" ? requestedView : "day";
+  const requestedFocus = parseLocalDateParam(resolvedSearchParams?.focus);
+  const appointmentRange = resolveAppointmentsRange(resolvedSearchParams);
   const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
   const kioskWorkerName = typeof resolvedSearchParams?.worker === "string" ? resolvedSearchParams.worker.trim() : "";
 
@@ -284,14 +321,10 @@ export default async function AppointmentsPage({
 
   if (hasCowlendarToken()) {
     try {
-      const now = new Date();
-      const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 4, 0);
-
       [bookings, services] = await Promise.all([
         getCowlendarBookingsForRange({
-          startDate: toIsoBoundary(rangeStart),
-          endDate: toIsoBoundary(rangeEnd, true),
+          startDate: toIsoBoundary(appointmentRange.start),
+          endDate: toIsoBoundary(appointmentRange.end, true),
           limit: 5000,
           forceRefresh,
         }),
@@ -489,14 +522,6 @@ export default async function AppointmentsPage({
     })
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
-  if (hasCowlendarToken() && serializedBookings.length > 0) {
-    try {
-      await syncCowlendarConsultations(serializedBookings);
-    } catch (err) {
-      console.error("Auto-sync Cowlendar consultations failed:", err);
-    }
-  }
-
   return (
     <AppShell
       title="Appuntamenti"
@@ -521,6 +546,11 @@ export default async function AppointmentsPage({
         pcLocationId={pcLocationId}
         initialSalon={initialSalon}
         initialPcWorkerName={kioskWorkerName}
+        initialView={initialView}
+        initialAnchorDate={localDateKey(requestedFocus || new Date())}
+        initialRangeFrom={localDateKey(appointmentRange.start)}
+        initialRangeTo={localDateKey(appointmentRange.end)}
+        initialScopeAll={resolvedSearchParams?.scope === "all"}
         locations={locations}
       />
     </AppShell>
