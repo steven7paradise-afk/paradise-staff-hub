@@ -83,19 +83,19 @@ export default async function ShopifyPaymentsPage(props: {
   const dateFilter = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams.date || ""))
     ? String(searchParams.date)
     : "";
-  const method = ["CARTA", "CASHMATIC", "CONTANTI", "DA_VERIFICARE"].includes(String(searchParams.method))
+  const method = ["CARTA", "CONTANTI", "DA_VERIFICARE"].includes(String(searchParams.method))
     ? String(searchParams.method)
     : "TUTTI";
   const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : "VERIFICATI";
 
   const rows = await getShopifyPaymentRegister({ start, end });
-  const verifiedCardTotal = rows
-    .filter((payment) => payment.verified && payment.method === "CARTA")
+  const verifiedCashTotal = rows
+    .filter((payment) => payment.verified && payment.method === "CONTANTI")
     .reduce((total, payment) => total + payment.amount, 0);
   const todayKey = dateFilter || romeDateKey(new Date());
   const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
-  const todayCardTotal = todayVerifiedRows
-    .filter((payment) => payment.method === "CARTA")
+  const todayCashTotal = todayVerifiedRows
+    .filter((payment) => payment.method === "CONTANTI")
     .reduce((total, payment) => total + payment.amount, 0);
   const scopedRows = dateFilter
     ? rows.filter((payment) => romeDateKey(payment.createdAt) === dateFilter)
@@ -181,10 +181,10 @@ export default async function ShopifyPaymentsPage(props: {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl border border-[#F0A1AF]/40 bg-[#F0A1AF]/15 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta {dayCardSuffix}</p>
-                      <CreditCard className="size-4 text-[#F0A1AF]" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Contanti {dayCardSuffix}</p>
+                      <Coins className="size-4 text-[#F0A1AF]" />
                     </div>
-                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCardTotal)}</p>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCashTotal)}</p>
                   </div>
                   <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
@@ -199,8 +199,8 @@ export default async function ShopifyPaymentsPage(props: {
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Totale mese · {monthLabel}</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Carta mese</p>
-                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCardTotal)}</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Contanti mese</p>
+                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashTotal)}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti mese</p>
@@ -264,7 +264,6 @@ export default async function ShopifyPaymentsPage(props: {
             <select name="method" defaultValue={method} className="min-h-12 rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 text-sm font-bold outline-none focus:border-[#A74758]">
               <option value="TUTTI">Tutti i metodi</option>
               <option value="CARTA">Carta</option>
-              <option value="CASHMATIC">Cashmatic</option>
               <option value="CONTANTI">Contanti</option>
               <option value="DA_VERIFICARE">Da verificare</option>
             </select>
