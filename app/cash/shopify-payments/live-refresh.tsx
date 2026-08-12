@@ -7,10 +7,15 @@ export function ShopifyPaymentsLiveRefresh() {
   const router = useRouter();
 
   useEffect(() => {
+    let lastRefreshAt = Date.now();
     const refresh = () => {
-      if (document.visibilityState === "visible") router.refresh();
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 5 * 60_000) return;
+      lastRefreshAt = now;
+      router.refresh();
     };
-    const timer = window.setInterval(refresh, 60_000);
+    const timer = window.setInterval(refresh, 5 * 60_000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearInterval(timer);

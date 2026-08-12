@@ -78,9 +78,14 @@ async function subscribeToPushNotifications() {
 export function NotificationWatcher({ initialUnread }: { initialUnread: number }) {
   const lastCount = useRef(initialUnread);
   const lastId = useRef<string | null>(null);
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
-    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
-  );
+  // Keep the server render and the browser's first render identical. Reading
+  // Notification.permission during initialization causes a hydration mismatch
+  // because the API does not exist while rendering on the server.
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+
+  useEffect(() => {
+    setPermission("Notification" in window ? Notification.permission : "unsupported");
+  }, []);
 
   useEffect(() => {
     // Register Service Worker for push notifications

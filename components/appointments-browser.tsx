@@ -1160,9 +1160,9 @@ export function AppointmentsBrowser({
     () => dateFromLocalKey(initialAnchorDate) || new Date(),
   );
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
-    () => searchParams.get("booking"),
+    null,
   );
-  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("order") || "");
+  const [searchTerm, setSearchTerm] = useState("");
   const [internalNotes, setInternalNotes] = useState<Record<string, string>>(
     {},
   );
