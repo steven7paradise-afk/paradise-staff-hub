@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { User, MapPin, Calendar, Download, Archive, ArrowLeft, CheckCircle2, Pencil, Check, X, ExternalLink, ShoppingBag, CreditCard, Coins, History, StickyNote } from "lucide-react";
+import { User, MapPin, Calendar, Download, Archive, ArrowLeft, CheckCircle2, Pencil, Check, X, ExternalLink, ShoppingBag, CreditCard, Coins, History, StickyNote, Circle, Info } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,7 @@ export function ResponseDetailView({
   const [editingValue, setEditingValue] = useState<string>("");
   const [customSelectValue, setCustomSelectValue] = useState<string>("");
 
-  const handleSaveAnswer = async (fieldId: string, newValue: string) => {
+  const handleSaveAnswer = async (fieldId: string, newValue: unknown) => {
     try {
       const updatedAnswers = {
         ...response.answers,
@@ -124,6 +124,23 @@ export function ResponseDetailView({
       ? String(response.internal_notes.text || response.internal_notes.note || "")
       : "";
   const activityLog = Array.isArray(response.activity_log) ? response.activity_log : [];
+  const isBooleanField = (field: any, answer: unknown) => field.type === "checkbox" || typeof answer === "boolean" || ["true", "false"].includes(String(answer).toLowerCase());
+  const booleanValue = (answer: unknown) => answer === true || String(answer).toLowerCase() === "true";
+  const isWideField = (field: any) => {
+    const id = String(field.id || "").toLowerCase();
+    return ["textarea", "file", "worker_multi"].includes(field.type) || /staff|products_list|notes_text|description/.test(id);
+  };
+  const answerText = (field: any, answer: unknown) => {
+    const value = Array.isArray(answer) ? answer.join(", ") : String(answer);
+    if (String(field.id || "").includes("payment_method")) {
+      return ({ CARTA: "Carta", CONTANTI: "Contanti", CASHMATIC: "Cashmatic", MISTO: "Pagamento misto", SHOPIFY: "Shopify", DA_VERIFICARE: "Da verificare" } as Record<string, string>)[value.toUpperCase()] || value;
+    }
+    return value;
+  };
+  const activityTitle = (entry: any) => ({
+    CREATED_FROM_TABLET: "Scheda creata dal tablet",
+    STATUS_CHANGE: "Stato aggiornato",
+  } as Record<string, string>)[String(entry.type || "").toUpperCase()] || entry.note || entry.type || "Aggiornamento";
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -202,15 +219,16 @@ export function ResponseDetailView({
         </section>
       ) : null}
 
-      <div className="rounded-[28px] bg-white border border-black/5 shadow-md overflow-hidden">
-        <div className="flex items-center justify-between border-b border-black/5 bg-[#FBF7F9] px-6 py-4">
+      <div className="overflow-hidden rounded-[30px] border border-white/70 bg-white/75 shadow-[0_24px_70px_rgba(71,35,49,0.12)] backdrop-blur-2xl">
+        <div className="flex flex-col gap-4 border-b border-black/5 bg-gradient-to-r from-white/90 via-[#FFF8FB]/90 to-[#F8EDF2]/80 px-6 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#A74758]">
-              Dettagli Invio / Risposta
+            <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">
+              <Info className="size-3.5" /> Scheda operativa
             </span>
-            <h3 className="text-lg font-bold">
+            <h3 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
               {response.form?.name || "Dettagli Modulo"}
             </h3>
+            <p className="mt-1 text-sm font-medium text-black/45">Informazioni, verifiche e attività relative alla cliente.</p>
           </div>
           {response.status === "ARCHIVED" && (
             <span className="rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 px-2.5 py-0.5 text-xs font-bold flex items-center gap-1">
@@ -219,28 +237,28 @@ export function ResponseDetailView({
           )}
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="space-y-8 p-5 sm:p-8">
           {/* Submitter Metadata */}
-          <div className="grid gap-3 grid-cols-2 rounded-2xl bg-[#FBF7F9] border border-black/5 p-4 text-sm">
-            <div className="flex items-center gap-2">
-              <User className="size-4 text-black/40" />
+          <div className="grid overflow-hidden rounded-[22px] border border-black/[0.06] bg-white shadow-sm sm:grid-cols-3">
+            <div className="flex min-h-20 items-center gap-3 border-b border-black/[0.06] px-5 py-4 sm:border-b-0 sm:border-r">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#F8EAF0] text-[#A74758]"><User className="size-4" /></span>
               <div>
-                <span className="block text-[10px] font-bold text-black/40 uppercase">Dipendente</span>
-                <span className="font-semibold">{response.user?.name}</span>
+                <span className="block text-[9px] font-black uppercase tracking-[0.13em] text-black/55">Compilato da</span>
+                <span className="mt-1 block text-sm font-black">{response.user?.name}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <MapPin className="size-4 text-black/40" />
+            <div className="flex min-h-20 items-center gap-3 border-b border-black/[0.06] px-5 py-4 sm:border-b-0 sm:border-r">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#F8EAF0] text-[#A74758]"><MapPin className="size-4" /></span>
               <div>
-                <span className="block text-[10px] font-bold text-black/40 uppercase">Sede</span>
-                <span className="font-semibold">{response.user_location_name || "Nessuna"}</span>
+                <span className="block text-[9px] font-black uppercase tracking-[0.13em] text-black/55">Sede</span>
+                <span className="mt-1 block text-sm font-black">{response.user_location_name || "Nessuna"}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 col-span-2 border-t border-black/5 pt-2 mt-1">
-              <Calendar className="size-4 text-black/40" />
+            <div className="flex min-h-20 items-center gap-3 px-5 py-4">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#F8EAF0] text-[#A74758]"><Calendar className="size-4" /></span>
               <div>
-                <span className="block text-[10px] font-bold text-black/40 uppercase">Inviato il</span>
-                <span className="font-semibold">
+                <span className="block text-[9px] font-black uppercase tracking-[0.13em] text-black/55">Registrato il</span>
+                <span className="mt-1 block text-sm font-black">
                   {new Date(response.created_at).toLocaleString("it-IT")}
                 </span>
               </div>
@@ -248,8 +266,15 @@ export function ResponseDetailView({
           </div>
 
           {/* Answers Grid */}
-          <div className="space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-black/50">Risposte alle Domande</h4>
+          <section>
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Controllo cliente</p>
+                <h4 className="mt-1 text-xl font-black">Dati e verifiche</h4>
+              </div>
+              <p className="text-xs font-semibold text-black/55">Clicca su un dato per modificarlo</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
             
             {response.form?.fields ? (
               (response.form.fields as any[]).map((field) => {
@@ -261,13 +286,18 @@ export function ResponseDetailView({
                 const answer = response.answers[field.id];
                 
                 return (
-                  <div key={field.id} className="border-b border-black/5 pb-3">
-                    <span className="block text-xs font-bold text-black/40">{field.label}</span>
+                  <div key={field.id} className={cn("rounded-[20px] border border-black/[0.06] bg-white p-4 shadow-[0_7px_24px_rgba(44,25,33,0.035)]", isWideField(field) && "md:col-span-2")}>
+                    <span className="block text-[10px] font-black uppercase tracking-[0.12em] text-black/55">{field.label}</span>
                     
                     <div className="mt-1 text-sm text-black">
                       {editingFieldId === field.id ? (
                         <div className="space-y-2 mt-1">
-                          {field.type === "textarea" ? (
+                          {isBooleanField(field, answer) ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <button type="button" onClick={() => void handleSaveAnswer(field.id, true)} className={cn("min-h-11 rounded-xl border text-xs font-black", booleanValue(editingValue) ? "border-emerald-500 bg-emerald-500 text-white" : "border-black/10 bg-white")}>Fatto</button>
+                              <button type="button" onClick={() => void handleSaveAnswer(field.id, false)} className={cn("min-h-11 rounded-xl border text-xs font-black", !booleanValue(editingValue) ? "border-amber-400 bg-amber-50 text-amber-800" : "border-black/10 bg-white")}>Da fare</button>
+                            </div>
+                          ) : field.type === "textarea" ? (
                             <textarea
                               value={editingValue}
                               onChange={(e) => setEditingValue(e.target.value)}
@@ -357,7 +387,7 @@ export function ResponseDetailView({
                           )}
                         >
                           {answer === undefined || answer === null || answer === "" ? (
-                            <div className="bg-[#FBF7F9] p-3 rounded-xl border border-black/5 flex items-center justify-between">
+                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-dashed border-black/10 bg-black/[0.018] p-3">
                               <span className="text-black/30 italic">Nessuna risposta</span>
                               {field.type !== "file" && <Pencil className="size-3.5 text-black/0 group-hover/answer:text-black/30 transition-colors animate-in fade-in duration-200" />}
                             </div>
@@ -382,8 +412,16 @@ export function ResponseDetailView({
                                 Scarica: {answer.name}
                               </a>
                             </div>
+                          ) : isBooleanField(field, answer) ? (
+                            <div className={cn("flex min-h-12 items-center justify-between rounded-xl border px-3", booleanValue(answer) ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800")}>
+                              <span className="inline-flex items-center gap-2 text-sm font-black">
+                                {booleanValue(answer) ? <CheckCircle2 className="size-4" /> : <Circle className="size-4" />}
+                                {booleanValue(answer) ? "Fatto" : "Da fare"}
+                              </span>
+                              <Pencil className="size-3.5 opacity-0 transition group-hover/answer:opacity-50" />
+                            </div>
                           ) : field.type === "money" ? (
-                            <div className="whitespace-pre-line leading-relaxed font-semibold bg-[#FBF7F9] p-3 rounded-xl border border-black/5 text-[#A74758] flex items-center justify-between">
+                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-[#EFD7DE] bg-[#FFF8FA] p-3 font-black leading-relaxed text-[#A74758]">
                               <span>
                                 € {(() => {
                                   const val = parseFloat(answer);
@@ -393,7 +431,7 @@ export function ResponseDetailView({
                               <Pencil className="size-3.5 text-black/0 group-hover/answer:text-[#A74758]/65 transition-colors animate-in fade-in duration-200" />
                             </div>
                           ) : field.type === "date" ? (
-                            <div className="whitespace-pre-line leading-relaxed font-medium bg-[#FBF7F9] p-3 rounded-xl border border-black/5 flex items-center justify-between">
+                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-black/[0.06] bg-[#FBF9FA] p-3 font-semibold leading-relaxed">
                               <span>
                                 {(() => {
                                   const parts = String(answer).split("-");
@@ -406,8 +444,8 @@ export function ResponseDetailView({
                               <Pencil className="size-3.5 text-black/0 group-hover/answer:text-black/30 transition-colors animate-in fade-in duration-200" />
                             </div>
                           ) : (
-                            <div className="whitespace-pre-line leading-relaxed font-medium bg-[#FBF7F9] p-3 rounded-xl border border-black/5 flex items-center justify-between">
-                              <span>{String(answer)}</span>
+                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-black/[0.06] bg-[#FBF9FA] p-3 font-semibold leading-relaxed">
+                              <span className="min-w-0 whitespace-pre-line break-words">{answerText(field, answer)}</span>
                               <Pencil className="size-3.5 text-black/0 group-hover/answer:text-black/30 transition-colors animate-in fade-in duration-200" />
                             </div>
                           )}
@@ -472,7 +510,8 @@ export function ResponseDetailView({
             ) : (
               <p className="text-sm italic text-black/40">Impossibile mappare le domande (modulo eliminato).</p>
             )}
-          </div>
+            </div>
+          </section>
 
           {/* Response Comments */}
           {(internalNoteText || activityLog.length) ? (
@@ -486,7 +525,7 @@ export function ResponseDetailView({
                 <div className="mt-3 space-y-3">
                   {activityLog.length ? activityLog.slice().reverse().map((entry: any, index: number) => (
                     <div key={index} className="border-l-2 border-[#A74758]/25 pl-3 text-xs">
-                      <p className="font-bold text-black/70">{entry.note || entry.type || "Aggiornamento"}</p>
+                      <p className="font-bold text-black/70">{activityTitle(entry)}</p>
                       <p className="mt-0.5 text-black/35">{entry.by || "Staff"}{entry.at ? ` · ${new Date(entry.at).toLocaleString("it-IT")}` : ""}</p>
                     </div>
                   )) : <p className="text-sm text-black/40">Nessuna attività registrata.</p>}
@@ -506,21 +545,21 @@ export function ResponseDetailView({
           />
         </div>
 
-        <div className="flex items-center justify-between bg-[#FBF7F9] px-6 py-4 border-t border-black/5">
+        <div className="sticky bottom-0 flex flex-col-reverse gap-3 border-t border-black/5 bg-white/85 px-5 py-4 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <div>
             {response.status !== "ARCHIVED" && (
               <button
                 type="button"
                 onClick={handleArchiveResponse}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#A74758] text-white px-4 py-2 text-xs font-semibold hover:scale-[1.02] active:scale-[0.98] transition shadow-sm"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#A74758] px-5 text-xs font-black text-white shadow-sm transition hover:bg-[#8F3748] active:scale-[0.98] sm:w-auto"
               >
                 <Archive className="size-3.5" />
                 Marca come Completato
               </button>
             )}
           </div>
-          <Link href={backUrl}>
-            <Button type="button" variant="soft">
+          <Link href={backUrl} className="w-full sm:w-auto">
+            <Button type="button" variant="soft" className="min-h-11 w-full sm:w-auto">
               Chiudi
             </Button>
           </Link>
