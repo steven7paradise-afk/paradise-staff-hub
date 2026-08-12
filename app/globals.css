@@ -1292,11 +1292,11 @@ textarea {
 
 @media (min-width: 1280px) {
   .task-detail-page {
-    left: 264px;
+    left: 0;
   }
 
   .sidebar-collapsed .task-detail-page {
-    left: 88px;
+    left: 0;
   }
 }
 

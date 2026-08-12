@@ -1558,15 +1558,15 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {selected ? (
-        <div ref={taskDetailPageRef} className="task-detail-page fixed inset-y-0 right-0 z-[60] h-dvh overflow-y-auto overscroll-contain bg-[#F8F3F6]">
-          <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-5 sm:pt-6 md:pb-24 xl:px-7 xl:pt-8">
+        <div ref={taskDetailPageRef} className="task-detail-page fixed inset-0 z-[70] h-dvh w-screen overflow-y-auto overscroll-contain bg-[#F8F3F6]">
+          <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5 sm:pt-4 md:pb-24 xl:px-7 xl:pt-3">
             <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
               <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
                 <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
                   <button onClick={() => void openTask(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm"><ArrowLeft className="size-5" /></button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h1 className="truncate text-2xl font-black tracking-tight md:text-3xl">{selected.title}</h1>
+                      <h1 className="min-w-0 whitespace-normal break-words text-xl font-black leading-tight tracking-tight sm:text-2xl md:text-3xl">{selected.title}</h1>
                       <Badge tone={selected.status === "COMPLETED" ? "green" : "gold"}>{statusLabel(selected.status)}</Badge>
                     </div>
                     <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-black/35">{formatCategoryLabel(selected.category)}</p>
