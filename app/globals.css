@@ -52,6 +52,22 @@
   color-scheme: dark;
 }
 
+/* Le tabelle Shopify possono essere alte diverse migliaia di pixel. Su Chrome
+   un backdrop-filter applicato all'intera superficie causa tile vuote durante
+   lo scroll. Questa pagina usa pannelli opachi per mantenere tutte le righe
+   sempre leggibili; il canvas e la sidebar restano Liquid Glass. */
+.app-content-surface .shopify-payments-page .shopify-payments-solid {
+  background-color: #ffffff !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.dark .app-content-surface .shopify-payments-page .shopify-payments-solid {
+  background-color: #26232d !important;
+}
+
 /* Sistema visivo globale: ogni pagina eredita lo stesso canvas Liquid Glass. */
 .app-content-surface {
   background:

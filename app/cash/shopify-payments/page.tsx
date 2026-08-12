@@ -290,7 +290,7 @@ export default async function ShopifyPaymentsPage(props: {
       hideHeader
     >
       <ShopifyPaymentsLiveRefresh />
-      <div className="space-y-5">
+      <div className="shopify-payments-page space-y-5">
         <section className="relative -mx-4 overflow-hidden bg-[#0D0C12] px-5 py-8 text-white sm:mx-0 sm:rounded-[28px] sm:px-8">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(167,71,88,0.34),transparent_34%),linear-gradient(135deg,#0D0C12,#15192A)]" />
           <div className="relative flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
@@ -375,7 +375,7 @@ export default async function ShopifyPaymentsPage(props: {
           </div>
         </section>
 
-        <section className="-mx-4 bg-white px-4 py-5 sm:mx-0 sm:rounded-b-none sm:rounded-t-[24px] sm:border sm:border-b-0 sm:border-black/5 sm:px-5">
+        <section className="shopify-payments-solid -mx-4 bg-white px-4 py-5 sm:mx-0 sm:rounded-b-none sm:rounded-t-[24px] sm:border sm:border-b-0 sm:border-black/5 sm:px-5">
           <div className="mb-5 flex flex-col gap-3 border-b border-black/5 pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A74758]">Incassi confermati da Shopify</p>
@@ -462,7 +462,7 @@ export default async function ShopifyPaymentsPage(props: {
           ) : null}
         </section>
 
-        <section className="!-mt-5 -mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-b-[24px] sm:border sm:border-t-0 sm:border-black/5">
+        <section className="shopify-payments-solid !-mt-5 -mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-b-[24px] sm:border sm:border-t-0 sm:border-black/5">
           <div className="flex items-center justify-between gap-4 border-b border-black/5 px-5 py-5">
             <div>
               <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${status === "DA_CONTROLLARE" ? "text-amber-700" : "text-emerald-700"}`}>
