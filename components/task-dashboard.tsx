@@ -44,6 +44,7 @@ type FreeNoteBlock =
   | { type: "link"; url: string };
 type Task = {
   id: string;
+  detailsLoaded: boolean;
   title: string;
   description: string;
   status: string;
@@ -401,6 +402,10 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [open, setOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Task | null>(null);
+  const [selectedLoading, setSelectedLoading] = useState(false);
+  const [selectedExtrasLoading, setSelectedExtrasLoading] = useState(false);
+  const [selectedLoadError, setSelectedLoadError] = useState("");
+  const detailRequestRef = useRef(0);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
   const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ASSIGNED_TO_ME");
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null);
@@ -623,6 +628,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     setTasks((current) => [
       {
         id: data.id,
+        detailsLoaded: true,
         title: data.title,
         description: data.description,
         status: data.status,
@@ -812,6 +818,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   function mapApiTask(data: any): Task {
     return {
       id: data.id,
+      detailsLoaded: true,
       title: data.title,
       description: data.description,
       status: data.status,
@@ -857,6 +864,76 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         files: comment.files,
       })) : [],
     };
+  }
+
+  async function openTask(task: Task | null) {
+    const requestId = ++detailRequestRef.current;
+    setSelectedLoadError("");
+
+    if (!task) {
+      setSelectedLoading(false);
+      setSelectedExtrasLoading(false);
+      setSelected(null);
+      return;
+    }
+
+    setSelected(task);
+    if (task.detailsLoaded) {
+      setSelectedLoading(false);
+      return;
+    }
+
+    setSelectedLoading(true);
+    try {
+      const response = await fetch(`/api/tasks?id=${encodeURIComponent(task.id)}&section=core`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Impossibile caricare la task");
+      if (detailRequestRef.current !== requestId) return;
+
+      const coreTask = { ...mapApiTask(data), detailsLoaded: false };
+      setTasks((current) => current.map((item) => item.id === coreTask.id ? coreTask : item));
+      setSelected(coreTask);
+      setSelectedLoading(false);
+      setSelectedExtrasLoading(true);
+
+      const extrasResponse = await fetch(`/api/tasks?id=${encodeURIComponent(task.id)}&section=extras`);
+      const extras = await extrasResponse.json();
+      if (!extrasResponse.ok) throw new Error(extras.error || "Impossibile caricare immagini e commenti");
+      if (detailRequestRef.current !== requestId) return;
+
+      const detailedTask: Task = {
+        ...coreTask,
+        detailsLoaded: true,
+        attachmentName: extras.attachment_name ?? null,
+        attachmentUrl: extras.attachment_url ?? null,
+        photoUrl: extras.photo_url ?? null,
+        notes: extras.notes ?? null,
+        completionNote: extras.completion_note ?? null,
+        completionFiles: normalizeCompletionFiles(extras.completion_files),
+        completionLinks: Array.isArray(extras.completion_links) ? extras.completion_links : [],
+        comments: Array.isArray(extras.comments) ? extras.comments.map((comment: any) => ({
+          id: comment.id,
+          message: comment.message,
+          userId: comment.user_id,
+          userName: comment.user.name,
+          userPhoto: comment.user.photo_url ?? null,
+          createdAt: comment.created_at,
+          updatedAt: comment.updated_at,
+          files: comment.files,
+        })) : [],
+      };
+      setTasks((current) => current.map((item) => item.id === detailedTask.id ? detailedTask : item));
+      setSelected(detailedTask);
+    } catch (error) {
+      if (detailRequestRef.current === requestId) {
+        setSelectedLoadError(error instanceof Error ? error.message : "Impossibile caricare la task");
+      }
+    } finally {
+      if (detailRequestRef.current === requestId) {
+        setSelectedLoading(false);
+        setSelectedExtrasLoading(false);
+      }
+    }
   }
 
   function normalizeCompletionFiles(value: unknown): CompletionFile[] {
@@ -998,7 +1075,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   function TaskRow({ task }: { task: Task }) {
     return (
-      <button onClick={() => setSelected(task)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm md:grid-cols-[auto_1fr_120px_130px_90px]">
+      <button onClick={() => void openTask(task)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm md:grid-cols-[auto_1fr_120px_130px_90px]">
         <span className="grid size-5 place-items-center rounded-md border border-black/20">
           {task.status === "COMPLETED" ? <Check className="size-3" /> : null}
         </span>
@@ -1185,7 +1262,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       {view === "HOME" ? (
         <>
           {urgentTask ? (
-          <button onClick={() => setSelected(urgentTask)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-[28px] border border-red-200 bg-red-50 p-5 text-left shadow-sm">
+          <button onClick={() => void openTask(urgentTask)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 rounded-[28px] border border-red-200 bg-red-50 p-5 text-left shadow-sm">
             <div className="grid size-16 place-items-center rounded-full bg-[#E7DDFE] text-[#8064D8]">
               <Flag className="size-7 text-red-600" />
             </div>
@@ -1215,7 +1292,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div className="mt-5 grid gap-3">
                 {expiringTasks.length === 0 ? <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/45">Nessuna scadenza aperta.</p> : null}
                 {expiringTasks.map((task) => (
-                  <button key={task.id} onClick={() => setSelected(task)} className="flex items-center justify-between rounded-2xl border border-black/5 p-4 text-left">
+                  <button key={task.id} onClick={() => void openTask(task)} className="flex items-center justify-between rounded-2xl border border-black/5 p-4 text-left">
                     <div>
                       <p className="font-semibold">{task.title}</p>
                       <p className="text-sm text-black/45">{formatShortDateTime(task.dueDate)}</p>
@@ -1229,7 +1306,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <h2 className="text-2xl font-semibold">Ultime attivita</h2>
               <div className="mt-5 grid gap-3">
                 {recentActivity.map((task) => (
-                  <button key={task.id} onClick={() => setSelected(task)} className="flex items-center gap-3 rounded-2xl bg-[#FAF7F9] p-4 text-left">
+                  <button key={task.id} onClick={() => void openTask(task)} className="flex items-center gap-3 rounded-2xl bg-[#FAF7F9] p-4 text-left">
                     <span className={`size-3 rounded-full ${isCompletedTask(task) ? "bg-emerald-500" : isActiveTask(task) ? "bg-yellow-500" : isWaitingTask(task) ? "bg-violet-500" : "bg-red-500"}`} />
                     <div>
                       <p className="font-semibold">{task.title}</p>
@@ -1244,7 +1321,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
               <div className="mt-5 grid min-w-0 gap-3">
                 {recentComments.length === 0 ? <p className="rounded-2xl bg-[#FAF7F9] p-4 text-sm text-black/45">Nessun commento recente.</p> : null}
                 {recentComments.map((comment) => (
-                  <button key={comment.id} onClick={() => setSelected(personalTasks.find((task) => task.id === comment.taskId) ?? null)} className="flex min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-black/5 p-4 text-left">
+                  <button key={comment.id} onClick={() => void openTask(personalTasks.find((task) => task.id === comment.taskId) ?? null)} className="flex min-w-0 items-start gap-3 overflow-hidden rounded-2xl border border-black/5 p-4 text-left">
                     <Avatar name={comment.userName} photoUrl={comment.userPhoto} className="size-9" />
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <p className="truncate font-semibold">{comment.userName}</p>
@@ -1291,7 +1368,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 {filteredTasks.map((task) => (
                   <tr key={task.id} className="hover:bg-[#FAF7F9]">
                     <td className="px-4 py-4"><input type="checkbox" checked={selectedIds.includes(task.id)} onChange={() => toggleTaskSelection(task.id)} /></td>
-                    <td className="cursor-pointer px-4 py-4 font-semibold" onClick={() => setSelected(task)}>{task.title}<p className="mt-1 line-clamp-1 text-xs font-normal text-black/45">{task.description}</p></td>
+                    <td className="cursor-pointer px-4 py-4 font-semibold" onClick={() => void openTask(task)}>{task.title}</td>
                     <td className="px-4 py-4"><span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${statusClasses(task.status)}`}>{statusLabel(task.status)}</span></td>
                     <td className="px-4 py-4"><Badge tone={priorityTone(task.priority)}>{task.priority}</Badge></td>
                     <td className="px-4 py-4">
@@ -1353,7 +1430,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 <div className="grid gap-3">
                   {column.tasks.length === 0 ? <p className="rounded-2xl bg-white/70 p-4 text-sm text-black/40">Nessuna task.</p> : null}
                   {column.tasks.map((task) => (
-                    <button key={task.id} onClick={() => setSelected(task)} className="rounded-2xl border border-black/5 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <button key={task.id} onClick={() => void openTask(task)} className="rounded-2xl border border-black/5 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="font-semibold leading-5">{task.title}</h3>
                         <span className="text-lg leading-none text-black/35">...</span>
@@ -1434,7 +1511,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                         {visibleDayTasks.map((task) => (
                           <button
                             key={task.id}
-                            onClick={() => setSelected(task)}
+                            onClick={() => void openTask(task)}
                             className={cn(
                               "min-w-0 rounded-xl border text-left text-xs font-semibold leading-snug transition hover:-translate-y-0.5",
                               calendarMode === "WEEK" ? "px-3 py-2" : "px-2 py-1",
@@ -1480,7 +1557,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
             <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
               <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
                 <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
-                  <button onClick={() => setSelected(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm"><ArrowLeft className="size-5" /></button>
+                  <button onClick={() => void openTask(null)} className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAF7F9] shadow-sm"><ArrowLeft className="size-5" /></button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h1 className="truncate text-2xl font-black tracking-tight md:text-3xl">{selected.title}</h1>
@@ -1531,7 +1608,28 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                 </div>
               </div>
             </div>
-            <div className="grid gap-4 xl:grid-cols-[minmax(320px,410px)_minmax(0,1fr)] xl:items-start">
+            {selectedLoading ? (
+              <div className="flex items-center gap-3 rounded-[22px] border border-[#8064D8]/15 bg-white px-5 py-4 shadow-sm" role="status" aria-live="polite">
+                <span className="size-5 animate-spin rounded-full border-2 border-[#8064D8]/20 border-t-[#8064D8]" />
+                <div>
+                  <p className="text-sm font-black">Apro la task</p>
+                  <p className="text-xs text-black/45">Caricamento di immagini, allegati, note e commenti…</p>
+                </div>
+              </div>
+            ) : null}
+            {selectedExtrasLoading && !selectedLoading ? (
+              <div className="flex items-center gap-3 rounded-[22px] border border-black/5 bg-white/80 px-5 py-3 text-black/55 shadow-sm" role="status" aria-live="polite">
+                <span className="size-4 animate-spin rounded-full border-2 border-black/10 border-t-[#8064D8]" />
+                <p className="text-xs font-bold">La task è pronta. Immagini, allegati e commenti stanno arrivando…</p>
+              </div>
+            ) : null}
+            {selectedLoadError ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-red-200 bg-red-50 px-5 py-4 text-red-800">
+                <p className="text-sm font-bold">{selectedLoadError}</p>
+                <button type="button" onClick={() => void openTask(selected)} className="rounded-xl bg-white px-4 py-2 text-xs font-black shadow-sm">Riprova</button>
+              </div>
+            ) : null}
+            <div className={cn("grid gap-4 xl:grid-cols-[minmax(320px,410px)_minmax(0,1fr)] xl:items-start", selectedLoading ? "pointer-events-none opacity-45" : "")}>
             <div className="space-y-4 xl:sticky xl:top-4">
             <Card className="bg-white p-4 md:p-5">
               <div className="flex items-center justify-between gap-3">

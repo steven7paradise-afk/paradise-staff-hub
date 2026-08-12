@@ -44,15 +44,24 @@ export default async function TasksPage() {
     }),
     prisma.staffTask.findMany({
       where: taskWhere,
-      include: {
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        priority: true,
+        category: true,
+        timer_seconds: true,
+        evaluation: true,
+        location_id: true,
+        created_by_id: true,
+        due_date: true,
+        started_at: true,
+        completed_at: true,
+        created_at: true,
+        updated_at: true,
         assignees: { select: { id: true, name: true, photo_url: true } },
         created_by: { select: { id: true, name: true, photo_url: true } },
         location: { select: { id: true, name: true } },
-        comments: {
-          include: { user: { select: { id: true, name: true, photo_url: true } } },
-          orderBy: { created_at: "desc" },
-          take: 30,
-        },
       },
       orderBy: { created_at: "desc" },
       take: 120,
@@ -75,26 +84,21 @@ export default async function TasksPage() {
         initialTasks={tasks.map((task) => ({
           id: task.id,
           title: task.title,
-          description: task.description,
+          description: "",
           status: task.status,
           priority: task.priority,
           category: task.category ?? "Operativa",
-          checklist: Array.isArray(task.checklist) ? task.checklist as { text: string; done: boolean }[] : [],
-          attachmentName: task.attachment_name,
-          attachmentUrl: task.attachment_url,
-          photoUrl: task.photo_url,
-          linkUrl: task.link_url,
-          notes: task.notes,
+          checklist: [],
+          detailsLoaded: false,
+          attachmentName: null,
+          attachmentUrl: null,
+          photoUrl: null,
+          linkUrl: null,
+          notes: null,
           timerSeconds: task.timer_seconds,
-          completionNote: task.completion_note,
-          completionFiles: Array.isArray(task.completion_files)
-            ? task.completion_files.map((item) => {
-                if (typeof item === "string") return { name: item };
-                const record = item as Record<string, unknown>;
-                return { name: String(record.name ?? "file"), url: record.url ? String(record.url) : null };
-              })
-            : [],
-          completionLinks: Array.isArray(task.completion_links) ? task.completion_links.map(String) : [],
+          completionNote: null,
+          completionFiles: [],
+          completionLinks: [],
           evaluation: task.evaluation,
           locationId: task.location_id,
           locationName: task.location.name,
@@ -110,16 +114,7 @@ export default async function TasksPage() {
           completedAt: task.completed_at?.toISOString() ?? null,
           createdAt: task.created_at.toISOString(),
           updatedAt: task.updated_at.toISOString(),
-          comments: [...task.comments].reverse().map((comment) => ({
-            id: comment.id,
-            message: comment.message,
-            userId: comment.user_id,
-            userName: comment.user.name,
-            userPhoto: comment.user.photo_url,
-            files: comment.files as any,
-            createdAt: comment.created_at.toISOString(),
-            updatedAt: comment.updated_at.toISOString(),
-          })),
+          comments: [],
         }))}
       />
     </AppShell>

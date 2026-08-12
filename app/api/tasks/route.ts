@@ -15,6 +15,81 @@ async function getAuthorizedTaskUser(userId: string, role: string) {
   return user;
 }
 
+export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+
+  const currentUser = await getAuthorizedTaskUser(session.user.id, session.user.role);
+  if (!currentUser) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+
+  const id = request.nextUrl.searchParams.get("id")?.trim();
+  const section = request.nextUrl.searchParams.get("section") === "extras" ? "extras" : "core";
+  if (!id) return NextResponse.json({ error: "Task non valida" }, { status: 400 });
+
+  const accessSelect = {
+    assignees: { select: { id: true, name: true, photo_url: true } },
+    created_by: { select: { id: true, name: true, photo_url: true } },
+    location: { select: { id: true, name: true } },
+  } as const;
+  const task = section === "extras"
+    ? await prisma.staffTask.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          location_id: true,
+          created_by_id: true,
+          attachment_name: true,
+          attachment_url: true,
+          photo_url: true,
+          notes: true,
+          completion_note: true,
+          completion_files: true,
+          completion_links: true,
+          comments: {
+            include: { user: { select: { id: true, name: true, photo_url: true } } },
+            orderBy: { created_at: "asc" },
+            take: 30,
+          },
+          ...accessSelect,
+        },
+      })
+    : await prisma.staffTask.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          category: true,
+          checklist: true,
+          link_url: true,
+          timer_seconds: true,
+          evaluation: true,
+          location_id: true,
+          created_by_id: true,
+          due_date: true,
+          started_at: true,
+          completed_at: true,
+          created_at: true,
+          updated_at: true,
+          ...accessSelect,
+        },
+      });
+  if (!task) return NextResponse.json({ error: "Task non trovata" }, { status: 404 });
+
+  const canSeeAllLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const canSeeAllTasks = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role) || canSeeAllLocations;
+  const isAssignee = task.assignees.some((user) => user.id === session.user.id);
+  const locationAllowed = canSeeAllLocations || task.location_id === currentUser.sede_id;
+  const taskAllowed = canSeeAllTasks || task.created_by_id === session.user.id || isAssignee;
+  if (!locationAllowed || !taskAllowed) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  }
+
+  return NextResponse.json(task);
+}
+
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
