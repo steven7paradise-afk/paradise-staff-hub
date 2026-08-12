@@ -77,7 +77,7 @@ function paymentProvider(gateway: unknown, method: string) {
   if (value.includes("paypal")) return "PAYPAL";
   if (value.includes("shopify payments") || value.includes("shopify_payments")) return "SHOPIFY_PAYMENTS";
   if (method === "CONTANTI") return "CONTANTI";
-  if (method === "CASHMATIC") return "CASHMATIC";
+  if (method === "CASHMATIC") return "CONTANTI";
   if (method === "CARTA") return "CARTA";
   return "ALTRO";
 }
@@ -154,7 +154,7 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
       totals.transactions += 1;
       if (method === "CARTA") totals.card += amount;
       else if (method === "CONTANTI") totals.cash += amount;
-      else if (method === "CASHMATIC") totals.cashmatic += amount;
+      else if (method === "CASHMATIC") totals.cash += amount;
       else totals.unclassified += amount;
       const firstName = String(group.order.customer?.first_name || "").trim();
       const lastName = String(group.order.customer?.last_name || "").trim();
@@ -214,12 +214,9 @@ export async function getShopifyPaymentRegister(options: {
       const answers = response.answers as Record<string, unknown>;
       const storedMethod = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "DA_VERIFICARE").toUpperCase();
       const gateway = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentGateway] || "");
-      // Correct the presentation of legacy rows created by the old rule that
-      // incorrectly mapped the Shopify gateway "Cash" to Cashmatic.
-      const detectedGatewayMethod = classifyShopifyPaymentMethod([gateway]);
-      const method = storedMethod === "CASHMATIC" && detectedGatewayMethod === "CONTANTI"
-        ? "CONTANTI"
-        : storedMethod;
+      // Cashmatic is cash for reporting, filtering and reconciliation.
+      // This also normalizes historical responses already stored as CASHMATIC.
+      const method = storedMethod === "CASHMATIC" ? "CONTANTI" : storedMethod;
       const legacyDeclaredMethod = gateway.match(/Dichiarato manualmente:\s*([^·,]+)/i)?.[1]?.trim() || "";
       const baseRow = {
         id: response.id,

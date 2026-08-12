@@ -932,10 +932,10 @@ export function classifyShopifyPaymentMethod(gateways: string[]): "CARTA" | "CAS
   const normalized = gateways.join(" ").toLowerCase();
   if (!normalized) return "DA_VERIFICARE";
 
-  // Cashmatic is a specific automatic cash device. A generic Shopify
-  // gateway such as "Cash" or "Contanti" must never be promoted to it.
+  // Cashmatic is an automatic cash device, but operationally it belongs to
+  // the same accounting bucket as cash. Keep one label and one filter.
   if (/cashmatic|selfpay|inpay/.test(normalized)) {
-    return "CASHMATIC";
+    return "CONTANTI";
   }
 
   if (/\bcash\b|contant|cash on delivery|pagamento manuale|manual payment/.test(normalized)) {

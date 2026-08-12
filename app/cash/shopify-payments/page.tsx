@@ -4,11 +4,9 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Banknote,
   CheckCircle2,
   ClipboardList,
   CreditCard,
-  Coins,
   Search,
   ShieldCheck,
   WalletCards,
@@ -48,7 +46,7 @@ function romeDateKey(date: Date) {
 }
 
 function methodLabel(method: string) {
-  if (method === "CASHMATIC") return "Cashmatic";
+  if (method === "CASHMATIC") return "Contanti";
   if (method === "CONTANTI") return "Contanti";
   if (method === "CARTA") return "Carta";
   return "Da verificare";
@@ -57,6 +55,7 @@ function methodLabel(method: string) {
 function gatewayLabel(gateway: string) {
   const value = gateway.trim();
   if (!value) return "Gateway non rilevato";
+  if (/cashmatic|selfpay|inpay/i.test(value)) return "Contanti";
   return value
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -74,7 +73,7 @@ function providerLabel(provider: string) {
     SATISPAY: "Satispay",
     PAYPAL: "PayPal",
     CONTANTI: "Contanti",
-    CASHMATIC: "Cashmatic",
+    CASHMATIC: "Contanti",
     CARTA: "Altra carta / POS",
     ALTRO: "Altro / da classificare",
   } as Record<string, string>)[provider] || provider;
@@ -106,8 +105,9 @@ export default async function ShopifyPaymentsPage(props: {
   const method = ["CARTA", "CONTANTI", "DA_VERIFICARE"].includes(String(searchParams.method))
     ? String(searchParams.method)
     : "TUTTI";
-  const provider = ["SHOPIFY_PAYMENTS", "SCALAPAY", "KLARNA", "SATISPAY", "PAYPAL", "CONTANTI", "CASHMATIC", "CARTA", "ALTRO"].includes(String(searchParams.provider))
-    ? String(searchParams.provider)
+  const requestedProvider = searchParams.provider === "CASHMATIC" ? "CONTANTI" : String(searchParams.provider);
+  const provider = ["SHOPIFY_PAYMENTS", "SCALAPAY", "KLARNA", "SATISPAY", "PAYPAL", "CONTANTI", "CARTA", "ALTRO"].includes(requestedProvider)
+    ? requestedProvider
     : "TUTTI";
   const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : searchParams.status === "VERIFICATI" ? "VERIFICATI" : "TUTTI";
 
@@ -163,7 +163,7 @@ export default async function ShopifyPaymentsPage(props: {
     const control = controls[0] || null;
     const declaredAmount = control ? control.declaredAmount : 0;
     const amountMatches = Boolean(control) && Math.abs(declaredAmount - payment.amount) < 0.01;
-    const declaredMethodText = control?.declaredMethod || "Non dichiarato";
+    const declaredMethodText = (control?.declaredMethod || "Non dichiarato").replace(/cashmatic/gi, "Contanti");
     const declaredNormalized = declaredMethodText.toLowerCase();
     const methodMatches = Boolean(control) && (
       payment.providers.some((item) => declaredNormalized.includes(providerLabel(item).toLowerCase())) ||
@@ -193,8 +193,7 @@ export default async function ShopifyPaymentsPage(props: {
     : rows;
   const pendingPayments = scopedRows
     .filter((payment) => payment.order && (
-      !payment.verified ||
-      (payment.method === "CASHMATIC" && payment.gateway.includes(","))
+      !payment.verified
     ))
     .map((payment) => ({ id: payment.responseId, order: payment.order }));
   const verifiedCount = reconciledRows.filter((payment) => payment.state === "CONFIRMED").length;
@@ -325,48 +324,18 @@ export default async function ShopifyPaymentsPage(props: {
           </div>
         </section>
 
-        {liveDailyRevenue.available ? (
-          <section className="-mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5">
-            <div className="flex flex-col gap-3 border-b border-black/5 px-5 py-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A74758]">Incassi confermati da Shopify</p>
-                <h2 className="mt-1 text-xl font-black">Entrate per singolo cliente</h2>
-                <p className="mt-1 text-xs font-semibold text-black/45">Ogni importo usa la transazione Shopify effettiva, anche senza Controllo Cliente.</p>
-              </div>
-              <div className="rounded-2xl bg-[#111017] px-4 py-3 text-white">
-                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/45">{clientPayments.length} clienti / ordini</p>
-                <p className="mt-1 text-xl font-black">{formatMoney(liveDailyRevenue.total)}</p>
-              </div>
+        <section className="-mx-4 bg-white px-4 py-5 sm:mx-0 sm:rounded-b-none sm:rounded-t-[24px] sm:border sm:border-b-0 sm:border-black/5 sm:px-5">
+          <div className="mb-5 flex flex-col gap-3 border-b border-black/5 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A74758]">Incassi confermati da Shopify</p>
+              <h2 className="mt-1 text-xl font-black">Entrate e controllo per singolo cliente</h2>
+              <p className="mt-1 max-w-3xl text-xs font-semibold leading-5 text-black/45">Ogni importo usa la transazione Shopify effettiva. Nello stesso registro trovi il cliente, l’ordine, il metodo, il Controllo Cliente e le eventuali differenze.</p>
             </div>
-            {clientPayments.length ? (
-              <div className="divide-y divide-black/5">
-                {clientPayments.map((payment) => {
-                  const methodText = payment.methods.map(methodLabel).join(" + ");
-                  const isUnclassified = payment.methods.includes("DA_VERIFICARE");
-                  return (
-                    <article key={payment.orderId} className="grid gap-3 px-5 py-4 sm:grid-cols-[70px_minmax(0,1fr)_minmax(150px,0.65fr)_130px] sm:items-center">
-                      <div className="flex size-12 items-center justify-center rounded-2xl bg-[#F7E9EF] text-[#A74758]">
-                        {payment.methods.includes("CONTANTI") ? <Coins className="size-5" /> : <CreditCard className="size-5" />}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-black">{payment.clientName}</p>
-                        <p className="mt-1 text-xs font-bold text-black/40">Ordine {payment.orderName.startsWith("#") ? payment.orderName : `#${payment.orderName}`}</p>
-                        <p className="mt-1 text-[10px] font-semibold text-black/35">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(payment.processedAt))} · Shopify</p>
-                      </div>
-                      <div>
-                        <p className={`text-xs font-black ${isUnclassified ? "text-amber-700" : "text-black/70"}`}>{methodText}</p>
-                        <p className="mt-1 truncate text-[10px] font-semibold text-black/35">{payment.gateways.map(gatewayLabel).join(" · ") || "Gateway da classificare"}</p>
-                      </div>
-                      <p className="text-xl font-black tabular-nums sm:text-right">{formatMoney(payment.amount)}</p>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : <p className="px-5 py-12 text-center text-sm font-bold text-black/40">Nessuna entrata Shopify nel giorno selezionato.</p>}
-          </section>
-        ) : null}
-
-        <section className="-mx-4 bg-white px-4 py-5 sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5 sm:px-5">
+            <div className="rounded-2xl bg-[#111017] px-4 py-3 text-white">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/45">{clientPayments.length} clienti / ordini</p>
+              <p className="mt-1 text-xl font-black">{formatMoney(liveDailyRevenue.available ? liveDailyRevenue.total : todayRevenueTotal)}</p>
+            </div>
+          </div>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Link href={`/cash/shopify-payments?month=${monthKey(previousMonth)}&status=${status}`} className="rounded-xl border border-black/10 px-3 py-2 text-xs font-black hover:bg-black/5">Mese prima</Link>
@@ -442,7 +411,7 @@ export default async function ShopifyPaymentsPage(props: {
           ) : null}
         </section>
 
-        <section className="-mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5">
+        <section className="!-mt-5 -mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-b-[24px] sm:border sm:border-t-0 sm:border-black/5">
           <div className="flex items-center justify-between gap-4 border-b border-black/5 px-5 py-5">
             <div>
               <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${status === "DA_CONTROLLARE" ? "text-amber-700" : "text-emerald-700"}`}>
