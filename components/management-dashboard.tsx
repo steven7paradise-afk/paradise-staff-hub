@@ -72,6 +72,7 @@ type AnalyticsWorker = {
 
 type DashboardAnalytics = {
   months: Array<{ key: string; label: string; daysInMonth: number }>;
+  salon: AnalyticsMonth[];
   workers: AnalyticsWorker[];
   ranking: Array<Omit<AnalyticsWorker, "months">>;
   totals: { controls: number; revenue: number };
@@ -119,6 +120,50 @@ function Avatar({ name, photoUrl, size = 44 }: { name: string; photoUrl: string 
   );
 }
 
+const revenueLineColors = ["#F080B7", "#62D4FF", "#72E0B1"];
+
+function ThreeMonthRevenueChart({ months, selectedDay, onSelectDay }: {
+  months: AnalyticsMonth[];
+  selectedDay: number | null;
+  onSelectDay: (day: number) => void;
+}) {
+  const width = 1120;
+  const height = 360;
+  const plot = { left: 76, right: 24, top: 28, bottom: 50 };
+  const plotWidth = width - plot.left - plot.right;
+  const plotHeight = height - plot.top - plot.bottom;
+  const maxRevenue = Math.max(0, ...months.flatMap((month) => month.days.map((day) => day.revenue)));
+  const yMax = Math.max(500, Math.ceil(maxRevenue / 500) * 500);
+  const ticks = Array.from({ length: yMax / 500 + 1 }, (_, index) => index * 500);
+  const x = (day: number) => plot.left + ((day - 1) / 30) * plotWidth;
+  const y = (value: number) => plot.top + plotHeight - (value / yMax) * plotHeight;
+  const line = (month: AnalyticsMonth) => month.days.filter((day) => day.valid).map((day, index) => `${index ? "L" : "M"}${x(day.day)},${y(day.revenue)}`).join(" ");
+  const selectedValues = selectedDay ? months.map((month) => ({ month, day: month.days.find((item) => item.day === selectedDay) })) : [];
+
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div><div className="flex items-center gap-2"><TrendingUp className="size-5 text-[#f080b7]" /><h3 className="font-black">Fatturazione giornaliera · 3 mesi</h3></div><p className="mt-1 text-xs text-white/50">Asse X: giorni 1–31 · Asse Y: ricavo attribuito ogni 500 €</p></div>
+        <div className="flex flex-wrap gap-3">{months.map((month, index) => <span key={month.key} className="inline-flex items-center gap-2 text-[10px] font-black uppercase text-white/70"><span className="size-2.5 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} />{month.label}</span>)}</div>
+      </div>
+      <div className="mt-4 overflow-x-auto pb-2">
+        <div className="relative min-w-[1120px]" style={{ aspectRatio: `${width}/${height}` }}>
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 h-full w-full" role="img" aria-label="Grafico della fatturazione giornaliera negli ultimi tre mesi">
+            {ticks.map((tick) => <g key={tick}><line x1={plot.left} x2={width - plot.right} y1={y(tick)} y2={y(tick)} stroke="rgba(255,255,255,0.10)" /><text x={plot.left - 12} y={y(tick) + 4} textAnchor="end" fill="rgba(255,255,255,0.55)" fontSize="11">{tick.toLocaleString("it-IT")} €</text></g>)}
+            {selectedDay ? <rect x={x(selectedDay) - 16} y={plot.top} width="32" height={plotHeight} rx="12" fill="rgba(255,255,255,0.06)" /> : null}
+            {months.map((month, index) => <g key={month.key}><path d={line(month)} fill="none" stroke={revenueLineColors[index]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /><path d={`${line(month)} L${x(month.daysInMonth)},${plot.top + plotHeight} L${x(1)},${plot.top + plotHeight} Z`} fill={revenueLineColors[index]} opacity="0.055" />{month.days.filter((day) => day.valid && (day.revenue > 0 || day.day === selectedDay)).map((day) => <circle key={day.day} cx={x(day.day)} cy={y(day.revenue)} r={day.day === selectedDay ? 6 : 3.5} fill={revenueLineColors[index]} stroke={day.day === selectedDay ? "white" : "none"} strokeWidth="2" />)}</g>)}
+            {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <text key={day} x={x(day)} y={height - 18} textAnchor="middle" fill={selectedDay === day ? "white" : "rgba(255,255,255,0.48)"} fontSize="10" fontWeight={selectedDay === day ? "800" : "500"}>{day}</text>)}
+          </svg>
+          <div className="absolute" style={{ left: `${plot.left / width * 100}%`, right: `${plot.right / width * 100}%`, top: `${plot.top / height * 100}%`, bottom: `${plot.bottom / height * 100}%` }}>
+            {Array.from({ length: 31 }, (_, index) => index + 1).map((day) => <button key={day} type="button" onClick={() => onSelectDay(day)} aria-pressed={selectedDay === day} aria-label={`Confronta il giorno ${day} nei tre mesi`} className="absolute top-0 h-full min-w-11 -translate-x-1/2 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f8b0d0]" style={{ left: `${(day - 1) / 30 * 100}%`, width: `${100 / 31}%` }} />)}
+          </div>
+        </div>
+      </div>
+      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-2 text-xl font-black tabular-nums text-white">{money.format(day?.revenue || 0)}</p><p className="mt-1 text-[10px] font-semibold text-white/50">{day?.controls || 0} clienti svolti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare lo stesso giorno nei tre mesi.</p>}
+    </div>
+  );
+}
+
 function Metric({ label, value, note, icon: Icon, tone = "pink", active = false, controls, onClick }: {
   label: string;
   value: string;
@@ -161,6 +206,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [selectedComparisonDay, setSelectedComparisonDay] = useState<number | null>(null);
   const [selectedAnalyticsDay, setSelectedAnalyticsDay] = useState<{ monthKey: string; day: number } | null>(null);
   const [dayTooltip, setDayTooltip] = useState<{ x: number; y: number; month: AnalyticsMonth; day: AnalyticsDay } | null>(null);
   const hourlyChartItems = useMemo(() => {
@@ -396,7 +442,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <div className="space-y-7 p-5 lg:p-8">
             <div className="flex gap-3 overflow-x-auto pb-2">
               {analytics.ranking.map((worker, index) => (
-                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId(worker.id); setSelectedAnalyticsDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
+                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId(worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
                   <span className="text-sm font-black text-[#f3a0c8]">#{index + 1}</span>
                   <Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />
                   <span className="min-w-0"><span className="block truncate text-sm font-black">{worker.name}</span><span className="mt-1 block text-xs text-white/55">{worker.controls} schede</span></span>
@@ -405,7 +451,9 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             </div>
 
             {selectedWorker ? (
-              <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+              <div className="space-y-5">
+                <ThreeMonthRevenueChart months={analytics.salon} selectedDay={selectedComparisonDay} onSelectDay={setSelectedComparisonDay} />
+                <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
                 <div className="rounded-[24px] border border-white/15 bg-[#172131] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
                   <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
                   <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-1">
@@ -457,6 +505,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                       })}
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
             ) : null}

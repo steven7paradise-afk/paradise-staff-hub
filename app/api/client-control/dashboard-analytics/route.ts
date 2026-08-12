@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
     }),
   ]);
   const formIds = forms.filter((form) => isClientControlFormName(form.name, form.category)).map((form) => form.id);
-  if (!formIds.length) return NextResponse.json({ months, workers: [], ranking: [], totals: { controls: 0, revenue: 0 } });
+  if (!formIds.length) return NextResponse.json({ months, salon: [], workers: [], ranking: [], totals: { controls: 0, revenue: 0 } });
 
   const responses = await prisma.serviceFormResponse.findMany({
     where: { form_id: { in: formIds }, created_at: { gte: periodStart, lt: periodEnd } },
@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
   const canonicalNames = employees.map((employee) => employee.name);
   const employeeByName = new Map(employees.map((employee) => [resolveCanonicalStaffName(employee.name, canonicalNames), employee]));
   const workerMap = new Map<string, WorkerBucket>();
+  const salonMonths = new Map<string, MonthBucket>();
   for (const employee of employees) {
     const canonical = resolveCanonicalStaffName(employee.name, canonicalNames);
     workerMap.set(canonical, { id: employee.id, name: employee.name, photoUrl: employee.photo_url, months: new Map() });
@@ -126,19 +127,31 @@ export async function GET(request: NextRequest) {
     const location = answers[CLIENT_CONTROL_FIELD_IDS.location] || response.user_location_name;
     if (!isBuenosAires(location) || !countsInAnalytics(answers)) continue;
 
+    const key = monthKey(response.created_at);
+    if (!months.some((month) => month.key === key)) continue;
+    const day = romeDay(response.created_at);
+    const totalRevenue = moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.depositPaid]) + moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]);
+    const services = serviceNames(answers);
+
+    // Salon revenue counts each client control exactly once. It must not grow
+    // when the same client was handled by two or more workers.
+    const salonMonth = salonMonths.get(key) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
+    const salonDay = salonMonth.days.get(day) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+    salonMonth.controls += 1;
+    salonMonth.revenue += totalRevenue;
+    salonDay.controls += 1;
+    salonDay.revenue += totalRevenue;
+    for (const service of services) salonDay.services.set(service, (salonDay.services.get(service) || 0) + 1);
+    salonMonth.days.set(day, salonDay);
+    salonMonths.set(key, salonMonth);
+
     const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
     const owner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
     const names = [...new Set((selectedStaff.length ? selectedStaff : owner.length ? owner : [response.user?.name || ""])
       .map((name) => resolveCanonicalStaffName(name, canonicalNames))
       .filter((name) => employeeByName.has(name)))];
     if (!names.length) continue;
-
-    const key = monthKey(response.created_at);
-    if (!months.some((month) => month.key === key)) continue;
-    const day = romeDay(response.created_at);
-    const totalRevenue = moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.depositPaid]) + moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]);
     const revenueShare = totalRevenue / names.length;
-    const services = serviceNames(answers);
 
     for (const name of names) {
       const worker = workerMap.get(name)!;
@@ -187,8 +200,29 @@ export async function GET(request: NextRequest) {
     };
   }).sort((a, b) => b.controls - a.controls || b.revenue - a.revenue || a.name.localeCompare(b.name, "it"));
 
+  const salon = months.map((monthInfo) => {
+    const month = salonMonths.get(monthInfo.key);
+    return {
+      ...monthInfo,
+      controls: month?.controls || 0,
+      revenue: Math.round((month?.revenue || 0) * 100) / 100,
+      days: Array.from({ length: 31 }, (_, index) => {
+        const day = index + 1;
+        const data = month?.days.get(day);
+        return {
+          day,
+          valid: day <= monthInfo.daysInMonth,
+          controls: data?.controls || 0,
+          revenue: Math.round((data?.revenue || 0) * 100) / 100,
+          services: data ? Array.from(data.services.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count) : [],
+        };
+      }),
+    };
+  });
+
   return NextResponse.json({
     months,
+    salon,
     workers,
     ranking: workers.map(({ id, name, photoUrl, controls, revenue, averageRevenue }) => ({ id, name, photoUrl, controls, revenue, averageRevenue })),
     totals: {
