@@ -1167,7 +1167,11 @@ textarea {
 .mobile-liquid-sidebar {
   isolation: isolate;
   color: var(--dark-sidebar-text);
-  background: color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent);
+  background:
+    linear-gradient(165deg,
+      color-mix(in srgb, var(--sidebar-gradient-from) var(--glass-opacity), transparent) 0%,
+      color-mix(in srgb, var(--sidebar-gradient-mid) var(--glass-opacity), transparent) 52%,
+      color-mix(in srgb, var(--sidebar-gradient-to) var(--glass-opacity), transparent) 100%);
   background-clip: padding-box;
   box-shadow:
     inset -1px 0 0 color-mix(in srgb, white var(--glass-border-opacity), transparent),
@@ -1196,7 +1200,76 @@ textarea {
 }
 
 .mobile-liquid-sidebar input::placeholder {
-  color: rgba(255, 255, 255, 0.66) !important;
+  color: color-mix(in srgb, var(--dark-sidebar-text) 62%, transparent) !important;
+}
+
+.mobile-sidebar-text,
+.mobile-sidebar-link {
+  color: var(--dark-sidebar-text) !important;
+}
+
+.mobile-sidebar-muted,
+.mobile-sidebar-section {
+  color: color-mix(in srgb, var(--dark-sidebar-text) 68%, transparent) !important;
+}
+
+.mobile-sidebar-icon,
+.mobile-sidebar-link-icon {
+  color: var(--dark-sidebar-icon) !important;
+}
+
+.mobile-sidebar-divider,
+.mobile-sidebar-avatar,
+.mobile-sidebar-close,
+.mobile-sidebar-search,
+.mobile-sidebar-muted {
+  border-color: color-mix(in srgb, var(--dark-sidebar-text) var(--glass-border-opacity), transparent) !important;
+}
+
+.mobile-sidebar-avatar {
+  background-color: color-mix(in srgb, var(--sidebar-gradient-mid) 78%, black) !important;
+}
+
+.mobile-sidebar-status {
+  --tw-ring-color: color-mix(in srgb, var(--dark-sidebar-text) 18%, transparent) !important;
+}
+
+.mobile-sidebar-close,
+.mobile-sidebar-search,
+.mobile-sidebar-section:hover {
+  background-color: color-mix(in srgb, var(--dark-sidebar-text) 8%, transparent) !important;
+}
+
+.mobile-sidebar-search {
+  color: var(--dark-sidebar-text) !important;
+}
+
+.mobile-sidebar-link:not(.active):hover {
+  color: var(--dark-sidebar-text) !important;
+  background-color: color-mix(in srgb, var(--dark-sidebar-text) 7%, transparent) !important;
+}
+
+.mobile-sidebar-link.active {
+  color: var(--sidebar-active-text) !important;
+  border-color: color-mix(in srgb, var(--sidebar-active-text) var(--glass-border-opacity), transparent) !important;
+  background-color: var(--sidebar-active-bg) !important;
+}
+
+.mobile-sidebar-link-icon.active {
+  color: var(--sidebar-active-icon) !important;
+  background-color: color-mix(in srgb, var(--sidebar-active-text) 10%, transparent) !important;
+}
+
+.mobile-sidebar-footer > * {
+  color: var(--dark-sidebar-text) !important;
+  border-color: color-mix(in srgb, var(--dark-sidebar-text) var(--glass-border-opacity), transparent) !important;
+  background-color: color-mix(in srgb, var(--dark-sidebar-text) 6%, transparent) !important;
+}
+
+.mobile-sidebar-trigger {
+  color: var(--dark-sidebar-icon) !important;
+  border-color: color-mix(in srgb, var(--dark-sidebar-text) var(--glass-border-opacity), transparent) !important;
+  background-color: color-mix(in srgb, var(--sidebar-gradient-mid) 84%, transparent) !important;
 }
 
 /* Dettaglio Task: pagina autonoma accanto alla sidebar, non più popup. */
@@ -1225,12 +1298,6 @@ textarea {
   .sidebar-collapsed .task-detail-page {
     left: 88px;
   }
-}
-
-.mobile-liquid-sidebar a[aria-current="page"],
-.mobile-liquid-sidebar a:active {
-  border-color: rgba(255, 255, 255, 0.20);
-  background-color: rgba(255, 255, 255, 0.12);
 }
 
 @media (prefers-reduced-transparency: reduce) {
