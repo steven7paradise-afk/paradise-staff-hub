@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
+import { getShopifyRevenueRange } from "@/lib/shopify-payment-register";
 
 export const dynamic = "force-dynamic";
 
@@ -21,28 +22,6 @@ function moneyValue(value: unknown) {
     .replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function validDate(value: unknown) {
-  if (!value) return null;
-  const date = new Date(String(value));
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function verifiedRevenueEvents(answers: Record<string, unknown>) {
-  const breakdown = Array.isArray(answers.client_control_payment_breakdown)
-    ? answers.client_control_payment_breakdown.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    : [];
-  const events = breakdown.flatMap((item) => {
-    const date = validDate(item.processedAt);
-    const amount = moneyValue(item.amount);
-    return date && amount > 0 ? [{ date, amount }] : [];
-  });
-  if (events.length) return events;
-
-  const date = validDate(answers[CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt]);
-  const amount = moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]);
-  return date && amount > 0 ? [{ date, amount }] : [];
 }
 
 function isBuenosAires(value: unknown) {
@@ -85,6 +64,10 @@ function serviceNames(answers: Record<string, unknown>) {
   return raw.split(/[,;\n]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+function cleanOrderCode(value: unknown) {
+  return String(value ?? "").replace(/^#/, "").trim().toLowerCase();
+}
+
 type DayBucket = { controls: number; revenue: number; services: Map<string, number> };
 type MonthBucket = { controls: number; revenue: number; days: Map<number, DayBucket> };
 type WorkerBucket = {
@@ -110,8 +93,11 @@ export async function GET(request: NextRequest) {
     const key = monthKey(date);
     return { key, label: monthLabel(key), daysInMonth: new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate() };
   });
+  const shopifyRangeStart = `${months[0].key}-01`;
+  const monthAfterRange = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const shopifyRangeEnd = `${monthAfterRange.getUTCFullYear()}-${String(monthAfterRange.getUTCMonth() + 1).padStart(2, "0")}-01`;
 
-  const [forms, employees] = await Promise.all([
+  const [forms, employees, shopifyRevenue] = await Promise.all([
     prisma.serviceForm.findMany({ where: { active: true }, select: { id: true, name: true, category: true } }),
     prisma.user.findMany({
       where: {
@@ -125,6 +111,7 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
       select: { id: true, name: true, photo_url: true },
     }),
+    getShopifyRevenueRange(shopifyRangeStart, shopifyRangeEnd),
   ]);
   const formIds = forms.filter((form) => isClientControlFormName(form.name, form.category)).map((form) => form.id);
   if (!formIds.length) return NextResponse.json({ months, salon: [], workers: [], ranking: [], totals: { controls: 0, revenue: 0 } });
@@ -139,6 +126,7 @@ export async function GET(request: NextRequest) {
   const employeeByName = new Map(employees.map((employee) => [resolveCanonicalStaffName(employee.name, canonicalNames), employee]));
   const workerMap = new Map<string, WorkerBucket>();
   const salonMonths = new Map<string, MonthBucket>();
+  const controlsByOrder = new Map<string, { names: string[]; services: string[] }>();
   for (const employee of employees) {
     const canonical = resolveCanonicalStaffName(employee.name, canonicalNames);
     workerMap.set(canonical, { id: employee.id, name: employee.name, photoUrl: employee.photo_url, months: new Map() });
@@ -152,10 +140,6 @@ export async function GET(request: NextRequest) {
     const key = monthKey(response.created_at);
     if (!months.some((month) => month.key === key)) continue;
     const day = romeDay(response.created_at);
-    // Revenue must follow the verified Shopify transaction date. Historical
-    // forms were often imported in bulk, so created_at is not an accounting date.
-    const revenueEvents = verifiedRevenueEvents(answers);
-    const totalRevenue = revenueEvents.reduce((sum, event) => sum + event.amount, 0);
     const services = serviceNames(answers);
 
     // Salon revenue counts each client control exactly once. It must not grow
@@ -168,25 +152,14 @@ export async function GET(request: NextRequest) {
     salonMonth.days.set(day, salonDay);
     salonMonths.set(key, salonMonth);
 
-    for (const event of revenueEvents) {
-      const revenueKey = monthKey(event.date);
-      if (!months.some((month) => month.key === revenueKey)) continue;
-      const revenueDayNumber = romeDay(event.date);
-      const revenueMonth = salonMonths.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
-      const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
-      revenueMonth.revenue += event.amount;
-      revenueDay.revenue += event.amount;
-      revenueMonth.days.set(revenueDayNumber, revenueDay);
-      salonMonths.set(revenueKey, revenueMonth);
-    }
-
     const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
     const owner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
     const names = [...new Set((selectedStaff.length ? selectedStaff : owner.length ? owner : [response.user?.name || ""])
       .map((name) => resolveCanonicalStaffName(name, canonicalNames))
       .filter((name) => employeeByName.has(name)))];
+    const orderCode = cleanOrderCode(answers.second_shopify_order || answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder]);
+    if (orderCode && !controlsByOrder.has(orderCode)) controlsByOrder.set(orderCode, { names, services });
     if (!names.length) continue;
-    const revenueShare = names.length ? totalRevenue / names.length : 0;
 
     for (const name of names) {
       const worker = workerMap.get(name)!;
@@ -198,18 +171,37 @@ export async function GET(request: NextRequest) {
       month.days.set(day, daily);
       worker.months.set(key, month);
 
-      for (const event of revenueEvents) {
-        const revenueKey = monthKey(event.date);
-        if (!months.some((monthInfo) => monthInfo.key === revenueKey)) continue;
-        const revenueDayNumber = romeDay(event.date);
-        const revenueMonth = worker.months.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
-        const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
-        const share = event.amount / names.length;
-        revenueMonth.revenue += share;
-        revenueDay.revenue += share;
-        revenueMonth.days.set(revenueDayNumber, revenueDay);
-        worker.months.set(revenueKey, revenueMonth);
-      }
+    }
+  }
+
+  // Shopify is the accounting source. Controllo Cliente supplies the salon,
+  // services and staff linked through the Shopify order number.
+  for (const payment of shopifyRevenue.payments) {
+    const control = controlsByOrder.get(cleanOrderCode(payment.orderName));
+    if (!control) continue;
+    const paymentDate = new Date(payment.processedAt);
+    const revenueKey = monthKey(paymentDate);
+    if (!months.some((month) => month.key === revenueKey)) continue;
+    const revenueDayNumber = romeDay(paymentDate);
+    const revenueMonth = salonMonths.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
+    const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+    revenueMonth.revenue += payment.amount;
+    revenueDay.revenue += payment.amount;
+    for (const service of control.services) revenueDay.services.set(service, (revenueDay.services.get(service) || 0) + 1);
+    revenueMonth.days.set(revenueDayNumber, revenueDay);
+    salonMonths.set(revenueKey, revenueMonth);
+
+    if (!control.names.length) continue;
+    const share = payment.amount / control.names.length;
+    for (const name of control.names) {
+      const worker = workerMap.get(name);
+      if (!worker) continue;
+      const workerMonth = worker.months.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
+      const workerDay = workerMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+      workerMonth.revenue += share;
+      workerDay.revenue += share;
+      workerMonth.days.set(revenueDayNumber, workerDay);
+      worker.months.set(revenueKey, workerMonth);
     }
   }
 

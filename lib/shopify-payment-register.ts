@@ -40,6 +40,8 @@ export type ShopifyDailyRevenue = {
   }>;
 };
 
+export type ShopifyRevenuePayment = ShopifyDailyRevenue["payments"][number];
+
 function moneyValue(value: unknown) {
   const amount = Number(String(value ?? "0").replace(",", "."));
   return Number.isFinite(amount) ? amount : 0;
@@ -87,16 +89,14 @@ function paymentProvider(gateway: unknown, method: string) {
  * This source is independent from client-control forms, so a paid POS order
  * is counted even before staff complete the operational control.
  */
-export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDailyRevenue> {
+export async function getShopifyRevenueRange(startDateKey: string, endDateKey: string): Promise<ShopifyDailyRevenue> {
   const empty: ShopifyDailyRevenue = { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false, payments: [] };
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
-  if (!shop || !token || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return empty;
+  if (!shop || !token || !/^\d{4}-\d{2}-\d{2}$/.test(startDateKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateKey)) return empty;
 
-  const offset = romeOffset(dateKey);
-  const start = new Date(`${dateKey}T00:00:00${offset}`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  const start = new Date(`${startDateKey}T00:00:00${romeOffset(startDateKey)}`);
+  const end = new Date(`${endDateKey}T00:00:00${romeOffset(endDateKey)}`);
   const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
   const initialUrl = new URL(`https://${shop}/admin/api/2024-04/orders.json`);
   initialUrl.searchParams.set("status", "any");
@@ -113,8 +113,8 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
       email?: string;
     }> = [];
     let nextUrl: string | null = initialUrl.toString();
-    for (let page = 0; nextUrl && page < 4; page += 1) {
-      const response: Response = await fetch(nextUrl, { headers, signal: AbortSignal.timeout(7000), next: { revalidate: 60 } });
+    for (let page = 0; nextUrl && page < 20; page += 1) {
+      const response: Response = await fetch(nextUrl, { headers, signal: AbortSignal.timeout(12000), next: { revalidate: 300 } });
       if (!response.ok) throw new Error(`Shopify orders ${response.status}`);
       const data = await response.json();
       if (Array.isArray(data?.orders)) orders.push(...data.orders);
@@ -127,8 +127,8 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
       const results = await Promise.all(batch.map(async (order) => {
         const response = await fetch(`https://${shop}/admin/api/2024-04/orders/${order.id}/transactions.json`, {
           headers,
-          signal: AbortSignal.timeout(7000),
-          next: { revalidate: 60 },
+          signal: AbortSignal.timeout(12000),
+          next: { revalidate: 300 },
         });
         if (!response.ok) return { order, transactions: [] };
         const data = await response.json();
@@ -143,7 +143,7 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
       for (const transaction of group.transactions) {
       const id = String(transaction?.id || transaction?.authorization || "");
       const processedAt = paymentDate(transaction?.processed_at || transaction?.created_at, new Date(0));
-      if (!id || seen.has(id) || romeDateKey(processedAt) !== dateKey) continue;
+      if (!id || seen.has(id) || processedAt < start || processedAt >= end) continue;
       if (String(transaction?.status).toLowerCase() !== "success") continue;
       if (!["sale", "capture"].includes(String(transaction?.kind).toLowerCase())) continue;
       const amount = moneyValue(transaction?.amount);
@@ -177,6 +177,16 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
     console.error("Unable to load Shopify daily revenue:", error);
     return empty;
   }
+}
+
+export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDailyRevenue> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    return { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false, payments: [] };
+  }
+  const end = new Date(`${dateKey}T12:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  const endKey = end.toISOString().slice(0, 10);
+  return getShopifyRevenueRange(dateKey, endKey);
 }
 
 export async function getShopifyPaymentRegister(options: {
