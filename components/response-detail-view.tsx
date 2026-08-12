@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { User, MapPin, Calendar, Download, Archive, ArrowLeft, CheckCircle2, Pencil, Check, X, ExternalLink, ShoppingBag, CreditCard, Coins, History, StickyNote, Circle, Info } from "lucide-react";
+import { User, MapPin, Calendar, Download, Archive, ArrowLeft, CheckCircle2, Pencil, Check, X, ExternalLink, ShoppingBag, CreditCard, Coins, History, StickyNote, Circle, Info, Mail, Phone, WalletCards, UsersRound, PackageCheck, Camera, Instagram, Star, BadgeCheck, Hash, FileText } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
 import { ResponseComments } from "@/components/response-comments";
 import { cn } from "@/lib/utils";
@@ -141,6 +142,25 @@ export function ResponseDetailView({
     CREATED_FROM_TABLET: "Scheda creata dal tablet",
     STATUS_CHANGE: "Stato aggiornato",
   } as Record<string, string>)[String(entry.type || "").toUpperCase()] || entry.note || entry.type || "Aggiornamento";
+  const fieldPresentation = (field: any): { icon: LucideIcon; tone: string } => {
+    const key = `${field.id || ""} ${field.label || ""}`.toLowerCase();
+    if (/email/.test(key)) return { icon: Mail, tone: "bg-sky-50 text-sky-700" };
+    if (/telefono|phone/.test(key)) return { icon: Phone, tone: "bg-emerald-50 text-emerald-700" };
+    if (/sede|location/.test(key)) return { icon: MapPin, tone: "bg-violet-50 text-violet-700" };
+    if (/acconto|pagato|payment|importo/.test(key) || field.type === "money") return { icon: WalletCards, tone: "bg-amber-50 text-amber-700" };
+    if (/responsabile|service_owner/.test(key)) return { icon: User, tone: "bg-rose-50 text-rose-700" };
+    if (/staff|lavorato|collaborator/.test(key) || field.type === "worker_multi") return { icon: UsersRound, tone: "bg-fuchsia-50 text-fuchsia-700" };
+    if (/ordine|shopify/.test(key)) return { icon: ShoppingBag, tone: "bg-slate-100 text-slate-700" };
+    if (/prodott/.test(key)) return { icon: PackageCheck, tone: "bg-teal-50 text-teal-700" };
+    if (/foto|video|media/.test(key) || field.type === "file") return { icon: Camera, tone: "bg-pink-50 text-pink-700" };
+    if (/instagram|ig tag/.test(key)) return { icon: Instagram, tone: "bg-purple-50 text-purple-700" };
+    if (/recensione|review/.test(key)) return { icon: Star, tone: "bg-yellow-50 text-yellow-700" };
+    if (/corrett|stato|verific/.test(key)) return { icon: BadgeCheck, tone: "bg-emerald-50 text-emerald-700" };
+    if (/nome|client/.test(key)) return { icon: User, tone: "bg-[#F8EAF0] text-[#A74758]" };
+    if (/numero|codice/.test(key) || field.type === "number") return { icon: Hash, tone: "bg-slate-100 text-slate-700" };
+    if (/note|descrizione/.test(key) || field.type === "textarea") return { icon: StickyNote, tone: "bg-orange-50 text-orange-700" };
+    return { icon: FileText, tone: "bg-[#F8EAF0] text-[#A74758]" };
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -284,12 +304,41 @@ export function ResponseDetailView({
                 }
 
                 const answer = response.answers[field.id];
+                const presentation = fieldPresentation(field);
+                const FieldIcon = presentation.icon;
+                const hasAnswer = answer !== undefined && answer !== null && answer !== "";
+                const showsSupportingContent = editingFieldId === field.id || !hasAnswer || field.type === "file" || isBooleanField(field, answer);
                 
                 return (
-                  <div key={field.id} className={cn("rounded-[20px] border border-black/[0.06] bg-white p-4 shadow-[0_7px_24px_rgba(44,25,33,0.035)]", isWideField(field) && "md:col-span-2")}>
-                    <span className="block text-[10px] font-black uppercase tracking-[0.12em] text-black/55">{field.label}</span>
-                    
-                    <div className="mt-1 text-sm text-black">
+                  <article key={field.id} className={cn("group/card relative overflow-hidden rounded-[22px] border border-black/[0.06] bg-gradient-to-br from-white to-[#FCF9FA] p-4 shadow-[0_8px_28px_rgba(44,25,33,0.04)] transition hover:-translate-y-0.5 hover:border-[#A74758]/20 hover:shadow-[0_16px_38px_rgba(71,35,49,0.08)] sm:p-5", isWideField(field) && "md:col-span-2")}>
+                    <div className="flex items-start gap-3">
+                      <span className={cn("grid size-11 shrink-0 place-items-center rounded-[14px]", presentation.tone)}>
+                        <FieldIcon className="size-[19px]" strokeWidth={1.8} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-[10px] font-black uppercase tracking-[0.12em] text-black/55">{field.label}</span>
+                        {editingFieldId !== field.id && answer !== undefined && answer !== null && answer !== "" && !isBooleanField(field, answer) && field.type !== "file" ? (
+                          <p className={cn("mt-1 min-w-0 whitespace-pre-line break-words text-[15px] font-bold leading-6 text-[#242126]", field.type === "money" && "text-lg text-[#A74758]")}>{field.type === "money" ? `€ ${(Number(answer) || 0).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : field.type === "date" ? String(answer).split("-").reverse().join("/") : answerText(field, answer)}</p>
+                        ) : null}
+                      </div>
+                      {field.type !== "file" && editingFieldId !== field.id ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingFieldId(field.id);
+                            setEditingValue(answer === undefined || answer === null ? "" : String(answer));
+                            setCustomSelectValue("");
+                          }}
+                          className="grid size-11 shrink-0 place-items-center rounded-full border border-black/[0.06] bg-white text-black/35 opacity-70 shadow-sm transition hover:border-[#A74758]/20 hover:bg-[#FFF5F8] hover:text-[#A74758] group-hover/card:opacity-100"
+                          aria-label={`Modifica ${field.label}`}
+                          title={`Modifica ${field.label}`}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className={cn("text-sm text-black", editingFieldId === field.id ? "mt-4" : "mt-3", !showsSupportingContent && "hidden")}>
                       {editingFieldId === field.id ? (
                         <div className="space-y-2 mt-1">
                           {isBooleanField(field, answer) ? (
@@ -373,23 +422,10 @@ export function ResponseDetailView({
                           </div>
                         </div>
                       ) : (
-                        <div 
-                          onClick={() => {
-                            if (field.type !== "file") {
-                              setEditingFieldId(field.id);
-                              setEditingValue(answer === undefined || answer === null ? "" : String(answer));
-                              setCustomSelectValue("");
-                            }
-                          }}
-                          className={cn(
-                            "group/answer relative transition-all duration-200 rounded-xl",
-                            field.type !== "file" && "cursor-pointer hover:ring-1 hover:ring-[#A74758]/50"
-                          )}
-                        >
+                        <div className="relative">
                           {answer === undefined || answer === null || answer === "" ? (
-                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-dashed border-black/10 bg-black/[0.018] p-3">
-                              <span className="text-black/30 italic">Nessuna risposta</span>
-                              {field.type !== "file" && <Pencil className="size-3.5 text-black/0 group-hover/answer:text-black/30 transition-colors animate-in fade-in duration-200" />}
+                            <div className="flex min-h-12 items-center rounded-xl border border-dashed border-black/10 bg-black/[0.018] px-3">
+                              <span className="text-sm font-medium text-black/35">Informazione non inserita</span>
                             </div>
                           ) : field.type === "file" && typeof answer === "object" ? (
                             <div className="space-y-3 mt-1.5">
@@ -418,36 +454,9 @@ export function ResponseDetailView({
                                 {booleanValue(answer) ? <CheckCircle2 className="size-4" /> : <Circle className="size-4" />}
                                 {booleanValue(answer) ? "Fatto" : "Da fare"}
                               </span>
-                              <Pencil className="size-3.5 opacity-0 transition group-hover/answer:opacity-50" />
-                            </div>
-                          ) : field.type === "money" ? (
-                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-[#EFD7DE] bg-[#FFF8FA] p-3 font-black leading-relaxed text-[#A74758]">
-                              <span>
-                                € {(() => {
-                                  const val = parseFloat(answer);
-                                  return isNaN(val) ? String(answer) : val.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                })()}
-                              </span>
-                              <Pencil className="size-3.5 text-black/0 group-hover/answer:text-[#A74758]/65 transition-colors animate-in fade-in duration-200" />
-                            </div>
-                          ) : field.type === "date" ? (
-                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-black/[0.06] bg-[#FBF9FA] p-3 font-semibold leading-relaxed">
-                              <span>
-                                {(() => {
-                                  const parts = String(answer).split("-");
-                                  if (parts.length === 3) {
-                                    return `${parts[2]}/${parts[1]}/${parts[0]}`;
-                                  }
-                                  return String(answer);
-                                })()}
-                              </span>
-                              <Pencil className="size-3.5 text-black/0 group-hover/answer:text-black/30 transition-colors animate-in fade-in duration-200" />
                             </div>
                           ) : (
-                            <div className="flex min-h-12 items-center justify-between rounded-xl border border-black/[0.06] bg-[#FBF9FA] p-3 font-semibold leading-relaxed">
-                              <span className="min-w-0 whitespace-pre-line break-words">{answerText(field, answer)}</span>
-                              <Pencil className="size-3.5 text-black/0 group-hover/answer:text-black/30 transition-colors animate-in fade-in duration-200" />
-                            </div>
+                            <span className="sr-only">{answerText(field, answer)}</span>
                           )}
                         </div>
                       )}
@@ -504,7 +513,7 @@ export function ResponseDetailView({
                         </div>
                       </div>
                     )}
-                  </div>
+                  </article>
                 );
               })
             ) : (
