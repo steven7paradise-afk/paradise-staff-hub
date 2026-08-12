@@ -406,6 +406,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [selectedExtrasLoading, setSelectedExtrasLoading] = useState(false);
   const [selectedLoadError, setSelectedLoadError] = useState("");
   const detailRequestRef = useRef(0);
+  const taskDetailPageRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
   const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ASSIGNED_TO_ME");
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreview | null>(null);
@@ -440,6 +441,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     photoUrl: "",
     checklistText: "",
   });
+
+  useEffect(() => {
+    if (!selected?.id) return;
+    taskDetailPageRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [selected?.id]);
 
   const baseTasks = useMemo(() => {
     return canAssign 
@@ -1552,8 +1558,8 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {selected ? (
-        <div className="task-detail-page fixed inset-y-0 right-0 z-30 overflow-y-auto overscroll-contain bg-[#F8F3F6]">
-          <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[calc(env(safe-area-inset-top)+16px)] sm:px-5 md:pb-24 xl:px-7 xl:pt-7">
+        <div ref={taskDetailPageRef} className="task-detail-page fixed inset-y-0 right-0 z-[60] h-dvh overflow-y-auto overscroll-contain bg-[#F8F3F6]">
+          <div className="mx-auto min-h-full w-full max-w-[1440px] space-y-3 px-3 pb-28 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-5 sm:pt-6 md:pb-24 xl:px-7 xl:pt-8">
             <div className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm">
               <div className="grid gap-0 md:grid-cols-[minmax(0,1.25fr)_220px_minmax(220px,0.65fr)_minmax(220px,0.65fr)_auto] md:items-stretch">
                 <div className="flex min-w-0 items-center gap-3 border-b border-black/5 p-4 md:border-b-0 md:border-r">
