@@ -354,6 +354,27 @@ model Notification {
   @@map("notifications")
 }
 
+model ShopifyPaymentReview {
+  id                 String   @id @default(cuid())
+  order_id           String   @unique
+  order_name         String
+  client_name        String
+  amount             Float
+  methods            Json?
+  response_id        String?
+  status             String   @default("REQUESTED")
+  requested_by_id    String
+  requested_by_name  String?
+  requested_at       DateTime @default(now())
+  confirmed_by_id    String?
+  confirmed_by_name  String?
+  confirmed_at       DateTime?
+  updated_at         DateTime @updatedAt
+
+  @@index([status, requested_at])
+  @@map("shopify_payment_reviews")
+}
+
 model ServiceForm {
   id                   String                @id @default(cuid())
   name                 String
