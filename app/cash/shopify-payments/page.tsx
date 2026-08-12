@@ -4,12 +4,12 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  CalendarCheck,
   CheckCircle2,
   ClipboardList,
   CreditCard,
   Search,
   ShieldCheck,
+  SquareArrowOutUpRight,
   WalletCards,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -81,22 +81,9 @@ function providerLabel(provider: string) {
   } as Record<string, string>)[provider] || provider;
 }
 
-function appointmentUrl(payment: { orderName: string; processedAt: string; control?: { bookingId?: string; locationName?: string | null } | null }) {
-  const location = String(payment.control?.locationName || "").toLowerCase();
-  const base = location.includes("buenos") || location.includes("corso")
-    ? "/appointments/buenos-aires"
-    : "/appointments";
-  const params = new URLSearchParams();
-  const date = romeDateKey(new Date(payment.processedAt));
-  if (payment.control?.bookingId) {
-    params.set("from", date);
-    params.set("to", date);
-    params.set("booking", payment.control.bookingId);
-  } else {
-    params.set("scope", "all");
-    params.set("order", payment.orderName);
-  }
-  return `${base}?${params.toString()}`;
+function shopifyAdminOrderUrl(orderId: string) {
+  const numericId = orderId.match(/(\d+)$/)?.[1] || orderId;
+  return `https://admin.shopify.com/store/c1uzax-u0/orders/${encodeURIComponent(numericId)}`;
 }
 
 export default async function ShopifyPaymentsPage(props: {
@@ -517,12 +504,14 @@ export default async function ShopifyPaymentsPage(props: {
                         </Link>
                       </div> : null}
                       {!isConfirmed ? (
-                        <Link
-                          href={appointmentUrl(payment)}
+                        <a
+                          href={shopifyAdminOrderUrl(payment.orderId)}
+                          target="_blank"
+                          rel="noreferrer"
                           className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#A74758]/20 bg-white px-3 text-[10px] font-black uppercase text-[#873647] transition hover:bg-[#FFF2F5]"
                         >
-                          <CalendarCheck className="size-3.5" /> Apri prenotazione
-                        </Link>
+                          <SquareArrowOutUpRight className="size-3.5" /> Apri ordine Shopify
+                        </a>
                       ) : null}
                     </div>
                     <div className="rounded-2xl bg-[#F7F8FA] p-3">
