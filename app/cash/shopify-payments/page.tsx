@@ -98,6 +98,35 @@ export default async function ShopifyPaymentsPage(props: {
     .reduce((total, payment) => total + payment.amount, 0);
   const todayKey = dateFilter || romeDateKey(new Date());
   const liveDailyRevenue = await getShopifyDailyRevenue(todayKey);
+  const clientPayments = Array.from(liveDailyRevenue.payments.reduce((groups, payment) => {
+    const key = payment.orderId;
+    const current = groups.get(key);
+    groups.set(key, current
+      ? {
+          ...current,
+          amount: current.amount + payment.amount,
+          methods: [...new Set([...current.methods, payment.method])],
+          gateways: [...new Set([...current.gateways, payment.gateway].filter(Boolean))],
+        }
+      : {
+          orderId: payment.orderId,
+          orderName: payment.orderName,
+          clientName: payment.clientName,
+          amount: payment.amount,
+          methods: [payment.method],
+          gateways: payment.gateway ? [payment.gateway] : [],
+          processedAt: payment.processedAt,
+        });
+    return groups;
+  }, new Map<string, {
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    methods: string[];
+    gateways: string[];
+    processedAt: string;
+  }>()).values());
   const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
   const todayRevenueTotal = todayVerifiedRows.reduce((total, payment) => total + payment.amount, 0);
   const todayCardTotal = todayVerifiedRows
@@ -238,6 +267,47 @@ export default async function ShopifyPaymentsPage(props: {
             <PaymentControlButton payments={pendingPayments} />
           </div>
         </section>
+
+        {liveDailyRevenue.available ? (
+          <section className="-mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5">
+            <div className="flex flex-col gap-3 border-b border-black/5 px-5 py-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A74758]">Incassi confermati da Shopify</p>
+                <h2 className="mt-1 text-xl font-black">Entrate per singolo cliente</h2>
+                <p className="mt-1 text-xs font-semibold text-black/45">Ogni importo usa la transazione Shopify effettiva, anche senza Controllo Cliente.</p>
+              </div>
+              <div className="rounded-2xl bg-[#111017] px-4 py-3 text-white">
+                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/45">{clientPayments.length} clienti / ordini</p>
+                <p className="mt-1 text-xl font-black">{formatMoney(liveDailyRevenue.total)}</p>
+              </div>
+            </div>
+            {clientPayments.length ? (
+              <div className="divide-y divide-black/5">
+                {clientPayments.map((payment) => {
+                  const methodText = payment.methods.map(methodLabel).join(" + ");
+                  const isUnclassified = payment.methods.includes("DA_VERIFICARE");
+                  return (
+                    <article key={payment.orderId} className="grid gap-3 px-5 py-4 sm:grid-cols-[70px_minmax(0,1fr)_minmax(150px,0.65fr)_130px] sm:items-center">
+                      <div className="flex size-12 items-center justify-center rounded-2xl bg-[#F7E9EF] text-[#A74758]">
+                        {payment.methods.includes("CONTANTI") ? <Coins className="size-5" /> : <CreditCard className="size-5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black">{payment.clientName}</p>
+                        <p className="mt-1 text-xs font-bold text-black/40">Ordine {payment.orderName.startsWith("#") ? payment.orderName : `#${payment.orderName}`}</p>
+                        <p className="mt-1 text-[10px] font-semibold text-black/35">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(payment.processedAt))} · Shopify</p>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-black ${isUnclassified ? "text-amber-700" : "text-black/70"}`}>{methodText}</p>
+                        <p className="mt-1 truncate text-[10px] font-semibold text-black/35">{payment.gateways.map(gatewayLabel).join(" · ") || "Gateway da classificare"}</p>
+                      </div>
+                      <p className="text-xl font-black tabular-nums sm:text-right">{formatMoney(payment.amount)}</p>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : <p className="px-5 py-12 text-center text-sm font-bold text-black/40">Nessuna entrata Shopify nel giorno selezionato.</p>}
+          </section>
+        ) : null}
 
         <section className="-mx-4 bg-white px-4 py-5 sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5 sm:px-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

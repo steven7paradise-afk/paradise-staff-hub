@@ -24,6 +24,16 @@ export type ShopifyDailyRevenue = {
   unclassified: number;
   transactions: number;
   available: boolean;
+  payments: Array<{
+    id: string;
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    method: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
+    gateway: string;
+    processedAt: string;
+  }>;
 };
 
 function moneyValue(value: unknown) {
@@ -61,7 +71,7 @@ function romeOffset(dateKey: string) {
  * is counted even before staff complete the operational control.
  */
 export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDailyRevenue> {
-  const empty: ShopifyDailyRevenue = { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false };
+  const empty: ShopifyDailyRevenue = { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false, payments: [] };
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
   if (!shop || !token || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return empty;
@@ -76,10 +86,15 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
   initialUrl.searchParams.set("limit", "250");
   initialUrl.searchParams.set("updated_at_min", start.toISOString());
   initialUrl.searchParams.set("updated_at_max", end.toISOString());
-  initialUrl.searchParams.set("fields", "id,name,updated_at");
+  initialUrl.searchParams.set("fields", "id,name,customer,email,updated_at");
 
   try {
-    const orders: Array<{ id: string | number }> = [];
+    const orders: Array<{
+      id: string | number;
+      name?: string;
+      customer?: { first_name?: string; last_name?: string; email?: string } | null;
+      email?: string;
+    }> = [];
     let nextUrl: string | null = initialUrl.toString();
     for (let page = 0; nextUrl && page < 4; page += 1) {
       const response: Response = await fetch(nextUrl, { headers, signal: AbortSignal.timeout(7000), next: { revalidate: 60 } });
@@ -89,7 +104,7 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
       nextUrl = response.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i)?.[1] || null;
     }
 
-    const transactionGroups: any[][] = [];
+    const transactionGroups: Array<{ order: (typeof orders)[number]; transactions: any[] }> = [];
     for (let index = 0; index < orders.length; index += 8) {
       const batch = orders.slice(index, index + 8);
       const results = await Promise.all(batch.map(async (order) => {
@@ -98,16 +113,17 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
           signal: AbortSignal.timeout(7000),
           next: { revalidate: 60 },
         });
-        if (!response.ok) return [];
+        if (!response.ok) return { order, transactions: [] };
         const data = await response.json();
-        return Array.isArray(data?.transactions) ? data.transactions : [];
+        return { order, transactions: Array.isArray(data?.transactions) ? data.transactions : [] };
       }));
       transactionGroups.push(...results);
     }
 
     const seen = new Set<string>();
     const totals = { ...empty, available: true };
-    for (const transaction of transactionGroups.flat()) {
+    for (const group of transactionGroups) {
+      for (const transaction of group.transactions) {
       const id = String(transaction?.id || transaction?.authorization || "");
       const processedAt = paymentDate(transaction?.processed_at || transaction?.created_at, new Date(0));
       if (!id || seen.has(id) || romeDateKey(processedAt) !== dateKey) continue;
@@ -123,7 +139,21 @@ export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDa
       else if (method === "CONTANTI") totals.cash += amount;
       else if (method === "CASHMATIC") totals.cashmatic += amount;
       else totals.unclassified += amount;
+      const firstName = String(group.order.customer?.first_name || "").trim();
+      const lastName = String(group.order.customer?.last_name || "").trim();
+      totals.payments.push({
+        id,
+        orderId: String(group.order.id),
+        orderName: String(group.order.name || group.order.id),
+        clientName: [firstName, lastName].filter(Boolean).join(" ") || "Cliente Shopify",
+        amount,
+        method,
+        gateway: String(transaction?.gateway || ""),
+        processedAt: processedAt.toISOString(),
+      });
+      }
     }
+    totals.payments.sort((a, b) => new Date(b.processedAt).getTime() - new Date(a.processedAt).getTime());
     return totals;
   } catch (error) {
     console.error("Unable to load Shopify daily revenue:", error);
