@@ -1,5 +1,6 @@
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { prisma } from "@/lib/prisma";
+import { classifyShopifyPaymentMethod } from "@/lib/shopify";
 
 export type ShopifyPaymentRegisterRow = {
   id: string;
@@ -53,7 +54,14 @@ export async function getShopifyPaymentRegister(options: {
   return responses
     .map((response): ShopifyPaymentRegisterRow => {
       const answers = response.answers as Record<string, unknown>;
-      const method = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "DA_VERIFICARE").toUpperCase();
+      const storedMethod = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "DA_VERIFICARE").toUpperCase();
+      const gateway = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentGateway] || "");
+      // Correct the presentation of legacy rows created by the old rule that
+      // incorrectly mapped the Shopify gateway "Cash" to Cashmatic.
+      const detectedGatewayMethod = classifyShopifyPaymentMethod([gateway]);
+      const method = storedMethod === "CASHMATIC" && detectedGatewayMethod === "CONTANTI"
+        ? "CONTANTI"
+        : storedMethod;
       return {
         id: response.id,
         createdAt: response.created_at,
@@ -63,7 +71,7 @@ export async function getShopifyPaymentRegister(options: {
         amount: moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]),
         order: String(answers.second_shopify_order || ""),
         clientName: String(answers[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente"),
-        gateway: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentGateway] || ""),
+        gateway,
         status: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentStatus] || ""),
         reference: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentReference] || ""),
       };

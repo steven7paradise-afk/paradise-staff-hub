@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  Coins,
   CreditCard,
   MapPin,
   PenLine,
@@ -770,8 +771,9 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               <div className="divide-y divide-black/5 overflow-hidden rounded-md border border-black/10">
                 {paymentRows.slice(0, 4).map((payment) => {
                   const isCashmatic = payment.method === "CASHMATIC";
+                  const isCash = payment.method === "CONTANTI";
                   const isVerified = payment.verified && payment.method !== "DA_VERIFICARE";
-                  const PaymentIcon = isCashmatic ? Banknote : CreditCard;
+                  const PaymentIcon = isCashmatic ? Banknote : isCash ? Coins : CreditCard;
                   return (
                     <div key={payment.id} className="grid gap-3 bg-white p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                       <div className={`flex size-11 items-center justify-center rounded-xl ${isVerified ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
@@ -797,7 +799,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
                         <p className="text-base font-black">{formatMoney(payment.amount)}</p>
                         <p className={`mt-1 text-[10px] font-black uppercase ${isVerified ? "text-emerald-700" : "text-amber-700"}`}>
-                          {isCashmatic ? "Cashmatic" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
+                          {isCashmatic ? "Cashmatic" : isCash ? "Contanti" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
                         </p>
                       </div>
                     </div>

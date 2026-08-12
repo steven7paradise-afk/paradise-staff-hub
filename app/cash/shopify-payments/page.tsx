@@ -7,6 +7,7 @@ import {
   Banknote,
   CheckCircle2,
   CreditCard,
+  Coins,
   Search,
   ShieldCheck,
 } from "lucide-react";
@@ -45,6 +46,7 @@ function romeDateKey(date: Date) {
 
 function methodLabel(method: string) {
   if (method === "CASHMATIC") return "Cashmatic";
+  if (method === "CONTANTI") return "Contanti";
   if (method === "CARTA") return "Carta";
   return "Da verificare";
 }
@@ -58,7 +60,7 @@ function gatewayLabel(gateway: string) {
 }
 
 export default async function ShopifyPaymentsPage(props: {
-  searchParams: Promise<{ month?: string; q?: string; method?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ month?: string; date?: string; q?: string; method?: string; status?: string; page?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const session = await auth();
@@ -77,7 +79,10 @@ export default async function ShopifyPaymentsPage(props: {
   const previousMonth = new Date(start.getFullYear(), start.getMonth() - 1, 1);
   const nextMonth = new Date(start.getFullYear(), start.getMonth() + 1, 1);
   const query = String(searchParams.q || "").trim().toLowerCase();
-  const method = ["CARTA", "CASHMATIC", "DA_VERIFICARE"].includes(String(searchParams.method))
+  const dateFilter = /^\d{4}-\d{2}-\d{2}$/.test(String(searchParams.date || ""))
+    ? String(searchParams.date)
+    : "";
+  const method = ["CARTA", "CASHMATIC", "CONTANTI", "DA_VERIFICARE"].includes(String(searchParams.method))
     ? String(searchParams.method)
     : "TUTTI";
   const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : "VERIFICATI";
@@ -89,7 +94,10 @@ export default async function ShopifyPaymentsPage(props: {
   const verifiedCashmaticTotal = rows
     .filter((payment) => payment.verified && payment.method === "CASHMATIC")
     .reduce((total, payment) => total + payment.amount, 0);
-  const todayKey = romeDateKey(new Date());
+  const verifiedCashTotal = rows
+    .filter((payment) => payment.verified && payment.method === "CONTANTI")
+    .reduce((total, payment) => total + payment.amount, 0);
+  const todayKey = dateFilter || romeDateKey(new Date());
   const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
   const todayCardTotal = todayVerifiedRows
     .filter((payment) => payment.method === "CARTA")
@@ -97,12 +105,18 @@ export default async function ShopifyPaymentsPage(props: {
   const todayCashmaticTotal = todayVerifiedRows
     .filter((payment) => payment.method === "CASHMATIC")
     .reduce((total, payment) => total + payment.amount, 0);
-  const pendingPayments = rows
+  const todayCashTotal = todayVerifiedRows
+    .filter((payment) => payment.method === "CONTANTI")
+    .reduce((total, payment) => total + payment.amount, 0);
+  const scopedRows = dateFilter
+    ? rows.filter((payment) => romeDateKey(payment.createdAt) === dateFilter)
+    : rows;
+  const pendingPayments = scopedRows
     .filter((payment) => payment.order && !payment.verified)
     .map((payment) => ({ id: payment.id, order: payment.order }));
-  const verifiedCount = rows.filter((payment) => payment.verified).length;
-  const pendingCount = rows.filter((payment) => !payment.verified).length;
-  const filteredRows = rows.filter((payment) => {
+  const verifiedCount = scopedRows.filter((payment) => payment.verified).length;
+  const pendingCount = scopedRows.filter((payment) => !payment.verified).length;
+  const filteredRows = scopedRows.filter((payment) => {
     const matchesStatus = status === "DA_CONTROLLARE" ? !payment.verified : payment.verified;
     const matchesMethod = method === "TUTTI"
       || (method === "DA_VERIFICARE" ? !payment.verified || payment.method === "DA_VERIFICARE" : payment.method === method);
@@ -116,18 +130,25 @@ export default async function ShopifyPaymentsPage(props: {
   const currentPage = Math.min(requestedPage, totalPages);
   const visibleRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const monthLabel = new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(start);
+  const summaryDate = dateFilter ? new Date(`${dateFilter}T12:00:00+02:00`) : new Date();
   const todayLabel = new Intl.DateTimeFormat("it-IT", {
     timeZone: "Europe/Rome",
     weekday: "long",
     day: "numeric",
     month: "long",
-  }).format(new Date());
+  }).format(summaryDate);
+  const dayCardSuffix = dateFilter ? "giorno" : "oggi";
   const persistentParams = new URLSearchParams({ month: selectedMonth });
   persistentParams.set("status", status);
+  if (dateFilter) persistentParams.set("date", dateFilter);
   if (query) persistentParams.set("q", query);
   if (method !== "TUTTI") persistentParams.set("method", method);
   const verifiedTabParams = new URLSearchParams({ month: selectedMonth, status: "VERIFICATI" });
   const pendingTabParams = new URLSearchParams({ month: selectedMonth, status: "DA_CONTROLLARE" });
+  if (dateFilter) {
+    verifiedTabParams.set("date", dateFilter);
+    pendingTabParams.set("date", dateFilter);
+  }
   if (query) {
     verifiedTabParams.set("q", query);
     pendingTabParams.set("q", query);
@@ -164,25 +185,32 @@ export default async function ShopifyPaymentsPage(props: {
             </div>
             <div className="w-full space-y-4 xl:max-w-[690px]">
               <div>
-                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">Oggi · {todayLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-3">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">{dateFilter ? "Giorno selezionato" : "Oggi"} · {todayLabel}</p>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl border border-[#F0A1AF]/40 bg-[#F0A1AF]/15 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta {dayCardSuffix}</p>
                       <CreditCard className="size-4 text-[#F0A1AF]" />
                     </div>
                     <p className="mt-2 text-2xl font-black">{formatMoney(todayCardTotal)}</p>
                   </div>
                   <div className="rounded-2xl border border-[#F7DFA7]/40 bg-[#F7DFA7]/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Cashmatic oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Cashmatic {dayCardSuffix}</p>
                       <Banknote className="size-4 text-[#F7DFA7]" />
                     </div>
                     <p className="mt-2 text-2xl font-black">{formatMoney(todayCashmaticTotal)}</p>
                   </div>
+                  <div className="rounded-2xl border border-sky-300/30 bg-sky-300/10 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Contanti {dayCardSuffix}</p>
+                      <Coins className="size-4 text-sky-300" />
+                    </div>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCashTotal)}</p>
+                  </div>
                   <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Verificati oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Verificati {dayCardSuffix}</p>
                       <CheckCircle2 className="size-4 text-emerald-300" />
                     </div>
                     <p className="mt-2 text-2xl font-black">{todayVerifiedRows.length}</p>
@@ -191,7 +219,7 @@ export default async function ShopifyPaymentsPage(props: {
               </div>
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Totale mese · {monthLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Carta mese</p>
                     <p className="mt-2 text-xl font-black">{formatMoney(verifiedCardTotal)}</p>
@@ -199,6 +227,10 @@ export default async function ShopifyPaymentsPage(props: {
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Cashmatic mese</p>
                     <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashmaticTotal)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Contanti mese</p>
+                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashTotal)}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Movimenti mese</p>
@@ -211,7 +243,7 @@ export default async function ShopifyPaymentsPage(props: {
           <div className="relative mt-5 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.14em]">Controllo automatico Shopify</p>
-              <p className="mt-1 text-xs text-white/45">Verifica tutti gli ordini del mese ancora senza metodo confermato.</p>
+              <p className="mt-1 text-xs text-white/45">Verifica gli ordini {dateFilter ? "del giorno selezionato" : "del mese"} ancora senza metodo confermato.</p>
             </div>
             <PaymentControlButton payments={pendingPayments} />
           </div>
@@ -241,21 +273,43 @@ export default async function ShopifyPaymentsPage(props: {
               </Link>
             </div>
           </div>
-          <form action="/cash/shopify-payments" method="get" className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+          <form action="/cash/shopify-payments" method="get" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_190px_220px_auto]">
             <input type="hidden" name="month" value={selectedMonth} />
             <input type="hidden" name="status" value={status} />
             <label className="flex min-h-12 items-center gap-3 rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 focus-within:border-[#A74758]">
               <Search className="size-4 text-black/35" />
               <input name="q" defaultValue={searchParams.q || ""} placeholder="Cerca cliente, ordine, sede..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-black/30" />
             </label>
+            <label className="flex min-h-12 flex-col justify-center rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 focus-within:border-[#A74758]">
+              <span className="text-[9px] font-black uppercase tracking-[0.12em] text-black/35">Data pagamento</span>
+              <input
+                type="date"
+                name="date"
+                defaultValue={dateFilter}
+                min={`${selectedMonth}-01`}
+                max={`${selectedMonth}-${String(new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()).padStart(2, "0")}`}
+                className="mt-0.5 w-full bg-transparent text-sm font-bold outline-none"
+              />
+            </label>
             <select name="method" defaultValue={method} className="min-h-12 rounded-2xl border border-black/10 bg-[#FAF8F9] px-4 text-sm font-bold outline-none focus:border-[#A74758]">
               <option value="TUTTI">Tutti i metodi</option>
               <option value="CARTA">Carta</option>
               <option value="CASHMATIC">Cashmatic</option>
+              <option value="CONTANTI">Contanti</option>
               <option value="DA_VERIFICARE">Da verificare</option>
             </select>
             <button type="submit" className="min-h-12 rounded-2xl bg-[#111017] px-6 text-sm font-black text-white hover:bg-black">Filtra</button>
           </form>
+          {dateFilter ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
+              <span className="rounded-full bg-[#F6E8EC] px-3 py-2 text-[#873647]">
+                Giorno selezionato: {new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "long", year: "numeric" }).format(new Date(`${dateFilter}T12:00:00+02:00`))}
+              </span>
+              <Link href={`/cash/shopify-payments?month=${selectedMonth}&status=${status}`} className="rounded-full border border-black/10 px-3 py-2 text-black/55 hover:bg-black/5">
+                Mostra tutto il mese
+              </Link>
+            </div>
+          ) : null}
         </section>
 
         <section className="-mx-4 overflow-hidden bg-white sm:mx-0 sm:rounded-[24px] sm:border sm:border-black/5">
@@ -281,8 +335,9 @@ export default async function ShopifyPaymentsPage(props: {
             <div className="divide-y divide-black/5">
               {visibleRows.map((payment) => {
                 const isCashmatic = payment.method === "CASHMATIC";
+                const isCash = payment.method === "CONTANTI";
                 const isVerified = payment.verified && payment.method !== "DA_VERIFICARE";
-                const PaymentIcon = isCashmatic ? Banknote : CreditCard;
+                const PaymentIcon = isCashmatic ? Banknote : isCash ? Coins : CreditCard;
                 return (
                   <article key={payment.id} className="grid gap-3 px-5 py-4 md:grid-cols-[110px_minmax(180px,1.4fr)_150px_150px_120px] md:items-center md:gap-4">
                     <div>

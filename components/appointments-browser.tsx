@@ -1353,7 +1353,7 @@ export function AppointmentsBrowser({
     createdAt?: string;
     financialStatus?: string | null;
     paymentGateways?: string[];
-    paymentMethod?: "CARTA" | "CASHMATIC" | "DA_VERIFICARE";
+    paymentMethod?: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
     paymentReference?: string | null;
     transactionStatus?: string | null;
     transactionProcessedAt?: string | null;
@@ -1371,7 +1371,7 @@ export function AppointmentsBrowser({
     createdAt?: string;
     financialStatus?: string | null;
     paymentGateways?: string[];
-    paymentMethod?: "CARTA" | "CASHMATIC" | "DA_VERIFICARE";
+    paymentMethod?: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
     paymentReference?: string | null;
     transactionStatus?: string | null;
     transactionProcessedAt?: string | null;
@@ -1424,7 +1424,7 @@ export function AppointmentsBrowser({
     clientControlOpen &&
     secondOrderDetails &&
     String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
-    !["CARTA", "CASHMATIC"].includes(String(secondOrderDetails.paymentMethod || "")) &&
+    !["CARTA", "CASHMATIC", "CONTANTI"].includes(String(secondOrderDetails.paymentMethod || "")) &&
     !manualPaymentMethod,
   );
 
@@ -3306,7 +3306,7 @@ export function AppointmentsBrowser({
                                 {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
                                   ? manualPaymentMethod
                                     ? `Metodo dichiarato · ${manualPaymentMethod === "CARTA" ? "Carta" : manualPaymentMethod === "SHOPIFY" ? "Shopify" : "Contanti"}`
-                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
+                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CONTANTI" ? "Contanti" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
                                   : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
                                 {secondOrderDetails.paymentGateways?.length ? (
                                   <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>
@@ -3317,7 +3317,7 @@ export function AppointmentsBrowser({
                               </div>
 
                               {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" &&
-                              !["CARTA", "CASHMATIC"].includes(String(secondOrderDetails.paymentMethod || "")) &&
+                              !["CARTA", "CASHMATIC", "CONTANTI"].includes(String(secondOrderDetails.paymentMethod || "")) &&
                               !manualPaymentMethod ? (
                                 <div className="mt-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF5FA] p-4 shadow-sm">
                                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B83D7F]">

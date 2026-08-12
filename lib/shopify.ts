@@ -747,7 +747,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   phone: string | null;
   financialStatus: string | null;
   paymentGateways: string[];
-  paymentMethod: "CARTA" | "CASHMATIC" | "DA_VERIFICARE";
+  paymentMethod: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
   paymentReference: string | null;
   transactionStatus: string | null;
   transactionProcessedAt: string | null;
@@ -889,12 +889,18 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   return null;
 }
 
-export function classifyShopifyPaymentMethod(gateways: string[]): "CARTA" | "CASHMATIC" | "DA_VERIFICARE" {
+export function classifyShopifyPaymentMethod(gateways: string[]): "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE" {
   const normalized = gateways.join(" ").toLowerCase();
   if (!normalized) return "DA_VERIFICARE";
 
-  if (/cashmatic|cash|contant|selfpay|inpay/.test(normalized)) {
+  // Cashmatic is a specific automatic cash device. A generic Shopify
+  // gateway such as "Cash" or "Contanti" must never be promoted to it.
+  if (/cashmatic|selfpay|inpay/.test(normalized)) {
     return "CASHMATIC";
+  }
+
+  if (/\bcash\b|contant|cash on delivery|pagamento manuale|manual payment/.test(normalized)) {
+    return "CONTANTI";
   }
 
   if (/shopify payments|shopify_payments|card|carta|credit|debit|visa|mastercard|amex|stripe|pos|sumup|nexi|klarna|paypal/.test(normalized)) {
