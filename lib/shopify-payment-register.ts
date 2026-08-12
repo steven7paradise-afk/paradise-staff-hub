@@ -16,9 +16,119 @@ export type ShopifyPaymentRegisterRow = {
   reference: string;
 };
 
+export type ShopifyDailyRevenue = {
+  total: number;
+  card: number;
+  cash: number;
+  cashmatic: number;
+  unclassified: number;
+  transactions: number;
+  available: boolean;
+};
+
 function moneyValue(value: unknown) {
   const amount = Number(String(value ?? "0").replace(",", "."));
   return Number.isFinite(amount) ? amount : 0;
+}
+
+function paymentDate(value: unknown, fallback: Date) {
+  const parsed = value ? new Date(String(value)) : null;
+  return parsed && Number.isFinite(parsed.getTime()) ? parsed : fallback;
+}
+
+function romeDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function romeOffset(dateKey: string) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Rome",
+    timeZoneName: "longOffset",
+  });
+  const value = formatter.formatToParts(new Date(`${dateKey}T12:00:00Z`))
+    .find((part) => part.type === "timeZoneName")?.value || "GMT+01:00";
+  return value.replace("GMT", "");
+}
+
+/**
+ * Reads the successful Shopify transactions for one Rome calendar day.
+ * This source is independent from client-control forms, so a paid POS order
+ * is counted even before staff complete the operational control.
+ */
+export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDailyRevenue> {
+  const empty: ShopifyDailyRevenue = { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false };
+  const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  if (!shop || !token || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return empty;
+
+  const offset = romeOffset(dateKey);
+  const start = new Date(`${dateKey}T00:00:00${offset}`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
+  const initialUrl = new URL(`https://${shop}/admin/api/2024-04/orders.json`);
+  initialUrl.searchParams.set("status", "any");
+  initialUrl.searchParams.set("limit", "250");
+  initialUrl.searchParams.set("updated_at_min", start.toISOString());
+  initialUrl.searchParams.set("updated_at_max", end.toISOString());
+  initialUrl.searchParams.set("fields", "id,name,updated_at");
+
+  try {
+    const orders: Array<{ id: string | number }> = [];
+    let nextUrl: string | null = initialUrl.toString();
+    for (let page = 0; nextUrl && page < 4; page += 1) {
+      const response: Response = await fetch(nextUrl, { headers, signal: AbortSignal.timeout(7000), next: { revalidate: 60 } });
+      if (!response.ok) throw new Error(`Shopify orders ${response.status}`);
+      const data = await response.json();
+      if (Array.isArray(data?.orders)) orders.push(...data.orders);
+      nextUrl = response.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i)?.[1] || null;
+    }
+
+    const transactionGroups: any[][] = [];
+    for (let index = 0; index < orders.length; index += 8) {
+      const batch = orders.slice(index, index + 8);
+      const results = await Promise.all(batch.map(async (order) => {
+        const response = await fetch(`https://${shop}/admin/api/2024-04/orders/${order.id}/transactions.json`, {
+          headers,
+          signal: AbortSignal.timeout(7000),
+          next: { revalidate: 60 },
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        return Array.isArray(data?.transactions) ? data.transactions : [];
+      }));
+      transactionGroups.push(...results);
+    }
+
+    const seen = new Set<string>();
+    const totals = { ...empty, available: true };
+    for (const transaction of transactionGroups.flat()) {
+      const id = String(transaction?.id || transaction?.authorization || "");
+      const processedAt = paymentDate(transaction?.processed_at || transaction?.created_at, new Date(0));
+      if (!id || seen.has(id) || romeDateKey(processedAt) !== dateKey) continue;
+      if (String(transaction?.status).toLowerCase() !== "success") continue;
+      if (!["sale", "capture"].includes(String(transaction?.kind).toLowerCase())) continue;
+      const amount = moneyValue(transaction?.amount);
+      if (amount <= 0) continue;
+      seen.add(id);
+      const method = classifyShopifyPaymentMethod([String(transaction?.gateway || "")]);
+      totals.total += amount;
+      totals.transactions += 1;
+      if (method === "CARTA") totals.card += amount;
+      else if (method === "CONTANTI") totals.cash += amount;
+      else if (method === "CASHMATIC") totals.cashmatic += amount;
+      else totals.unclassified += amount;
+    }
+    return totals;
+  } catch (error) {
+    console.error("Unable to load Shopify daily revenue:", error);
+    return empty;
+  }
 }
 
 export async function getShopifyPaymentRegister(options: {
@@ -64,7 +174,9 @@ export async function getShopifyPaymentRegister(options: {
         : storedMethod;
       const baseRow = {
         id: response.id,
-        createdAt: response.created_at,
+        // A payment belongs to the day in which Shopify processed the
+        // transaction, not to the day in which staff submitted the form.
+        createdAt: paymentDate(answers[CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt], response.created_at),
         locationName: response.user_location_name,
         method,
         verified: answers[CLIENT_CONTROL_FIELD_IDS.paymentVerified] === true,
@@ -78,10 +190,14 @@ export async function getShopifyPaymentRegister(options: {
       const breakdown = Array.isArray(answers.client_control_payment_breakdown)
         ? answers.client_control_payment_breakdown.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
         : [];
-      if (breakdown.length > 1) {
+      // Once Shopify has returned its transaction breakdown, that is the
+      // authoritative source for amount, method and processed date. This also
+      // prevents a declared form total from being counted a second time.
+      if (breakdown.length > 0) {
         return breakdown.map((item, index) => ({
           ...baseRow,
           id: `${response.id}:${index}`,
+          createdAt: paymentDate(item.processedAt, baseRow.createdAt),
           method: String(item.method || "DA_VERIFICARE").toUpperCase(),
           amount: moneyValue(item.amount),
           gateway: String(item.gateway || ""),

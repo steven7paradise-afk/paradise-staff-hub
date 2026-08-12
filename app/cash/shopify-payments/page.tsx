@@ -11,12 +11,13 @@ import {
   Coins,
   Search,
   ShieldCheck,
+  WalletCards,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
+import { getShopifyDailyRevenue, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 import { PaymentControlButton } from "./payment-control-button";
 
 export const dynamic = "force-dynamic";
@@ -89,11 +90,19 @@ export default async function ShopifyPaymentsPage(props: {
   const status = searchParams.status === "DA_CONTROLLARE" ? "DA_CONTROLLARE" : "VERIFICATI";
 
   const rows = await getShopifyPaymentRegister({ start, end });
+  const verifiedRevenueTotal = rows
+    .filter((payment) => payment.verified)
+    .reduce((total, payment) => total + payment.amount, 0);
   const verifiedCashTotal = rows
     .filter((payment) => payment.verified && payment.method === "CONTANTI")
     .reduce((total, payment) => total + payment.amount, 0);
   const todayKey = dateFilter || romeDateKey(new Date());
+  const liveDailyRevenue = await getShopifyDailyRevenue(todayKey);
   const todayVerifiedRows = rows.filter((payment) => payment.verified && romeDateKey(payment.createdAt) === todayKey);
+  const todayRevenueTotal = todayVerifiedRows.reduce((total, payment) => total + payment.amount, 0);
+  const todayCardTotal = todayVerifiedRows
+    .filter((payment) => payment.method === "CARTA")
+    .reduce((total, payment) => total + payment.amount, 0);
   const todayCashTotal = todayVerifiedRows
     .filter((payment) => payment.method === "CONTANTI")
     .reduce((total, payment) => total + payment.amount, 0);
@@ -178,26 +187,37 @@ export default async function ShopifyPaymentsPage(props: {
             <div className="w-full space-y-4 xl:max-w-[690px]">
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">{dateFilter ? "Giorno selezionato" : "Oggi"} · {todayLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-3">
                   <div className="rounded-2xl border border-[#F0A1AF]/40 bg-[#F0A1AF]/15 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Contanti {dayCardSuffix}</p>
-                      <Coins className="size-4 text-[#F0A1AF]" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Ricavato Shopify {dayCardSuffix}</p>
+                      <WalletCards className="size-4 text-[#F0A1AF]" />
                     </div>
-                    <p className="mt-2 text-2xl font-black">{formatMoney(todayCashTotal)}</p>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(liveDailyRevenue.available ? liveDailyRevenue.total : todayRevenueTotal)}</p>
+                    <p className="mt-1 text-[10px] font-bold text-white/40">{liveDailyRevenue.available ? "Letto direttamente da Shopify" : "Ultimi dati Shopify verificati"}</p>
+                  </div>
+                  <div className="rounded-2xl border border-sky-300/30 bg-sky-300/10 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta / POS Shopify</p><CreditCard className="size-4 text-sky-300" /></div>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(liveDailyRevenue.available ? liveDailyRevenue.card : todayCardTotal)}</p>
+                    <p className="mt-1 text-[10px] font-bold text-white/40">Contanti {formatMoney(liveDailyRevenue.available ? liveDailyRevenue.cash : todayCashTotal)}</p>
+                    {liveDailyRevenue.available && liveDailyRevenue.unclassified > 0 ? <p className="mt-1 text-[10px] font-bold text-amber-300">Da classificare {formatMoney(liveDailyRevenue.unclassified)}</p> : null}
                   </div>
                   <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Verificati {dayCardSuffix}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Movimenti Shopify {dayCardSuffix}</p>
                       <CheckCircle2 className="size-4 text-emerald-300" />
                     </div>
-                    <p className="mt-2 text-2xl font-black">{todayVerifiedRows.length}</p>
+                    <p className="mt-2 text-2xl font-black">{liveDailyRevenue.available ? liveDailyRevenue.transactions : todayVerifiedRows.length}</p>
                   </div>
                 </div>
               </div>
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">Totale mese · {monthLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Ricavato Shopify mese</p>
+                    <p className="mt-2 text-xl font-black">{formatMoney(verifiedRevenueTotal)}</p>
+                  </div>
                   <div className="rounded-2xl border border-white/10 bg-white/10 px-5 py-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/45">Contanti mese</p>
                     <p className="mt-2 text-xl font-black">{formatMoney(verifiedCashTotal)}</p>
