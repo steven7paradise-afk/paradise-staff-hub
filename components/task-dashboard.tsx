@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 
 type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
-type ChecklistItem = { text: string; done: boolean };
+type ChecklistItem = { text: string; done: boolean; completedBy?: string | null; completedAt?: string | null };
 type CompletionFile = { name: string; url?: string | null };
 type FreeNoteBlock =
   | { type: "title"; text: string }
@@ -440,7 +440,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     linkUrl: "",
     attachmentName: "",
     photoUrl: "",
-    checklistText: "",
+    checklistItems: [""],
   });
 
   useEffect(() => {
@@ -623,7 +623,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         ...form,
         assignedToId: form.assignedToIds[0] ?? "",
         assignedToIds: form.assignedToIds,
-        checklist: form.checklistText.split("\n"),
+        checklist: form.checklistItems.map((item) => item.trim()).filter(Boolean),
       }),
     });
     const data = await response.json();
@@ -685,14 +685,14 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     ]);
     setFormStatus(`Task inviata a ${data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno"}. Notifica creata.`);
     setTimeout(() => {
-      setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistText: "" });
+      setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
       setFormStatus("");
       setOpen(false);
     }, 900);
   }
 
   function resetTaskForm() {
-    setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistText: "" });
+    setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
     setEditingTaskId(null);
     setFormStatus("");
     setOpen(false);
@@ -712,7 +712,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       linkUrl: task.linkUrl ?? "",
       attachmentName: task.attachmentName ?? "",
       photoUrl: task.photoUrl ?? "",
-      checklistText: task.checklist.map((item) => item.text).join("\n"),
+      checklistItems: task.checklist.length > 0 ? task.checklist.map((item) => item.text) : [""],
     });
     setOpen(true);
   }
@@ -723,7 +723,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     const response = await fetch("/api/tasks", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: editingTaskId, ...form, assignedToId: form.assignedToIds[0] ?? "", assignedToIds: form.assignedToIds, checklist: form.checklistText.split("\n") }),
+      body: JSON.stringify({ id: editingTaskId, ...form, assignedToId: form.assignedToIds[0] ?? "", assignedToIds: form.assignedToIds, checklist: form.checklistItems.map((item) => item.trim()).filter(Boolean) }),
     });
     const data = await response.json();
     setSaving(false);
@@ -765,8 +765,15 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   async function toggleChecklistItem(index: number) {
     if (!selected) return;
-    const nextChecklist = selected.checklist.map((item, idx) => 
-      idx === index ? { ...item, done: !item.done } : item
+    const nextChecklist = selected.checklist.map((item, idx) =>
+      idx === index
+        ? {
+            ...item,
+            done: !item.done,
+            completedBy: !item.done ? userName : null,
+            completedAt: !item.done ? new Date().toISOString() : null,
+          }
+        : item
     );
     const nextTask = { ...selected, checklist: nextChecklist };
     setSelected(nextTask);
@@ -1674,12 +1681,19 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                       type="button"
                       key={`${item.text}-${index}`}
                       onClick={() => void toggleChecklistItem(index)}
-                      className="flex items-center gap-3 text-left w-full hover:bg-black/5 rounded-xl p-1 transition"
+                      className="flex min-h-14 w-full items-start gap-3 rounded-xl p-2 text-left transition hover:bg-black/5"
                     >
-                      <span className={`grid size-6 place-items-center rounded-md border ${item.done ? "bg-[#8064D8] text-white" : "border-black/20"}`}>
+                      <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border ${item.done ? "bg-[#8064D8] text-white" : "border-black/20"}`}>
                         {item.done ? <Check className="size-4" /> : null}
                       </span>
-                      <span className={item.done ? "text-black/45 line-through" : ""}>{item.text}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block text-sm font-semibold", item.done && "text-black/45 line-through")}>{item.text}</span>
+                        {item.done && (item.completedBy || item.completedAt) ? (
+                          <span className="mt-1 block text-[11px] font-medium text-black/40">
+                            Completata{item.completedBy ? ` da ${item.completedBy}` : ""}{item.completedAt ? ` · ${new Date(item.completedAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}` : ""}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -2016,24 +2030,26 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
       ) : null}
 
       {open ? (
-        <div className="fixed inset-0 z-50 bg-black/25 backdrop-blur-sm">
-          <div className="ml-auto h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
-            <div className="mb-6 flex items-center justify-between">
+        <GlobalFullscreenLayer className="bg-black/35 backdrop-blur-md">
+          <section className="ml-auto grid h-full w-full grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-[#F8F6F7] text-[#17151A] shadow-[-24px_0_80px_rgba(31,17,24,0.18)] sm:max-w-3xl sm:border-l sm:border-white/70">
+            <header className="flex items-center justify-between gap-4 border-b border-black/[0.08] bg-white/90 px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl sm:px-8 sm:py-5">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">{editingTaskId ? "Modifica task" : "Nuova task"}</p>
-                <h2 className="mt-1 text-2xl font-semibold">{editingTaskId ? "Aggiorna task" : "Crea task"}</h2>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-[#A74758]">{editingTaskId ? "Modifica task" : "Nuova task"}</p>
+                <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{editingTaskId ? "Aggiorna task" : "Crea task"}</h2>
               </div>
-              <button onClick={resetTaskForm} className="grid size-10 place-items-center rounded-xl border border-black/10"><X className="size-5" /></button>
-            </div>
-            <div className="grid gap-5">
-              <label className="space-y-2"><span className="text-xs font-bold uppercase text-black/45">Titolo *</span><Field value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Controllare prenotazioni serali" /></label>
-              <label className="space-y-2"><span className="text-xs font-bold uppercase text-black/45">Descrizione</span><textarea className="min-h-28 w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm outline-none focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-2"><span className="text-sm font-semibold">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
-                <label className="space-y-2"><span className="text-sm font-semibold">Priorita</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
+              <button type="button" onClick={resetTaskForm} className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/70 shadow-sm transition hover:bg-black hover:text-white" aria-label="Chiudi creazione task"><X className="size-5" /></button>
+            </header>
+
+            <main className="min-h-0 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8 sm:py-8">
+              <div className="grid gap-6">
+              <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Titolo *</span><Field value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="Controllare prenotazioni serali" /></label>
+              <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Descrizione</span><textarea className="min-h-32 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm leading-6 shadow-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
+                <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Priorità</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
                 <div className="space-y-2 md:col-span-2">
-                  <span className="text-sm font-semibold text-black/60 block">Assegnato a (Seleziona uno o più dipendenti)</span>
-                  <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-3.5 border border-black/10 rounded-2xl bg-[#FAF7F9]">
+                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">Assegnato a <span className="normal-case tracking-normal text-black/40">· seleziona uno o più dipendenti</span></span>
+                  <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-sm sm:grid-cols-2">
                     {initialAllowedWorkers.map((worker) => {
                       const isSelected = form.assignedToIds.includes(worker.id);
                       return (
@@ -2050,25 +2066,56 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                               assignedToId: newIds[0] ?? "" 
                             });
                           }}
-                          className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all shadow-sm ${
+                          className={`flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-bold transition-all ${
                             isSelected 
-                              ? "bg-paradise-pink text-black ring-2 ring-paradise-pink/50 scale-[1.03]" 
-                              : "bg-white text-black/60 hover:bg-[#FAF7F9] hover:text-black ring-1 ring-black/5"
+                              ? "bg-[#FBE5EE] text-[#7F2945] ring-2 ring-[#D96B94]/45"
+                              : "bg-[#F8F6F7] text-black/65 ring-1 ring-black/[0.06] hover:bg-white hover:text-black"
                           }`}
                         >
                           <Avatar name={worker.name} photoUrl={worker.photoUrl} className="size-6" />
-                          <span>{worker.name}</span>
+                          <span className="min-w-0 flex-1 truncate">{worker.name}</span>
+                          {isSelected ? <Check className="size-4 shrink-0" /> : null}
                         </button>
                       );
                     })}
                   </div>
                 </div>
               </div>
-              <label className="space-y-2"><span className="text-sm font-semibold">Checklist</span><textarea className="min-h-28 w-full rounded-2xl border border-black/10 bg-white/80 px-4 py-3 text-sm outline-none" value={form.checklistText} onChange={(event) => setForm({ ...form, checklistText: event.target.value })} placeholder={"Controllare tavoli VIP\nVerificare richieste speciali"} /></label>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <label className="grid cursor-pointer place-items-center gap-2 rounded-2xl border border-black/10 p-4 text-sm font-semibold"><Paperclip className="size-5" />Allega file<input type="file" className="hidden" onChange={(event) => void attachMainFile(event.target.files?.[0])} /></label>
-                <label className="grid cursor-pointer place-items-center gap-2 rounded-2xl border border-black/10 p-4 text-sm font-semibold"><FileImage className="size-5" />Foto<input type="file" accept="image/*" className="hidden" onChange={(event) => void attachPhoto(event.target.files?.[0])} /></label>
-                <label className="col-span-2 space-y-2"><span className="sr-only">Link</span><Field value={form.linkUrl} onChange={(event) => setForm({ ...form, linkUrl: event.target.value })} placeholder="https:// link" /></label>
+              <fieldset className="space-y-3">
+                <legend className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Checklist</legend>
+                <div className="space-y-2">
+                  {form.checklistItems.map((item, index) => (
+                    <div key={index} className="grid grid-cols-[28px_minmax(0,1fr)_44px] items-center gap-2 rounded-2xl border border-black/10 bg-white p-2 shadow-sm">
+                      <span className="grid size-7 place-items-center rounded-lg bg-[#FBE5EE] text-xs font-black text-[#A74758]">{index + 1}</span>
+                      <input
+                        value={item}
+                        onChange={(event) => setForm((current) => ({ ...current, checklistItems: current.checklistItems.map((entry, itemIndex) => itemIndex === index ? event.target.value : entry) }))}
+                        placeholder={index === 0 ? "Scrivi una voce della checklist" : "Altra voce"}
+                        className="min-h-11 w-full bg-transparent px-2 text-sm font-semibold outline-none placeholder:text-black/30"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setForm((current) => ({ ...current, checklistItems: current.checklistItems.length === 1 ? [""] : current.checklistItems.filter((_, itemIndex) => itemIndex !== index) }))}
+                        className="grid size-11 place-items-center rounded-xl text-black/35 transition hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Rimuovi voce ${index + 1}`}
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm((current) => ({ ...current, checklistItems: [...current.checklistItems, ""] }))}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-[#D96B94]/55 bg-[#FFF4F8] px-4 text-sm font-black text-[#8E334E] transition hover:border-[#A74758] hover:bg-[#FBE5EE]"
+                >
+                  <Plus className="size-4" /> Aggiungi voce
+                </button>
+              </fieldset>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <label className="grid min-h-20 cursor-pointer place-items-center gap-1 rounded-2xl border border-black/10 bg-white p-3 text-sm font-bold shadow-sm transition hover:border-[#D96B94]/45"><Paperclip className="size-5 text-[#A74758]" />Allega file<input type="file" className="hidden" onChange={(event) => void attachMainFile(event.target.files?.[0])} /></label>
+                <label className="grid min-h-20 cursor-pointer place-items-center gap-1 rounded-2xl border border-black/10 bg-white p-3 text-sm font-bold shadow-sm transition hover:border-[#D96B94]/45"><FileImage className="size-5 text-[#A74758]" />Foto<input type="file" accept="image/*" className="hidden" onChange={(event) => void attachPhoto(event.target.files?.[0])} /></label>
+                <label className="col-span-2 flex items-center"><span className="sr-only">Link</span><Field value={form.linkUrl} onChange={(event) => setForm({ ...form, linkUrl: event.target.value })} placeholder="https:// link" /></label>
               </div>
               {form.attachmentName ? (
                 <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
@@ -2096,15 +2143,17 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   {formStatus}
                 </div>
               ) : null}
-              <div className="flex justify-between gap-3 border-t border-black/5 pt-5">
-                <Button variant="soft" onClick={resetTaskForm}>Annulla</Button>
-                <Button onClick={editingTaskId ? saveTaskEdit : createTask} disabled={saving}>
-                  <Send className="size-4" /> {saving ? "Salvo..." : editingTaskId ? "Salva modifiche" : "Crea task"}
-                </Button>
               </div>
-            </div>
-          </div>
-        </div>
+            </main>
+
+            <footer className="grid grid-cols-[auto_1fr] gap-3 border-t border-black/[0.08] bg-white/92 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-xl sm:px-8 sm:py-5">
+              <Button variant="soft" onClick={resetTaskForm}>Annulla</Button>
+              <Button onClick={editingTaskId ? saveTaskEdit : createTask} disabled={saving} className="w-full justify-center">
+                <Send className="size-4" /> {saving ? "Salvo..." : editingTaskId ? "Salva modifiche" : "Crea task"}
+              </Button>
+            </footer>
+          </section>
+        </GlobalFullscreenLayer>
       ) : null}
     </div>
   );

@@ -112,7 +112,9 @@ export async function POST(request: NextRequest) {
   const attachmentName = String(payload.attachmentName ?? "").trim();
   const photoUrl = String(payload.photoUrl ?? "").trim();
   const checklist = Array.isArray(payload.checklist)
-    ? payload.checklist.map((item: unknown) => ({ text: String(item).trim(), done: false })).filter((item: { text: string; done: boolean }) => item.text)
+    ? payload.checklist
+        .map((item: unknown) => ({ text: String(typeof item === "object" && item !== null ? (item as Record<string, unknown>).text ?? "" : item).trim(), done: false, completedBy: null, completedAt: null }))
+        .filter((item: { text: string }) => item.text)
     : [];
   const dueDate = payload.dueDate ? new Date(String(payload.dueDate)) : null;
 
@@ -201,13 +203,13 @@ export async function PATCH(request: NextRequest) {
         .filter(Boolean)
     : [];
 
-  const checklist = Array.isArray(payload.checklist)
+  const requestedChecklist = Array.isArray(payload.checklist)
     ? payload.checklist
         .map((item: any) => {
           if (item && typeof item === "object") {
             return {
               text: String(item.text ?? "").trim(),
-              done: Boolean(item.done)
+              done: Boolean(item.done),
             };
           }
           return null;
@@ -217,7 +219,7 @@ export async function PATCH(request: NextRequest) {
 
   const isNotesUpdate = notes !== null && !status && !evaluation;
   const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
-  const isChecklistUpdate = checklist !== null && !status && !evaluation && notes === null && photoUrl === null;
+  const isChecklistUpdate = requestedChecklist !== null && !status && !evaluation && notes === null && photoUrl === null;
   
   if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "WAITING", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
@@ -225,6 +227,24 @@ export async function PATCH(request: NextRequest) {
 
   const task = await prisma.staffTask.findUnique({ where: { id }, include: { assignees: true, created_by: true } });
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
+  const existingChecklist = Array.isArray(task.checklist)
+    ? task.checklist as Array<{ text: string; done?: boolean; completedBy?: string | null; completedAt?: string | null }>
+    : [];
+  const checklist = requestedChecklist?.map((item: { text: string; done: boolean }, index: number) => {
+    const previous = existingChecklist[index]?.text === item.text
+      ? existingChecklist[index]
+      : existingChecklist.find((entry) => entry.text === item.text);
+    if (!item.done) return { text: item.text, done: false, completedBy: null, completedAt: null };
+    if (previous?.done) {
+      return {
+        text: item.text,
+        done: true,
+        completedBy: previous.completedBy ?? session.user.name ?? "Collaboratore",
+        completedAt: previous.completedAt ?? new Date().toISOString(),
+      };
+    }
+    return { text: item.text, done: true, completedBy: session.user.name ?? "Collaboratore", completedAt: new Date().toISOString() };
+  }) ?? null;
   const isEvaluation = ["LIKE", "OK", "DISLIKE"].includes(evaluation) && !status;
   
   const isAssignee = task.assignees.some(u => u.id === session.user.id);
@@ -314,13 +334,23 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Puoi modificare task solo nel tuo salone." }, { status: 403 });
   }
 
-  const existingChecklist = Array.isArray(task.checklist) ? task.checklist as { text: string; done?: boolean }[] : [];
+  const existingChecklist = Array.isArray(task.checklist)
+    ? task.checklist as Array<{ text: string; done?: boolean; completedBy?: string | null; completedAt?: string | null }>
+    : [];
   const checklist = Array.isArray(payload.checklist)
     ? payload.checklist
         .map((item: unknown) => String(item).trim())
         .filter(Boolean)
-        .map((text: string) => ({ text, done: Boolean(existingChecklist.find((item) => item.text === text)?.done) }))
-    : existingChecklist.map((item) => ({ text: item.text, done: Boolean(item.done) }));
+        .map((text: string) => {
+          const existing = existingChecklist.find((item) => item.text === text);
+          return {
+            text,
+            done: Boolean(existing?.done),
+            completedBy: existing?.completedBy ?? null,
+            completedAt: existing?.completedAt ?? null,
+          };
+        })
+    : existingChecklist.map((item) => ({ text: item.text, done: Boolean(item.done), completedBy: item.completedBy ?? null, completedAt: item.completedAt ?? null }));
 
   const updated = await prisma.staffTask.update({
     where: { id },
