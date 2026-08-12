@@ -14,16 +14,6 @@ function namesFromAnswer(value: unknown) {
   return String(value ?? "").split(/[,;]+/).map((name) => name.trim()).filter(Boolean);
 }
 
-function moneyValue(value: unknown) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const normalized = String(value ?? "")
-    .replace(/[^\d,.-]/g, "")
-    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
-    .replace(",", ".");
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function isBuenosAires(value: unknown) {
   const text = String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return text.includes("buenos") || text.includes("corso");
