@@ -143,7 +143,7 @@ function ThreeMonthRevenueChart({ months, selectedDay, onSelectDay }: {
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="flex items-center gap-2"><TrendingUp className="size-5 text-[#f080b7]" /><h3 className="font-black">Fatturazione giornaliera · 3 mesi</h3></div><p className="mt-1 text-xs text-white/50">Asse X: giorni 1–31 · Asse Y: ricavo attribuito ogni 500 €</p></div>
+        <div><div className="flex items-center gap-2"><TrendingUp className="size-5 text-[#f080b7]" /><h3 className="font-black">Fatturazione giornaliera · 3 mesi</h3></div><p className="mt-1 text-xs text-white/50">Transazioni Shopify verificate · Asse X: giorni 1–31 · Asse Y: incasso ogni 500 €</p></div>
         <div className="flex flex-wrap gap-3">{months.map((month, index) => <span key={month.key} className="inline-flex items-center gap-2 text-[10px] font-black uppercase text-white/70"><span className="size-2.5 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} />{month.label}</span>)}</div>
       </div>
       <div className="mt-4 overflow-x-auto pb-2">

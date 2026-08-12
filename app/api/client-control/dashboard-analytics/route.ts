@@ -23,6 +23,28 @@ function moneyValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function validDate(value: unknown) {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function verifiedRevenueEvents(answers: Record<string, unknown>) {
+  const breakdown = Array.isArray(answers.client_control_payment_breakdown)
+    ? answers.client_control_payment_breakdown.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    : [];
+  const events = breakdown.flatMap((item) => {
+    const date = validDate(item.processedAt);
+    const amount = moneyValue(item.amount);
+    return date && amount > 0 ? [{ date, amount }] : [];
+  });
+  if (events.length) return events;
+
+  const date = validDate(answers[CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt]);
+  const amount = moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]);
+  return date && amount > 0 ? [{ date, amount }] : [];
+}
+
 function isBuenosAires(value: unknown) {
   const text = String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return text.includes("buenos") || text.includes("corso");
@@ -130,7 +152,10 @@ export async function GET(request: NextRequest) {
     const key = monthKey(response.created_at);
     if (!months.some((month) => month.key === key)) continue;
     const day = romeDay(response.created_at);
-    const totalRevenue = moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.depositPaid]) + moneyValue(answers[CLIENT_CONTROL_FIELD_IDS.paid]);
+    // Revenue must follow the verified Shopify transaction date. Historical
+    // forms were often imported in bulk, so created_at is not an accounting date.
+    const revenueEvents = verifiedRevenueEvents(answers);
+    const totalRevenue = revenueEvents.reduce((sum, event) => sum + event.amount, 0);
     const services = serviceNames(answers);
 
     // Salon revenue counts each client control exactly once. It must not grow
@@ -138,12 +163,22 @@ export async function GET(request: NextRequest) {
     const salonMonth = salonMonths.get(key) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
     const salonDay = salonMonth.days.get(day) || { controls: 0, revenue: 0, services: new Map<string, number>() };
     salonMonth.controls += 1;
-    salonMonth.revenue += totalRevenue;
     salonDay.controls += 1;
-    salonDay.revenue += totalRevenue;
     for (const service of services) salonDay.services.set(service, (salonDay.services.get(service) || 0) + 1);
     salonMonth.days.set(day, salonDay);
     salonMonths.set(key, salonMonth);
+
+    for (const event of revenueEvents) {
+      const revenueKey = monthKey(event.date);
+      if (!months.some((month) => month.key === revenueKey)) continue;
+      const revenueDayNumber = romeDay(event.date);
+      const revenueMonth = salonMonths.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
+      const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+      revenueMonth.revenue += event.amount;
+      revenueDay.revenue += event.amount;
+      revenueMonth.days.set(revenueDayNumber, revenueDay);
+      salonMonths.set(revenueKey, revenueMonth);
+    }
 
     const selectedStaff = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]);
     const owner = namesFromAnswer(answers[CLIENT_CONTROL_FIELD_IDS.serviceOwner]);
@@ -151,19 +186,30 @@ export async function GET(request: NextRequest) {
       .map((name) => resolveCanonicalStaffName(name, canonicalNames))
       .filter((name) => employeeByName.has(name)))];
     if (!names.length) continue;
-    const revenueShare = totalRevenue / names.length;
+    const revenueShare = names.length ? totalRevenue / names.length : 0;
 
     for (const name of names) {
       const worker = workerMap.get(name)!;
       const month = worker.months.get(key) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
       const daily = month.days.get(day) || { controls: 0, revenue: 0, services: new Map<string, number>() };
       month.controls += 1;
-      month.revenue += revenueShare;
       daily.controls += 1;
-      daily.revenue += revenueShare;
       for (const service of services) daily.services.set(service, (daily.services.get(service) || 0) + 1);
       month.days.set(day, daily);
       worker.months.set(key, month);
+
+      for (const event of revenueEvents) {
+        const revenueKey = monthKey(event.date);
+        if (!months.some((monthInfo) => monthInfo.key === revenueKey)) continue;
+        const revenueDayNumber = romeDay(event.date);
+        const revenueMonth = worker.months.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
+        const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+        const share = event.amount / names.length;
+        revenueMonth.revenue += share;
+        revenueDay.revenue += share;
+        revenueMonth.days.set(revenueDayNumber, revenueDay);
+        worker.months.set(revenueKey, revenueMonth);
+      }
     }
   }
 

@@ -4109,7 +4109,7 @@ export function AppointmentsBrowser({
       ) : null}
       <div className="w-full">
         <main className="min-w-0 space-y-5">
-          <section className="rounded-lg border border-[#E8D6E0] bg-white p-5 shadow-sm sm:p-7">
+          <section className={`relative rounded-lg border border-[#E8D6E0] bg-white p-5 shadow-sm sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
             <div>
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-4">
@@ -4243,7 +4243,7 @@ export function AppointmentsBrowser({
                   <ChevronRight className="size-4 shrink-0 rotate-90" />
                 </button>
                 {isDatePickerOpen ? (
-                  <div className="absolute left-0 right-0 top-14 z-30 rounded-2xl border border-[#E8D8CF] bg-white p-3 shadow-xl">
+                  <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 min-w-[260px] rounded-2xl border border-black/10 bg-white/95 p-3 shadow-[0_20px_60px_rgba(45,25,35,0.22)] backdrop-blur-xl">
                     <div className="grid gap-2">
                       {[
                         {
