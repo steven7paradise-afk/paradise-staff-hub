@@ -419,7 +419,9 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const [calendarMode, setCalendarMode] = useState<"MONTH" | "WEEK">("MONTH");
   const [saving, setSaving] = useState(false);
   const [formStatus, setFormStatus] = useState("");
-  const [completionOpen, setCompletionOpen] = useState(false);
+  const [completionTarget, setCompletionTarget] = useState<Task | null>(null);
+  const [completionSaving, setCompletionSaving] = useState(false);
+  const [completionError, setCompletionError] = useState("");
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerPaused, setTimerPaused] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -810,23 +812,43 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
     };
     setTasks((current) => current.map((item) => (item.id === task.id ? nextTask : item)));
     if (selected?.id === task.id) setSelected(nextTask);
-    const response = await fetch("/api/tasks", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        id: task.id, 
-        status, 
-        timerSeconds: currentSeconds, 
-        startedAt: status === "ACTIVE" ? new Date().toISOString() : (status === "WAITING" ? null : undefined),
-        ...extra 
-      }),
-    });
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: task.id,
+          status,
+          timerSeconds: currentSeconds,
+          startedAt: status === "ACTIVE" ? new Date().toISOString() : (status === "WAITING" ? null : undefined),
+          ...extra,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));
+        if (selected?.id === task.id) setSelected(task);
+        return { ok: false, error: data?.error || "Non è stato possibile salvare la Task. Riprova." };
+      }
       const mapped = mapApiTask(data);
       setTasks((current) => current.map((item) => (item.id === task.id ? mapped : item)));
       if (selected?.id === task.id) setSelected(mapped);
+      return { ok: true, error: "" };
+    } catch {
+      setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));
+      if (selected?.id === task.id) setSelected(task);
+      return { ok: false, error: "Connessione non disponibile. Controlla la rete e riprova." };
     }
+  }
+
+  function requestTaskCompletion(task: Task) {
+    if (isCompletedTask(task)) {
+      void openTask(task);
+      return;
+    }
+    setCompletion({ note: "", link: "", files: [] });
+    setCompletionError("");
+    setCompletionTarget(task);
   }
 
   function mapApiTask(data: any): Task {
@@ -1089,10 +1111,28 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
 
   function TaskRow({ task }: { task: Task }) {
     return (
-      <button onClick={() => void openTask(task)} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm md:grid-cols-[auto_1fr_120px_130px_90px]">
-        <span className="grid size-5 place-items-center rounded-md border border-black/20">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => void openTask(task)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") void openTask(task);
+        }}
+        className="grid w-full cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 rounded-2xl border border-black/5 bg-white px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm md:grid-cols-[auto_1fr_120px_130px_90px]"
+      >
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            requestTaskCompletion(task);
+          }}
+          className={cn("grid size-11 place-items-center rounded-xl transition", isCompletedTask(task) ? "text-emerald-700" : "hover:bg-[#FBE5EE]")}
+          aria-label={isCompletedTask(task) ? `Apri task completata: ${task.title}` : `Completa task: ${task.title}`}
+        >
+          <span className={cn("grid size-5 place-items-center rounded-md border", isCompletedTask(task) ? "border-emerald-600 bg-emerald-600 text-white" : "border-black/20 bg-white")}>
           {task.status === "COMPLETED" ? <Check className="size-3" /> : null}
-        </span>
+          </span>
+        </button>
         <div className="min-w-0">
           <p className="truncate font-semibold">{task.title}</p>
           <div className="mt-1 flex items-center gap-2 text-xs text-black/45">
@@ -1119,7 +1159,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         <span className="hidden text-sm font-medium text-black/55 md:block">{formatCategoryLabel(task.category)}</span>
         <span className="hidden text-sm font-semibold text-black/55 md:block">{statusLabel(task.status)}</span>
         <Badge tone={priorityTone(task.priority)}>{task.priority}</Badge>
-      </button>
+      </div>
     );
   }
 
@@ -1949,7 +1989,7 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   >
                     {selected.status === "ACTIVE" ? "Metti fermo" : selected.timerSeconds > 0 ? "Riprendi in corso" : "Metti in corso"}
                   </Button>
-                  <Button onClick={() => setCompletionOpen(true)}><CheckCircle2 className="size-4" /> Completa task</Button>
+                  <Button onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> Completa task</Button>
                 </>
               )}
             </div>
@@ -1988,19 +2028,23 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
         </div>
       ) : null}
 
-      {completionOpen && selected ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-[28px] bg-white p-6 shadow-2xl">
+      {completionTarget ? (
+        <GlobalFullscreenLayer className="grid place-items-center overflow-y-auto bg-black/40 p-4 backdrop-blur-md">
+          <div className="my-auto w-full max-w-xl rounded-[28px] border border-white/70 bg-white p-6 shadow-2xl sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Completamento</p>
                 <h2 className="mt-2 text-2xl font-semibold">Invia prova task</h2>
-                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(selected, todayAttendanceLogs))}</p>
+                <p className="mt-1 font-semibold text-black/70">{completionTarget.title}</p>
+                <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(completionTarget, todayAttendanceLogs))}</p>
               </div>
-              <button onClick={() => setCompletionOpen(false)} className="grid size-10 place-items-center rounded-xl border border-black/10"><X className="size-5" /></button>
+              <button onClick={() => setCompletionTarget(null)} disabled={completionSaving} className="grid size-11 place-items-center rounded-full border border-black/10 disabled:opacity-40" aria-label="Chiudi completamento"><X className="size-5" /></button>
             </div>
             <div className="mt-5 grid gap-4">
-              <textarea className="min-h-24 rounded-2xl border border-black/10 px-4 py-3 text-sm outline-none" value={completion.note} onChange={(event) => setCompletion({ ...completion, note: event.target.value })} placeholder="Note finali o cosa e stato fatto..." />
+              <label className="grid gap-2">
+                <span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Azione svolta</span>
+                <textarea className="min-h-28 rounded-2xl border border-black/10 px-4 py-3 text-sm leading-6 outline-none focus:border-[#D96B94] focus:ring-4 focus:ring-[#D96B94]/15" value={completion.note} onChange={(event) => { setCompletion({ ...completion, note: event.target.value }); setCompletionError(""); }} placeholder="Scrivi cosa è stato fatto..." />
+              </label>
               <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
                 <Field value={completion.link} onChange={(event) => setCompletion({ ...completion, link: event.target.value })} placeholder="https:// link prova" />
                 <Button type="button" variant="soft">Link</Button>
@@ -2019,14 +2063,26 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                   ))}
                 </div>
               ) : null}
-              <Button onClick={() => {
+              {completionError ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{completionError}</p> : null}
+              <Button disabled={completionSaving} onClick={async () => {
+                if (!completion.note.trim()) {
+                  setCompletionError("Scrivi l’azione svolta prima di completare la Task.");
+                  return;
+                }
                 const links = completion.link.trim() ? [completion.link.trim()] : [];
-                void updateStatus(selected, "COMPLETED", { completionNote: completion.note, completionLinks: links, completionFiles: completion.files });
-                setCompletionOpen(false);
-              }}><Send className="size-4" /> Invia e completa</Button>
+                setCompletionSaving(true);
+                setCompletionError("");
+                const result = await updateStatus(completionTarget, "COMPLETED", { completionNote: completion.note.trim(), completionLinks: links, completionFiles: completion.files });
+                setCompletionSaving(false);
+                if (!result.ok) {
+                  setCompletionError(result.error);
+                  return;
+                }
+                setCompletionTarget(null);
+              }}><Send className="size-4" /> {completionSaving ? "Salvataggio..." : "Invia e completa"}</Button>
             </div>
           </div>
-        </div>
+        </GlobalFullscreenLayer>
       ) : null}
 
       {open ? (
