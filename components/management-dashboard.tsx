@@ -12,6 +12,9 @@ import {
   Clock3,
   FileWarning,
   HeartPulse,
+  LineChart,
+  Loader2,
+  TrendingUp,
   RefreshCw,
   Umbrella,
   Users,
@@ -38,6 +41,40 @@ type LeaveRow = {
   location: string;
   type: "FERIE" | "MALATTIA" | "RIPOSO";
   periodLabel: string;
+};
+
+type AnalyticsDay = {
+  day: number;
+  valid: boolean;
+  controls: number;
+  revenue: number;
+  services: Array<{ name: string; count: number }>;
+};
+
+type AnalyticsMonth = {
+  key: string;
+  label: string;
+  daysInMonth: number;
+  controls: number;
+  revenue: number;
+  days: AnalyticsDay[];
+};
+
+type AnalyticsWorker = {
+  id: string;
+  name: string;
+  photoUrl: string | null;
+  controls: number;
+  revenue: number;
+  averageRevenue: number;
+  months: AnalyticsMonth[];
+};
+
+type DashboardAnalytics = {
+  months: Array<{ key: string; label: string; daysInMonth: number }>;
+  workers: AnalyticsWorker[];
+  ranking: Array<Omit<AnalyticsWorker, "months">>;
+  totals: { controls: number; revenue: number };
 };
 
 export type ManagementDashboardData = {
@@ -121,12 +158,41 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [personnelView, setPersonnelView] = useState<"PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
-  const maxHourly = useMemo(() => Math.max(1, ...data.hourlyClients.map((item) => item.count)), [data.hourlyClients]);
+  const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const hourlyChartItems = useMemo(() => {
+    const byHour = new Map(data.hourlyClients.map((item) => [item.hour, item]));
+    const standardHours = Array.from({ length: 11 }, (_, index) => `${String(index + 10).padStart(2, "0")}:00`);
+    const hours = [...new Set([...standardHours, ...data.hourlyClients.map((item) => item.hour)])].sort();
+    return hours.map((hour) => byHour.get(hour) || { hour, count: 0, locations: [] });
+  }, [data.hourlyClients]);
+  const maxHourly = useMemo(() => Math.max(1, ...hourlyChartItems.map((item) => item.count)), [hourlyChartItems]);
 
   useEffect(() => {
     const timer = window.setInterval(() => router.refresh(), 60_000);
     return () => window.clearInterval(timer);
   }, [router]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/client-control/dashboard-analytics", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.error || "Analisi non disponibile");
+        return payload as DashboardAnalytics;
+      })
+      .then((payload) => {
+        if (!active) return;
+        setAnalytics(payload);
+        setSelectedWorkerId((current) => current || payload.workers[0]?.id || null);
+      })
+      .catch((error) => console.error("Dashboard client analytics unavailable:", error))
+      .finally(() => active && setAnalyticsLoading(false));
+    return () => { active = false; };
+  }, []);
+
+  const selectedWorker = analytics?.workers.find((worker) => worker.id === selectedWorkerId) || analytics?.workers[0] || null;
 
   const refresh = () => {
     setRefreshing(true);
@@ -269,23 +335,87 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       ) : null}
 
-      <section className="rounded-[24px] border border-white/80 bg-white/80 p-5 shadow-[0_12px_40px_rgba(69,38,52,0.07)] backdrop-blur-xl lg:p-6">
+      <section className="overflow-hidden rounded-[28px] border border-white/85 bg-[linear-gradient(135deg,rgba(255,255,255,0.86),rgba(250,244,255,0.76))] p-5 shadow-[0_20px_70px_rgba(69,38,52,0.10)] backdrop-blur-2xl lg:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
-            <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 min-h-11 rounded-lg text-left text-xl font-black transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none">Controlli cliente completati per ora</button>
+            <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg text-left text-xl font-black transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none"><TrendingUp className="size-5 text-[#eb5da3]" /> Controlli cliente completati per ora</button>
           </div>
           <button type="button" onClick={() => router.push("/client-control?date=today")} aria-label={`Apri tutte le ${data.clientsToday} schede Controllo Cliente completate oggi`} className="min-h-11 rounded-xl px-3 text-left transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#6f676b]">schede oggi · apri controlli</p></button>
         </div>
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {data.hourlyClients.length === 0 ? <p className="text-sm text-[#8d8589]">Nessun controllo cliente completato oggi.</p> : data.hourlyClients.map((item) => (
-            <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede Controllo Cliente completate alle ${item.hour}`} className="min-h-28 rounded-[16px] border border-[#eee4e8] bg-white/70 p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-[#d75489] hover:bg-[#fff8fb] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transform-none motion-reduce:transition-none">
-              <div className="flex items-center justify-between"><span className="font-black">{item.hour}</span><strong>{item.count}</strong></div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#f2e9ed]"><div className="h-full rounded-full bg-[#d75489]" style={{ width: `${Math.max(8, item.count / maxHourly * 100)}%` }} /></div>
-              <p className="mt-2 truncate text-[11px] font-medium text-[#6f676b]">{item.locations.map((loc) => `${loc.name} ${loc.count}`).join(" · ")}</p>
-            </button>
-          ))}
+        <div className="mt-6 overflow-x-auto pb-2">
+          <div className="flex min-w-[720px] items-end gap-4 border-b border-[#dfd5dd] px-3 pt-8">
+            {hourlyChartItems.map((item) => (
+              <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede completate alle ${item.hour}`} className="group flex min-h-36 min-w-16 flex-1 flex-col items-center justify-end rounded-t-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f]">
+                <strong className="mb-2 text-sm tabular-nums">{item.count}</strong>
+                <span className="w-full max-w-16 rounded-t-xl bg-[linear-gradient(180deg,#f15ba6,#f8afd1_65%,rgba(248,175,209,0.20))] shadow-[0_0_25px_rgba(235,93,163,0.24)] transition group-hover:brightness-105" style={{ height: `${Math.max(28, item.count / maxHourly * 108)}px` }} />
+                <span className="py-3 text-xs font-black">{item.hour}</span>
+              </button>
+            ))}
+          </div>
         </div>
+      </section>
+
+      <section className="overflow-hidden rounded-[30px] border border-white/15 bg-[linear-gradient(145deg,#101725,#07131f)] text-white shadow-[0_24px_80px_rgba(6,15,28,0.20)]">
+        <div className="flex flex-col gap-4 border-b border-white/10 p-6 sm:flex-row sm:items-end sm:justify-between lg:p-8">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f080b7]">Performance Buenos Aires</p>
+            <h2 className="mt-2 text-2xl font-black">Confronto ultimi 3 mesi</h2>
+            <p className="mt-1 text-sm text-white/60">Schede cliente, servizi e fatturazione attribuita · giorni 1–31</p>
+          </div>
+          {analytics ? <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 text-right"><strong className="text-2xl tabular-nums">{analytics.totals.controls}</strong><p className="text-[10px] font-bold uppercase tracking-wider text-white/55">schede nei 3 mesi</p></div> : null}
+        </div>
+
+        {analyticsLoading ? (
+          <div className="flex min-h-72 items-center justify-center gap-3 text-sm font-bold text-white/65"><Loader2 className="size-5 animate-spin text-[#f080b7]" /> Preparazione confronto...</div>
+        ) : !analytics || !analytics.workers.length ? (
+          <div className="p-8 text-sm text-white/60">Nessuna scheda valida trovata per il salone Buenos Aires.</div>
+        ) : (
+          <div className="space-y-7 p-5 lg:p-8">
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {analytics.ranking.map((worker, index) => (
+                <button key={worker.id} type="button" onClick={() => setSelectedWorkerId(worker.id)} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
+                  <span className="text-sm font-black text-[#f3a0c8]">#{index + 1}</span>
+                  <Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />
+                  <span className="min-w-0"><span className="block truncate text-sm font-black">{worker.name}</span><span className="mt-1 block text-xs text-white/55">{worker.controls} schede</span></span>
+                </button>
+              ))}
+            </div>
+
+            {selectedWorker ? (
+              <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+                <aside className="rounded-[24px] border border-white/10 bg-white/[0.055] p-5">
+                  <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
+                  <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-1">
+                    <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Clienti svolti</p><strong className="mt-1 block text-2xl tabular-nums">{selectedWorker.controls}</strong></div>
+                    <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Media per cliente</p><strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedWorker.averageRevenue)}</strong></div>
+                    <div className="col-span-2 rounded-2xl bg-white/[0.06] p-4 xl:col-span-1"><p className="text-[10px] font-bold uppercase text-white/50">Fatturazione attribuita</p><strong className="mt-1 block text-xl tabular-nums">{money.format(selectedWorker.revenue)}</strong></div>
+                  </div>
+                </aside>
+
+                <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
+                  <div className="flex items-center gap-2"><LineChart className="size-5 text-[#f080b7]" /><h3 className="font-black">Attività giornaliera</h3><span className="ml-auto text-[10px] font-bold uppercase text-white/45">Passa il mouse sui giorni</span></div>
+                  <div className="mt-5 overflow-x-auto pb-2">
+                    <div className="min-w-[1580px] space-y-4">
+                      {selectedWorker.months.map((month) => {
+                        const max = Math.max(1, ...month.days.map((day) => day.controls));
+                        return <div key={month.key} className="grid grid-cols-[120px_repeat(31,44px)] items-center gap-1.5">
+                          <div className="pr-3"><p className="truncate text-xs font-black capitalize">{month.label}</p><p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p></div>
+                          {month.days.map((day) => (
+                            <div key={day.day} className="group relative">
+                              <button type="button" disabled={!day.valid} aria-label={`${day.day} ${month.label}: ${day.controls} schede`} className={`grid size-11 place-items-end rounded-[9px] border pb-1 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${!day.valid ? "border-transparent bg-transparent text-transparent" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.04] bg-white/[0.055] text-white/40"}`} style={day.valid && day.controls ? { opacity: 0.35 + day.controls / max * 0.65 } : undefined}><span>{day.day}</span></button>
+                              {day.valid && day.controls > 0 ? <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-64 -translate-x-1/2 rounded-2xl border border-white/15 bg-[#172131] p-3 text-left shadow-2xl group-hover:block group-focus-within:block"><div className="flex justify-between gap-3"><strong className="text-xs">{day.day} {month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{day.controls} schede</span></div><p className="mt-1 text-[11px] text-emerald-300">{money.format(day.revenue)} attribuiti</p><div className="mt-2 space-y-1 border-t border-white/10 pt-2">{day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/70"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
+                            </div>
+                          ))}
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(145deg,rgba(31,27,38,0.98),rgba(17,16,24,0.98))] text-white shadow-[0_20px_60px_rgba(20,11,16,0.16)] backdrop-blur-2xl">
