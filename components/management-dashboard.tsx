@@ -161,6 +161,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  const [selectedAnalyticsDay, setSelectedAnalyticsDay] = useState<{ monthKey: string; day: number } | null>(null);
+  const [dayTooltip, setDayTooltip] = useState<{ x: number; y: number; month: AnalyticsMonth; day: AnalyticsDay } | null>(null);
   const hourlyChartItems = useMemo(() => {
     const byHour = new Map(data.hourlyClients.map((item) => [item.hour, item]));
     const standardHours = Array.from({ length: 11 }, (_, index) => `${String(index + 10).padStart(2, "0")}:00`);
@@ -193,6 +195,26 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   }, []);
 
   const selectedWorker = analytics?.workers.find((worker) => worker.id === selectedWorkerId) || analytics?.workers[0] || null;
+  const selectedDayDetails = selectedWorker && selectedAnalyticsDay
+    ? selectedWorker.months.find((month) => month.key === selectedAnalyticsDay.monthKey)?.days.find((day) => day.day === selectedAnalyticsDay.day) || null
+    : null;
+  const selectedDayMonth = selectedWorker && selectedAnalyticsDay
+    ? selectedWorker.months.find((month) => month.key === selectedAnalyticsDay.monthKey) || null
+    : null;
+  const attributionPeriod = analytics?.months.length
+    ? (() => {
+        const first = new Date(`${analytics.months[0].key}-01T12:00:00`);
+        const lastMonth = analytics.months[analytics.months.length - 1];
+        const today = new Date();
+        const todayParts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit" }).formatToParts(today);
+        const currentMonthKey = `${todayParts.find((part) => part.type === "year")?.value}-${todayParts.find((part) => part.type === "month")?.value}`;
+        const last = lastMonth.key === currentMonthKey
+          ? today
+          : new Date(`${lastMonth.key}-${String(lastMonth.daysInMonth).padStart(2, "0")}T12:00:00`);
+        const formatter = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" });
+        return `${formatter.format(first)} – ${formatter.format(last)}`;
+      })()
+    : "";
 
   const refresh = () => {
     setRefreshing(true);
@@ -374,7 +396,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <div className="space-y-7 p-5 lg:p-8">
             <div className="flex gap-3 overflow-x-auto pb-2">
               {analytics.ranking.map((worker, index) => (
-                <button key={worker.id} type="button" onClick={() => setSelectedWorkerId(worker.id)} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
+                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId(worker.id); setSelectedAnalyticsDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
                   <span className="text-sm font-black text-[#f3a0c8]">#{index + 1}</span>
                   <Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />
                   <span className="min-w-0"><span className="block truncate text-sm font-black">{worker.name}</span><span className="mt-1 block text-xs text-white/55">{worker.controls} schede</span></span>
@@ -384,27 +406,51 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
 
             {selectedWorker ? (
               <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-                <aside className="rounded-[24px] border border-white/10 bg-white/[0.055] p-5">
+                <div className="rounded-[24px] border border-white/15 bg-[#172131] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
                   <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
                   <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-1">
                     <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Clienti svolti</p><strong className="mt-1 block text-2xl tabular-nums">{selectedWorker.controls}</strong></div>
                     <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Media per cliente</p><strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedWorker.averageRevenue)}</strong></div>
-                    <div className="col-span-2 rounded-2xl bg-white/[0.06] p-4 xl:col-span-1"><p className="text-[10px] font-bold uppercase text-white/50">Fatturazione attribuita</p><strong className="mt-1 block text-xl tabular-nums">{money.format(selectedWorker.revenue)}</strong></div>
+                    <div className="col-span-2 rounded-2xl border border-white/10 bg-white/[0.07] p-4 xl:col-span-1">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/55">{selectedDayDetails ? "Fatturazione del giorno" : "Fatturazione attribuita"}</p>
+                      <strong className="mt-1 block text-xl tabular-nums text-emerald-300">{money.format(selectedDayDetails?.revenue ?? selectedWorker.revenue)}</strong>
+                      <p className="mt-2 text-[10px] font-semibold leading-4 text-white/50">{selectedDayDetails && selectedDayMonth ? `${selectedDayDetails.day} ${selectedDayMonth.label} · ${selectedDayDetails.controls} clienti` : attributionPeriod}</p>
+                      {selectedDayDetails ? <button type="button" onClick={() => setSelectedAnalyticsDay(null)} className="mt-3 min-h-11 rounded-xl border border-white/15 px-3 text-[10px] font-black uppercase text-white/70 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7]">Mostra totale periodo</button> : <p className="mt-2 text-[10px] font-semibold text-[#f3a0c8]">Tocca un giorno per vedere il ricavo</p>}
+                    </div>
                   </div>
-                </aside>
+                </div>
 
                 <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
                   <div className="flex items-center gap-2"><LineChart className="size-5 text-[#f080b7]" /><h3 className="font-black">Attività giornaliera</h3><span className="ml-auto text-[10px] font-bold uppercase text-white/45">Passa il mouse sui giorni</span></div>
                   <div className="mt-5 overflow-x-auto pb-2">
-                    <div className="min-w-[1580px] space-y-4">
+                    <div className="min-w-[1580px] space-y-4 pb-2">
                       {selectedWorker.months.map((month) => {
                         const max = Math.max(1, ...month.days.map((day) => day.controls));
                         return <div key={month.key} className="grid grid-cols-[120px_repeat(31,44px)] items-center gap-1.5">
                           <div className="pr-3"><p className="truncate text-xs font-black capitalize">{month.label}</p><p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p></div>
                           {month.days.map((day) => (
-                            <div key={day.day} className="group relative">
-                              <button type="button" disabled={!day.valid} aria-label={`${day.day} ${month.label}: ${day.controls} schede`} className={`grid size-11 place-items-end rounded-[9px] border pb-1 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${!day.valid ? "border-transparent bg-transparent text-transparent" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.04] bg-white/[0.055] text-white/40"}`} style={day.valid && day.controls ? { opacity: 0.35 + day.controls / max * 0.65 } : undefined}><span>{day.day}</span></button>
-                              {day.valid && day.controls > 0 ? <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-64 -translate-x-1/2 rounded-2xl border border-white/15 bg-[#172131] p-3 text-left shadow-2xl group-hover:block group-focus-within:block"><div className="flex justify-between gap-3"><strong className="text-xs">{day.day} {month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{day.controls} schede</span></div><p className="mt-1 text-[11px] text-emerald-300">{money.format(day.revenue)} attribuiti</p><div className="mt-2 space-y-1 border-t border-white/10 pt-2">{day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/70"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
+                            <div key={day.day} className="relative">
+                              <button
+                                type="button"
+                                disabled={!day.valid}
+                                aria-pressed={selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day}
+                                aria-label={`${day.day} ${month.label}: ${day.controls} schede, ${money.format(day.revenue)} attribuiti`}
+                                onClick={() => day.valid && setSelectedAnalyticsDay({ monthKey: month.key, day: day.day })}
+                                onMouseEnter={(event) => {
+                                  if (!day.valid || day.controls < 1) return;
+                                  const rect = event.currentTarget.getBoundingClientRect();
+                                  setDayTooltip({ x: rect.left + rect.width / 2, y: rect.top - 10, month, day });
+                                }}
+                                onMouseLeave={() => setDayTooltip(null)}
+                                onFocus={(event) => {
+                                  if (!day.valid || day.controls < 1) return;
+                                  const rect = event.currentTarget.getBoundingClientRect();
+                                  setDayTooltip({ x: rect.left + rect.width / 2, y: rect.top - 10, month, day });
+                                }}
+                                onBlur={() => setDayTooltip(null)}
+                                className={`grid size-11 place-items-end rounded-[9px] border pb-1 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f8b0d0] ${!day.valid ? "border-transparent bg-transparent text-transparent" : selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day ? "border-white bg-[#f080b7] text-white shadow-[0_0_0_3px_rgba(240,128,183,0.25)]" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.08] bg-white/[0.055] text-white/45 hover:bg-white/10"}`}
+                                style={day.valid && day.controls && !(selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day) ? { opacity: 0.42 + day.controls / max * 0.58 } : undefined}
+                              ><span>{day.day}</span></button>
                             </div>
                           ))}
                         </div>;
@@ -414,6 +460,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                 </div>
               </div>
             ) : null}
+            {dayTooltip ? <div className="pointer-events-none fixed z-[200] w-72 -translate-x-1/2 -translate-y-full rounded-2xl border border-white/15 bg-[#101725]/[0.98] p-4 text-left text-white shadow-[0_20px_70px_rgba(0,0,0,0.52)] backdrop-blur-xl" style={{ left: dayTooltip.x, top: dayTooltip.y }}><div className="flex justify-between gap-3"><strong className="text-xs capitalize">{dayTooltip.day.day} {dayTooltip.month.label}</strong><span className="text-xs font-black text-[#f3a0c8]">{dayTooltip.day.controls} schede</span></div><p className="mt-1 text-sm font-black text-emerald-300">{money.format(dayTooltip.day.revenue)} attribuiti</p><div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">{dayTooltip.day.services.slice(0, 6).map((service) => <p key={service.name} className="flex justify-between gap-3 text-[10px] text-white/75"><span className="truncate">{service.name}</span><strong>×{service.count}</strong></p>)}</div></div> : null}
           </div>
         )}
       </section>
