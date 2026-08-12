@@ -184,7 +184,17 @@ export default async function ShopifyPaymentsPage(props: {
         : amountMatches && methodMatches
           ? "CONFIRMED"
           : "MISMATCH";
-    return { ...payment, control, review, declaredAmount, declaredMethodText, amountMatches, methodMatches, state };
+    return {
+      ...payment,
+      clientName: control?.clientName || payment.clientName,
+      control,
+      review,
+      declaredAmount,
+      declaredMethodText,
+      amountMatches,
+      methodMatches,
+      state,
+    };
   });
   const providerCounts = liveDailyRevenue.payments.reduce((counts, payment) => counts.set(payment.provider, (counts.get(payment.provider) || 0) + 1), new Map<string, number>());
   const visibleReconciledRows = reconciledRows.filter((payment) => {
@@ -214,7 +224,9 @@ export default async function ShopifyPaymentsPage(props: {
   const pendingCount = reconciledRows.filter((payment) => payment.state !== "CONFIRMED").length;
   const manualPendingCount = reconciledRows.filter((payment) => payment.review?.status === "REQUESTED").length;
   const uniqueDeclaredTotal = (source: typeof rows) => Array.from(
-    new Map(source.map((payment) => [payment.responseId, payment])).values(),
+    // The same Shopify order can have repeated or split control records. It
+    // must contribute once to the declared total, never once per response.
+    new Map(source.map((payment) => [cleanOrderCode(payment.order) || payment.responseId, payment])).values(),
   ).reduce((total, payment) => total + payment.declaredAmount, 0);
   const declaredDayTotal = uniqueDeclaredTotal(rows.filter((payment) => romeDateKey(payment.createdAt) === todayKey));
   const declaredMonthTotal = uniqueDeclaredTotal(rows);

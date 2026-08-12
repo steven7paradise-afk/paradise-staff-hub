@@ -103,9 +103,6 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
       nodes {
         id
         name
-        customer { displayName }
-        billingAddress { name }
-        shippingAddress { name }
         transactions {
           id
           status
@@ -120,7 +117,7 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
   }`;
 
   try {
-    const transactionGroups: Array<{ order: { id: string; name: string; customer?: { displayName?: string }; billingAddress?: { name?: string }; shippingAddress?: { name?: string } }; transactions: any[] }> = [];
+    const transactionGroups: Array<{ order: { id: string; name: string }; transactions: any[] }> = [];
     let cursor: string | null = null;
     for (let page = 0; page < 20; page += 1) {
       const response: Response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
@@ -172,7 +169,9 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
         id,
         orderId: String(group.order.id),
         orderName: String(group.order.name || group.order.id),
-        clientName: String(group.order.customer?.displayName || group.order.billingAddress?.name || group.order.shippingAddress?.name || "Cliente Shopify"),
+        // Customer personal data requires a separate Shopify scope. The page
+        // enriches this label from Controllo Cliente when that record exists.
+        clientName: "Cliente Shopify",
         amount,
         method,
         provider: paymentProvider(transaction?.gateway, method),
