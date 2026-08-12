@@ -98,55 +98,64 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
   const start = new Date(`${startDateKey}T00:00:00${romeOffset(startDateKey)}`);
   const end = new Date(`${endDateKey}T00:00:00${romeOffset(endDateKey)}`);
   const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
-  const initialUrl = new URL(`https://${shop}/admin/api/2024-04/orders.json`);
-  initialUrl.searchParams.set("status", "any");
-  initialUrl.searchParams.set("limit", "250");
-  initialUrl.searchParams.set("updated_at_min", start.toISOString());
-  initialUrl.searchParams.set("updated_at_max", end.toISOString());
-  initialUrl.searchParams.set("fields", "id,name,customer,email,updated_at");
+  const query = `query RevenueOrders($cursor: String, $search: String!) {
+    orders(first: 250, after: $cursor, query: $search, sortKey: PROCESSED_AT) {
+      nodes {
+        id
+        name
+        transactions {
+          id
+          status
+          kind
+          processedAt
+          gateway
+          amountSet { shopMoney { amount currencyCode } }
+        }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }`;
 
   try {
-    const orders: Array<{
-      id: string | number;
-      name?: string;
-      customer?: { first_name?: string; last_name?: string; email?: string } | null;
-      email?: string;
-    }> = [];
-    let nextUrl: string | null = initialUrl.toString();
-    for (let page = 0; nextUrl && page < 20; page += 1) {
-      const response: Response = await fetch(nextUrl, { headers, signal: AbortSignal.timeout(12000), next: { revalidate: 300 } });
-      if (!response.ok) throw new Error(`Shopify orders ${response.status}`);
+    const transactionGroups: Array<{ order: { id: string; name: string }; transactions: any[] }> = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 20; page += 1) {
+      const response: Response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query,
+          variables: {
+            cursor,
+            search: `processed_at:>=${start.toISOString()} processed_at:<${end.toISOString()}`,
+          },
+        }),
+        signal: AbortSignal.timeout(15000),
+        next: { revalidate: 300 },
+      });
+      if (!response.ok) throw new Error(`Shopify GraphQL ${response.status}`);
       const data = await response.json();
-      if (Array.isArray(data?.orders)) orders.push(...data.orders);
-      nextUrl = response.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i)?.[1] || null;
-    }
-
-    const transactionGroups: Array<{ order: (typeof orders)[number]; transactions: any[] }> = [];
-    for (let index = 0; index < orders.length; index += 8) {
-      const batch = orders.slice(index, index + 8);
-      const results = await Promise.all(batch.map(async (order) => {
-        const response = await fetch(`https://${shop}/admin/api/2024-04/orders/${order.id}/transactions.json`, {
-          headers,
-          signal: AbortSignal.timeout(12000),
-          next: { revalidate: 300 },
-        });
-        if (!response.ok) return { order, transactions: [] };
-        const data = await response.json();
-        return { order, transactions: Array.isArray(data?.transactions) ? data.transactions : [] };
-      }));
-      transactionGroups.push(...results);
+      if (data?.errors?.some((error: { path?: string[] }) => error.path?.[0] === "orders")) {
+        throw new Error(`Shopify GraphQL orders: ${data.errors[0]?.message || "unknown error"}`);
+      }
+      const connection = data?.data?.orders;
+      for (const order of Array.isArray(connection?.nodes) ? connection.nodes : []) {
+        transactionGroups.push({ order, transactions: Array.isArray(order?.transactions) ? order.transactions : [] });
+      }
+      if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+      cursor = connection.pageInfo.endCursor;
     }
 
     const seen = new Set<string>();
     const totals = { ...empty, available: true };
     for (const group of transactionGroups) {
       for (const transaction of group.transactions) {
-      const id = String(transaction?.id || transaction?.authorization || "");
-      const processedAt = paymentDate(transaction?.processed_at || transaction?.created_at, new Date(0));
+      const id = String(transaction?.id || "");
+      const processedAt = paymentDate(transaction?.processedAt, new Date(0));
       if (!id || seen.has(id) || processedAt < start || processedAt >= end) continue;
       if (String(transaction?.status).toLowerCase() !== "success") continue;
       if (!["sale", "capture"].includes(String(transaction?.kind).toLowerCase())) continue;
-      const amount = moneyValue(transaction?.amount);
+      const amount = moneyValue(transaction?.amountSet?.shopMoney?.amount);
       if (amount <= 0) continue;
       seen.add(id);
       const method = classifyShopifyPaymentMethod([String(transaction?.gateway || "")]);
@@ -156,13 +165,11 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
       else if (method === "CONTANTI") totals.cash += amount;
       else if (method === "CASHMATIC") totals.cash += amount;
       else totals.unclassified += amount;
-      const firstName = String(group.order.customer?.first_name || "").trim();
-      const lastName = String(group.order.customer?.last_name || "").trim();
       totals.payments.push({
         id,
         orderId: String(group.order.id),
         orderName: String(group.order.name || group.order.id),
-        clientName: [firstName, lastName].filter(Boolean).join(" ") || "Cliente Shopify",
+        clientName: "Cliente Shopify",
         amount,
         method,
         provider: paymentProvider(transaction?.gateway, method),
