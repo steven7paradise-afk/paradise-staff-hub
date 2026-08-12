@@ -112,7 +112,10 @@ export default async function ShopifyPaymentsPage(props: {
     ? rows.filter((payment) => romeDateKey(payment.createdAt) === dateFilter)
     : rows;
   const pendingPayments = scopedRows
-    .filter((payment) => payment.order && !payment.verified)
+    .filter((payment) => payment.order && (
+      !payment.verified ||
+      (payment.method === "CASHMATIC" && payment.gateway.includes(","))
+    ))
     .map((payment) => ({ id: payment.id, order: payment.order }));
   const verifiedCount = scopedRows.filter((payment) => payment.verified).length;
   const pendingCount = scopedRows.filter((payment) => !payment.verified).length;

@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     answers[CLIENT_CONTROL_FIELD_IDS.paymentVerified] = verified;
     answers[CLIENT_CONTROL_FIELD_IDS.paymentReference] = details.paymentReference || "";
     answers[CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt] = details.transactionProcessedAt || "";
+    answers.client_control_payment_breakdown = details.paymentBreakdown;
     answers.client_control_payment_checked_at = new Date().toISOString();
     answers.client_control_payment_checked_by = user.name || user.id;
 

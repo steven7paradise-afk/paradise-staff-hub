@@ -747,7 +747,14 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   phone: string | null;
   financialStatus: string | null;
   paymentGateways: string[];
-  paymentMethod: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
+  paymentMethod: "CARTA" | "CASHMATIC" | "CONTANTI" | "MISTO" | "DA_VERIFICARE";
+  paymentBreakdown: Array<{
+    method: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
+    gateway: string;
+    amount: number;
+    reference: string | null;
+    processedAt: string | null;
+  }>;
   paymentReference: string | null;
   transactionStatus: string | null;
   transactionProcessedAt: string | null;
@@ -841,6 +848,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const phone = orderData.customer?.phone || null;
       const financialStatus = orderData.financial_status ? String(orderData.financial_status) : null;
       let paymentTransaction: any = null;
+      let successfulPaymentTransactions: any[] = [];
       try {
         const transactionResponse = await fetch(`https://${shop}/admin/api/2024-04/orders/${orderData.id}/transactions.json`, {
           headers: {
@@ -851,10 +859,14 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         if (transactionResponse.ok) {
           const transactionData = await transactionResponse.json();
           const transactions = Array.isArray(transactionData?.transactions) ? transactionData.transactions : [];
-          paymentTransaction = transactions.find((transaction: any) =>
+          successfulPaymentTransactions = transactions.filter((transaction: any) =>
             String(transaction.status).toLowerCase() === "success" &&
             ["sale", "capture"].includes(String(transaction.kind).toLowerCase())
-          ) ?? transactions.find((transaction: any) => String(transaction.status).toLowerCase() === "success") ?? transactions[0] ?? null;
+          );
+          paymentTransaction = successfulPaymentTransactions[0]
+            ?? transactions.find((transaction: any) => String(transaction.status).toLowerCase() === "success")
+            ?? transactions[0]
+            ?? null;
         }
       } catch (transactionError) {
         console.error(`Error fetching Shopify transactions for ${orderData.id}:`, transactionError);
@@ -865,7 +877,33 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         : paymentTransaction?.gateway || orderData.gateway
           ? [String(paymentTransaction?.gateway || orderData.gateway).trim()]
           : [];
-      const paymentMethod = classifyShopifyPaymentMethod(paymentGateways);
+      const rawPaymentBreakdown = successfulPaymentTransactions
+        .map((transaction: any) => {
+          const gateway = String(transaction.gateway || "").trim();
+          const amount = Number.parseFloat(String(transaction.amount || "0"));
+          return {
+            method: classifyShopifyPaymentMethod([gateway]),
+            gateway,
+            amount: Number.isFinite(amount) ? amount : 0,
+            reference: transaction.authorization ? String(transaction.authorization) : transaction.id ? String(transaction.id) : null,
+            processedAt: transaction.processed_at ? String(transaction.processed_at) : transaction.created_at ? String(transaction.created_at) : null,
+          };
+        })
+        .filter((transaction) => transaction.amount > 0);
+      const paymentBreakdown = Array.from(
+        rawPaymentBreakdown.reduce((groups, transaction) => {
+          const key = `${transaction.method}:${transaction.gateway}`;
+          const current = groups.get(key);
+          groups.set(key, current
+            ? { ...current, amount: current.amount + transaction.amount }
+            : transaction);
+          return groups;
+        }, new Map<string, (typeof rawPaymentBreakdown)[number]>()).values(),
+      );
+      const recognizedMethods = new Set(paymentBreakdown.map((transaction) => transaction.method).filter((method) => method !== "DA_VERIFICARE"));
+      const paymentMethod = recognizedMethods.size > 1
+        ? "MISTO" as const
+        : paymentBreakdown[0]?.method ?? classifyShopifyPaymentMethod(paymentGateways);
 
       return {
         id: String(orderData.id),
@@ -878,6 +916,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         financialStatus,
         paymentGateways,
         paymentMethod,
+        paymentBreakdown,
         paymentReference: paymentTransaction?.authorization ? String(paymentTransaction.authorization) : paymentTransaction?.id ? String(paymentTransaction.id) : null,
         transactionStatus: paymentTransaction?.status ? String(paymentTransaction.status) : null,
         transactionProcessedAt: paymentTransaction?.processed_at ? String(paymentTransaction.processed_at) : paymentTransaction?.created_at ? String(paymentTransaction.created_at) : null,

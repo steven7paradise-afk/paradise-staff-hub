@@ -52,7 +52,7 @@ export async function getShopifyPaymentRegister(options: {
   });
 
   return responses
-    .map((response): ShopifyPaymentRegisterRow => {
+    .flatMap((response): ShopifyPaymentRegisterRow[] => {
       const answers = response.answers as Record<string, unknown>;
       const storedMethod = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "DA_VERIFICARE").toUpperCase();
       const gateway = String(answers[CLIENT_CONTROL_FIELD_IDS.paymentGateway] || "");
@@ -62,7 +62,7 @@ export async function getShopifyPaymentRegister(options: {
       const method = storedMethod === "CASHMATIC" && detectedGatewayMethod === "CONTANTI"
         ? "CONTANTI"
         : storedMethod;
-      return {
+      const baseRow = {
         id: response.id,
         createdAt: response.created_at,
         locationName: response.user_location_name,
@@ -75,6 +75,20 @@ export async function getShopifyPaymentRegister(options: {
         status: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentStatus] || ""),
         reference: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentReference] || ""),
       };
+      const breakdown = Array.isArray(answers.client_control_payment_breakdown)
+        ? answers.client_control_payment_breakdown.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        : [];
+      if (breakdown.length > 1) {
+        return breakdown.map((item, index) => ({
+          ...baseRow,
+          id: `${response.id}:${index}`,
+          method: String(item.method || "DA_VERIFICARE").toUpperCase(),
+          amount: moneyValue(item.amount),
+          gateway: String(item.gateway || ""),
+          reference: String(item.reference || ""),
+        }));
+      }
+      return [baseRow];
     })
     .filter((payment) => Boolean(payment.order) || payment.verified || payment.method !== "DA_VERIFICARE");
 }
