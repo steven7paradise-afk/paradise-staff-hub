@@ -14,6 +14,16 @@ function namesFromAnswer(value: unknown) {
   return String(value ?? "").split(/[,;]+/).map((name) => name.trim()).filter(Boolean);
 }
 
+function moneyValue(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const normalized = String(value ?? "")
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function isBuenosAires(value: unknown) {
   const text = String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   return text.includes("buenos") || text.includes("corso");
@@ -58,8 +68,8 @@ function cleanOrderCode(value: unknown) {
   return String(value ?? "").replace(/^#/, "").trim().toLowerCase();
 }
 
-type DayBucket = { controls: number; revenue: number; services: Map<string, number> };
-type MonthBucket = { controls: number; revenue: number; days: Map<number, DayBucket> };
+type DayBucket = { controls: number; revenue: number; declaredRevenue: number; services: Map<string, number> };
+type MonthBucket = { controls: number; revenue: number; declaredRevenue: number; days: Map<number, DayBucket> };
 type WorkerBucket = {
   id: string;
   name: string;
@@ -116,7 +126,7 @@ export async function GET(request: NextRequest) {
   const employeeByName = new Map(employees.map((employee) => [resolveCanonicalStaffName(employee.name, canonicalNames), employee]));
   const workerMap = new Map<string, WorkerBucket>();
   const salonMonths = new Map<string, MonthBucket>();
-  const controlsByOrder = new Map<string, { names: string[]; services: string[] }>();
+  const controlsByOrder = new Map<string, { names: string[]; services: string[]; declaredAmount: number }>();
   for (const employee of employees) {
     const canonical = resolveCanonicalStaffName(employee.name, canonicalNames);
     workerMap.set(canonical, { id: employee.id, name: employee.name, photoUrl: employee.photo_url, months: new Map() });
@@ -134,8 +144,8 @@ export async function GET(request: NextRequest) {
 
     // Salon revenue counts each client control exactly once. It must not grow
     // when the same client was handled by two or more workers.
-    const salonMonth = salonMonths.get(key) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
-    const salonDay = salonMonth.days.get(day) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+    const salonMonth = salonMonths.get(key) || { controls: 0, revenue: 0, declaredRevenue: 0, days: new Map<number, DayBucket>() };
+    const salonDay = salonMonth.days.get(day) || { controls: 0, revenue: 0, declaredRevenue: 0, services: new Map<string, number>() };
     salonMonth.controls += 1;
     salonDay.controls += 1;
     for (const service of services) salonDay.services.set(service, (salonDay.services.get(service) || 0) + 1);
@@ -148,13 +158,14 @@ export async function GET(request: NextRequest) {
       .map((name) => resolveCanonicalStaffName(name, canonicalNames))
       .filter((name) => employeeByName.has(name)))];
     const orderCode = cleanOrderCode(answers.second_shopify_order || answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder]);
-    if (orderCode && !controlsByOrder.has(orderCode)) controlsByOrder.set(orderCode, { names, services });
+    const declaredAmount = moneyValue(answers.client_control_declared_paid ?? answers[CLIENT_CONTROL_FIELD_IDS.paid]);
+    if (orderCode && !controlsByOrder.has(orderCode)) controlsByOrder.set(orderCode, { names, services, declaredAmount });
     if (!names.length) continue;
 
     for (const name of names) {
       const worker = workerMap.get(name)!;
-      const month = worker.months.get(key) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
-      const daily = month.days.get(day) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+      const month = worker.months.get(key) || { controls: 0, revenue: 0, declaredRevenue: 0, days: new Map<number, DayBucket>() };
+      const daily = month.days.get(day) || { controls: 0, revenue: 0, declaredRevenue: 0, services: new Map<string, number>() };
       month.controls += 1;
       daily.controls += 1;
       for (const service of services) daily.services.set(service, (daily.services.get(service) || 0) + 1);
@@ -166,6 +177,7 @@ export async function GET(request: NextRequest) {
 
   // Shopify is the accounting source. Controllo Cliente supplies the salon,
   // services and staff linked through the Shopify order number.
+  const declaredOrdersCounted = new Set<string>();
   for (const payment of shopifyRevenue.payments) {
     const control = controlsByOrder.get(cleanOrderCode(payment.orderName));
     if (!control) continue;
@@ -173,10 +185,16 @@ export async function GET(request: NextRequest) {
     const revenueKey = monthKey(paymentDate);
     if (!months.some((month) => month.key === revenueKey)) continue;
     const revenueDayNumber = romeDay(paymentDate);
-    const revenueMonth = salonMonths.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
-    const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+    const revenueMonth = salonMonths.get(revenueKey) || { controls: 0, revenue: 0, declaredRevenue: 0, days: new Map<number, DayBucket>() };
+    const revenueDay = revenueMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, declaredRevenue: 0, services: new Map<string, number>() };
     revenueMonth.revenue += payment.amount;
     revenueDay.revenue += payment.amount;
+    const orderCode = cleanOrderCode(payment.orderName);
+    if (!declaredOrdersCounted.has(orderCode)) {
+      revenueMonth.declaredRevenue += control.declaredAmount;
+      revenueDay.declaredRevenue += control.declaredAmount;
+      declaredOrdersCounted.add(orderCode);
+    }
     for (const service of control.services) revenueDay.services.set(service, (revenueDay.services.get(service) || 0) + 1);
     revenueMonth.days.set(revenueDayNumber, revenueDay);
     salonMonths.set(revenueKey, revenueMonth);
@@ -186,8 +204,8 @@ export async function GET(request: NextRequest) {
     for (const name of control.names) {
       const worker = workerMap.get(name);
       if (!worker) continue;
-      const workerMonth = worker.months.get(revenueKey) || { controls: 0, revenue: 0, days: new Map<number, DayBucket>() };
-      const workerDay = workerMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, services: new Map<string, number>() };
+      const workerMonth = worker.months.get(revenueKey) || { controls: 0, revenue: 0, declaredRevenue: 0, days: new Map<number, DayBucket>() };
+      const workerDay = workerMonth.days.get(revenueDayNumber) || { controls: 0, revenue: 0, declaredRevenue: 0, services: new Map<string, number>() };
       workerMonth.revenue += share;
       workerDay.revenue += share;
       workerMonth.days.set(revenueDayNumber, workerDay);
@@ -202,6 +220,7 @@ export async function GET(request: NextRequest) {
         ...monthInfo,
         controls: month?.controls || 0,
         revenue: Math.round((month?.revenue || 0) * 100) / 100,
+        declaredRevenue: Math.round((month?.declaredRevenue || 0) * 100) / 100,
         days: Array.from({ length: 31 }, (_, index) => {
           const day = index + 1;
           const data = month?.days.get(day);
@@ -210,6 +229,7 @@ export async function GET(request: NextRequest) {
             valid: day <= monthInfo.daysInMonth,
             controls: data?.controls || 0,
             revenue: Math.round((data?.revenue || 0) * 100) / 100,
+            declaredRevenue: Math.round((data?.declaredRevenue || 0) * 100) / 100,
             services: data ? Array.from(data.services.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count) : [],
           };
         }),
@@ -234,6 +254,7 @@ export async function GET(request: NextRequest) {
       ...monthInfo,
       controls: month?.controls || 0,
       revenue: Math.round((month?.revenue || 0) * 100) / 100,
+      declaredRevenue: Math.round((month?.declaredRevenue || 0) * 100) / 100,
       days: Array.from({ length: 31 }, (_, index) => {
         const day = index + 1;
         const data = month?.days.get(day);
@@ -242,6 +263,7 @@ export async function GET(request: NextRequest) {
           valid: day <= monthInfo.daysInMonth,
           controls: data?.controls || 0,
           revenue: Math.round((data?.revenue || 0) * 100) / 100,
+          declaredRevenue: Math.round((data?.declaredRevenue || 0) * 100) / 100,
           services: data ? Array.from(data.services.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count) : [],
         };
       }),

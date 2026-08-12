@@ -48,6 +48,7 @@ type AnalyticsDay = {
   valid: boolean;
   controls: number;
   revenue: number;
+  declaredRevenue: number;
   services: Array<{ name: string; count: number }>;
 };
 
@@ -57,6 +58,7 @@ type AnalyticsMonth = {
   daysInMonth: number;
   controls: number;
   revenue: number;
+  declaredRevenue: number;
   days: AnalyticsDay[];
 };
 
@@ -159,7 +161,7 @@ function ThreeMonthRevenueChart({ months, selectedDay, onSelectDay }: {
           </div>
         </div>
       </div>
-      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><p className="mt-2 text-xl font-black tabular-nums text-white">{money.format(day?.revenue || 0)}</p><p className="mt-1 text-[10px] font-semibold text-white/50">{day?.controls || 0} clienti svolti</p></div>)}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare lo stesso giorno nei tre mesi.</p>}
+      {selectedDay ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{selectedValues.map(({ month, day }, index) => { const shopify = day?.revenue || 0; const declared = day?.declaredRevenue || 0; const difference = declared - shopify; return <div key={month.key} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><div className="flex items-center justify-between gap-3"><p className="text-xs font-black capitalize">{selectedDay} {month.label}</p><span className="size-3 rounded-full" style={{ backgroundColor: revenueLineColors[index] }} /></div><div className="mt-3 grid grid-cols-2 gap-2"><div><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Shopify</p><p className="mt-1 text-lg font-black tabular-nums text-white">{money.format(shopify)}</p></div><div><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Dichiarato</p><p className="mt-1 text-lg font-black tabular-nums text-[#f5b2d2]">{money.format(declared)}</p></div></div><div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3"><p className="text-[10px] font-semibold text-white/50">{day?.controls || 0} clienti svolti</p><p className={`text-[10px] font-black ${Math.abs(difference) < 0.01 ? "text-emerald-300" : "text-amber-300"}`}>{Math.abs(difference) < 0.01 ? "Coincide" : `Differenza ${difference > 0 ? "+" : ""}${money.format(difference)}`}</p></div></div>; })}</div> : <p className="mt-3 text-xs font-bold text-[#f3a0c8]">Clicca o tocca un giorno per confrontare lo stesso giorno nei tre mesi.</p>}
     </div>
   );
 }
