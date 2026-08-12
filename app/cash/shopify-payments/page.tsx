@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  CalendarCheck,
   CheckCircle2,
   ClipboardList,
   CreditCard,
@@ -78,6 +79,24 @@ function providerLabel(provider: string) {
     CARTA: "Altra carta / POS",
     ALTRO: "Altro / da classificare",
   } as Record<string, string>)[provider] || provider;
+}
+
+function appointmentUrl(payment: { orderName: string; processedAt: string; control?: { bookingId?: string; locationName?: string | null } | null }) {
+  const location = String(payment.control?.locationName || "").toLowerCase();
+  const base = location.includes("buenos") || location.includes("corso")
+    ? "/appointments/buenos-aires"
+    : "/appointments";
+  const params = new URLSearchParams();
+  const date = romeDateKey(new Date(payment.processedAt));
+  if (payment.control?.bookingId) {
+    params.set("from", date);
+    params.set("to", date);
+    params.set("booking", payment.control.bookingId);
+  } else {
+    params.set("scope", "all");
+    params.set("order", payment.orderName);
+  }
+  return `${base}?${params.toString()}`;
 }
 
 export default async function ShopifyPaymentsPage(props: {
@@ -497,6 +516,14 @@ export default async function ShopifyPaymentsPage(props: {
                           <ClipboardList className="size-3.5" /> Vedi dettagli
                         </Link>
                       </div> : null}
+                      {!isConfirmed ? (
+                        <Link
+                          href={appointmentUrl(payment)}
+                          className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#A74758]/20 bg-white px-3 text-[10px] font-black uppercase text-[#873647] transition hover:bg-[#FFF2F5]"
+                        >
+                          <CalendarCheck className="size-3.5" /> Apri prenotazione
+                        </Link>
+                      ) : null}
                     </div>
                     <div className="rounded-2xl bg-[#F7F8FA] p-3">
                       <p className="text-base font-black">{formatMoney(payment.amount)}</p>

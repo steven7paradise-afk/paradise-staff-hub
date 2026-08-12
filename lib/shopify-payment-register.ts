@@ -17,6 +17,7 @@ export type ShopifyPaymentRegisterRow = {
   reference: string;
   declaredAmount: number;
   declaredMethod: string;
+  bookingId: string;
 };
 
 export type ShopifyDailyRevenue = {
@@ -254,6 +255,7 @@ export async function getShopifyPaymentRegister(options: {
         reference: String(answers[CLIENT_CONTROL_FIELD_IDS.paymentReference] || ""),
         declaredAmount: moneyValue(answers.client_control_declared_paid ?? answers[CLIENT_CONTROL_FIELD_IDS.paid]),
         declaredMethod: String(answers.client_control_declared_payment_method || legacyDeclaredMethod || storedMethod || ""),
+        bookingId: String(answers.booking_id || "").trim(),
       };
       const breakdown = Array.isArray(answers.client_control_payment_breakdown)
         ? answers.client_control_payment_breakdown.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")

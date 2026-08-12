@@ -1160,9 +1160,9 @@ export function AppointmentsBrowser({
     () => dateFromLocalKey(initialAnchorDate) || new Date(),
   );
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
-    null,
+    () => searchParams.get("booking"),
   );
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get("order") || "");
   const [internalNotes, setInternalNotes] = useState<Record<string, string>>(
     {},
   );
@@ -2390,6 +2390,16 @@ export function AppointmentsBrowser({
       null,
     [filteredBookings, initialBookings, selectedBookingId],
   );
+
+  useEffect(() => {
+    const bookingFromUrl = searchParams.get("booking");
+    const orderFromUrl = searchParams.get("order");
+    if (bookingFromUrl && initialBookings.some((booking) => booking.id === bookingFromUrl)) {
+      setSelectedBookingId(bookingFromUrl);
+    } else if (orderFromUrl) {
+      setSearchTerm(orderFromUrl);
+    }
+  }, [initialBookings, searchParams]);
 
   useEffect(() => {
     if (!filteredBookings.length) {
