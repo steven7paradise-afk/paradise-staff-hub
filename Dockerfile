@@ -22,7 +22,7 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 # Keep enough memory available for Docker/BuildKit on the deployment host.
 # Next is already configured to compile with one worker in next.config.ts.
-ENV NODE_OPTIONS="--max-old-space-size=768"
+ENV NODE_OPTIONS="--max-old-space-size=640"
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
