@@ -4232,18 +4232,28 @@ export function AppointmentsBrowser({
         </div>
       ) : null}
       <div className="w-full">
-        <main className="min-w-0 space-y-5">
-          <section className={`relative rounded-lg border border-[#E8D6E0] bg-white p-5 shadow-sm sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
+        <main className="relative min-w-0 space-y-5 overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_5%_0%,rgba(255,197,226,0.34),transparent_30%),radial-gradient(circle_at_95%_8%,rgba(224,213,255,0.4),transparent_28%)] p-2 sm:p-3 lg:p-4">
+          <section className={`relative overflow-visible rounded-[28px] border border-white/80 bg-white/72 p-5 shadow-[0_22px_60px_rgba(88,45,66,0.10)] backdrop-blur-2xl sm:p-7 ${isDatePickerOpen ? "z-40" : "z-10"}`}>
             <div>
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <h1 className="text-4xl font-bold text-[#1C1C1C] sm:text-5xl">
-                      Prenotazioni
-                    </h1>
-                    <span className="rounded-full bg-[#F6C6E3] px-3 py-1 text-sm font-black text-black">
-                      {activeBookingsCount}
+                    <span className="grid size-12 shrink-0 place-items-center rounded-[18px] border border-white bg-[linear-gradient(145deg,#FFD5E9,#F3E9FF)] text-[#B83D7F] shadow-[0_10px_28px_rgba(185,61,127,0.16)]">
+                      <CalendarCheck className="size-6" />
                     </span>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <h1 className="text-3xl font-black tracking-[-0.04em] text-[#171717] sm:text-4xl">
+                          Appuntamenti
+                        </h1>
+                        <span className="rounded-full border border-[#F0C4D7] bg-[#FFF2F8] px-3 py-1 text-xs font-black tabular-nums text-[#A93469]">
+                          {activeBookingsCount} attivi
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm font-semibold text-black/48">
+                        Clienti, arrivi e servizi in un’unica vista operativa
+                      </p>
+                    </div>
                     {isPC && pcActiveWorker ? (
                       <button
                         type="button"
@@ -4278,13 +4288,10 @@ export function AppointmentsBrowser({
                     </button>
                   )}
                 </div>
-                <p className="mt-2 text-sm font-medium text-black/50">
-                  Gestione giornaliera clienti e appuntamenti
-                </p>
               </div>
             </div>
 
-            <div className="mt-7 overflow-x-auto rounded-lg border border-[#E8D6E0] bg-[#FFF8FC] p-1.5">
+            <div className="mt-7 overflow-x-auto rounded-[20px] border border-white/90 bg-[#F8F3F7]/85 p-1.5 shadow-inner">
               <div className="flex min-w-max gap-1">
                 {[
                   {
@@ -4329,14 +4336,14 @@ export function AppointmentsBrowser({
                     type="button"
                     onClick={tab.onClick}
                     className={[
-                      "inline-flex min-h-11 items-center gap-3 rounded-md px-4 py-3 text-xs font-black uppercase transition",
+                      "inline-flex min-h-11 items-center gap-2.5 rounded-[15px] px-4 py-3 text-xs font-black transition",
                       tab.active
-                        ? "bg-[#F6C6E3] text-black shadow-sm"
-                        : "text-black/65 hover:bg-white",
+                        ? "border border-white bg-white text-[#9E3262] shadow-[0_6px_18px_rgba(89,45,65,0.10)]"
+                        : "border border-transparent text-black/55 hover:bg-white/70 hover:text-black/75",
                     ].join(" ")}
                   >
                     {tab.label}
-                    <span className="min-w-6 rounded-full border border-[#E1CAD6] bg-white px-2 py-0.5 text-center text-[10px] text-black">
+                    <span className="min-w-6 rounded-full bg-[#F5D5E4] px-2 py-0.5 text-center text-[10px] text-[#8D2E59]">
                       {tab.count}
                     </span>
                   </button>
@@ -4344,21 +4351,21 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(260px,1fr)_200px_200px_110px_140px]">
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_210px_190px_120px_150px]">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#9E8D83]" />
+                <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#B44D79]" />
                 <input
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Cerca per nome cliente, email o servizio..."
-                  className="h-12 w-full rounded-md border border-[#DDBDCE] bg-white pl-12 pr-4 text-sm font-semibold text-black outline-none transition placeholder:text-black/35 focus:border-black focus:ring-2 focus:ring-[#F6C6E3]"
+                  className="h-13 w-full rounded-[17px] border border-white bg-white/90 pl-12 pr-4 text-sm font-semibold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none transition placeholder:text-black/35 focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
                 />
               </div>
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setIsDatePickerOpen((current) => !current)}
-                  className="flex h-12 w-full items-center justify-between rounded-md border border-[#DDBDCE] bg-white px-4 text-sm font-bold text-black hover:border-black"
+                  className="flex h-13 w-full items-center justify-between rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] transition hover:border-[#D86B9B]"
                 >
                   <span className="inline-flex min-w-0 items-center gap-2">
                     <CalendarDays className="size-4 shrink-0 text-[#A56A42]" />
@@ -4467,7 +4474,7 @@ export function AppointmentsBrowser({
                 onChange={(event) =>
                   updateSalonFilter(event.target.value as SalonFilter)
                 }
-                className="h-12 rounded-md border border-[#DDBDCE] bg-white px-4 text-sm font-bold text-black outline-none focus:border-black focus:ring-2 focus:ring-[#F6C6E3]"
+                className="h-13 rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
               >
                 {salonOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -4481,8 +4488,8 @@ export function AppointmentsBrowser({
                   onClick={() => setIsFilterModalOpen((current) => !current)}
                   className={`flex h-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition ${
                     activeAdvancedFilterCount > 0
-                      ? "border-black bg-[#F6C6E3] text-black"
-                      : "border-[#DDBDCE] bg-white text-black hover:border-black"
+                      ? "border-[#D86B9B] bg-[#FFF0F7] text-[#A93469]"
+                      : "border-white bg-white/90 text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] hover:border-[#D86B9B]"
                   }`}
                 >
                   <MoreVertical className={`size-4 rotate-90 ${activeAdvancedFilterCount > 0 ? "text-[#B9476D]" : "text-[#A56A42]"}`} />
@@ -4595,16 +4602,16 @@ export function AppointmentsBrowser({
                     forceRefresh: true,
                   });
                 }}
-                className="flex h-12 items-center justify-center gap-2 rounded-full border border-black bg-black px-5 text-xs font-black uppercase text-white transition hover:bg-[#D93B8F] disabled:opacity-50"
+                className="flex h-13 items-center justify-center gap-2 rounded-[17px] border border-[#1C1820] bg-[#1C1820] px-5 text-xs font-black text-white shadow-[0_10px_26px_rgba(28,24,32,0.20)] transition hover:-translate-y-0.5 hover:bg-[#A93469] disabled:opacity-50"
               >
-                <RefreshCw className={`size-4 text-[#A56A42] ${isRefreshing ? "animate-spin" : ""}`} />
-                <span>{isRefreshing ? "Syncing..." : "Sincronizza"}</span>
+                <RefreshCw className={`size-4 text-[#FFD8E9] ${isRefreshing ? "animate-spin" : ""}`} />
+                <span>{isRefreshing ? "Sincronizzo..." : "Sincronizza"}</span>
               </button>
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-lg border border-[#E8D6E0] bg-white shadow-sm">
-            <div className="hidden grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] gap-4 border-b border-[#E4C7D7] bg-[#F6C6E3] px-6 py-4 text-[11px] font-black uppercase text-black xl:grid">
+          <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white/76 shadow-[0_22px_60px_rgba(88,45,66,0.10)] backdrop-blur-2xl">
+            <div className="hidden grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] gap-4 border-b border-[#EEDCE5] bg-[linear-gradient(90deg,#FFF4F9,#F7F2FF)] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#7D5266] xl:grid">
               <span>Appuntamento</span>
               <span>Cliente</span>
               <span>Servizio</span>
@@ -4614,7 +4621,7 @@ export function AppointmentsBrowser({
               <span />
             </div>
 
-            <div className="divide-y divide-[#E8D6E0]">
+            <div className="divide-y divide-[#F0E4EA]">
               {tableBookings.length ? (
                 tableBookings.map((booking, index) => {
                   const status = getBookingStatus(booking);
@@ -4636,21 +4643,21 @@ export function AppointmentsBrowser({
                         setSelectedBookingId(booking.id);
                       }}
                       className={[
-                        "grid w-full cursor-pointer gap-4 px-5 py-5 text-left transition xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
+                        "group grid w-full cursor-pointer gap-4 px-5 py-5 text-left transition duration-200 xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
                         isSelected
-                          ? "bg-[#FFF0F8] shadow-[inset_4px_0_0_#D93B8F]"
-                          : "bg-white hover:bg-[#FFF8FC]",
+                          ? "bg-[linear-gradient(90deg,#FFF0F7,#FBF8FF)] shadow-[inset_4px_0_0_#D93B8F]"
+                          : "bg-white/82 hover:bg-[#FFFAFC] hover:shadow-[inset_4px_0_0_#F2B6D1]",
                       ].join(" ")}
                     >
                       <div className="flex gap-3">
-                        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#F6C6E3] text-black">
+                        <span className="grid size-12 shrink-0 place-items-center rounded-[17px] border border-white bg-[linear-gradient(145deg,#FFE1EF,#F1E9FF)] text-[#A93469] shadow-sm">
                           <CalendarDays className="size-5" />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#38271F]">
+                          <p className="text-sm font-black text-[#211A1E]">
                             {formatDate(booking.startDate)}
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-[#38271F]">
+                          <p className="mt-1 text-sm font-black tabular-nums text-[#211A1E]">
                             {formatTime(booking.startDate)} -{" "}
                             {formatTime(booking.endDate)}
                           </p>
@@ -4699,7 +4706,7 @@ export function AppointmentsBrowser({
                         </div>
                       </div>
 
-                      <div className="min-w-0 rounded-2xl bg-[#FFF9F6] p-3 xl:bg-transparent xl:p-0">
+                      <div className="min-w-0 rounded-[18px] border border-[#F3E8ED] bg-[#FFFBFD] p-3 xl:border-transparent xl:bg-transparent xl:p-0">
                         <div className="flex min-w-0 items-center gap-2">
                           {assignedTeam.slice(0, 2).map((mate) => (
                             <Avatar
@@ -4759,7 +4766,7 @@ export function AppointmentsBrowser({
                           void openClientControlForBooking(booking);
                         }}
                         onClick={(event) => event.stopPropagation()}
-                        className="grid size-10 place-items-center rounded-xl border border-[#E8D8CF] bg-white text-[#8D5E49] transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] hover:text-[#B83D7F]"
+                        className="grid size-11 place-items-center rounded-[15px] border border-[#EAD8E1] bg-white text-[#A14770] shadow-sm transition group-hover:border-[#E88AC5] group-hover:bg-[#FFF1F8] hover:scale-105"
                         title="Compila controllo cliente"
                       >
                         <ChevronRight className="size-5" />
