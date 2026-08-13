@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
 import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
@@ -170,6 +171,8 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ? prisma.user.findUnique({
         where: { id: session.user.id },
         select: {
+          id: true,
+          role: true,
           name: true,
           photo_url: true,
           header_color: true,
@@ -190,6 +193,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     unreadNotificationsPromise,
   ]);
   const displayUser = isPcCassa && pcDisplayUser ? pcDisplayUser : currentUser;
+  const salonShiftModulesEnabled = isPcCassa || !currentUser || !isSalonCollaborator(currentUser)
+    ? true
+    : await canAccessSalonShiftModules(currentUser).catch(() => false);
 
   const settingsMap = new Map(settingsList.map((s) => [s.key, s]));
   const sidebarConfigSetting = settingsMap.get("sidebar_configuration") || null;
@@ -353,6 +359,11 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     iconName: item.iconName,
     section: item.section,
   }));
+  if (!salonShiftModulesEnabled) {
+    sidebarItems = sidebarItems.filter(
+      (item) => item.href !== "/appointments" && item.href !== "/service-forms",
+    );
+  }
   let effectiveSidebarConfig = sidebarConfig;
   if (isPcCassa) {
     sidebarItems = sidebarItems

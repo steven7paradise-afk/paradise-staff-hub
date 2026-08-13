@@ -6,7 +6,7 @@ import {
   appointmentsPcWorkerCookieName,
   checkPCAuthorization,
 } from "@/lib/appointments-pc-auth";
-import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
+import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 
 export type OperationalUser = {
   id: string;
@@ -67,9 +67,13 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
   if (!session?.user?.id) return null;
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { location: { select: { name: true } } },
+    select: { id: true, role: true, location: { select: { name: true } } },
   }).catch(() => null);
-  if (requiresBuenosAiresPcCassa(String(session.user.role ?? ""), dbUser?.location?.name)) return null;
+  if (
+    dbUser &&
+    isShiftProtectedPath(request.nextUrl.pathname) &&
+    !(await canAccessSalonShiftModules(dbUser).catch(() => false))
+  ) return null;
 
   return {
     id: session.user.id,

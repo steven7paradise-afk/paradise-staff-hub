@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
 import { pinLookup } from "@/lib/pin";
+import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 
 export const authConfig = {
   session: {
@@ -148,10 +149,19 @@ export const authConfig = {
       try {
         const dbUser = await prisma.user.findUnique({
           where: { id: auth.user.id },
-          select: { id: true, role: true, mansione: true }
+          select: {
+            id: true,
+            role: true,
+            mansione: true,
+            location: { select: { name: true } },
+          }
         });
 
         if (!dbUser) return false;
+        if (
+          isShiftProtectedPath(pathname) &&
+          !(await canAccessSalonShiftModules(dbUser))
+        ) return false;
         const permissions = await getEffectivePermissionSet(prisma, dbUser);
 
         return canAccess(
@@ -162,6 +172,9 @@ export const authConfig = {
         );
       } catch (err) {
         console.error("Auth dynamic check error:", err);
+        // Sensitive salon modules fail closed: a database/attendance error must
+        // never restore access to appointments or service forms outside a shift.
+        if (isShiftProtectedPath(pathname)) return false;
         return canAccess(
           pathname, 
           auth?.user?.role as Role | undefined, 

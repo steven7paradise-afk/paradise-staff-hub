@@ -35,7 +35,7 @@ import { canAccessForUser, type Role } from "@/lib/roles";
 import { cashDateInput } from "@/lib/cash-records";
 import { VAULT_WITHDRAWAL_FIELD_IDS } from "@/lib/vault-withdrawal-form";
 import { calculateClockHours } from "@/lib/work-hours";
-import { getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
+import { getShopifyPaymentRegister, getShopifyRevenueRange } from "@/lib/shopify-payment-register";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +57,15 @@ function monthKey(date: Date) {
 
 function dayKey(date: Date) {
   return `${monthKey(date)}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function romeDayKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 function getMondayDate(date: Date): Date {
@@ -304,11 +313,14 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     prisma.cashMonthClose.findMany().catch(() => []),
   ]);
 
-  const paymentRows = await getShopifyPaymentRegister({
-    start,
-    end,
-    locationId: isResponsible ? session.user.sedeId : null,
-  });
+  const [paymentRows, shopifyRevenue] = await Promise.all([
+    getShopifyPaymentRegister({
+      start,
+      end,
+      locationId: isResponsible ? session.user.sedeId : null,
+    }),
+    getShopifyRevenueRange(dayKey(start), dayKey(end)),
+  ]);
 
   const closingReviewRows = cashClosingRows.length
     ? await prisma.setting.findMany({
@@ -354,6 +366,22 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const totalWithdrawn = responses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
   const totalVaultOut = vaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
+  const shopifyCashExpected = shopifyRevenue.cash;
+  const shopifyCashDifference = totalWithdrawn - shopifyCashExpected;
+  const shopifyCashByDay = new Map<string, number>();
+  for (const payment of shopifyRevenue.payments) {
+    if (payment.method !== "CONTANTI" && payment.method !== "CASHMATIC") continue;
+    const key = romeDayKey(new Date(payment.processedAt));
+    shopifyCashByDay.set(key, (shopifyCashByDay.get(key) ?? 0) + payment.amount);
+  }
+  const declaredCashByDay = new Map<string, number>();
+  for (const response of responses) {
+    const key = dayKey(cashAccountingDate(response));
+    declaredCashByDay.set(
+      key,
+      (declaredCashByDay.get(key) ?? 0) + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)),
+    );
+  }
 
   const weekClosesList = Array.isArray(allWeekCloses) ? allWeekCloses : [];
 
@@ -651,6 +679,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       amount: moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)),
       amountClass: "text-emerald-700",
       detail: `Fondo cassa ${formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.fund)))}`,
+      expectedShopifyCash: shopifyCashByDay.get(dayKey(cashAccountingDate(response))) ?? 0,
+      declaredCashForDay: declaredCashByDay.get(dayKey(cashAccountingDate(response))) ?? 0,
       note: String(answer(response, CASH_CLOSING_FIELD_IDS.notes) || "-"),
       closing: response,
       vault: null as any,
@@ -664,6 +694,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       amount: -moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)),
       amountClass: "text-[#A74758]",
       detail: String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "Motivo non indicato"),
+      expectedShopifyCash: null,
+      declaredCashForDay: null,
       note: String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "-"),
       closing: null as any,
       vault: response,
@@ -1175,6 +1207,33 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
             <h2 className="mt-1 text-2xl font-black">Tutti i movimenti</h2>
             <p className="mt-1 text-sm text-black/45">Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato.</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">
+                  <CreditCard className="size-4" /> Contanti attesi da Shopify
+                </div>
+                <p className="mt-2 text-2xl font-black tabular-nums text-sky-950">
+                  {shopifyRevenue.available ? formatMoney(shopifyCashExpected) : "Non disponibile"}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-sky-800/60">Transazioni contanti elaborate da Shopify.</p>
+              </div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                  <Banknote className="size-4" /> Contanti dichiarati
+                </div>
+                <p className="mt-2 text-2xl font-black tabular-nums text-emerald-950">{formatMoney(totalWithdrawn)}</p>
+                <p className="mt-1 text-xs font-semibold text-emerald-800/60">Totale prelevato nelle chiusure, fondo escluso.</p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+                <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "text-amber-700" : "text-emerald-700"}`}>
+                  {shopifyRevenue.available && Math.abs(shopifyCashDifference) <= 0.009 ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />} Scostamento da verificare
+                </div>
+                <p className={`mt-2 text-2xl font-black tabular-nums ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "text-amber-950" : "text-emerald-950"}`}>
+                  {shopifyRevenue.available ? formatMoney(shopifyCashDifference) : "—"}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-black/45">Dichiarato meno atteso. Positivo = contanti in più.</p>
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1180px] text-left text-sm">
@@ -1219,6 +1278,18 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       </td>
                       <td className="max-w-[420px] px-5 py-4 text-xs leading-5 text-black/55">
                         <p className="font-semibold text-black/65">{movement.detail}</p>
+                        {movement.closing && shopifyRevenue.available ? (
+                          <div className="mt-2 rounded-xl border border-black/5 bg-[#FAF7F9] p-3">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-black/35">Confronto totale giornata</p>
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold">
+                              <span>Atteso Shopify: <strong>{formatMoney(movement.expectedShopifyCash ?? 0)}</strong></span>
+                              <span>Dichiarato: <strong>{formatMoney(movement.declaredCashForDay ?? 0)}</strong></span>
+                              <span className={Math.abs((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0)) <= 0.009 ? "text-emerald-700" : "text-amber-700"}>
+                                Differenza: <strong>{formatMoney((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0))}</strong>
+                              </span>
+                            </div>
+                          </div>
+                        ) : null}
                         {review ? (
                           <div className="mt-2 space-y-1">
                             <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>

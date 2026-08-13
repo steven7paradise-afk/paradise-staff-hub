@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
+import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
 import { prisma } from "@/lib/prisma";
 import { checkPCAuthorization, appointmentsPcCookieName, appointmentsPcWorkerCookieName } from "@/lib/appointments-pc-auth";
 import type { Role } from "@/lib/roles";
@@ -79,9 +80,16 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   if (!isPC && sessionUser.id) {
     const accessUser = await prisma.user.findUnique({
       where: { id: sessionUser.id },
-      select: { role: true, location: { select: { name: true } } },
+      select: { id: true, role: true, location: { select: { name: true } } },
     });
-    if (accessUser && requiresBuenosAiresPcCassa(accessUser.role, accessUser.location?.name)) {
+    if (accessUser && !(await canAccessSalonShiftModules(accessUser))) {
+      redirect("/dashboard?accesso=fuori-turno");
+    }
+    if (
+      accessUser?.role !== "DIPENDENTE" &&
+      accessUser &&
+      requiresBuenosAiresPcCassa(accessUser.role, accessUser.location?.name)
+    ) {
       redirect("/pc-non-autorizzato");
     }
   }

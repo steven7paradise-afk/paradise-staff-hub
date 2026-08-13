@@ -4,6 +4,7 @@ import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
+import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
 import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
@@ -287,7 +288,15 @@ export default async function AppointmentsPage({
       })
     : null;
 
-  if (!isPC && accessUser && requiresBuenosAiresPcCassa(accessUser.role, accessUser.location?.name)) {
+  if (!isPC && accessUser && !(await canAccessSalonShiftModules(accessUser))) {
+    redirect("/dashboard?accesso=fuori-turno");
+  }
+  if (
+    !isPC &&
+    accessUser?.role !== "DIPENDENTE" &&
+    accessUser &&
+    requiresBuenosAiresPcCassa(accessUser.role, accessUser.location?.name)
+  ) {
     redirect("/pc-non-autorizzato");
   }
 
