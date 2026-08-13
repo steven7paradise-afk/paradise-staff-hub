@@ -209,9 +209,14 @@ function WhatsAppMark({ className = "size-4" }: { className?: string }) {
       viewBox="0 0 24 24"
       aria-hidden="true"
       className={className}
-      fill="currentColor"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.65"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <path d="M12.04 2a9.84 9.84 0 0 0-8.5 14.78L2 22l5.37-1.5A9.94 9.94 0 1 0 12.04 2Zm0 17.91a8 8 0 0 1-4.08-1.12l-.29-.17-3.18.88.85-3.1-.19-.3a8.06 8.06 0 1 1 6.89 3.81Zm4.42-6.04c-.24-.12-1.43-.7-1.65-.79-.22-.08-.38-.12-.55.12-.16.24-.62.79-.76.95-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2a7.25 7.25 0 0 1-1.34-1.67c-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.41.08-.16.04-.3-.02-.42-.06-.12-.55-1.31-.75-1.8-.2-.47-.4-.4-.55-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.4 1.37.51.58.18 1.1.16 1.51.1.46-.07 1.43-.59 1.63-1.15.2-.57.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28Z" />
+      <path d="M20.5 11.7a8.5 8.5 0 0 1-12.55 7.48L3.5 20.5l1.3-4.32A8.5 8.5 0 1 1 20.5 11.7Z" />
+      <path d="M8.4 7.9c.2-.24.43-.26.66-.1l1.35 1.04c.25.2.3.45.15.72l-.57.96c.7 1.28 1.73 2.31 3.01 3.01l.96-.57c.27-.15.52-.1.72.15l1.04 1.35c.16.23.14.46-.1.66-.5.42-1.1.65-1.72.65-3.54 0-7.67-4.13-7.67-7.67 0-.62.23-1.22.65-1.72Z" />
     </svg>
   );
 }
@@ -696,7 +701,7 @@ function ServiceImage({
   imageUrl?: string | null;
   compact?: boolean;
 }) {
-  const sizeClass = compact ? "size-12" : "h-36 w-full";
+  const sizeClass = compact ? "size-12 shrink-0" : "h-36 w-full";
 
   if (imageUrl) {
     return (
@@ -3073,22 +3078,22 @@ export function AppointmentsBrowser({
             role="status"
             aria-live="polite"
             title={customerUpdate.message || "Aggiornamento ricevuto via WhatsApp"}
-            className="mt-1 flex max-w-[290px] items-start gap-2 rounded-2xl border border-[#BCEFD1] bg-[linear-gradient(135deg,#F2FFF7_0%,#E5FAEE_100%)] px-3 py-2 text-left shadow-[0_8px_22px_rgba(37,211,102,0.12)]"
+            className="mt-1 flex max-w-[300px] items-start gap-2.5 rounded-[18px] border border-[#D5E9DD] bg-[linear-gradient(135deg,rgba(250,255,252,0.96),rgba(239,249,243,0.94))] px-3.5 py-3 text-left shadow-[0_8px_24px_rgba(24,92,55,0.07)] backdrop-blur-xl"
           >
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#25D366] text-white shadow-sm">
-              <WhatsAppMark className="size-[17px]" />
+            <span className="grid size-8 shrink-0 place-items-center rounded-full border border-[#B9DEC8] bg-white/90 text-[#16864A] shadow-[0_3px_10px_rgba(22,134,74,0.08)]">
+              <WhatsAppMark className="size-[18px]" />
             </span>
             <span className="min-w-0">
-              <span className="block text-[10px] font-black uppercase tracking-[0.11em] text-[#087A3A]">
-                Messaggio WhatsApp
+              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-[#3D7655]">
+                Aggiornamento WhatsApp
               </span>
-              <span className="mt-0.5 block text-xs font-black leading-4 text-[#123D25]">
+              <span className="mt-1 block text-xs font-semibold leading-4 text-[#173C27]">
                 {customerUpdate.delayMinutes
                   ? `Sta arrivando · ${customerUpdate.delayMinutes} min di ritardo`
                   : "Sta arrivando"}
               </span>
               {customerUpdate.message ? (
-                <span className="mt-1 block line-clamp-2 text-[11px] font-semibold leading-4 text-[#315B42]">
+                <span className="mt-1 block line-clamp-2 text-[11px] font-normal leading-4 text-[#52705E]">
                   “{customerUpdate.message}”
                 </span>
               ) : null}
@@ -4351,21 +4356,23 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_210px_190px_120px_150px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#B44D79]" />
+            <div className="mt-5 grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_210px_190px_120px_150px]">
+              <div className="relative h-[52px]">
+                <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-12 place-items-center text-[#B44D79]">
+                  <Search className="size-5" />
+                </span>
                 <input
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   placeholder="Cerca per nome cliente, email o servizio..."
-                  className="h-13 w-full rounded-[17px] border border-white bg-white/90 pl-12 pr-4 text-sm font-semibold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none transition placeholder:text-black/35 focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
+                  className="h-[52px] w-full rounded-[17px] border border-white bg-white/90 pl-12 pr-4 text-sm font-semibold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none transition placeholder:text-black/35 focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
                 />
               </div>
-              <div className="relative">
+              <div className="relative h-[52px]">
                 <button
                   type="button"
                   onClick={() => setIsDatePickerOpen((current) => !current)}
-                  className="flex h-13 w-full items-center justify-between rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] transition hover:border-[#D86B9B]"
+                  className="flex h-[52px] w-full items-center justify-between rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] transition hover:border-[#D86B9B]"
                 >
                   <span className="inline-flex min-w-0 items-center gap-2">
                     <CalendarDays className="size-4 shrink-0 text-[#A56A42]" />
@@ -4474,7 +4481,7 @@ export function AppointmentsBrowser({
                 onChange={(event) =>
                   updateSalonFilter(event.target.value as SalonFilter)
                 }
-                className="h-13 rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
+                className="h-[52px] rounded-[17px] border border-white bg-white/90 px-4 text-sm font-bold text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] outline-none focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7]"
               >
                 {salonOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -4486,7 +4493,7 @@ export function AppointmentsBrowser({
                 <button
                   type="button"
                   onClick={() => setIsFilterModalOpen((current) => !current)}
-                  className={`flex h-12 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition ${
+                  className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[17px] border px-4 text-sm font-black transition ${
                     activeAdvancedFilterCount > 0
                       ? "border-[#D86B9B] bg-[#FFF0F7] text-[#A93469]"
                       : "border-white bg-white/90 text-black shadow-[0_8px_24px_rgba(81,43,60,0.07)] hover:border-[#D86B9B]"
@@ -4602,7 +4609,7 @@ export function AppointmentsBrowser({
                     forceRefresh: true,
                   });
                 }}
-                className="flex h-13 items-center justify-center gap-2 rounded-[17px] border border-[#1C1820] bg-[#1C1820] px-5 text-xs font-black text-white shadow-[0_10px_26px_rgba(28,24,32,0.20)] transition hover:-translate-y-0.5 hover:bg-[#A93469] disabled:opacity-50"
+                className="flex h-[52px] items-center justify-center gap-2 rounded-[17px] border border-[#1C1820] bg-[#1C1820] px-5 text-xs font-black text-white shadow-[0_10px_26px_rgba(28,24,32,0.20)] transition hover:-translate-y-0.5 hover:bg-[#A93469] disabled:opacity-50"
               >
                 <RefreshCw className={`size-4 text-[#FFD8E9] ${isRefreshing ? "animate-spin" : ""}`} />
                 <span>{isRefreshing ? "Sincronizzo..." : "Sincronizza"}</span>
@@ -4611,7 +4618,7 @@ export function AppointmentsBrowser({
           </section>
 
           <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white/76 shadow-[0_22px_60px_rgba(88,45,66,0.10)] backdrop-blur-2xl">
-            <div className="hidden grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] gap-4 border-b border-[#EEDCE5] bg-[linear-gradient(90deg,#FFF4F9,#F7F2FF)] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#7D5266] xl:grid">
+            <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#EEDCE5] bg-[linear-gradient(90deg,#FFF4F9,#F7F2FF)] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#7D5266] xl:grid">
               <span>Appuntamento</span>
               <span>Cliente</span>
               <span>Servizio</span>
@@ -4643,7 +4650,7 @@ export function AppointmentsBrowser({
                         setSelectedBookingId(booking.id);
                       }}
                       className={[
-                        "group grid w-full cursor-pointer gap-4 px-5 py-5 text-left transition duration-200 xl:grid-cols-[1.15fr_1fr_1.1fr_0.9fr_0.55fr_0.85fr_48px] xl:items-center",
+                        "group grid w-full cursor-pointer gap-5 px-5 py-5 text-left transition duration-200 xl:grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] xl:items-center",
                         isSelected
                           ? "bg-[linear-gradient(90deg,#FFF0F7,#FBF8FF)] shadow-[inset_4px_0_0_#D93B8F]"
                           : "bg-white/82 hover:bg-[#FFFAFC] hover:shadow-[inset_4px_0_0_#F2B6D1]",
