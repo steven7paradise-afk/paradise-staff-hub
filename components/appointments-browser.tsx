@@ -276,13 +276,12 @@ const appointmentStatusOptions: Array<{
   value: AppointmentStatusValue;
   label: string;
 }> = [
-  { value: "PRENOTATO", label: "Prenotato" },
+  { value: "PRENOTATO", label: "Confermato" },
   { value: "NON_PRESENTATO", label: "Non presentato" },
   { value: "INIZIATO", label: "Iniziato" },
   { value: "IN_ATTESA", label: "In attesa" },
   { value: "COMPLETATO", label: "Completato" },
   { value: "ARRIVATO_IN_RITARDO", label: "Arrivato in ritardo" },
-  { value: "PAGATO", label: "Pagato" },
 ];
 
 const appointmentStatusLabels = Object.fromEntries(
@@ -511,7 +510,9 @@ function normalizeAppointmentStatus(
   if (normalized === "INIZIATO") return "INIZIATO";
   if (normalized === "COMPLETATO" || normalized === "COMPLETA")
     return "COMPLETATO";
-  if (normalized === "PAGATO" || normalized === "PAID") return "PAGATO";
+  // Payment is not an operational appointment state. Legacy PAGATO/PAID
+  // entries are displayed with the common booking state "Confermato".
+  if (normalized === "PAGATO" || normalized === "PAID") return "PRENOTATO";
   if (
     normalized === "PRENOTATO" ||
     normalized === "CONFIRMED" ||
@@ -527,10 +528,16 @@ function getDefaultAppointmentStatus(
   return (
     normalizeAppointmentStatus(booking.localStatus) ||
     normalizeAppointmentStatus(booking.attendance) ||
-    normalizeAppointmentStatus(booking.financialStatus) ||
     normalizeAppointmentStatus(booking.confirmationStatus) ||
     "PRENOTATO"
   );
+}
+
+function getPaymentLabel(booking: AppointmentRecord) {
+  const financial = normalizeSearchValue(booking.financialStatus);
+  if (financial.includes("partially paid") || financial.includes("partially_paid")) return "Acconto";
+  if (financial.includes("paid") || financial.includes("pagato")) return "Pagamento registrato";
+  return null;
 }
 
 function startOfWeek(date: Date) {
@@ -4634,6 +4641,11 @@ export function AppointmentsBrowser({
                         <p className="mt-1 text-xs font-medium text-[#6F625C]">
                           Qta: {getQuantityLabel(booking)}
                         </p>
+                        {getPaymentLabel(booking) ? (
+                          <span className="mt-2 inline-flex rounded-full border border-[#F1A7C3] bg-[#FFF1F6] px-2.5 py-1 text-[10px] font-black text-[#B9476D]">
+                            {getPaymentLabel(booking)}
+                          </span>
+                        ) : null}
                       </div>
 
                       <div
@@ -5447,6 +5459,11 @@ export function AppointmentsBrowser({
                       <p className="mt-1 text-xs font-bold text-black/45">
                         Qta: {getQuantityLabel(booking)}
                       </p>
+                      {getPaymentLabel(booking) ? (
+                        <span className="mt-2 inline-flex rounded-full border border-[#F1A7C3] bg-[#FFF1F6] px-2.5 py-1 text-[10px] font-black text-[#B9476D]">
+                          {getPaymentLabel(booking)}
+                        </span>
+                      ) : null}
                       <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
                         <CalendarCheck className="size-3.5" />
                         Prenotato

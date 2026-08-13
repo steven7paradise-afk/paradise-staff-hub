@@ -12,7 +12,6 @@ const terminalStatuses = new Set([
   "INIZIATO",
   "COMPLETATO",
   "ARRIVATO_IN_RITARDO",
-  "PAGATO",
   "NON_PRESENTATO",
 ]);
 
@@ -151,6 +150,16 @@ function inferCustomerUpdate(message: string, requestedState?: string, requested
   return { state, delayMinutes } as const;
 }
 
+function normalizeOperationalStatus(value: unknown) {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  if (!normalized || normalized === "PAID" || normalized === "PAGATO") return "PRENOTATO";
+  if (normalized === "CONFIRMED" || normalized === "CONFERMATO") return "PRENOTATO";
+  return normalized;
+}
+
 export async function GET(request: NextRequest) {
   const authError = authorizeBot(request);
   if (authError) return authError;
@@ -174,13 +183,12 @@ export async function GET(request: NextRequest) {
       .map((booking) => ({
         booking,
         elapsedMinutes: Math.floor((nowMs - new Date(booking.start_date).getTime()) / 60_000),
-        effectiveStatus: String(
+        effectiveStatus: normalizeOperationalStatus(
           statuses[String(booking.id)]?.status ||
             booking.attendance ||
-            booking.financial_status ||
             booking.confirmation_status ||
             "PRENOTATO",
-        ).toUpperCase(),
+        ),
       }))
       .filter(
         ({ elapsedMinutes, effectiveStatus }) =>
