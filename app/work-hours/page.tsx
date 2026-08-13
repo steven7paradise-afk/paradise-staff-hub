@@ -25,7 +25,7 @@ export default async function WorkHoursPage() {
     });
 
   return (
-    <AppShell title="Ore staff" subtitle="Controllo mensile ore lavorate per singolo lavoratore, con correzioni manuali e note." role={role}>
+    <AppShell title="Ore staff" subtitle="Controllo mensile di ore timbrate, ore riconosciute e assenze retribuite per ogni lavoratore." role={role}>
       <WorkHoursManager
         initialYear={year}
         initialMonth={month}

@@ -16,6 +16,55 @@ function categoryDuration(start: string | null, end: string | null) {
   return Math.max(0, (endHours * 60 + endMinutes - startHours * 60 - startMinutes) / 60);
 }
 
+function netHours(hours: number) {
+  return Math.max(0, hours >= 6 ? hours - 1 : hours);
+}
+
+function plannedNetHours(
+  category: { paid_hours: number | null },
+  start: string | null,
+  end: string | null,
+) {
+  return category.paid_hours ?? netHours(categoryDuration(start, end));
+}
+
+function categoryFlags(category?: { code: string; name: string } | null) {
+  const code = String(category?.code ?? "").trim().toUpperCase();
+  const name = String(category?.name ?? "").trim().toLowerCase();
+  return {
+    rest: ["R", "RI", "R3", "RIPOSO"].includes(code) || name.includes("riposo"),
+    holiday: ["F", "FE", "FERIE"].includes(code) || name.includes("ferie"),
+    permission: ["P", "PE", "PERMESSO"].includes(code) || name.includes("permesso"),
+    storeClosed:
+      code === "CHIUSO" ||
+      code.startsWith("CHIUSO0") ||
+      name.includes("chiuso") ||
+      name.includes("chiusura salone"),
+  };
+}
+
+function approvedPaidHours(
+  schedule: { start_time: string | null; end_time: string | null; category: { code: string; name: string; start_time: string | null; end_time: string | null; paid_hours: number | null } } | undefined,
+  leave: { type: string; start_time: string | null; end_time: string | null } | undefined,
+) {
+  const flags = categoryFlags(schedule?.category);
+  if (flags.rest) return { hours: 0, kind: null, partial: false };
+  const plannedStart = schedule?.start_time ?? schedule?.category.start_time ?? null;
+  const plannedEnd = schedule?.end_time ?? schedule?.category.end_time ?? null;
+  const planned = schedule ? plannedNetHours(schedule.category, plannedStart, plannedEnd) : 0;
+  const fallbackDay = planned > 0 ? planned : 8;
+
+  if (flags.storeClosed) return { hours: fallbackDay, kind: "CHIUSURA_NEGOZIO", partial: false };
+  if (leave?.type === "FERIE" || flags.holiday) return { hours: fallbackDay, kind: "FERIE", partial: false };
+  if (leave?.type === "PERMESSO" || flags.permission) {
+    const permissionDuration = categoryDuration(leave?.start_time ?? null, leave?.end_time ?? null);
+    return permissionDuration > 0
+      ? { hours: permissionDuration, kind: "PERMESSO", partial: true }
+      : { hours: fallbackDay, kind: "PERMESSO", partial: false };
+  }
+  return { hours: 0, kind: null, partial: false };
+}
+
 function isWorkCategory(category: { code: string; name: string }) {
   const code = category.code.toUpperCase();
   const name = category.name.toLowerCase();
@@ -93,6 +142,8 @@ export async function GET(request: NextRequest) {
         type: true,
         start_date: true,
         end_date: true,
+        start_time: true,
+        end_time: true,
         medical_code: true,
         sickness_unjustified: true,
       },
@@ -137,23 +188,36 @@ export async function GET(request: NextRequest) {
     let plannedStart: string | null = null;
     let plannedEnd: string | null = null;
     let categoryCode: string | null = null;
+    let categoryName: string | null = null;
     let defaultNote = "";
     if (schedule) {
       plannedStart = schedule.start_time ?? schedule.category.start_time;
       plannedEnd = schedule.end_time ?? schedule.category.end_time;
       categoryCode = schedule.category.code;
+      categoryName = schedule.category.name;
       if (isWorkCategory(schedule.category)) {
-        scheduledHours = schedule.category.paid_hours ?? categoryDuration(plannedStart, plannedEnd);
+        scheduledHours = plannedNetHours(schedule.category, plannedStart, plannedEnd);
       } else {
         defaultNote = schedule.category.name;
       }
     }
 
+    const paidAbsence = approvedPaidHours(schedule, leave);
+    if (paidAbsence.hours > 0) scheduledHours = paidAbsence.hours;
+    const recognizedAutomaticHours = paidAbsence.hours > 0
+      ? paidAbsence.partial
+        ? automaticHours + paidAbsence.hours
+        : Math.max(automaticHours, paidAbsence.hours)
+      : automaticHours;
+
     return {
       key,
       userId: key.split("-").slice(0, -3).join("-"),
       date: key.slice(-10),
-      hours: record?.manual_override ? record.hours : automaticHours,
+      hours: record?.manual_override ? record.hours : recognizedAutomaticHours,
+      workedHours: automaticHours,
+      paidAbsenceHours: paidAbsence.hours,
+      paidAbsenceKind: paidAbsence.kind,
       note: record?.note ?? defaultNote,
       paidBreak,
       manualOverride: record?.manual_override ?? false,
@@ -161,6 +225,7 @@ export async function GET(request: NextRequest) {
       plannedStart,
       plannedEnd,
       categoryCode,
+      categoryName,
       leaveType: leave?.type ?? null,
       medicalCode: leave?.medical_code ?? null,
       sicknessUnjustified: leave?.sickness_unjustified ?? false,
@@ -224,15 +289,23 @@ export async function PUT(request: NextRequest) {
     orderBy: [{ type: "desc" }, { created_at: "desc" }],
     select: {
       type: true,
+      start_time: true,
+      end_time: true,
       medical_code: true,
       sickness_unjustified: true,
     },
   });
+  const paidAbsence = approvedPaidHours(schedule ?? undefined, leave ?? undefined);
+  const recognizedAutomaticHours = paidAbsence.hours > 0
+    ? paidAbsence.partial
+      ? computedHours + paidAbsence.hours
+      : Math.max(computedHours, paidAbsence.hours)
+    : computedHours;
 
   const record = await prisma.workHourRecord.upsert({
     where: { user_id_date: { user_id: userId, date } },
-    update: { hours: manualOverride ? hours : computedHours, note: note !== undefined && note !== null ? note : null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
-    create: { user_id: userId, date, hours: manualOverride ? hours : computedHours, note: note !== undefined && note !== null ? note : null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
+    update: { hours: manualOverride ? hours : recognizedAutomaticHours, note: note !== undefined && note !== null ? note : null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
+    create: { user_id: userId, date, hours: manualOverride ? hours : recognizedAutomaticHours, note: note !== undefined && note !== null ? note : null, paid_break: paidBreak, manual_override: manualOverride, updated_by: session.user.id },
   });
 
   return NextResponse.json({
@@ -246,6 +319,10 @@ export async function PUT(request: NextRequest) {
     plannedStart: schedule?.start_time ?? schedule?.category.start_time ?? null,
     plannedEnd: schedule?.end_time ?? schedule?.category.end_time ?? null,
     categoryCode: schedule?.category.code ?? null,
+    categoryName: schedule?.category.name ?? null,
+    workedHours: computedHours,
+    paidAbsenceHours: paidAbsence.hours,
+    paidAbsenceKind: paidAbsence.kind,
     leaveType: leave?.type ?? null,
     medicalCode: leave?.medical_code ?? null,
     sicknessUnjustified: leave?.sickness_unjustified ?? false,

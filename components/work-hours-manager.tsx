@@ -30,6 +30,10 @@ type WorkRecord = {
   plannedStart: string | null;
   plannedEnd: string | null;
   categoryCode: string | null;
+  categoryName: string | null;
+  workedHours: number;
+  paidAbsenceHours: number;
+  paidAbsenceKind: "FERIE" | "PERMESSO" | "CHIUSURA_NEGOZIO" | null;
   leaveType: "FERIE" | "PERMESSO" | "RIPOSO" | "MALATTIA" | "ALTRO" | null;
   medicalCode: string | null;
   sicknessUnjustified: boolean;
@@ -47,15 +51,12 @@ function daysInMonth(year: number, month: number) {
 
 function getWorkedHours(record?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
   if (!record) return 0;
-  return record.paidBreak ? record.grossHours : record.netHours;
+  const recognized = Number(record.hours);
+  return Number.isFinite(recognized) ? recognized : 0;
 }
 
 function getControlHours(record?: Omit<WorkRecord, "userId" | "date"> & { scheduledHours: number }) {
   if (!record) return 0;
-  const controlHours = Number(record.hours);
-  if (Number.isFinite(controlHours) && controlHours > 0) {
-    return controlHours;
-  }
   return record.scheduledHours ?? 0;
 }
 
@@ -63,6 +64,7 @@ function getAbsenceLabel(record?: Omit<WorkRecord, "userId" | "date"> & { schedu
   if (!record) return "-";
   const type = record.leaveType;
   const code = record.categoryCode?.toUpperCase() ?? "";
+  if (record.paidAbsenceKind === "CHIUSURA_NEGOZIO" || code === "CHIUSO" || code.startsWith("CHIUSO0")) return "Chiusura salone · ferie pagate";
 
   if (type === "PERMESSO" || code === "P" || code === "PE") return "Permesso";
   if (type === "FERIE" || code === "F" || code === "FE") return "Ferie";
@@ -79,6 +81,7 @@ function getAbsenceLabel(record?: Omit<WorkRecord, "userId" | "date"> & { schedu
 function getAbsenceClass(label: string) {
   if (label === "Permesso") return "bg-amber-50 text-amber-800 border-amber-200";
   if (label === "Ferie") return "bg-sky-50 text-sky-800 border-sky-200";
+  if (label === "Chiusura salone · ferie pagate") return "bg-violet-50 text-violet-800 border-violet-200";
   if (label === "Riposo") return "bg-emerald-50 text-emerald-800 border-emerald-200";
   if (label === "Malattia giustificata") return "bg-emerald-50 text-emerald-800 border-emerald-200";
   if (label === "Malattia non giustificata") return "bg-rose-50 text-rose-800 border-rose-200";
@@ -178,6 +181,10 @@ export function WorkHoursManager({
         plannedStart: record.plannedStart ?? null,
         plannedEnd: record.plannedEnd ?? null,
         categoryCode: record.categoryCode ?? null,
+        categoryName: record.categoryName ?? null,
+        workedHours: record.workedHours ?? 0,
+        paidAbsenceHours: record.paidAbsenceHours ?? 0,
+        paidAbsenceKind: record.paidAbsenceKind ?? null,
         leaveType: record.leaveType ?? null,
         medicalCode: record.medicalCode ?? null,
         sicknessUnjustified: record.sicknessUnjustified ?? false,
@@ -190,6 +197,8 @@ export function WorkHoursManager({
   // Calculate statistics (Worked, Due, Missing, Overtime)
   const stats = useMemo(() => {
     let worked = 0;
+    let actualWorked = 0;
+    let paidAbsence = 0;
     let due = 0;
 
     days.forEach((day) => {
@@ -199,6 +208,8 @@ export function WorkHoursManager({
       const scheduled = getControlHours(record);
 
       worked += hours;
+      actualWorked += record?.workedHours ?? 0;
+      paidAbsence += Math.max(0, hours - (record?.workedHours ?? 0));
       due += scheduled;
     });
 
@@ -207,6 +218,8 @@ export function WorkHoursManager({
 
     return {
       worked,
+      actualWorked,
+      paidAbsence,
       due,
       missing,
       overtime,
@@ -249,7 +262,7 @@ export function WorkHoursManager({
   }, [filteredWorkers, selectedWorkerId]);
 
   function emptyRecord() {
-    return { hours: "", note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null, leaveType: null, medicalCode: null, sicknessUnjustified: false };
+    return { hours: "", note: "", paidBreak: false, manualOverride: false, grossHours: 0, breakHours: 0, netHours: 0, firstEntry: null, lastExit: null, scheduledHours: 0, plannedStart: null, plannedEnd: null, categoryCode: null, categoryName: null, workedHours: 0, paidAbsenceHours: 0, paidAbsenceKind: null, leaveType: null, medicalCode: null, sicknessUnjustified: false };
   }
 
   function updateLocal(day: Date, key: "hours" | "note" | "paidBreak" | "manualOverride", value: string | boolean) {
@@ -345,6 +358,10 @@ export function WorkHoursManager({
           plannedStart: data.plannedStart ?? record.plannedStart,
           plannedEnd: data.plannedEnd ?? record.plannedEnd,
           categoryCode: data.categoryCode ?? record.categoryCode,
+          categoryName: data.categoryName ?? record.categoryName,
+          workedHours: data.workedHours ?? record.workedHours,
+          paidAbsenceHours: data.paidAbsenceHours ?? record.paidAbsenceHours,
+          paidAbsenceKind: data.paidAbsenceKind ?? record.paidAbsenceKind,
           leaveType: data.leaveType ?? record.leaveType,
           medicalCode: data.medicalCode ?? record.medicalCode,
           sicknessUnjustified: data.sicknessUnjustified ?? record.sicknessUnjustified,
@@ -448,7 +465,7 @@ export function WorkHoursManager({
         pdf.setTextColor(80, 80, 80);
         pdf.text(`Mese: ${monthNames[month]} ${year}    |    Salone: ${worker.location}`, margin, 24);
 
-        pdf.text(`Totale ore lavorate approvate:`, margin, 30);
+        pdf.text(`Totale ore riconosciute:`, margin, 30);
         pdf.setFont("helvetica", "bold");
         pdf.setTextColor(219, 39, 119); // pink color
         const totalStr = workerTotal % 1 === 0 ? workerTotal.toString() : workerTotal.toFixed(2).replace(".", ",");
@@ -469,7 +486,7 @@ export function WorkHoursManager({
         pdf.setTextColor(31, 31, 31);
 
         pdf.text("Giorno", margin + 4, y + 5.5);
-        pdf.text("Ore lavorate", margin + col1Width + 4, y + 5.5);
+        pdf.text("Ore riconosciute", margin + col1Width + 4, y + 5.5);
         pdf.text("Note", margin + col1Width + col2Width + 4, y + 5.5);
       }
 
@@ -519,7 +536,7 @@ export function WorkHoursManager({
           const dateStr = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(day);
           pdf.text(dateStr, margin + 4, y + 5);
 
-          // Col 2: Ore lavorate (Number formatted with comma, or 0)
+          // Col 2: ore riconosciute, incluse le assenze retribuite.
           const hoursVal = Number(record.hours) || 0;
           const hoursStr = hoursVal % 1 === 0 ? hoursVal.toString() : hoursVal.toFixed(2).replace(".", ",");
           pdf.text(hoursStr, margin + col1Width + 4, y + 5);
@@ -684,14 +701,14 @@ export function WorkHoursManager({
 
           {/* Griglia Statistiche di Lusso (Worked, Due, Missing, Overtime) */}
           <div className="mt-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
-            {/* Ore Lavorate */}
+            {/* Ore riconosciute */}
             <div className="p-4 rounded-[20px] bg-neutral-50 dark:bg-neutral-800/40 border border-black/5 dark:border-white/5 flex flex-col justify-between transition hover:shadow-luxury">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/40">Ore Lavorate</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/40 dark:text-white/40">Ore riconosciute</p>
                 <Clock className="size-3.5 text-paradise-pink" />
               </div>
               <p className="mt-3 text-2xl font-bold tracking-tight text-paradise-pink">{stats.worked.toFixed(2).replace(".00", "")} h</p>
-              <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">Ore totali registrate</p>
+              <p className="mt-1 text-[10px] text-black/45 dark:text-white/45">{stats.actualWorked.toFixed(2).replace(".00", "")} h timbrate · {stats.paidAbsence.toFixed(2).replace(".00", "")} h giustificate</p>
             </div>
 
             {/* Ore Dovute */}
@@ -740,7 +757,7 @@ export function WorkHoursManager({
                     <span className="text-[10px] font-semibold text-black/45 dark:text-white/40">{firstDayStr} - {lastDayStr}</span>
                   </div>
                   <div className="flex gap-3 text-[10px] font-bold text-black/60 dark:text-white/70">
-                    <span>Lavorate: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".00", "")} h</strong></span>
+                    <span>Riconosciute: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".00", "")} h</strong></span>
                     <span>Dovute: <strong className="text-amber-600 dark:text-paradise-gold">{due.toFixed(2).replace(".00", "")} h</strong></span>
                   </div>
                 </div>
@@ -904,7 +921,7 @@ export function WorkHoursManager({
                           </div>
                           <div className="flex items-center gap-4">
                             <span className="text-xs font-bold text-black/60 dark:text-white/70">
-                              Ore Lavorate: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".", ",")} h</strong>
+                              Ore riconosciute: <strong className="text-paradise-pink">{worked.toFixed(2).replace(".", ",")} h</strong>
                             </span>
                             <span className="text-xs font-bold text-black/60 dark:text-white/70">
                               Ore Dovute: <strong className="text-amber-600 dark:text-paradise-gold">{due.toFixed(2).replace(".", ",")} h</strong>
@@ -919,7 +936,7 @@ export function WorkHoursManager({
                       const recordKey = `${selectedWorkerId}-${dateKey(day)}`;
                       const record = records[recordKey] ?? emptyRecord();
                       const dayOfWeek = day.getUTCDay();
-                      const computedHours = record.paidBreak ? record.grossHours : record.netHours;
+                      const computedHours = Number(record.hours) || 0;
 
                       const dayName = new Intl.DateTimeFormat("it-IT", { weekday: "long" }).format(day);
                       const capitalizedDayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
