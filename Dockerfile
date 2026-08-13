@@ -1,4 +1,6 @@
-FROM node:22.13.1-bookworm-slim AS deps
+# syntax=docker/dockerfile:1.7
+
+FROM node:22.13.1-bookworm-slim AS base
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -7,11 +9,14 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/*
 
+FROM base AS deps
+
 COPY package*.json ./
 COPY prisma ./prisma
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+  npm ci --no-audit --no-fund
 
-FROM node:22.13.1-bookworm-slim AS builder
+FROM base AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -19,15 +24,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Next is already configured to compile with one worker in next.config.ts.
 ENV NODE_OPTIONS="--max-old-space-size=768"
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
-  && rm -rf /var/lib/apt/lists/*
-
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:22.13.1-bookworm-slim AS runner
+FROM deps AS production-deps
+
+RUN npm prune --omit=dev --no-audit --no-fund
+
+FROM base AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -35,16 +40,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
-  && rm -rf /var/lib/apt/lists/*
-
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=45s --retries=6 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 CMD ["npm", "run", "start"]
