@@ -52,6 +52,45 @@
   color-scheme: dark;
 }
 
+/* Chiusura cassa: superficie operativa chiara e stabile anche quando il tema
+   generale e scuro. La pagina mostra e raccoglie esclusivamente gli ordini
+   pagati in contanti; i colori non dipendono dai token di branding. */
+.cash-closing-workspace {
+  color-scheme: light;
+  background:
+    radial-gradient(circle at 8% 2%, rgba(240, 166, 194, 0.23), transparent 28%),
+    radial-gradient(circle at 94% 8%, rgba(232, 201, 139, 0.17), transparent 25%),
+    linear-gradient(145deg, #fbf8fa 0%, #f3edf1 100%) !important;
+}
+
+.cash-closing-workspace .cash-closing-field-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(112, 77, 92, 0.12) !important;
+  box-shadow: 0 22px 65px rgba(72, 42, 55, 0.08) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(135%);
+  backdrop-filter: blur(24px) saturate(135%);
+}
+
+.cash-closing-workspace .cash-order-entry input,
+.cash-closing-workspace .cash-order-entry textarea {
+  color: #241a21 !important;
+  background: #ffffff !important;
+  border-color: rgba(112, 77, 92, 0.18) !important;
+  -webkit-text-fill-color: #241a21;
+}
+
+.cash-closing-workspace .cash-order-entry input::placeholder,
+.cash-closing-workspace .cash-order-entry textarea::placeholder {
+  color: #9b8d94 !important;
+  -webkit-text-fill-color: #9b8d94;
+}
+
+.cash-closing-workspace .cash-order-entry input:focus,
+.cash-closing-workspace .cash-order-entry textarea:focus {
+  border-color: #a74758 !important;
+  box-shadow: 0 0 0 4px rgba(167, 71, 88, 0.1) !important;
+}
+
 /* Le tabelle Shopify possono essere alte diverse migliaia di pixel. Su Chrome
    un backdrop-filter applicato all'intera superficie causa tile vuote durante
    lo scroll. Questa pagina usa pannelli opachi per mantenere tutte le righe

@@ -21,7 +21,7 @@ export const CASH_CLOSING_FORM_FIELDS = [
   },
   {
     id: CASH_CLOSING_FIELD_IDS.withdrawn,
-    label: "ORDINI CASH / CONTANTI DICHIARATI",
+    label: "ORDINI RICEVUTI IN CONTANTI",
     type: "money",
     required: true,
     description: "Inserisci manualmente il totale degli ordini pagati in contanti. Il fondo cassa va indicato nel passaggio successivo e non deve essere incluso.",
@@ -83,6 +83,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
       where: { id: existing.id },
       data: {
         category: CASH_CLOSING_FORM_CATEGORY,
+        description: "Dichiara gli ordini ricevuti in contanti, controlla il riferimento Shopify, indica il fondo cassa e firma con il PIN personale.",
         icon: existing.icon || "Calculator",
         active: true,
         allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],

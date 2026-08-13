@@ -15,6 +15,8 @@ export function proxy(request: NextRequest) {
     const isOperationalServiceFormsApi =
       pathname === "/api/service-forms/submit" ||
       pathname.startsWith("/api/service-forms/responses/");
+    const isCashClosingReferenceApi =
+      pathname === "/api/cash/shopify-daily-summary";
     const isOperationalOrdersApi =
       pathname.startsWith("/api/orders/") &&
       !pathname.startsWith("/api/orders/import");
@@ -25,6 +27,7 @@ export function proxy(request: NextRequest) {
       pathname === "/api/client-control/tablet-submit" ||
       isOperationalOrdersApi ||
       isOperationalServiceFormsApi ||
+      isCashClosingReferenceApi ||
       pathname.startsWith("/api/shopify-order-lookup") ||
       pathname.startsWith("/api/vat-lookup") ||
       pathname.startsWith("/api/drive-image") ||

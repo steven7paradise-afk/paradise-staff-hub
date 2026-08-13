@@ -2,29 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
 import { getShopifyDailyRevenue, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 
-const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
-
 function cleanOrder(value: string) {
   return value.replace(/^#/, "").trim().toLowerCase();
 }
 
-function providerLabel(value: string) {
-  return ({
-    SHOPIFY_PAYMENTS: "Carta / Shopify Payments",
-    SCALAPAY: "Scalapay",
-    KLARNA: "Klarna",
-    SATISPAY: "Satispay",
-    PAYPAL: "PayPal",
-    CONTANTI: "Contanti",
-    CASHMATIC: "Contanti",
-    CARTA: "Carta / POS",
-    ALTRO: "Da classificare",
-  } as Record<string, string>)[value] || value;
-}
-
 export async function GET(request: NextRequest) {
   const user = await getOperationalUser(request);
-  if (!user?.id || (!user.isPC && !managementRoles.has(user.role))) {
+  if (!user?.id || !user.sedeId) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -65,47 +49,45 @@ export async function GET(request: NextRequest) {
     controlsByOrder.set(key, [...(controlsByOrder.get(key) || []), control]);
   }
 
-  const grouped = new Map<string, {
+  const groupedCash = new Map<string, {
     orderId: string;
     orderName: string;
     clientName: string;
     amount: number;
-    providers: string[];
     processedAt: string;
   }>();
 
   for (const payment of shopify.payments) {
-    const current = grouped.get(payment.orderId);
+    if (payment.provider !== "CONTANTI" && payment.provider !== "CASHMATIC") continue;
+    const current = groupedCash.get(payment.orderId);
     if (current) {
       current.amount += payment.amount;
-      current.providers = [...new Set([...current.providers, payment.provider])];
       continue;
     }
     const control = controlsByOrder.get(cleanOrder(payment.orderName))?.[0];
-    grouped.set(payment.orderId, {
+    groupedCash.set(payment.orderId, {
       orderId: payment.orderId,
       orderName: payment.orderName,
       clientName: control?.clientName || payment.clientName || "Cliente Shopify",
       amount: payment.amount,
-      providers: [payment.provider],
       processedAt: payment.processedAt,
     });
   }
 
-  const rows = Array.from(grouped.values())
+  const rows = Array.from(groupedCash.values())
     .map((row) => ({
       ...row,
-      method: row.providers.map(providerLabel).join(" + "),
+      method: "Contanti",
     }))
     .sort((a, b) => new Date(b.processedAt).getTime() - new Date(a.processedAt).getTime());
 
   return NextResponse.json({
     available: true,
     date,
-    total: shopify.total,
-    card: shopify.card,
+    total: shopify.cash,
+    card: 0,
     cash: shopify.cash,
-    other: shopify.unclassified,
+    other: 0,
     orders: rows.length,
     transactions: shopify.transactions,
     rows,

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote, WalletCards } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -1614,6 +1614,7 @@ export function StaffFormsViewer({
       {selectedForm && (
         <div className={cn(
           "fixed inset-0 z-50",
+          isCashClosingForm && "cash-closing-workspace",
           isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
             : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
@@ -1626,7 +1627,7 @@ export function StaffFormsViewer({
           )}>
             <div className={cn(
               "relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7",
-              isCashClosingForm && "sticky top-0 z-30 bg-white/85 shadow-sm backdrop-blur-2xl"
+              isCashClosingForm && "sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl"
             )}>
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
               <div className="flex items-start justify-between gap-4">
@@ -1656,7 +1657,7 @@ export function StaffFormsViewer({
               </div>
 
               {!success && visibleFields.length > 0 && (
-                <div className="mt-5 space-y-3">
+                <div className={cn("mt-5 space-y-3", isCashClosingForm && "mt-3")}>
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
                     <span>Progresso compilazione</span>
                     <span>{progressPercentage}%</span>
@@ -1750,7 +1751,10 @@ export function StaffFormsViewer({
                         key={field.id} 
                         className="animate-in fade-in slide-in-from-right-5 duration-300"
                       >
-                        <div className="rounded-[28px] border border-slate-100 bg-slate-50/50 p-5 shadow-sm sm:p-6">
+                        <div className={cn(
+                          "rounded-[28px] border border-slate-100 bg-slate-50/50 p-5 shadow-sm sm:p-6",
+                          isCashClosingForm && "cash-closing-field-card"
+                        )}>
                           <div className="mb-5 space-y-2">
                             <span className="inline-flex rounded-full bg-slate-200/50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
                               Campo {currentActiveIndex + 1}
@@ -1979,10 +1983,19 @@ export function StaffFormsViewer({
                           {field.type === "money" && (
                             <div className="space-y-4">
                               {isCashClosingForm && field.id === "cash_withdrawn" ? (
-                                <div className="space-y-3">
+                                <div className="cash-order-entry space-y-4">
+                                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500 text-white shadow-sm">
+                                      <Banknote className="size-5" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-black text-slate-900">Dichiara solamente il denaro contante ricevuto</p>
+                                      <p className="mt-0.5 text-xs font-semibold text-slate-500">Un ordine per riga. Non inserire carta, Scalapay, Klarna, PayPal o altri metodi.</p>
+                                    </div>
+                                  </div>
                                   <div className="grid grid-cols-[minmax(0,1fr)_140px_44px] gap-2 px-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-                                    <span>Numero ordine</span>
-                                    <span>Importo cash</span>
+                                    <span>Ordine / cliente</span>
+                                    <span>Contanti ricevuti</span>
                                     <span className="sr-only">Azioni</span>
                                   </div>
                                   {cashOrderRows.map((row, index) => (
@@ -1994,7 +2007,7 @@ export function StaffFormsViewer({
                                           const value = event.target.value;
                                           setCashOrderRows((current) => current.map((item) => item.id === row.id ? { ...item, order: value } : item));
                                         }}
-                                        placeholder={`Ordine #${index + 1}`}
+                                        placeholder={`Es. #25732 o nome cliente`}
                                         aria-label={`Numero ordine cash ${index + 1}`}
                                         className="h-14 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20"
                                       />
@@ -2040,10 +2053,10 @@ export function StaffFormsViewer({
                                     className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-dashed border-[#A74758]/30 bg-[#A74758]/5 px-4 text-sm font-black text-[#A74758] transition hover:border-[#A74758]/50 hover:bg-[#A74758]/10"
                                   >
                                     <Plus className="size-4" />
-                                    Aggiungi ordine cash
+                                    Aggiungi un altro ordine
                                   </button>
                                   <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale dichiarato</span>
+                                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale contanti ricevuti</span>
                                     <span className="text-2xl font-black text-slate-900">{formatEuro(Number(answers[field.id]) || 0)}</span>
                                   </div>
                                 </div>
@@ -2319,113 +2332,91 @@ export function StaffFormsViewer({
                   </div>
 
                   {isCashClosingForm && (
-                    <aside className="space-y-4 xl:sticky xl:top-36" aria-label="Riepilogo teorico Shopify">
-                      <section className="overflow-hidden rounded-[30px] border border-white/10 bg-[#121119] text-white shadow-[0_24px_70px_rgba(31,19,27,0.18)]">
-                        <div className="border-b border-white/10 p-5 sm:p-6">
+                    <aside className="xl:sticky xl:top-32" aria-label="Ordini Shopify pagati in contanti">
+                      <section
+                        className="overflow-hidden rounded-[32px] border shadow-[0_28px_80px_rgba(72,42,55,0.16)]"
+                        style={{ background: "linear-gradient(155deg,#241A21 0%,#151319 58%,#101117 100%)", borderColor: "rgba(255,255,255,.12)", color: "white" }}
+                      >
+                        <div className="p-5 sm:p-7">
                           <div className="flex items-start justify-between gap-4">
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f4a8c0]">Riferimento teorico</p>
-                              <h4 className="mt-2 text-xl font-black">Incassi Shopify del giorno</h4>
-                              <p className="mt-1 text-xs font-semibold text-white/45">
-                                Confronto informativo: non modifica la dichiarazione manuale.
+                              <div className="inline-flex items-center gap-2 rounded-full border border-[#f3b2c7]/25 bg-[#f3b2c7]/10 px-3 py-1.5">
+                                <Banknote className="size-3.5 text-[#f7bfd1]" />
+                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f7bfd1]">Solo contanti</span>
+                              </div>
+                              <h4 className="mt-4 text-2xl font-black tracking-tight text-white">Ordini cash ricevuti</h4>
+                              <p className="mt-1.5 max-w-md text-sm font-medium leading-5 text-white/55">
+                                Questi sono gli ordini che Shopify registra come pagati in contanti nella data selezionata.
                               </p>
                             </div>
-                            <div className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/[0.07]">
-                              {cashSummaryLoading ? <Loader2 className="size-5 animate-spin text-[#f4a8c0]" /> : <WalletCards className="size-5 text-[#f4a8c0]" />}
+                            <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/[0.07]">
+                              {cashSummaryLoading ? <Loader2 className="size-5 animate-spin text-[#f7bfd1]" /> : <ReceiptText className="size-5 text-[#f7bfd1]" />}
                             </div>
                           </div>
 
                           {cashSummaryError ? (
-                            <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm font-bold text-amber-100">
+                            <div className="mt-6 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm font-bold text-amber-100">
                               {cashSummaryError}
                             </div>
                           ) : cashSummaryLoading && !cashSummary ? (
-                            <div className="mt-6 space-y-3" aria-label="Caricamento riepilogo">
-                              <div className="h-10 w-44 animate-pulse rounded-xl bg-white/10" />
-                              <div className="h-16 animate-pulse rounded-2xl bg-white/[0.06]" />
+                            <div className="mt-6 space-y-3" aria-label="Caricamento ordini cash">
+                              <div className="h-20 animate-pulse rounded-2xl bg-white/[0.07]" />
+                              <div className="h-20 animate-pulse rounded-2xl bg-white/[0.05]" />
                             </div>
                           ) : cashSummary?.available === false ? (
-                            <p className="mt-5 rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-sm font-semibold text-white/55">
-                              {cashSummary.message || "Riepilogo Shopify non disponibile."}
+                            <p className="mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-sm font-semibold text-white/60">
+                              {cashSummary.message || "Ordini cash temporaneamente non disponibili."}
                             </p>
                           ) : cashSummary ? (
                             <>
-                              <div className="mt-6 flex items-end justify-between gap-4">
+                              <div className="mt-6 flex items-end justify-between gap-4 rounded-[24px] border border-emerald-300/20 bg-emerald-300/[0.09] p-5">
                                 <div>
-                                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-white/40">Totale atteso</p>
-                                  <p className="mt-1 text-4xl font-black tracking-tight">{formatEuro(cashSummary.total)}</p>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/70">Contanti ricevuti</p>
+                                  <p className="mt-1 text-4xl font-black tracking-tight text-white">{formatEuro(cashSummary.cash)}</p>
                                 </div>
-                                <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-xs font-black text-emerald-200">
-                                  {cashSummary.orders} ordini
+                                <span className="rounded-full bg-emerald-300 px-3 py-1.5 text-xs font-black text-[#10231d]">
+                                  {cashSummary.orders} {cashSummary.orders === 1 ? "ordine" : "ordini"}
                                 </span>
                               </div>
-                              <div className="mt-5 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-                                {[
-                                  { label: "Carta / POS", value: cashSummary.card, icon: CreditCard },
-                                  { label: "Contanti Shopify", value: cashSummary.cash, icon: Banknote },
-                                  { label: "Altri metodi", value: cashSummary.other, icon: ReceiptText },
-                                ].map((item) => (
-                                  <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.06] p-3.5">
-                                    <item.icon className="size-4 text-[#f4a8c0]" />
-                                    <p className="mt-3 text-[9px] font-black uppercase tracking-[0.14em] text-white/35">{item.label}</p>
-                                    <p className="mt-1 text-base font-black">{formatEuro(item.value)}</p>
+
+                              <div className="mt-5 max-h-[48vh] space-y-2 overflow-y-auto pr-1">
+                                {cashSummary.rows.length === 0 ? (
+                                  <div className="rounded-[24px] border border-dashed border-white/15 bg-white/[0.04] p-8 text-center">
+                                    <Banknote className="mx-auto size-7 text-white/25" />
+                                    <p className="mt-3 text-sm font-black text-white/70">Nessun ordine cash</p>
+                                    <p className="mt-1 text-xs font-medium text-white/40">Per questa data Shopify non registra pagamenti in contanti.</p>
+                                  </div>
+                                ) : cashSummary.rows.map((row, index) => (
+                                  <div
+                                    key={row.orderId}
+                                    className="grid grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-[22px] border border-white/10 p-3.5"
+                                    style={{ backgroundColor: index % 2 === 0 ? "rgba(255,255,255,.075)" : "rgba(255,255,255,.045)" }}
+                                  >
+                                    <div className="grid size-10 place-items-center rounded-2xl bg-[#f2adc3]/15 text-[#f6bdd0]">
+                                      <Receipt className="size-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-black text-white">{row.clientName}</p>
+                                      <p className="mt-1 text-[11px] font-semibold text-white/40">
+                                        {row.orderName} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.processedAt))}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="whitespace-nowrap text-base font-black text-white">{formatEuro(row.amount)}</p>
+                                      <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300">Ricevuto cash</p>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
                             </>
                           ) : null}
                         </div>
-                      </section>
-
-                      <section className="overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/90 shadow-[0_18px_55px_rgba(61,42,53,0.10)] backdrop-blur-xl">
-                        <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6">
-                          <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Dettaglio giornaliero</p>
-                            <h4 className="mt-1 text-lg font-black text-slate-900">Importi attesi per cliente</h4>
-                          </div>
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
-                            {cashSummary?.rows.length ?? 0}
-                          </span>
+                        <div className="border-t border-white/10 bg-black/20 px-5 py-4 sm:px-7">
+                          <p className="text-xs font-medium leading-5 text-white/45">
+                            Usa questa lista per confrontare la dichiarazione manuale. Carta, Scalapay, Klarna, PayPal e gli altri metodi non sono mostrati.
+                          </p>
                         </div>
-
-                        <div className="max-h-[46vh] overflow-y-auto">
-                          {!cashSummaryLoading && cashSummary?.available && cashSummary.rows.length === 0 ? (
-                            <div className="p-8 text-center">
-                              <Receipt className="mx-auto size-7 text-slate-300" />
-                              <p className="mt-3 text-sm font-black text-slate-600">Nessun incasso Shopify per questa data</p>
-                            </div>
-                          ) : (
-                            <div className="divide-y divide-slate-100">
-                              {cashSummary?.rows.map((row) => (
-                                <div key={row.orderId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-5 py-4 sm:px-6">
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm font-black text-slate-900">{row.clientName}</p>
-                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400">
-                                      <span>{row.orderName}</span>
-                                      <span aria-hidden="true">•</span>
-                                      <span>{new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.processedAt))}</span>
-                                    </div>
-                                    <span className="mt-2 inline-flex rounded-full bg-[#A74758]/8 px-2.5 py-1 text-[10px] font-black text-[#A74758]">
-                                      {row.method}
-                                    </span>
-                                  </div>
-                                  <p className="self-center whitespace-nowrap text-base font-black text-slate-900">{formatEuro(row.amount)}</p>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        {cashSummary?.available ? (
-                          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-6">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale teorico</span>
-                            <span className="text-xl font-black text-slate-900">{formatEuro(cashSummary.total)}</span>
-                          </div>
-                        ) : null}
                       </section>
-
-                      <p className="px-2 text-xs font-semibold leading-5 text-slate-500">
-                        Shopify è una fonte di confronto. L’operatore deve dichiarare manualmente i contanti, indicare il fondo cassa e firmare con il proprio PIN.
-                      </p>
                     </aside>
                   )}
                 </div>
