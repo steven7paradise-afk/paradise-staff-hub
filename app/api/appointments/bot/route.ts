@@ -252,13 +252,14 @@ export async function POST(request: NextRequest) {
     const bookingId = String(body?.bookingId || "").trim();
     const customerPhone = normalizePhone(body?.customerPhone);
     const message = String(body?.message || "").trim().slice(0, 500);
+    const clearUpdate = String(body?.action || "").trim().toUpperCase() === "CLEAR";
     const inferred = inferCustomerUpdate(message, body?.state, body?.delayMinutes);
     if (!bookingId && !customerPhone) {
       return NextResponse.json({ error: "bookingId o customerPhone obbligatorio." }, { status: 400 });
     }
-    if (!inferred.state) {
+    if (!clearUpdate && !inferred.state) {
       return NextResponse.json(
-        { error: "Risposta non riconosciuta. Usa ON_THE_WAY, DELAYED oppure indica i minuti." },
+        { error: "Risposta non riconosciuta. Usa ON_THE_WAY, DELAYED, CLEAR oppure indica i minuti." },
         { status: 400 },
       );
     }
@@ -279,15 +280,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Appuntamento odierno non trovato." }, { status: 404 });
     }
 
+    const currentSetting = await prisma.setting.findUnique({ where: { key: BOT_UPDATE_SETTING_KEY } });
+    const currentUpdates = recordMap<BotUpdate>(currentSetting?.value);
+
+    if (clearUpdate) {
+      const nextUpdates = { ...currentUpdates };
+      delete nextUpdates[String(booking.id)];
+      await prisma.setting.upsert({
+        where: { key: BOT_UPDATE_SETTING_KEY },
+        create: { key: BOT_UPDATE_SETTING_KEY, value: nextUpdates },
+        update: { value: nextUpdates },
+      });
+
+      return NextResponse.json({
+        success: true,
+        cleared: true,
+        bookingId: String(booking.id),
+        customerName: bookingCustomerName(booking),
+      });
+    }
+
     const update: BotUpdate = {
-      state: inferred.state,
+      state: inferred.state!,
       delayMinutes: inferred.delayMinutes,
       message: message || null,
       updatedAt: new Date().toISOString(),
       source: "BOT",
     };
-    const currentSetting = await prisma.setting.findUnique({ where: { key: BOT_UPDATE_SETTING_KEY } });
-    const currentUpdates = recordMap<BotUpdate>(currentSetting?.value);
     await prisma.setting.upsert({
       where: { key: BOT_UPDATE_SETTING_KEY },
       create: { key: BOT_UPDATE_SETTING_KEY, value: { ...currentUpdates, [String(booking.id)]: update } },
