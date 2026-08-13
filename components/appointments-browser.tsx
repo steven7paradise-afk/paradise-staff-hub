@@ -264,7 +264,7 @@ const viewOptions: Array<{ value: ViewMode; label: string }> = [
   { value: "month", label: "Mese" },
 ];
 
-const appointmentsPageSize = 5;
+const appointmentsPageSize = 25;
 
 const appointmentStatusOptions: Array<{
   value: AppointmentStatusValue;
@@ -4656,7 +4656,7 @@ export function AppointmentsBrowser({
             </div>
 
             {filteredBookings.length > tableBookings.length ? (
-              <div className="border-t border-[#E8D8CF] p-5">
+              <div className="grid gap-3 border-t border-[#E8D8CF] p-5 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() =>
@@ -4664,7 +4664,14 @@ export function AppointmentsBrowser({
                   }
                   className="w-full rounded-2xl border border-[#E8D8CF] bg-white px-4 py-3 text-sm font-black text-[#4E382C] transition hover:bg-[#FFF7F3]"
                 >
-                  Carica altri 5
+                  Carica altri {Math.min(appointmentsPageSize, filteredBookings.length - tableBookings.length)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount(filteredBookings.length)}
+                  className="w-full rounded-2xl bg-[#171717] px-4 py-3 text-sm font-black text-white transition hover:bg-[#D93B8F]"
+                >
+                  Mostra tutti ({filteredBookings.length})
                 </button>
               </div>
             ) : null}
@@ -5510,7 +5517,7 @@ export function AppointmentsBrowser({
           )}
         </div>
         {recentBookings.length > visibleRecentBookings.length ? (
-          <div className="border-t border-black/5 p-5">
+          <div className="grid gap-3 border-t border-black/5 p-5 sm:grid-cols-2">
             <button
               type="button"
               onClick={() =>
@@ -5518,7 +5525,14 @@ export function AppointmentsBrowser({
               }
               className="w-full rounded-[18px] border border-black/8 bg-white px-4 py-3 text-sm font-black text-[#171717] transition hover:border-[#F1A7C3] hover:bg-[#FFF8FB]"
             >
-              Carica altri 5
+              Carica altri {Math.min(appointmentsPageSize, recentBookings.length - visibleRecentBookings.length)}
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibleCount(recentBookings.length)}
+              className="w-full rounded-[18px] bg-[#171717] px-4 py-3 text-sm font-black text-white transition hover:bg-[#D93B8F]"
+            >
+              Mostra tutti ({recentBookings.length})
             </button>
           </div>
         ) : null}

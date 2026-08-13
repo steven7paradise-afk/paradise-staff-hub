@@ -216,6 +216,28 @@ function isCowlendarNoteField(label: string) {
   ].some((keyword) => normalized.includes(keyword));
 }
 
+function isUsefulBookingDetailField(key: string) {
+  const normalized = normalizeName(key.replace(/_/g, " "));
+  return (
+    normalized === "form data" ||
+    normalized.includes("quantity") ||
+    normalized.includes("quantita") ||
+    normalized.includes("product") ||
+    normalized.includes("prodot") ||
+    normalized.includes("photo") ||
+    normalized.includes("foto") ||
+    normalized.includes("video") ||
+    normalized.includes("note") ||
+    normalized.includes("comment") ||
+    normalized.includes("message") ||
+    normalized.includes("telefono") ||
+    normalized.includes("phone") ||
+    normalized.includes("email") ||
+    normalized.includes("instagram") ||
+    normalized.includes("ig tag")
+  );
+}
+
 export default async function AppointmentsPage({
   searchParams,
   forcePcSalon,
@@ -464,7 +486,13 @@ export default async function AppointmentsPage({
 
       const extraDetails = dedupeDetails(
         Object.entries(booking)
-        .filter(([key, value]) => !usedKeys.has(key) && value != null && value !== "")
+        .filter(
+          ([key, value]) =>
+            !usedKeys.has(key) &&
+            isUsefulBookingDetailField(key) &&
+            value != null &&
+            value !== "",
+        )
         .flatMap(([key, value]) => flattenBookingEntries(value, key))
         .map((item) => ({
           label: prettifyBookingLabel(item.key.replace(/_/g, " ")),
