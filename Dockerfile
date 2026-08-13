@@ -50,6 +50,6 @@ COPY --from=builder /app/scripts/start-production.sh ./scripts/start-production.
 EXPOSE 3000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=45s --retries=6 \
-  CMD-SHELL curl --fail --silent --show-error "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null || exit 1
+  CMD curl --fail --silent --show-error "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null || exit 1
 
 CMD ["npm", "run", "start"]
