@@ -6,7 +6,7 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && apt-get install -y --no-install-recommends ca-certificates curl openssl \
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
@@ -45,10 +45,11 @@ COPY --from=production-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts/start-production.sh ./scripts/start-production.sh
 
 EXPOSE 3000
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=45s --retries=6 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+  CMD-SHELL curl --fail --silent --show-error "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null || exit 1
 
 CMD ["npm", "run", "start"]
