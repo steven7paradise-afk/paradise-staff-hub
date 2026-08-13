@@ -1453,6 +1453,48 @@ textarea {
   border-color: rgba(74, 53, 63, 0.12) !important;
 }
 
+/* Compilazione moduli: il pannello e intenzionalmente chiaro anche quando la
+   pagina Cassa & Moduli usa il tema scuro. Senza questo confine, le regole
+   Liquid Glass globali trasformano le superfici `bg-white` in card scure ma
+   lasciano i testi slate scuri, rendendo campi e opzioni illeggibili. */
+.dark .app-content-surface .service-form-fill-workspace,
+.app-content-surface .service-form-fill-workspace {
+  color: #0f172a !important;
+  color-scheme: light !important;
+}
+
+.dark .app-content-surface .service-form-fill-workspace :is(
+  [class~="bg-white"],
+  [class~="bg-white/50"],
+  [class~="bg-white/60"],
+  [class~="bg-white/65"],
+  [class~="bg-white/70"],
+  [class~="bg-white/75"],
+  [class~="bg-white/80"],
+  [class~="bg-white/90"],
+  [class~="bg-white/95"]
+),
+.app-content-surface .service-form-fill-workspace :is(
+  [class~="bg-white"],
+  [class~="bg-white/50"],
+  [class~="bg-white/60"],
+  [class~="bg-white/65"],
+  [class~="bg-white/70"],
+  [class~="bg-white/75"],
+  [class~="bg-white/80"],
+  [class~="bg-white/90"],
+  [class~="bg-white/95"]
+) {
+  background-color: #ffffff !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.dark .app-content-surface .service-form-fill-workspace :is([class~="bg-slate-50"], [class~="bg-slate-50/50"]),
+.app-content-surface .service-form-fill-workspace :is([class~="bg-slate-50"], [class~="bg-slate-50/50"]) {
+  background-color: #f8fafc !important;
+}
+
 @media (max-width: 1279px) {
   .cash-closing-workspace .cash-closing-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));

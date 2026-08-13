@@ -1637,6 +1637,7 @@ export function StaffFormsViewer({
         <div className={cn(
           "fixed inset-0 z-50",
           isCashClosingForm && "cash-closing-workspace",
+          !isCashClosingForm && "service-form-fill-workspace",
           isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
             : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
