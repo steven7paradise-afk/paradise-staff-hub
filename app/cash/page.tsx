@@ -313,14 +313,11 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     prisma.cashMonthClose.findMany().catch(() => []),
   ]);
 
-  const [paymentRows, shopifyRevenue] = await Promise.all([
-    getShopifyPaymentRegister({
-      start,
-      end,
-      locationId: isResponsible ? session.user.sedeId : null,
-    }),
-    getShopifyRevenueRange(dayKey(start), dayKey(end)),
-  ]);
+  const paymentRows = await getShopifyPaymentRegister({
+    start,
+    end,
+    locationId: isResponsible ? session.user.sedeId : null,
+  });
 
   const closingReviewRows = cashClosingRows.length
     ? await prisma.setting.findMany({
@@ -349,6 +346,17 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     return accountingDate >= start && accountingDate < end;
   }));
 
+  // Compare Shopify against exactly the period covered by the declared cash
+  // closings. The previous month-end query also included sales made after the
+  // latest closing, creating a false discrepancy during the current month.
+  const latestDeclaredDay = responses.reduce<Date | null>((latest, response) => {
+    const date = cashAccountingDate(response);
+    return !latest || date > latest ? date : latest;
+  }, null);
+  const shopifyComparisonEnd = latestDeclaredDay ? new Date(latestDeclaredDay) : new Date(start);
+  shopifyComparisonEnd.setDate(shopifyComparisonEnd.getDate() + (latestDeclaredDay ? 1 : 0));
+  const shopifyRevenue = await getShopifyRevenueRange(dayKey(start), dayKey(shopifyComparisonEnd));
+
   const trendClosings = latestClosingsByLocationDay(trendClosingRecords.filter((response) => {
     const accountingDate = cashAccountingDate(response);
     return accountingDate >= trendStart && accountingDate < end;
@@ -366,7 +374,15 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const totalWithdrawn = responses.reduce((sum, response) => sum + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)), 0);
   const totalVaultOut = vaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
-  const shopifyCashExpected = shopifyRevenue.cash;
+  // Derive the accounting total only from the Shopify transaction rows.
+  // Vault movements, cash funds and manual cash records never enter here.
+  const shopifyCashExpected = shopifyRevenue.payments.reduce(
+    (sum, payment) =>
+      payment.method === "CONTANTI" || payment.method === "CASHMATIC"
+        ? sum + payment.amount
+        : sum,
+    0,
+  );
   const shopifyCashDifference = totalWithdrawn - shopifyCashExpected;
   const shopifyCashByDay = new Map<string, number>();
   for (const payment of shopifyRevenue.payments) {
