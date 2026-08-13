@@ -15,7 +15,9 @@ FROM node:22.13.1-bookworm-slim AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=1024"
+# Keep enough memory available for Docker/BuildKit on the deployment host.
+# Next is already configured to compile with one worker in next.config.ts.
+ENV NODE_OPTIONS="--max-old-space-size=768"
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates openssl \
