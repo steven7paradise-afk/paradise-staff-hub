@@ -115,10 +115,22 @@ type CashDailySummary = {
     amount: number;
     method: string;
     processedAt: string;
+    controlResponseId: string | null;
+    controlClientName: string | null;
+    controlDeclaredAmount: number | null;
   }>;
 };
 
-type CashOrderRow = { id: string; order: string; amount: string };
+type CashOrderRow = {
+  id: string;
+  order: string;
+  amount: string;
+  clientName?: string;
+  expectedAmount?: number;
+  controlResponseId?: string | null;
+  controlClientName?: string | null;
+  controlDeclaredAmount?: number | null;
+};
 
 function formatEuro(value: number | null | undefined) {
   if (value === null || value === undefined) return "Non indicato";
@@ -251,6 +263,7 @@ export function StaffFormsViewer({
   const [cashOrderRows, setCashOrderRows] = useState<CashOrderRow[]>([
     { id: "cash-order-1", order: "", amount: "" },
   ]);
+  const [activeCashCustomerIndex, setActiveCashCustomerIndex] = useState(0);
 
   const handleSelectCustomer = (cust: any) => {
     setAnswers((prev) => ({
@@ -609,6 +622,15 @@ export function StaffFormsViewer({
     const currentField = visibleFields[currentActiveIndex];
     if (!currentField) return;
 
+    if (isCashClosingForm && currentField.id === "cash_withdrawn") {
+      const missingCashCustomer = cashOrderRows.find((row) => row.order && (!Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0));
+      if (missingCashCustomer) {
+        setActiveCashCustomerIndex(Math.max(0, cashOrderRows.indexOf(missingCashCustomer)));
+        setErrorMsg("Conferma l'importo contante ricevuto per ogni cliente prima di continuare.");
+        return;
+      }
+    }
+
     if (!isCurrentFieldValid(currentField)) {
       setErrorMsg("Per favore, compila questo campo obbligatorio prima di procedere.");
       return;
@@ -813,6 +835,7 @@ export function StaffFormsViewer({
     setErrorMsg("");
     setActiveFieldIndex(0);
     setCashOrderRows([{ id: `cash-order-${Date.now()}`, order: "", amount: "" }]);
+    setActiveCashCustomerIndex(0);
     setShowPastCustomers(false);
     setCustomerSearchQuery("");
   };
@@ -852,6 +875,26 @@ export function StaffFormsViewer({
       controller.abort();
     };
   }, [isCashClosingForm, selectedForm, answers.cash_date]);
+
+  React.useEffect(() => {
+    if (!isCashClosingForm || !cashSummary?.available) return;
+    setCashOrderRows((current) => {
+      const existingAmounts = new Map(current.map((row) => [row.order.trim().toLowerCase(), row.amount]));
+      if (cashSummary.rows.length === 0) return [{ id: `cash-order-empty-${cashSummary.date}`, order: "", amount: "" }];
+      return cashSummary.rows.map((row) => ({
+        id: `shopify-cash-${row.orderId}`,
+        order: row.orderName,
+        amount: existingAmounts.get(row.orderName.trim().toLowerCase()) || "",
+        clientName: row.clientName,
+        expectedAmount: row.amount,
+        controlResponseId: row.controlResponseId,
+        controlClientName: row.controlClientName,
+        controlDeclaredAmount: row.controlDeclaredAmount,
+      }));
+    });
+    setActiveCashCustomerIndex(0);
+    handleTextChange("cash_withdrawn", "0.00");
+  }, [isCashClosingForm, cashSummary]);
 
   React.useEffect(() => {
     if (autoFillFormId) {
@@ -1627,7 +1670,7 @@ export function StaffFormsViewer({
           )}>
             <div className={cn(
               "relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7",
-              isCashClosingForm && "sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl"
+              isCashClosingForm && "cash-closing-header sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl"
             )}>
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
               <div className="flex items-start justify-between gap-4">
@@ -1718,14 +1761,16 @@ export function StaffFormsViewer({
                 className={cn(
                   "flex min-h-[430px] flex-1 flex-col justify-between",
                   isCashClosingForm
-                    ? "mx-auto w-full max-w-[1600px] overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
+                    ? "w-full overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
                     : "overflow-y-auto bg-white p-5 sm:p-7"
                 )}
               >
                 <div className={cn(
                   "flex-1",
                   isCashClosingForm
-                    ? "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(390px,0.78fr)]"
+                    ? currentActiveIndex === 0
+                      ? "block"
+                      : "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.72fr)]"
                     : ""
                 )}>
                   <div className="space-y-5">
@@ -1984,77 +2029,117 @@ export function StaffFormsViewer({
                             <div className="space-y-4">
                               {isCashClosingForm && field.id === "cash_withdrawn" ? (
                                 <div className="cash-order-entry space-y-4">
-                                  <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                                    <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500 text-white shadow-sm">
-                                      <Banknote className="size-5" />
+                                  {cashSummaryLoading ? (
+                                    <div className="space-y-3" aria-label="Caricamento clienti cash">
+                                      <div className="h-24 animate-pulse rounded-3xl bg-slate-100" />
+                                      <div className="h-20 animate-pulse rounded-3xl bg-slate-100" />
                                     </div>
-                                    <div>
-                                      <p className="text-sm font-black text-slate-900">Dichiara solamente il denaro contante ricevuto</p>
-                                      <p className="mt-0.5 text-xs font-semibold text-slate-500">Un ordine per riga. Non inserire carta, Scalapay, Klarna, PayPal o altri metodi.</p>
-                                    </div>
-                                  </div>
-                                  <div className="grid grid-cols-[minmax(0,1fr)_140px_44px] gap-2 px-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-                                    <span>Ordine / cliente</span>
-                                    <span>Contanti ricevuti</span>
-                                    <span className="sr-only">Azioni</span>
-                                  </div>
-                                  {cashOrderRows.map((row, index) => (
-                                    <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_140px_44px] gap-2">
-                                      <input
-                                        type="text"
-                                        value={row.order}
-                                        onChange={(event) => {
-                                          const value = event.target.value;
-                                          setCashOrderRows((current) => current.map((item) => item.id === row.id ? { ...item, order: value } : item));
-                                        }}
-                                        placeholder={`Es. #25732 o nome cliente`}
-                                        aria-label={`Numero ordine cash ${index + 1}`}
-                                        className="h-14 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20"
-                                      />
-                                      <div className="relative">
-                                        <span className="absolute inset-y-0 left-3 flex items-center text-sm font-black text-slate-400">€</span>
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          step="0.01"
-                                          value={row.amount}
-                                          onChange={(event) => {
-                                            const value = event.target.value;
-                                            const nextRows = cashOrderRows.map((item) => item.id === row.id ? { ...item, amount: value } : item);
-                                            setCashOrderRows(nextRows);
-                                            const total = nextRows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-                                            handleTextChange(field.id, total.toFixed(2));
-                                          }}
-                                          placeholder="0,00"
-                                          aria-label={`Importo ordine cash ${index + 1}`}
-                                          className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-3 text-right text-sm font-black text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20"
-                                        />
+                                  ) : (() => {
+                                    const row = cashOrderRows[activeCashCustomerIndex];
+                                    if (!row?.order) {
+                                      return (
+                                        <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-8 text-center">
+                                          <Banknote className="mx-auto size-8 text-slate-300" />
+                                          <p className="mt-3 text-base font-black text-slate-800">Nessun pagamento cash</p>
+                                          <p className="mt-1 text-sm font-semibold text-slate-500">Shopify non registra clienti che hanno pagato in contanti in questa data.</p>
+                                        </div>
+                                      );
+                                    }
+                                    const received = Number(row.amount) || 0;
+                                    const expected = Number(row.expectedAmount) || 0;
+                                    const matches = received > 0 && Math.abs(received - expected) < 0.01;
+                                    return (
+                                      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_16px_50px_rgba(45,30,38,0.08)]">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+                                          <div>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A74758]">Cliente {activeCashCustomerIndex + 1} di {cashOrderRows.length}</p>
+                                            <h4 className="mt-1 text-xl font-black text-slate-900">{row.controlClientName || row.clientName || "Cliente Shopify"}</h4>
+                                            <p className="mt-1 text-xs font-bold text-slate-400">Ordine {row.order}</p>
+                                          </div>
+                                          <span className={cn(
+                                            "rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em]",
+                                            row.controlResponseId ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                          )}>
+                                            {row.controlResponseId ? "Controllo cliente presente" : "Controllo cliente mancante"}
+                                          </span>
+                                        </div>
+
+                                        <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
+                                          <div className="rounded-2xl bg-slate-50 p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Cash atteso da Shopify</p>
+                                            <p className="mt-2 text-2xl font-black text-slate-900">{formatEuro(expected)}</p>
+                                          </div>
+                                          <div className="rounded-2xl bg-slate-50 p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Dichiarato nel controllo cliente</p>
+                                            <p className="mt-2 text-2xl font-black text-slate-900">
+                                              {row.controlDeclaredAmount === null || row.controlDeclaredAmount === undefined ? "Non ricevuto" : formatEuro(row.controlDeclaredAmount)}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="border-t border-slate-100 p-5 sm:p-6">
+                                          <label htmlFor={`cash-received-${row.id}`} className="text-xs font-black uppercase tracking-[0.14em] text-slate-600">
+                                            Contanti realmente presenti
+                                          </label>
+                                          <div className="relative mt-2">
+                                            <span className="absolute inset-y-0 left-4 flex items-center text-lg font-black text-slate-400">€</span>
+                                            <input
+                                              id={`cash-received-${row.id}`}
+                                              type="number"
+                                              min="0"
+                                              step="0.01"
+                                              autoFocus
+                                              value={row.amount}
+                                              onChange={(event) => {
+                                                const value = event.target.value;
+                                                const nextRows = cashOrderRows.map((item) => item.id === row.id ? { ...item, amount: value } : item);
+                                                setCashOrderRows(nextRows);
+                                                const total = nextRows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                                                handleTextChange(field.id, total.toFixed(2));
+                                                setErrorMsg("");
+                                              }}
+                                              placeholder="0,00"
+                                              aria-label={`Contanti ricevuti da ${row.controlClientName || row.clientName || row.order}`}
+                                              className="h-16 w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 text-right text-2xl font-black text-slate-900 outline-none transition focus:border-[#A74758] focus:ring-4 focus:ring-[#A74758]/10"
+                                            />
+                                          </div>
+                                          {received > 0 ? (
+                                            <div className={cn(
+                                              "mt-3 flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-black",
+                                              matches ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"
+                                            )}>
+                                              <span>{matches ? "Importo corrispondente" : "Differenza rispetto a Shopify"}</span>
+                                              <span>{matches ? <Check className="size-5" /> : formatEuro(received - expected)}</span>
+                                            </div>
+                                          ) : null}
+                                        </div>
+
+                                        <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-6">
+                                          <button
+                                            type="button"
+                                            disabled={activeCashCustomerIndex === 0}
+                                            onClick={() => setActiveCashCustomerIndex((current) => Math.max(0, current - 1))}
+                                            className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-600 disabled:opacity-35"
+                                          >
+                                            Cliente precedente
+                                          </button>
+                                          {activeCashCustomerIndex < cashOrderRows.length - 1 ? (
+                                            <button
+                                              type="button"
+                                              disabled={received <= 0}
+                                              onClick={() => setActiveCashCustomerIndex((current) => Math.min(cashOrderRows.length - 1, current + 1))}
+                                              className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-[#A74758] px-5 text-sm font-black text-white disabled:opacity-35"
+                                            >
+                                              Conferma e prossima
+                                              <ChevronRight className="size-4" />
+                                            </button>
+                                          ) : (
+                                            <span className="text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Ultima cliente</span>
+                                          )}
+                                        </div>
                                       </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const nextRows = cashOrderRows.length === 1
-                                            ? [{ ...cashOrderRows[0], order: "", amount: "" }]
-                                            : cashOrderRows.filter((item) => item.id !== row.id);
-                                          setCashOrderRows(nextRows);
-                                          const total = nextRows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-                                          handleTextChange(field.id, total.toFixed(2));
-                                        }}
-                                        aria-label={`Elimina ordine cash ${index + 1}`}
-                                        className="grid size-11 self-center place-items-center rounded-2xl border border-slate-200 bg-white text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
-                                      >
-                                        <X className="size-4" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                  <button
-                                    type="button"
-                                    onClick={() => setCashOrderRows((current) => [...current, { id: `cash-order-${Date.now()}`, order: "", amount: "" }])}
-                                    className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-dashed border-[#A74758]/30 bg-[#A74758]/5 px-4 text-sm font-black text-[#A74758] transition hover:border-[#A74758]/50 hover:bg-[#A74758]/10"
-                                  >
-                                    <Plus className="size-4" />
-                                    Aggiungi un altro ordine
-                                  </button>
+                                    );
+                                  })()}
                                   <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4">
                                     <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale contanti ricevuti</span>
                                     <span className="text-2xl font-black text-slate-900">{formatEuro(Number(answers[field.id]) || 0)}</span>
@@ -2331,8 +2416,8 @@ export function StaffFormsViewer({
                   })()}
                   </div>
 
-                  {isCashClosingForm && (
-                    <aside className="xl:sticky xl:top-32" aria-label="Ordini Shopify pagati in contanti">
+                  {isCashClosingForm && currentActiveIndex > 0 && (
+                    <aside className="xl:sticky xl:top-32" aria-label="Confronto contanti Shopify e dichiarati">
                       <section
                         className="overflow-hidden rounded-[32px] border shadow-[0_28px_80px_rgba(72,42,55,0.16)]"
                         style={{ background: "linear-gradient(155deg,#241A21 0%,#151319 58%,#101117 100%)", borderColor: "rgba(255,255,255,.12)", color: "white" }}
@@ -2340,13 +2425,13 @@ export function StaffFormsViewer({
                         <div className="p-5 sm:p-7">
                           <div className="flex items-start justify-between gap-4">
                             <div>
-                              <div className="inline-flex items-center gap-2 rounded-full border border-[#f3b2c7]/25 bg-[#f3b2c7]/10 px-3 py-1.5">
+                              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5">
                                 <Banknote className="size-3.5 text-[#f7bfd1]" />
-                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f7bfd1]">Solo contanti</span>
+                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f7bfd1]">Controllo chiusura</span>
                               </div>
-                              <h4 className="mt-4 text-2xl font-black tracking-tight text-white">Ordini cash ricevuti</h4>
+                              <h4 className="mt-4 text-2xl font-black tracking-tight text-white">Confronto contanti</h4>
                               <p className="mt-1.5 max-w-md text-sm font-medium leading-5 text-white/55">
-                                Questi sono gli ordini che Shopify registra come pagati in contanti nella data selezionata.
+                                Verifica subito se la dichiarazione corrisponde agli incassi Shopify.
                               </p>
                             </div>
                             <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/[0.07]">
@@ -2369,45 +2454,44 @@ export function StaffFormsViewer({
                             </p>
                           ) : cashSummary ? (
                             <>
-                              <div className="mt-6 flex items-end justify-between gap-4 rounded-[24px] border border-emerald-300/20 bg-emerald-300/[0.09] p-5">
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/70">Contanti ricevuti</p>
-                                  <p className="mt-1 text-4xl font-black tracking-tight text-white">{formatEuro(cashSummary.cash)}</p>
+                              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+                                <div className="rounded-[24px] border border-white/10 bg-white/[0.065] p-5">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Atteso da Shopify</p>
+                                  <p className="mt-2 text-3xl font-black tracking-tight text-white">{formatEuro(cashSummary.cash)}</p>
+                                  <p className="mt-2 text-xs font-bold text-white/40">{cashSummary.orders} {cashSummary.orders === 1 ? "ordine cash" : "ordini cash"}</p>
                                 </div>
-                                <span className="rounded-full bg-emerald-300 px-3 py-1.5 text-xs font-black text-[#10231d]">
-                                  {cashSummary.orders} {cashSummary.orders === 1 ? "ordine" : "ordini"}
-                                </span>
+                                <div className="rounded-[24px] border border-[#f3b2c7]/25 bg-[#f3b2c7]/10 p-5">
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f7bfd1]/75">Dichiarato adesso</p>
+                                  <p className="mt-2 text-3xl font-black tracking-tight text-white">{formatEuro(Number(answers.cash_withdrawn) || 0)}</p>
+                                  <p className="mt-2 text-xs font-bold text-white/40">Aggiornato mentre compili</p>
+                                </div>
                               </div>
 
-                              <div className="mt-5 max-h-[48vh] space-y-2 overflow-y-auto pr-1">
-                                {cashSummary.rows.length === 0 ? (
-                                  <div className="rounded-[24px] border border-dashed border-white/15 bg-white/[0.04] p-8 text-center">
-                                    <Banknote className="mx-auto size-7 text-white/25" />
-                                    <p className="mt-3 text-sm font-black text-white/70">Nessun ordine cash</p>
-                                    <p className="mt-1 text-xs font-medium text-white/40">Per questa data Shopify non registra pagamenti in contanti.</p>
+                              {(() => {
+                                const declared = Number(answers.cash_withdrawn) || 0;
+                                const difference = declared - cashSummary.cash;
+                                const matches = Math.abs(difference) < 0.01;
+                                return (
+                                  <div className={cn(
+                                    "mt-3 flex items-center justify-between gap-4 rounded-2xl border px-4 py-3",
+                                    matches
+                                      ? "border-emerald-300/25 bg-emerald-300/10"
+                                      : "border-amber-300/25 bg-amber-300/10"
+                                  )}>
+                                    <div>
+                                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Differenza</p>
+                                      <p className="mt-1 text-xl font-black text-white">{formatEuro(difference)}</p>
+                                    </div>
+                                    <span className={cn(
+                                      "rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em]",
+                                      matches ? "bg-emerald-300 text-[#10231d]" : "bg-amber-200 text-amber-950"
+                                    )}>
+                                      {matches ? "Coincide" : difference < 0 ? "Mancano contanti" : "Contanti in più"}
+                                    </span>
                                   </div>
-                                ) : cashSummary.rows.map((row, index) => (
-                                  <div
-                                    key={row.orderId}
-                                    className="grid grid-cols-[42px_minmax(0,1fr)_auto] items-center gap-3 rounded-[22px] border border-white/10 p-3.5"
-                                    style={{ backgroundColor: index % 2 === 0 ? "rgba(255,255,255,.075)" : "rgba(255,255,255,.045)" }}
-                                  >
-                                    <div className="grid size-10 place-items-center rounded-2xl bg-[#f2adc3]/15 text-[#f6bdd0]">
-                                      <Receipt className="size-4" />
-                                    </div>
-                                    <div className="min-w-0">
-                                      <p className="truncate text-sm font-black text-white">{row.clientName}</p>
-                                      <p className="mt-1 text-[11px] font-semibold text-white/40">
-                                        {row.orderName} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.processedAt))}
-                                      </p>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="whitespace-nowrap text-base font-black text-white">{formatEuro(row.amount)}</p>
-                                      <p className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-300">Ricevuto cash</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                                );
+                              })()}
+
                             </>
                           ) : null}
                         </div>

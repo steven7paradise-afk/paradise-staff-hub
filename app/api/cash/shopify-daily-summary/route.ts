@@ -55,6 +55,9 @@ export async function GET(request: NextRequest) {
     clientName: string;
     amount: number;
     processedAt: string;
+    controlResponseId: string | null;
+    controlClientName: string | null;
+    controlDeclaredAmount: number | null;
   }>();
 
   for (const payment of shopify.payments) {
@@ -64,13 +67,17 @@ export async function GET(request: NextRequest) {
       current.amount += payment.amount;
       continue;
     }
-    const control = controlsByOrder.get(cleanOrder(payment.orderName))?.[0];
+    const orderControls = controlsByOrder.get(cleanOrder(payment.orderName)) || [];
+    const control = orderControls.find((item) => item.method === "CONTANTI") || orderControls[0];
     groupedCash.set(payment.orderId, {
       orderId: payment.orderId,
       orderName: payment.orderName,
       clientName: control?.clientName || payment.clientName || "Cliente Shopify",
       amount: payment.amount,
       processedAt: payment.processedAt,
+      controlResponseId: control?.responseId || null,
+      controlClientName: control?.clientName || null,
+      controlDeclaredAmount: control ? control.declaredAmount : null,
     });
   }
 
