@@ -393,9 +393,10 @@ export default async function AppointmentsPage({
 
   const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
-  const [shopifyOrderNames, statusSetting, rawSheetStatusOverrides] = await Promise.all([
+  const [shopifyOrderNames, statusSetting, botUpdateSetting, rawSheetStatusOverrides] = await Promise.all([
     getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
+    prisma.setting.findUnique({ where: { key: "appointment_bot_updates" } }).catch(() => null),
     getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
       id: String(booking.id),
       customerName:
@@ -419,6 +420,15 @@ export default async function AppointmentsPage({
   const statusOverrides =
     statusSetting?.value && typeof statusSetting.value === "object" && !Array.isArray(statusSetting.value)
       ? (statusSetting.value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>)
+      : {};
+  const botUpdates =
+    botUpdateSetting?.value && typeof botUpdateSetting.value === "object" && !Array.isArray(botUpdateSetting.value)
+      ? (botUpdateSetting.value as Record<string, {
+          state?: "ON_THE_WAY" | "DELAYED";
+          delayMinutes?: number | null;
+          message?: string | null;
+          updatedAt?: string;
+        }>)
       : {};
   const sheetStatusOverrides = rawSheetStatusOverrides as Record<string, {
     status?: string;
@@ -551,6 +561,7 @@ export default async function AppointmentsPage({
         statusUpdatedBy: sheetStatusOverrides[String(booking.id)]?.updatedBy ?? statusOverrides[String(booking.id)]?.updatedBy ?? null,
         sheetMatched: Boolean(sheetStatusOverrides[String(booking.id)]),
         sheetNote: sheetStatusOverrides[String(booking.id)]?.sheetNote ?? null,
+        customerUpdate: botUpdates[String(booking.id)] ?? null,
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
         notesText: notesText || null,

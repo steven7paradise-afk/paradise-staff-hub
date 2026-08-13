@@ -189,6 +189,12 @@ type AppointmentRecord = {
   statusUpdatedBy?: string | null;
   sheetMatched?: boolean;
   sheetNote?: string | null;
+  customerUpdate?: {
+    state?: "ON_THE_WAY" | "DELAYED";
+    delayMinutes?: number | null;
+    message?: string | null;
+    updatedAt?: string;
+  } | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   notesText?: string | null;
@@ -2979,6 +2985,16 @@ export function AppointmentsBrowser({
         {savingStatusId === booking.id ? (
           <span className="text-[10px] font-bold text-black/35">
             Salvataggio...
+          </span>
+        ) : null}
+        {booking.customerUpdate ? (
+          <span
+            className="inline-flex max-w-full items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-800"
+            title={booking.customerUpdate.message || "Aggiornamento ricevuto dal bot"}
+          >
+            {booking.customerUpdate.delayMinutes
+              ? `Sta arrivando · ${booking.customerUpdate.delayMinutes} min di ritardo`
+              : "Sta arrivando"}
           </span>
         ) : null}
       </div>
