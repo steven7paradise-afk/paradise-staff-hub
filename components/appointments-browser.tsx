@@ -1152,12 +1152,16 @@ export function AppointmentsBrowser({
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let requestInProgress = false;
 
     const synchronizeCustomerUpdates = async () => {
       if (document.visibilityState === "hidden") {
-        timer = setTimeout(synchronizeCustomerUpdates, 2500);
+        timer = setTimeout(synchronizeCustomerUpdates, 1500);
         return;
       }
+
+      if (requestInProgress) return;
+      requestInProgress = true;
 
       try {
         const response = await fetch("/api/appointments/customer-updates", {
@@ -1173,12 +1177,16 @@ export function AppointmentsBrowser({
       } catch {
         // A temporary network error must not interrupt appointment management.
       } finally {
-        if (!stopped) timer = setTimeout(synchronizeCustomerUpdates, 2000);
+        requestInProgress = false;
+        if (!stopped) timer = setTimeout(synchronizeCustomerUpdates, 1000);
       }
     };
 
     const synchronizeWhenVisible = () => {
-      if (document.visibilityState === "visible") void synchronizeCustomerUpdates();
+      if (document.visibilityState === "visible") {
+        if (timer) clearTimeout(timer);
+        void synchronizeCustomerUpdates();
+      }
     };
 
     void synchronizeCustomerUpdates();
