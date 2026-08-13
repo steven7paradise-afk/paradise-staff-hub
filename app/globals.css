@@ -1383,3 +1383,78 @@ textarea {
     backdrop-filter: none !important;
   }
 }
+
+/* Chiusura cassa deve restare una superficie operativa chiara anche quando
+   l'utente ha attivato il tema notte. Queste regole sono intenzionalmente in
+   fondo al foglio: isolano il modulo dai selettori globali del dark mode. */
+.dark .app-content-surface .cash-closing-workspace,
+.app-content-surface .cash-closing-workspace {
+  color: #1f1720 !important;
+  background: linear-gradient(145deg, #f8f7f8 0%, #f1eef0 100%) !important;
+  color-scheme: light !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-closing-header,
+.app-content-surface .cash-closing-workspace .cash-closing-header {
+  color: #1f1720 !important;
+  background: rgba(252, 251, 252, 0.96) !important;
+  border-color: rgba(74, 53, 63, 0.12) !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-closing-field-card,
+.app-content-surface .cash-closing-workspace .cash-closing-field-card {
+  color: #1f1720 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: rgba(112, 77, 92, 0.14) !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-customer-card,
+.app-content-surface .cash-closing-workspace .cash-customer-card,
+.dark .app-content-surface .cash-closing-workspace .cash-total-card,
+.app-content-surface .cash-closing-workspace .cash-total-card {
+  color: #1f1720 !important;
+  background: #ffffff !important;
+  border-color: #e8e1e5 !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-customer-metric,
+.app-content-surface .cash-closing-workspace .cash-customer-metric,
+.dark .app-content-surface .cash-closing-workspace .cash-customer-actions,
+.app-content-surface .cash-closing-workspace .cash-customer-actions {
+  color: #1f1720 !important;
+  background: #f8f6f7 !important;
+  border-color: #eee8eb !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-order-entry input,
+.dark .app-content-surface .cash-closing-workspace .cash-order-entry textarea,
+.app-content-surface .cash-closing-workspace .cash-order-entry input,
+.app-content-surface .cash-closing-workspace .cash-order-entry textarea {
+  color: #241a21 !important;
+  -webkit-text-fill-color: #241a21 !important;
+  background: #ffffff !important;
+  border-color: #ded2d8 !important;
+  opacity: 1 !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-order-entry input::placeholder,
+.dark .app-content-surface .cash-closing-workspace .cash-order-entry textarea::placeholder,
+.app-content-surface .cash-closing-workspace .cash-order-entry input::placeholder,
+.app-content-surface .cash-closing-workspace .cash-order-entry textarea::placeholder {
+  color: #9b8d94 !important;
+  -webkit-text-fill-color: #9b8d94 !important;
+  opacity: 1 !important;
+}
+
+.dark .app-content-surface .cash-closing-workspace .cash-closing-footer,
+.app-content-surface .cash-closing-workspace .cash-closing-footer {
+  color: #1f1720 !important;
+  background: rgba(252, 251, 252, 0.97) !important;
+  border-color: rgba(74, 53, 63, 0.12) !important;
+}
+
+@media (max-width: 1279px) {
+  .cash-closing-workspace .cash-closing-footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}

@@ -2049,7 +2049,7 @@ export function StaffFormsViewer({
                                     const expected = Number(row.expectedAmount) || 0;
                                     const matches = received > 0 && Math.abs(received - expected) < 0.01;
                                     return (
-                                      <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_16px_50px_rgba(45,30,38,0.08)]">
+                                      <div className="cash-customer-card overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_16px_50px_rgba(45,30,38,0.08)]">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
                                           <div>
                                             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#A74758]">Cliente {activeCashCustomerIndex + 1} di {cashOrderRows.length}</p>
@@ -2065,11 +2065,11 @@ export function StaffFormsViewer({
                                         </div>
 
                                         <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
-                                          <div className="rounded-2xl bg-slate-50 p-4">
+                                          <div className="cash-customer-metric rounded-2xl bg-slate-50 p-4">
                                             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Cash atteso da Shopify</p>
                                             <p className="mt-2 text-2xl font-black text-slate-900">{formatEuro(expected)}</p>
                                           </div>
-                                          <div className="rounded-2xl bg-slate-50 p-4">
+                                          <div className="cash-customer-metric rounded-2xl bg-slate-50 p-4">
                                             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">Dichiarato nel controllo cliente</p>
                                             <p className="mt-2 text-2xl font-black text-slate-900">
                                               {row.controlDeclaredAmount === null || row.controlDeclaredAmount === undefined ? "Non ricevuto" : formatEuro(row.controlDeclaredAmount)}
@@ -2114,7 +2114,7 @@ export function StaffFormsViewer({
                                           ) : null}
                                         </div>
 
-                                        <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-6">
+                                        <div className="cash-customer-actions flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-6">
                                           <button
                                             type="button"
                                             disabled={activeCashCustomerIndex === 0}
@@ -2140,7 +2140,7 @@ export function StaffFormsViewer({
                                       </div>
                                     );
                                   })()}
-                                  <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                                  <div className="cash-total-card flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4">
                                     <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale contanti ricevuti</span>
                                     <span className="text-2xl font-black text-slate-900">{formatEuro(Number(answers[field.id]) || 0)}</span>
                                   </div>
@@ -2508,7 +2508,7 @@ export function StaffFormsViewer({
                 {/* Footer buttons */}
                 <div className={cn(
                   "sticky bottom-0 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur",
-                  isCashClosingForm ? "z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8" : "-mx-5 sm:-mx-7 sm:px-7"
+                  isCashClosingForm ? "cash-closing-footer z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8" : "-mx-5 sm:-mx-7 sm:px-7"
                 )}>
                   <div>
                     <Button
