@@ -622,15 +622,6 @@ export function StaffFormsViewer({
     const currentField = visibleFields[currentActiveIndex];
     if (!currentField) return;
 
-    if (isCashClosingForm && currentField.id === "cash_withdrawn") {
-      const missingCashCustomer = cashOrderRows.find((row) => row.order && (!Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0));
-      if (missingCashCustomer) {
-        setActiveCashCustomerIndex(Math.max(0, cashOrderRows.indexOf(missingCashCustomer)));
-        setErrorMsg("Conferma l'importo contante ricevuto per ogni cliente prima di continuare.");
-        return;
-      }
-    }
-
     if (!isCurrentFieldValid(currentField)) {
       setErrorMsg("Per favore, compila questo campo obbligatorio prima di procedere.");
       return;
@@ -821,7 +812,7 @@ export function StaffFormsViewer({
     setSelectedForm(form);
     setAnswers(
       isCashClosing
-        ? { cash_date: today, cash_withdrawn: "0.00", cash_fund: "50.00" }
+        ? { cash_date: today, cash_withdrawn: "", cash_fund: "50.00" }
         : isClientControl
           ? {
               [CLIENT_CONTROL_FIELD_IDS.correctness]: "Da controllare",
@@ -893,7 +884,6 @@ export function StaffFormsViewer({
       }));
     });
     setActiveCashCustomerIndex(0);
-    handleTextChange("cash_withdrawn", "0.00");
   }, [isCashClosingForm, cashSummary]);
 
   React.useEffect(() => {
@@ -972,13 +962,6 @@ export function StaffFormsViewer({
         if (fundIndex !== -1) setActiveFieldIndex(fundIndex);
         return;
       }
-      const completedCashOrders = cashOrderRows.filter((row) => row.order.trim() || Number(row.amount) > 0);
-      if (completedCashOrders.some((row) => !row.order.trim() || !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0)) {
-        setErrorMsg("Completa numero ordine e importo per ogni riga cash, oppure elimina la riga vuota.");
-        const cashIndex = visibleFields.findIndex((field) => field.id === "cash_withdrawn");
-        if (cashIndex !== -1) setActiveFieldIndex(cashIndex);
-        return;
-      }
     }
 
     setSubmitting(true);
@@ -1009,11 +992,7 @@ export function StaffFormsViewer({
     if (isGroupCourse && !answersPayload["group_participants_count"]) {
       answersPayload["group_participants_count"] = "2";
     }
-    if (isCashClosingForm) {
-      answersPayload.cash_order_rows = cashOrderRows
-        .filter((row) => row.order.trim() || Number(row.amount) > 0)
-        .map((row) => ({ order: row.order.trim(), amount: Number(row.amount) }));
-    }
+    if (isCashClosingForm) answersPayload.cash_order_rows = [];
 
     // Non-file answers
     formData.append("answers", JSON.stringify(answersPayload));
@@ -1805,10 +1784,14 @@ export function StaffFormsViewer({
                               Campo {currentActiveIndex + 1}
                             </span>
                             <label className="block text-xl font-black leading-tight text-slate-900 sm:text-2xl">
-                              {field.label} {field.required && <span className="text-[#A74758]">*</span>}
+                              {isCashClosingForm && field.id === "cash_withdrawn" ? "TOTALE CONTANTI DICHIARATO" : field.label} {field.required && <span className="text-[#A74758]">*</span>}
                             </label>
                             {field.description && (
-                              <p className="text-sm leading-relaxed text-slate-500">{field.description}</p>
+                              <p className="text-sm leading-relaxed text-slate-500">
+                                {isCashClosingForm && field.id === "cash_withdrawn"
+                                  ? "Inserisci unicamente il totale dei contanti presenti in cassa, senza indicare le singole transazioni e senza includere il fondo cassa."
+                                  : field.description}
+                              </p>
                             )}
                           </div>
 
@@ -2026,8 +2009,8 @@ export function StaffFormsViewer({
                           )}
 
                           {field.type === "money" && (
-                            <div className="space-y-4">
-                              {isCashClosingForm && field.id === "cash_withdrawn" ? (
+                            <div className={cn("space-y-4", isCashClosingForm && "cash-order-entry")}>
+                              {isCashClosingForm && field.id === "__cash_transactions_legacy" ? (
                                 <div className="cash-order-entry space-y-4">
                                   {cashSummaryLoading ? (
                                     <div className="space-y-3" aria-label="Caricamento clienti cash">
