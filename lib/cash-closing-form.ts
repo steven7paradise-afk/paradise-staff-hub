@@ -21,10 +21,10 @@ export const CASH_CLOSING_FORM_FIELDS = [
   },
   {
     id: CASH_CLOSING_FIELD_IDS.withdrawn,
-    label: "IMPORTO PRELEVATO",
+    label: "ORDINI CASH / CONTANTI DICHIARATI",
     type: "money",
     required: true,
-    description: "Inserisci la cifra esatta che stai rimuovendo dalla cassa senza tenere in considerazione il fondo cassa.",
+    description: "Inserisci manualmente il totale degli ordini pagati in contanti. Il fondo cassa va indicato nel passaggio successivo e non deve essere incluso.",
   },
   {
     id: CASH_CLOSING_FIELD_IDS.fund,
@@ -75,7 +75,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
       existing.active &&
       JSON.stringify(roles ?? []) === JSON.stringify(expectedRoles) &&
       JSON.stringify(notifyRoles ?? []) === JSON.stringify(expectedNotifyRoles) &&
-      Boolean(existing.fields);
+      JSON.stringify(existing.fields ?? []) === JSON.stringify(CASH_CLOSING_FORM_FIELDS);
 
     if (alreadyReady) return existing;
 
@@ -87,7 +87,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
         active: true,
         allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
         notify_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
-        fields: existing.fields || CASH_CLOSING_FORM_FIELDS,
+        fields: CASH_CLOSING_FORM_FIELDS,
       },
     });
   }
@@ -95,7 +95,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
   return prisma.serviceForm.create({
     data: {
       name: CASH_CLOSING_FORM_NAME,
-      description: "Modulo per registrare la chiusura fiscale giornaliera della cassa, con importo prelevato, fondo cassa, note e firma tramite PIN personale.",
+      description: "Registra i contanti dichiarati manualmente, verifica il riferimento teorico Shopify, indica il fondo cassa e firma la chiusura con il PIN personale.",
       category: CASH_CLOSING_FORM_CATEGORY,
       icon: "Calculator",
       active: true,

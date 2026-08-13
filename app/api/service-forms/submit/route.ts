@@ -136,6 +136,10 @@ export async function POST(request: NextRequest) {
       const pinField = fields.find((field) => field.type === "pin" || field.id === CASH_CLOSING_FIELD_IDS.pin || field.label.toUpperCase().includes("PIN"));
       const pinValue = pinField ? String(answersObj[pinField.id] ?? "").trim() : "";
 
+      if (!/^\d{2,6}$/.test(pinValue)) {
+        return NextResponse.json({ error: "Inserisci un PIN personale valido per firmare la chiusura cassa." }, { status: 401 });
+      }
+
       let signingUser: { id: string; name: string; role: string; pin_hash?: string | null; pin_lookup?: string | null } | null = null;
 
       if (sessionUser.id !== "PC_CASSA") {
@@ -145,21 +149,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      if (pinValue && /^\d{2,6}$/.test(pinValue)) {
-        const found = await identifyWorkerByPin(pinValue, sessionUser.sedeId || "");
-        if (found) {
-          signingUser = { id: found.id, name: found.name, role: found.role };
-        } else if (signingUser?.pin_hash) {
-          const isValid = await isPinValidForUser(signingUser.id, pinValue, signingUser.pin_hash, signingUser.pin_lookup);
-          if (!isValid) signingUser = null;
-        }
-      }
-
-      if (!signingUser) {
-        signingUser = await prisma.user.findUnique({
-          where: { id: dbUserId },
-          select: { id: true, name: true, role: true },
-        });
+      const found = await identifyWorkerByPin(pinValue, sessionUser.sedeId || "");
+      if (found) {
+        signingUser = { id: found.id, name: found.name, role: found.role };
+      } else if (signingUser?.pin_hash) {
+        const isValid = await isPinValidForUser(signingUser.id, pinValue, signingUser.pin_hash, signingUser.pin_lookup);
+        if (!isValid) signingUser = null;
+      } else {
+        signingUser = null;
       }
 
       if (!signingUser) {
@@ -183,8 +180,26 @@ export async function POST(request: NextRequest) {
       const accountingDate = cashDateFromInput(answersObj[CASH_CLOSING_FIELD_IDS.date]);
       const withdrawn = moneyNumber(answersObj[CASH_CLOSING_FIELD_IDS.withdrawn]);
       const fund = moneyNumber(answersObj[CASH_CLOSING_FIELD_IDS.fund]);
+      const cashOrders = Array.isArray(answersObj.cash_order_rows)
+        ? answersObj.cash_order_rows
+            .map((row: unknown) => {
+              const value = row && typeof row === "object" ? row as Record<string, unknown> : {};
+              return {
+                order: String(value.order ?? "").trim(),
+                amount: moneyNumber(value.amount),
+              };
+            })
+            .filter((row: { order: string; amount: number }) => row.order || row.amount > 0)
+        : [];
       if (!accountingDate || withdrawn < 0 || !Number.isFinite(fund)) {
         return NextResponse.json({ error: "Data, importo prelevato e fondo cassa sono obbligatori." }, { status: 400 });
+      }
+      if (cashOrders.some((row: { order: string; amount: number }) => !row.order || row.amount <= 0)) {
+        return NextResponse.json({ error: "Ogni ordine cash deve avere numero ordine e importo validi." }, { status: 400 });
+      }
+      const cashOrderTotal = cashOrders.reduce((sum: number, row: { amount: number }) => sum + row.amount, 0);
+      if (cashOrders.length > 0 && Math.abs(cashOrderTotal - withdrawn) > 0.009) {
+        return NextResponse.json({ error: "Il totale degli ordini cash non coincide con l'importo dichiarato." }, { status: 400 });
       }
 
       const signedAt = new Date();
@@ -195,6 +210,7 @@ export async function POST(request: NextRequest) {
           date: accountingDate,
           withdrawn,
           fund,
+          cash_orders: cashOrders,
           notes: notesValue || null,
           signature_name: signingUser.name,
           signature_role: signingUser.role,

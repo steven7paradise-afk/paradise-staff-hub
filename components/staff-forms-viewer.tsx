@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote, WalletCards } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -97,6 +97,28 @@ type PickupStatusNotice = {
   statusLabel?: string;
   order?: PickupReadyOrder | null;
 };
+
+type CashDailySummary = {
+  available: boolean;
+  date: string;
+  total: number;
+  card: number;
+  cash: number;
+  other: number;
+  orders: number;
+  transactions?: number;
+  message?: string;
+  rows: Array<{
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    method: string;
+    processedAt: string;
+  }>;
+};
+
+type CashOrderRow = { id: string; order: string; amount: string };
 
 function formatEuro(value: number | null | undefined) {
   if (value === null || value === undefined) return "Non indicato";
@@ -223,6 +245,12 @@ export function StaffFormsViewer({
   const [pickupLoadingOrders, setPickupLoadingOrders] = useState(false);
   const [pickupSelectedOrder, setPickupSelectedOrder] = useState<PickupReadyOrder | null>(null);
   const [pickupStatusNotice, setPickupStatusNotice] = useState<PickupStatusNotice | null>(null);
+  const [cashSummary, setCashSummary] = useState<CashDailySummary | null>(null);
+  const [cashSummaryLoading, setCashSummaryLoading] = useState(false);
+  const [cashSummaryError, setCashSummaryError] = useState("");
+  const [cashOrderRows, setCashOrderRows] = useState<CashOrderRow[]>([
+    { id: "cash-order-1", order: "", amount: "" },
+  ]);
 
   const handleSelectCustomer = (cust: any) => {
     setAnswers((prev) => ({
@@ -513,6 +541,9 @@ export function StaffFormsViewer({
     return selectedForm.fields.filter((field) => {
       const isVisible = isFieldVisible(field);
       if (!isVisible) return false;
+      if (isCashClosingForm && field.id === "cash_notes") {
+        return false;
+      }
       if (isSelectedClientControlForm && autoClientControlFieldIds.has(field.id)) {
         return false;
       }
@@ -768,7 +799,7 @@ export function StaffFormsViewer({
     setSelectedForm(form);
     setAnswers(
       isCashClosing
-        ? { cash_date: today, cash_fund: "50.00" }
+        ? { cash_date: today, cash_withdrawn: "0.00", cash_fund: "50.00" }
         : isClientControl
           ? {
               [CLIENT_CONTROL_FIELD_IDS.correctness]: "Da controllare",
@@ -781,9 +812,46 @@ export function StaffFormsViewer({
     setSuccess(false);
     setErrorMsg("");
     setActiveFieldIndex(0);
+    setCashOrderRows([{ id: `cash-order-${Date.now()}`, order: "", amount: "" }]);
     setShowPastCustomers(false);
     setCustomerSearchQuery("");
   };
+
+  React.useEffect(() => {
+    if (!isCashClosingForm || !selectedForm) {
+      setCashSummary(null);
+      setCashSummaryError("");
+      return;
+    }
+    const date = String(answers.cash_date || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCashSummaryLoading(true);
+      setCashSummaryError("");
+      try {
+        const response = await fetch(`/api/cash/shopify-daily-summary?date=${encodeURIComponent(date)}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data) throw new Error(data?.error || "Riepilogo non disponibile.");
+        setCashSummary(data);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setCashSummary(null);
+        setCashSummaryError(error instanceof Error ? error.message : "Riepilogo non disponibile.");
+      } finally {
+        if (!controller.signal.aborted) setCashSummaryLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [isCashClosingForm, selectedForm, answers.cash_date]);
 
   React.useEffect(() => {
     if (autoFillFormId) {
@@ -857,8 +925,15 @@ export function StaffFormsViewer({
       const notesValue = String(answers.cash_notes ?? "").trim();
       if (Number.isFinite(fundValue) && Math.abs(fundValue - 50) > 0.009 && !notesValue) {
         setErrorMsg("Il fondo cassa e diverso da € 50,00: inserisci una nota di giustificazione.");
-        const notesIndex = visibleFields.findIndex((field) => field.id === "cash_notes" || field.label.toUpperCase().includes("NOTE"));
-        if (notesIndex !== -1) setActiveFieldIndex(notesIndex);
+        const fundIndex = visibleFields.findIndex((field) => field.id === "cash_fund");
+        if (fundIndex !== -1) setActiveFieldIndex(fundIndex);
+        return;
+      }
+      const completedCashOrders = cashOrderRows.filter((row) => row.order.trim() || Number(row.amount) > 0);
+      if (completedCashOrders.some((row) => !row.order.trim() || !Number.isFinite(Number(row.amount)) || Number(row.amount) <= 0)) {
+        setErrorMsg("Completa numero ordine e importo per ogni riga cash, oppure elimina la riga vuota.");
+        const cashIndex = visibleFields.findIndex((field) => field.id === "cash_withdrawn");
+        if (cashIndex !== -1) setActiveFieldIndex(cashIndex);
         return;
       }
     }
@@ -873,6 +948,7 @@ export function StaffFormsViewer({
     const answersPayload = Object.fromEntries(
       Object.entries(answers).filter(([key]) =>
         visibleFieldIds.has(key) ||
+        (isCashClosingForm && key === "cash_notes") ||
         (isSelectedClientControlForm && autoClientControlFieldIds.has(key)) ||
         key.includes("_altro") ||
         key.startsWith("participant_") ||
@@ -889,6 +965,11 @@ export function StaffFormsViewer({
 
     if (isGroupCourse && !answersPayload["group_participants_count"]) {
       answersPayload["group_participants_count"] = "2";
+    }
+    if (isCashClosingForm) {
+      answersPayload.cash_order_rows = cashOrderRows
+        .filter((row) => row.order.trim() || Number(row.amount) > 0)
+        .map((row) => ({ order: row.order.trim(), amount: Number(row.amount) }));
     }
 
     // Non-file answers
@@ -1531,9 +1612,22 @@ export function StaffFormsViewer({
 
       {/* FILL OUT MODAL */}
       {selectedForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px] border border-slate-100 bg-white text-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.25)] animate-in fade-in zoom-in-95 duration-200">
-            <div className="relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7">
+        <div className={cn(
+          "fixed inset-0 z-50",
+          isCashClosingForm
+            ? "overflow-y-auto bg-[#f4eff2]"
+            : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
+        )}>
+          <div className={cn(
+            "flex w-full flex-col border border-slate-100 bg-white text-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.25)] animate-in fade-in duration-200",
+            isCashClosingForm
+              ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_15%_0%,rgba(167,71,88,0.12),transparent_32%),linear-gradient(180deg,#faf8f9,#f3eef1)]"
+              : "max-h-[92vh] max-w-4xl overflow-hidden rounded-[32px] zoom-in-95"
+          )}>
+            <div className={cn(
+              "relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7",
+              isCashClosingForm && "sticky top-0 z-30 bg-white/85 shadow-sm backdrop-blur-2xl"
+            )}>
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 gap-3">
@@ -1544,7 +1638,7 @@ export function StaffFormsViewer({
                     <span className="inline-flex rounded-full border border-[#A74758]/20 bg-[#A74758]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">
                       {selectedForm.category}
                     </span>
-                    <h3 className="mt-2 truncate text-xl font-black text-slate-900 sm:text-2xl">{selectedForm.name}</h3>
+                    <h3 className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">{selectedForm.name}</h3>
                     <p className="mt-1 text-xs font-medium text-slate-500">
                       {visibleFields.length > 0
                         ? `Domanda ${currentActiveIndex + 1} di ${visibleFields.length} · ${answeredVisibleCount} compilate`
@@ -1620,9 +1714,20 @@ export function StaffFormsViewer({
                   e.preventDefault();
                   handleNextOrSubmit();
                 }} 
-                className="flex min-h-[430px] flex-1 flex-col justify-between overflow-y-auto p-5 sm:p-7 bg-white"
+                className={cn(
+                  "flex min-h-[430px] flex-1 flex-col justify-between",
+                  isCashClosingForm
+                    ? "mx-auto w-full max-w-[1600px] overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
+                    : "overflow-y-auto bg-white p-5 sm:p-7"
+                )}
               >
-                <div className="space-y-5 flex-1">
+                <div className={cn(
+                  "flex-1",
+                  isCashClosingForm
+                    ? "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(390px,0.78fr)]"
+                    : ""
+                )}>
+                  <div className="space-y-5">
                   {selectedForm.description && currentActiveIndex === 0 && (
                     <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
                       {selectedForm.description}
@@ -1872,18 +1977,106 @@ export function StaffFormsViewer({
                           )}
 
                           {field.type === "money" && (
-                            <div className="relative flex items-center">
-                              <span className="absolute left-4 text-base font-black text-slate-400">€</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                required={field.required}
-                                value={answers[field.id] || ""}
-                                onChange={(e) => handleTextChange(field.id, e.target.value)}
-                                onKeyDown={(e) => handleKeyDown(e, field.type)}
-                                className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
-                                placeholder="0.00"
-                              />
+                            <div className="space-y-4">
+                              {isCashClosingForm && field.id === "cash_withdrawn" ? (
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-[minmax(0,1fr)_140px_44px] gap-2 px-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                    <span>Numero ordine</span>
+                                    <span>Importo cash</span>
+                                    <span className="sr-only">Azioni</span>
+                                  </div>
+                                  {cashOrderRows.map((row, index) => (
+                                    <div key={row.id} className="grid grid-cols-[minmax(0,1fr)_140px_44px] gap-2">
+                                      <input
+                                        type="text"
+                                        value={row.order}
+                                        onChange={(event) => {
+                                          const value = event.target.value;
+                                          setCashOrderRows((current) => current.map((item) => item.id === row.id ? { ...item, order: value } : item));
+                                        }}
+                                        placeholder={`Ordine #${index + 1}`}
+                                        aria-label={`Numero ordine cash ${index + 1}`}
+                                        className="h-14 min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20"
+                                      />
+                                      <div className="relative">
+                                        <span className="absolute inset-y-0 left-3 flex items-center text-sm font-black text-slate-400">€</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={row.amount}
+                                          onChange={(event) => {
+                                            const value = event.target.value;
+                                            const nextRows = cashOrderRows.map((item) => item.id === row.id ? { ...item, amount: value } : item);
+                                            setCashOrderRows(nextRows);
+                                            const total = nextRows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                                            handleTextChange(field.id, total.toFixed(2));
+                                          }}
+                                          placeholder="0,00"
+                                          aria-label={`Importo ordine cash ${index + 1}`}
+                                          className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-8 pr-3 text-right text-sm font-black text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20"
+                                        />
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nextRows = cashOrderRows.length === 1
+                                            ? [{ ...cashOrderRows[0], order: "", amount: "" }]
+                                            : cashOrderRows.filter((item) => item.id !== row.id);
+                                          setCashOrderRows(nextRows);
+                                          const total = nextRows.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                                          handleTextChange(field.id, total.toFixed(2));
+                                        }}
+                                        aria-label={`Elimina ordine cash ${index + 1}`}
+                                        className="grid size-11 self-center place-items-center rounded-2xl border border-slate-200 bg-white text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                                      >
+                                        <X className="size-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <button
+                                    type="button"
+                                    onClick={() => setCashOrderRows((current) => [...current, { id: `cash-order-${Date.now()}`, order: "", amount: "" }])}
+                                    className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-dashed border-[#A74758]/30 bg-[#A74758]/5 px-4 text-sm font-black text-[#A74758] transition hover:border-[#A74758]/50 hover:bg-[#A74758]/10"
+                                  >
+                                    <Plus className="size-4" />
+                                    Aggiungi ordine cash
+                                  </button>
+                                  <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                                    <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale dichiarato</span>
+                                    <span className="text-2xl font-black text-slate-900">{formatEuro(Number(answers[field.id]) || 0)}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="relative flex items-center">
+                                  <span className="absolute left-4 text-base font-black text-slate-400">€</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    required={field.required}
+                                    value={answers[field.id] || ""}
+                                    onChange={(e) => handleTextChange(field.id, e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(e, field.type)}
+                                    className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
+                                    placeholder="0.00"
+                                  />
+                                </div>
+                              )}
+                              {isCashClosingForm && field.id === "cash_fund" ? (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                  <label htmlFor="cash-notes" className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                                    Nota di chiusura <span className="font-semibold normal-case tracking-normal text-slate-400">(facoltativa)</span>
+                                  </label>
+                                  <textarea
+                                    id="cash-notes"
+                                    rows={3}
+                                    value={answers.cash_notes || ""}
+                                    onChange={(event) => handleTextChange("cash_notes", event.target.value)}
+                                    placeholder="Spiega differenze, rettifiche o un fondo cassa diverso da € 50,00."
+                                    className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:bg-white focus:ring-1 focus:ring-[#A74758]/20"
+                                  />
+                                </div>
+                              ) : null}
                             </div>
                           )}
 
@@ -2123,10 +2316,125 @@ export function StaffFormsViewer({
                       </div>
                     );
                   })()}
+                  </div>
+
+                  {isCashClosingForm && (
+                    <aside className="space-y-4 xl:sticky xl:top-36" aria-label="Riepilogo teorico Shopify">
+                      <section className="overflow-hidden rounded-[30px] border border-white/10 bg-[#121119] text-white shadow-[0_24px_70px_rgba(31,19,27,0.18)]">
+                        <div className="border-b border-white/10 p-5 sm:p-6">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f4a8c0]">Riferimento teorico</p>
+                              <h4 className="mt-2 text-xl font-black">Incassi Shopify del giorno</h4>
+                              <p className="mt-1 text-xs font-semibold text-white/45">
+                                Confronto informativo: non modifica la dichiarazione manuale.
+                              </p>
+                            </div>
+                            <div className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/[0.07]">
+                              {cashSummaryLoading ? <Loader2 className="size-5 animate-spin text-[#f4a8c0]" /> : <WalletCards className="size-5 text-[#f4a8c0]" />}
+                            </div>
+                          </div>
+
+                          {cashSummaryError ? (
+                            <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm font-bold text-amber-100">
+                              {cashSummaryError}
+                            </div>
+                          ) : cashSummaryLoading && !cashSummary ? (
+                            <div className="mt-6 space-y-3" aria-label="Caricamento riepilogo">
+                              <div className="h-10 w-44 animate-pulse rounded-xl bg-white/10" />
+                              <div className="h-16 animate-pulse rounded-2xl bg-white/[0.06]" />
+                            </div>
+                          ) : cashSummary?.available === false ? (
+                            <p className="mt-5 rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-sm font-semibold text-white/55">
+                              {cashSummary.message || "Riepilogo Shopify non disponibile."}
+                            </p>
+                          ) : cashSummary ? (
+                            <>
+                              <div className="mt-6 flex items-end justify-between gap-4">
+                                <div>
+                                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-white/40">Totale atteso</p>
+                                  <p className="mt-1 text-4xl font-black tracking-tight">{formatEuro(cashSummary.total)}</p>
+                                </div>
+                                <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1.5 text-xs font-black text-emerald-200">
+                                  {cashSummary.orders} ordini
+                                </span>
+                              </div>
+                              <div className="mt-5 grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                                {[
+                                  { label: "Carta / POS", value: cashSummary.card, icon: CreditCard },
+                                  { label: "Contanti Shopify", value: cashSummary.cash, icon: Banknote },
+                                  { label: "Altri metodi", value: cashSummary.other, icon: ReceiptText },
+                                ].map((item) => (
+                                  <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[0.06] p-3.5">
+                                    <item.icon className="size-4 text-[#f4a8c0]" />
+                                    <p className="mt-3 text-[9px] font-black uppercase tracking-[0.14em] text-white/35">{item.label}</p>
+                                    <p className="mt-1 text-base font-black">{formatEuro(item.value)}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </section>
+
+                      <section className="overflow-hidden rounded-[30px] border border-slate-200/80 bg-white/90 shadow-[0_18px_55px_rgba(61,42,53,0.10)] backdrop-blur-xl">
+                        <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Dettaglio giornaliero</p>
+                            <h4 className="mt-1 text-lg font-black text-slate-900">Importi attesi per cliente</h4>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                            {cashSummary?.rows.length ?? 0}
+                          </span>
+                        </div>
+
+                        <div className="max-h-[46vh] overflow-y-auto">
+                          {!cashSummaryLoading && cashSummary?.available && cashSummary.rows.length === 0 ? (
+                            <div className="p-8 text-center">
+                              <Receipt className="mx-auto size-7 text-slate-300" />
+                              <p className="mt-3 text-sm font-black text-slate-600">Nessun incasso Shopify per questa data</p>
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-100">
+                              {cashSummary?.rows.map((row) => (
+                                <div key={row.orderId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-5 py-4 sm:px-6">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-black text-slate-900">{row.clientName}</p>
+                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400">
+                                      <span>{row.orderName}</span>
+                                      <span aria-hidden="true">•</span>
+                                      <span>{new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.processedAt))}</span>
+                                    </div>
+                                    <span className="mt-2 inline-flex rounded-full bg-[#A74758]/8 px-2.5 py-1 text-[10px] font-black text-[#A74758]">
+                                      {row.method}
+                                    </span>
+                                  </div>
+                                  <p className="self-center whitespace-nowrap text-base font-black text-slate-900">{formatEuro(row.amount)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {cashSummary?.available ? (
+                          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-5 py-4 sm:px-6">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Totale teorico</span>
+                            <span className="text-xl font-black text-slate-900">{formatEuro(cashSummary.total)}</span>
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <p className="px-2 text-xs font-semibold leading-5 text-slate-500">
+                        Shopify è una fonte di confronto. L’operatore deve dichiarare manualmente i contanti, indicare il fondo cassa e firmare con il proprio PIN.
+                      </p>
+                    </aside>
+                  )}
                 </div>
 
                 {/* Footer buttons */}
-                <div className="sticky bottom-0 -mx-5 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur sm:-mx-7 sm:px-7">
+                <div className={cn(
+                  "sticky bottom-0 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur",
+                  isCashClosingForm ? "z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8" : "-mx-5 sm:-mx-7 sm:px-7"
+                )}>
                   <div>
                     <Button
                       type="button"

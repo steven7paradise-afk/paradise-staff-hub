@@ -431,6 +431,7 @@ model CashClosing {
   date           DateTime
   withdrawn      Float
   fund           Float
+  cash_orders    Json?
   notes          String?
   signature_name String
   signature_role String?
