@@ -1148,15 +1148,12 @@ export function AppointmentsBrowser({
   initialRangeTo,
   initialScopeAll = false,
   locations = [],
-<<<<<<< Updated upstream
-=======
   navigationBasePath,
   pageTitle = "Appuntamenti",
   pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
   salonWorkflowMode,
   initialWorkflowWorkerName = "",
   initialWorkflowWorkerRole = "",
->>>>>>> Stashed changes
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
@@ -1170,15 +1167,12 @@ export function AppointmentsBrowser({
   initialRangeTo?: string;
   initialScopeAll?: boolean;
   locations?: Array<{ id: string; name: string }>;
-<<<<<<< Updated upstream
-=======
   navigationBasePath?: string;
   pageTitle?: string;
   pageSubtitle?: string;
   salonWorkflowMode?: "reception" | "queue" | "station";
   initialWorkflowWorkerName?: string;
   initialWorkflowWorkerRole?: string;
->>>>>>> Stashed changes
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
