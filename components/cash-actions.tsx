@@ -2,6 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CalendarDays, Camera, CheckCircle2, FilePlus2, LockKeyhole, Loader2, Plus, ReceiptText, Upload, WalletCards, X } from "lucide-react";
 import { jsPDF } from "jspdf";
@@ -79,6 +80,11 @@ const modalEyebrowClass = "text-[10px] font-black uppercase tracking-[0.28em] te
 const modalLabelClass = "text-[10px] font-black uppercase tracking-[0.18em] text-black/45";
 const secondaryButtonClass = "inline-flex min-h-12 items-center justify-center border border-black/20 bg-transparent px-6 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:border-black hover:bg-white disabled:opacity-40";
 const primaryButtonClass = "inline-flex min-h-12 items-center justify-center gap-2 bg-black px-7 text-xs font-black uppercase tracking-[0.14em] text-white transition hover:bg-[#292929] disabled:cursor-not-allowed disabled:opacity-40";
+
+function CashModalPortal({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(children, document.body);
+}
 
 export function CashActions({
   month,
@@ -162,6 +168,17 @@ export function CashActions({
       if (receiptPreview) URL.revokeObjectURL(receiptPreview);
     };
   }, [receiptPreview]);
+
+  useEffect(() => {
+    const hasOpenModal = open || manualOpen || weekCloseModalOpen || monthCloseModalOpen;
+    if (!hasOpenModal) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [manualOpen, monthCloseModalOpen, open, weekCloseModalOpen]);
 
   useEffect(() => {
     if (selectedWeekCloseLocationId && customStartDate && customEndDate) {
@@ -390,7 +407,7 @@ export function CashActions({
       </button>
 
       {monthCloseModalOpen ? (
-        <div className={modalBackdropClass}>
+        <CashModalPortal><div className={modalBackdropClass}>
           <div className={`${modalPanelClass} sm:max-w-6xl`}>
             <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
@@ -530,11 +547,11 @@ export function CashActions({
               </button>
             </div>
           </div>
-        </div>
+        </div></CashModalPortal>
       ) : null}
 
       {open ? (
-        <div className={modalBackdropClass}>
+        <CashModalPortal><div className={modalBackdropClass}>
           <form onSubmit={saveWithdrawal} className={`${modalPanelClass} sm:max-w-5xl`}>
             <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
@@ -660,11 +677,11 @@ export function CashActions({
               </button>
             </div>
           </form>
-        </div>
+        </div></CashModalPortal>
       ) : null}
 
       {manualOpen ? (
-        <div className={modalBackdropClass}>
+        <CashModalPortal><div className={modalBackdropClass}>
           <form onSubmit={saveManualClosing} className={`${modalPanelClass} sm:max-w-4xl`}>
             <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
@@ -738,11 +755,11 @@ export function CashActions({
               </button>
             </div>
           </form>
-        </div>
+        </div></CashModalPortal>
       ) : null}
 
       {weekCloseModalOpen ? (
-        <div className={modalBackdropClass}>
+        <CashModalPortal><div className={modalBackdropClass}>
           <div className={`${modalPanelClass} sm:max-w-5xl`}>
             <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
@@ -1245,7 +1262,7 @@ export function CashActions({
               })()}
             </div>
           </div>
-        </div>
+        </div></CashModalPortal>
       ) : null}
     </div>
   );
