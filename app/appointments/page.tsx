@@ -380,7 +380,7 @@ export default async function AppointmentsPage({
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
     : null;
 
-  const cowlendarTeamOptionsById = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
+  const cowlendarTeamOptionsByName = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
   const cowlendarTeammates = [
     ...safeBookings.flatMap((booking) => booking.teammates ?? []),
     ...safeServices.flatMap((service) => service.teammates ?? []),
@@ -390,19 +390,30 @@ export default async function AppointmentsPage({
     const name = cleanTeamName(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim());
     const matchedUser = matchUserByTeamName(corsoUsers, name);
     if (!mate.id || !name || !matchedUser) continue;
-    cowlendarTeamOptionsById.set(mate.id, {
-      id: mate.id,
-      name,
+    cowlendarTeamOptionsByName.set(normalizeName(matchedUser.name), {
+      id: matchedUser.id,
+      name: matchedUser.name,
       photoUrl: matchedUser.photo_url || mate.thumbnail || null,
     });
   }
 
-  const corsoTeamOptions = [...cowlendarTeamOptionsById.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
+  for (const user of corsoUsers) {
+    const key = normalizeName(user.name);
+    if (!key || cowlendarTeamOptionsByName.has(key)) continue;
+    cowlendarTeamOptionsByName.set(key, {
+      id: user.id,
+      name: user.name,
+      photoUrl: user.photo_url || null,
+    });
+  }
 
-  const [shopifyOrderNames, statusSetting, botUpdateSetting, rawSheetStatusOverrides] = await Promise.all([
+  const corsoTeamOptions = [...cowlendarTeamOptionsByName.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
+
+  const [shopifyOrderNames, statusSetting, botUpdateSetting, teamOverrideSetting, rawSheetStatusOverrides] = await Promise.all([
     getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_bot_updates" } }).catch(() => null),
+    prisma.setting.findUnique({ where: { key: "appointment_team_overrides" } }).catch(() => null),
     getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
       id: String(booking.id),
       customerName:
@@ -436,6 +447,14 @@ export default async function AppointmentsPage({
           updatedAt?: string;
         }>)
       : {};
+  const teamOverrides =
+    teamOverrideSetting?.value && typeof teamOverrideSetting.value === "object" && !Array.isArray(teamOverrideSetting.value)
+      ? (teamOverrideSetting.value as Record<string, {
+          teammates?: Array<{ id?: string; name?: string; photoUrl?: string | null }>;
+          updatedAt?: string;
+          updatedBy?: string;
+        }>)
+      : {};
   const sheetStatusOverrides = rawSheetStatusOverrides as Record<string, {
     status?: string;
     sheetNote?: string;
@@ -447,19 +466,30 @@ export default async function AppointmentsPage({
     .map((booking) => {
       const bookingDate = new Date(booking.start_date);
 
-      const teammates = (booking.teammates ?? [])
+      const cowlendarBookingTeammates = (booking.teammates ?? [])
         .map((mate) => {
           const rawName = `${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim();
           const cleanedName = cleanTeamName(rawName);
           const matchedUser = matchUserByTeamName(localUsers, cleanedName);
 
           return {
-            id: mate.id,
-            name: cleanedName,
+            id: matchedUser?.id || mate.id,
+            name: matchedUser?.name || cleanedName,
             photoUrl: matchedUser?.photo_url || mate.thumbnail || null,
           };
         })
         .filter((mate) => mate.name);
+      const overrideTeammates = teamOverrides[String(booking.id)]?.teammates;
+      const storedTeammates = Array.isArray(overrideTeammates)
+        ? overrideTeammates
+            .map((mate) => ({
+              id: String(mate.id || "").trim(),
+              name: String(mate.name || "").trim(),
+              photoUrl: mate.photoUrl || null,
+            }))
+            .filter((mate) => mate.id && mate.name)
+        : [];
+      const teammates = storedTeammates.length ? storedTeammates : cowlendarBookingTeammates;
 
       const teammateSalons = teammates
         .map((mate) => {

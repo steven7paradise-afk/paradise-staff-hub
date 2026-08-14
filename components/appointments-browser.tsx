@@ -2866,12 +2866,24 @@ export function AppointmentsBrowser({
       const response = await fetch("/api/appointments/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking.id, teammateIds, signedBy }),
+        body: JSON.stringify({
+          bookingId: booking.id,
+          orderName: booking.bookingStr,
+          teammateIds,
+          teammates: nextTeam,
+          signedBy,
+        }),
       });
 
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare il team.");
+      }
+      const data = await response.json().catch(() => null);
+      if (booking.bookingStr && data?.shopifyNoteSaved === false) {
+        alert(
+          "Collaboratrice salvata in Paradise. La nota Shopify non è stata aggiornata: riprova tra poco.",
+        );
       }
       return true;
     } catch (error) {
@@ -3136,7 +3148,7 @@ export function AppointmentsBrowser({
               Seleziona la collaboratrice
             </h4>
             <p className="mt-1 text-xs font-semibold leading-5 text-black/50">
-              La selezione aggiorna Cowlendar e apre il Controllo Cliente con la stessa collaboratrice già impostata.
+              La scelta viene salvata in Paradise Staff Hub, resta valida dopo ogni sincronizzazione e viene annotata sull’ordine Shopify.
             </p>
           </div>
         </div>
@@ -3159,7 +3171,7 @@ export function AppointmentsBrowser({
                   {mate.name}
                 </span>
                 <span className="mt-0.5 block text-[11px] font-bold text-black/40">
-                  {assignedIds.has(mate.id) ? "Attualmente su Cowlendar" : "Assegna e apri controllo"}
+                  {assignedIds.has(mate.id) ? "Assegnata in Paradise" : "Assegna e apri controllo"}
                 </span>
               </span>
               {savingTeamId === booking.id ? (
@@ -4723,7 +4735,15 @@ export function AppointmentsBrowser({
                         </div>
                       </div>
 
-                      <div className="min-w-0 rounded-[18px] border border-[#F3E8ED] bg-[#FFFBFD] p-3 xl:border-transparent xl:bg-transparent xl:p-0">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedBookingId(booking.id);
+                        }}
+                        className="group/staff min-w-0 rounded-[18px] border border-[#F3E8ED] bg-[#FFFBFD] p-3 text-left transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] xl:border-transparent xl:bg-transparent xl:p-2"
+                        title="Cambia collaboratrice"
+                      >
                         <div className="flex min-w-0 items-center gap-2">
                           {assignedTeam.slice(0, 2).map((mate) => (
                             <Avatar
@@ -4740,11 +4760,14 @@ export function AppointmentsBrowser({
                             {assignedTeam.map((mate) => mate.name).join(", ") ||
                               "Non assegnato"}
                           </span>
+                          <span className="ml-auto shrink-0 text-[10px] font-black uppercase tracking-[0.08em] text-[#B83D7F] opacity-0 transition group-hover/staff:opacity-100">
+                            Cambia
+                          </span>
                         </div>
                         <p className="mt-1 truncate text-xs font-medium text-[#7A5B4B]">
                           {getSalonLabel(booking.inferredSalon)}
                         </p>
-                      </div>
+                      </button>
 
                       <div>
                         <p className="text-sm font-semibold text-[#1F1F1F]">
