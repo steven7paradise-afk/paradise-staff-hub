@@ -398,6 +398,16 @@ function formatDuration(start?: string | null, end?: string | null) {
   return `${minutes} min`;
 }
 
+function formatWorkflowElapsed(start?: string | null, now = Date.now()) {
+  if (!start) return "0 min";
+  const startTime = new Date(start).getTime();
+  if (!Number.isFinite(startTime)) return "0 min";
+  const totalMinutes = Math.max(0, Math.floor((now - startTime) / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
 function formatMoney(amount?: number | null, currency?: string | null) {
   if (amount == null) return "-";
   return new Intl.NumberFormat("it-IT", {
@@ -413,6 +423,17 @@ function normalizeSearchValue(value?: string | null) {
     .replace(/[^\p{L}\p{N}@.+\s-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function namesReferToSamePerson(left?: string | null, right?: string | null) {
+  const leftParts = normalizeSearchValue(left).split(" ").filter(Boolean);
+  const rightParts = normalizeSearchValue(right).split(" ").filter(Boolean);
+  if (!leftParts.length || !rightParts.length) return false;
+
+  return (
+    leftParts.every((part) => rightParts.includes(part)) ||
+    rightParts.every((part) => leftParts.includes(part))
+  );
 }
 
 function formatOrderCode(value?: string | null) {
@@ -1127,6 +1148,15 @@ export function AppointmentsBrowser({
   initialRangeTo,
   initialScopeAll = false,
   locations = [],
+<<<<<<< Updated upstream
+=======
+  navigationBasePath,
+  pageTitle = "Appuntamenti",
+  pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
+  salonWorkflowMode,
+  initialWorkflowWorkerName = "",
+  initialWorkflowWorkerRole = "",
+>>>>>>> Stashed changes
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
@@ -1140,6 +1170,15 @@ export function AppointmentsBrowser({
   initialRangeTo?: string;
   initialScopeAll?: boolean;
   locations?: Array<{ id: string; name: string }>;
+<<<<<<< Updated upstream
+=======
+  navigationBasePath?: string;
+  pageTitle?: string;
+  pageSubtitle?: string;
+  salonWorkflowMode?: "reception" | "queue" | "station";
+  initialWorkflowWorkerName?: string;
+  initialWorkflowWorkerRole?: string;
+>>>>>>> Stashed changes
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1260,6 +1299,7 @@ export function AppointmentsBrowser({
   const [showCanceled, setShowCanceled] = useState(false);
   const [visibleCount, setVisibleCount] = useState(appointmentsPageSize);
   const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
+  const [workflowNow, setWorkflowNow] = useState(0);
   const [savingTeamId, setSavingTeamId] = useState<string | null>(null);
   const [teamByBooking, setTeamByBooking] = useState<
     Record<string, BookingTeammate[]>
@@ -1296,6 +1336,13 @@ export function AppointmentsBrowser({
       to: today,
     };
   });
+
+  useEffect(() => {
+    if (salonWorkflowMode !== "queue" && salonWorkflowMode !== "station") return;
+    setWorkflowNow(Date.now());
+    const interval = window.setInterval(() => setWorkflowNow(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, [salonWorkflowMode]);
 
   function rangeForView(nextView: ViewMode, date: Date) {
     const start = new Date(date);
@@ -2362,10 +2409,28 @@ export function AppointmentsBrowser({
     const statusScoped = (initialBookings || []).filter((booking) =>
       showCanceled ? booking.isCanceled : !booking.isCanceled,
     );
+    const workflowScoped = statusScoped.filter((booking) => {
+      if (!salonWorkflowMode || salonWorkflowMode === "reception") return true;
+
+      const status = getBookingStatus(booking);
+      if (salonWorkflowMode === "queue") return status === "IN_ATTESA";
+      if (status !== "INIZIATO") return false;
+
+      const activeWorkerName = isPC
+        ? initialPcWorkerName
+        : initialWorkflowWorkerName;
+      const mustUsePersonalView =
+        isPC || initialWorkflowWorkerRole === "DIPENDENTE";
+      if (!mustUsePersonalView || !activeWorkerName) return true;
+
+      return getBookingTeam(booking).some(
+        (mate) => namesReferToSamePerson(mate.name, activeWorkerName),
+      );
+    });
     const base =
       salon === "tutti" || normalizedSearch
-        ? statusScoped
-        : statusScoped.filter((booking) => {
+        ? workflowScoped
+        : workflowScoped.filter((booking) => {
             if (booking.inferredSalon === salon) return true;
             // Also include if assigned teammate belongs to current salon
             const team = getBookingTeam(booking);
@@ -2464,9 +2529,15 @@ export function AppointmentsBrowser({
     filterPayment,
     filterStatus,
     initialBookings,
+    initialPcWorkerName,
+    isPC,
     normalizedSearch,
+    initialWorkflowWorkerName,
+    initialWorkflowWorkerRole,
     salon,
+    salonWorkflowMode,
     showCanceled,
+    statusByBooking,
     teamByBooking,
   ]);
 
@@ -2794,6 +2865,7 @@ export function AppointmentsBrowser({
       if (data?.statusComment && selectedBooking?.id === bookingId) {
         setDbComments((current) => [...current, data.statusComment]);
       }
+      return true;
     } catch (error) {
       console.error("Failed to save appointment status:", error);
       setStatusByBooking((current) => {
@@ -2807,9 +2879,31 @@ export function AppointmentsBrowser({
           ? error.message
           : "Non sono riuscito a salvare lo stato. Riprova.",
       );
+      return false;
     } finally {
       setSavingStatusId(null);
     }
+  }
+
+  async function moveBookingToWorkflow(
+    booking: AppointmentRecord,
+    nextStatus: "IN_ATTESA" | "INIZIATO",
+  ) {
+    const saved = await executeStatusChange(
+      booking.id,
+      nextStatus,
+      isPC ? pcActiveWorker?.name : undefined,
+    );
+    if (!saved) return;
+
+    showPushToast(
+      nextStatus === "IN_ATTESA"
+        ? "Cliente in sala d’attesa"
+        : "Servizio iniziato",
+      nextStatus === "IN_ATTESA"
+        ? `${booking.customerName} è ora visibile nella coda.`
+        : `${booking.customerName} è ora visibile in La mia postazione.`,
+    );
   }
 
   function handleStatusChange(
@@ -4252,7 +4346,9 @@ export function AppointmentsBrowser({
                           Appuntamenti
                         </h1>
                         <span className="rounded-full border border-[#F0C4D7] bg-[#FFF2F8] px-3 py-1 text-xs font-black tabular-nums text-[#A93469]">
-                          {activeBookingsCount} attivi
+                          {salonWorkflowMode
+                            ? `${filteredBookings.length} ${salonWorkflowMode === "queue" ? "in attesa" : salonWorkflowMode === "station" ? "in lavorazione" : "attivi"}`
+                            : `${activeBookingsCount} attivi`}
                         </span>
                       </div>
                       <p className="mt-1 text-sm font-semibold text-black/48">
@@ -4296,6 +4392,44 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
+            {salonWorkflowMode ? (
+              <nav
+                aria-label="Flusso operativo salone"
+                className="mt-7 overflow-x-auto rounded-[20px] border border-white/90 bg-[#F8F3F7]/85 p-1.5 shadow-inner"
+              >
+                <div className="flex min-w-max gap-1">
+                  {([
+                    ["reception", "Reception", "/salone/reception"],
+                    ["queue", "Sala d’attesa", "/salone/incoda"],
+                    ["station", "La mia postazione", "/salone/postazione"],
+                  ] as const).map(([mode, label, href]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => router.push(href)}
+                      className={[
+                        "inline-flex min-h-11 items-center gap-2 rounded-[15px] px-5 py-3 text-xs font-black transition",
+                        salonWorkflowMode === mode
+                          ? "border border-white bg-[#171419] text-white shadow-[0_8px_22px_rgba(23,20,25,0.18)]"
+                          : "border border-transparent text-black/55 hover:bg-white/75 hover:text-black",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "size-2 rounded-full",
+                          mode === "reception"
+                            ? "bg-[#F286B9]"
+                            : mode === "queue"
+                              ? "bg-amber-400"
+                              : "bg-emerald-400",
+                        ].join(" ")}
+                      />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </nav>
+            ) : (
             <div className="mt-7 overflow-x-auto rounded-[20px] border border-white/90 bg-[#F8F3F7]/85 p-1.5 shadow-inner">
               <div className="flex min-w-max gap-1">
                 {[
@@ -4355,6 +4489,7 @@ export function AppointmentsBrowser({
                 ))}
               </div>
             </div>
+            )}
 
             <div className="mt-5 grid items-stretch gap-3 md:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_210px_190px_120px_150px]">
               <div className="relative h-[52px]">
@@ -4642,11 +4777,19 @@ export function AppointmentsBrowser({
                       role="button"
                       tabIndex={0}
                       onClick={() => {
+                        if (salonWorkflowMode) {
+                          void openClientControlForBooking(booking);
+                          return;
+                        }
                         setSelectedBookingId(booking.id);
                       }}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
+                        if (salonWorkflowMode) {
+                          void openClientControlForBooking(booking);
+                          return;
+                        }
                         setSelectedBookingId(booking.id);
                       }}
                       className={[
@@ -4672,6 +4815,26 @@ export function AppointmentsBrowser({
                             <MapPin className="size-3.5" />
                             {getSalonLabel(booking.inferredSalon)}
                           </p>
+                          {salonWorkflowMode === "queue" ||
+                          salonWorkflowMode === "station" ? (
+                            <p
+                              className={[
+                                "mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em]",
+                                salonWorkflowMode === "queue"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-emerald-50 text-emerald-700",
+                              ].join(" ")}
+                            >
+                              <Clock3 className="size-3.5" />
+                              {salonWorkflowMode === "queue"
+                                ? "In attesa da"
+                                : "In lavorazione da"}{" "}
+                              {formatWorkflowElapsed(
+                                booking.statusUpdatedAt || booking.startDate,
+                                workflowNow,
+                              )}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
@@ -4768,15 +4931,33 @@ export function AppointmentsBrowser({
 
                       <button
                         type="button"
-                        onPointerDown={(event) => {
+                        disabled={savingStatusId === booking.id}
+                        onClick={(event) => {
                           event.stopPropagation();
+                          if (salonWorkflowMode === "reception") {
+                            void moveBookingToWorkflow(booking, "IN_ATTESA");
+                            return;
+                          }
+                          if (salonWorkflowMode === "queue") {
+                            void moveBookingToWorkflow(booking, "INIZIATO");
+                            return;
+                          }
                           void openClientControlForBooking(booking);
                         }}
-                        onClick={(event) => event.stopPropagation()}
                         className="grid size-11 place-items-center rounded-[15px] border border-[#EAD8E1] bg-white text-[#A14770] shadow-sm transition group-hover:border-[#E88AC5] group-hover:bg-[#FFF1F8] hover:scale-105"
-                        title="Compila controllo cliente"
+                        title={
+                          salonWorkflowMode === "reception"
+                            ? "Invia in sala d’attesa"
+                            : salonWorkflowMode === "queue"
+                              ? "Inizia servizio"
+                              : "Compila controllo cliente"
+                        }
                       >
-                        <ChevronRight className="size-5" />
+                        {savingStatusId === booking.id ? (
+                          <Loader2 className="size-5 animate-spin" />
+                        ) : (
+                          <ChevronRight className="size-5" />
+                        )}
                       </button>
                     </div>
                   );
@@ -4811,7 +4992,7 @@ export function AppointmentsBrowser({
           </section>
         </main>
 
-        {selectedBooking ? (
+        {selectedBooking && !salonWorkflowMode ? (
           <div className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
             <div
               className="fixed inset-0"

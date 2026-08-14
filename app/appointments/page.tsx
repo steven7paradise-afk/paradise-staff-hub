@@ -241,9 +241,23 @@ function isUsefulBookingDetailField(key: string) {
 export default async function AppointmentsPage({
   searchParams,
   forcePcSalon,
+<<<<<<< Updated upstream
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   forcePcSalon?: AppointmentSalonSlug;
+=======
+  navigationBasePath,
+  pageTitle = "Appuntamenti",
+  pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
+  salonWorkflowMode,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  forcePcSalon?: AppointmentSalonSlug;
+  navigationBasePath?: string;
+  pageTitle?: string;
+  pageSubtitle?: string;
+  salonWorkflowMode?: "reception" | "queue" | "station";
+>>>>>>> Stashed changes
 }) {
   const session = await auth();
 
@@ -600,6 +614,15 @@ export default async function AppointmentsPage({
         initialRangeTo={localDateKey(appointmentRange.end)}
         initialScopeAll={resolvedSearchParams?.scope === "all"}
         locations={locations}
+<<<<<<< Updated upstream
+=======
+        navigationBasePath={navigationBasePath}
+        pageTitle={pageTitle}
+        pageSubtitle={pageSubtitle}
+        salonWorkflowMode={salonWorkflowMode}
+        initialWorkflowWorkerName={sessionUser.name || ""}
+        initialWorkflowWorkerRole={String(sessionUser.role || "")}
+>>>>>>> Stashed changes
       />
     </AppShell>
   );
