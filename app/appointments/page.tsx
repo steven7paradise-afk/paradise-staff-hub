@@ -241,9 +241,15 @@ function isUsefulBookingDetailField(key: string) {
 export default async function AppointmentsPage({
   searchParams,
   forcePcSalon,
+  navigationBasePath,
+  pageTitle = "Appuntamenti",
+  pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
   forcePcSalon?: AppointmentSalonSlug;
+  navigationBasePath?: string;
+  pageTitle?: string;
+  pageSubtitle?: string;
 }) {
   const session = await auth();
 
@@ -600,6 +606,9 @@ export default async function AppointmentsPage({
         initialRangeTo={localDateKey(appointmentRange.end)}
         initialScopeAll={resolvedSearchParams?.scope === "all"}
         locations={locations}
+        navigationBasePath={navigationBasePath}
+        pageTitle={pageTitle}
+        pageSubtitle={pageSubtitle}
       />
     </AppShell>
   );

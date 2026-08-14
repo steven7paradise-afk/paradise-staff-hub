@@ -1127,6 +1127,9 @@ export function AppointmentsBrowser({
   initialRangeTo,
   initialScopeAll = false,
   locations = [],
+  navigationBasePath,
+  pageTitle = "Appuntamenti",
+  pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
@@ -1140,6 +1143,9 @@ export function AppointmentsBrowser({
   initialRangeTo?: string;
   initialScopeAll?: boolean;
   locations?: Array<{ id: string; name: string }>;
+  navigationBasePath?: string;
+  pageTitle?: string;
+  pageSubtitle?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1223,7 +1229,7 @@ export function AppointmentsBrowser({
     if (searchParams.get("refresh") === "true") {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("refresh");
-      const base = appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon);
+      const base = navigationBasePath || appointmentSalonUrl(initialSalon === "tutti" ? null : initialSalon);
       router.replace(params.size ? `${base}?${params.toString()}` : base, { scroll: false });
     }
     setIsRefreshing(false);
@@ -1342,7 +1348,11 @@ export function AppointmentsBrowser({
     if (options?.forceRefresh) params.set("refresh", "true");
 
     setIsRefreshing(true);
-    const target = `${appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon)}?${params.toString()}`;
+    if (navigationBasePath && targetSalon !== "tutti") {
+      params.set("salone", targetSalon);
+    }
+    const base = navigationBasePath || appointmentSalonUrl(targetSalon === "tutti" ? null : targetSalon);
+    const target = `${base}?${params.toString()}`;
     if (options?.replace) router.replace(target, { scroll: false });
     else router.push(target, { scroll: false });
   }
@@ -4249,14 +4259,14 @@ export function AppointmentsBrowser({
                     <div>
                       <div className="flex flex-wrap items-center gap-2.5">
                         <h1 className="text-3xl font-black tracking-[-0.04em] text-[#171717] sm:text-4xl">
-                          Appuntamenti
+                          {pageTitle}
                         </h1>
                         <span className="rounded-full border border-[#F0C4D7] bg-[#FFF2F8] px-3 py-1 text-xs font-black tabular-nums text-[#A93469]">
                           {activeBookingsCount} attivi
                         </span>
                       </div>
                       <p className="mt-1 text-sm font-semibold text-black/48">
-                        Clienti, arrivi e servizi in un’unica vista operativa
+                        {pageSubtitle}
                       </p>
                     </div>
                     {isPC && pcActiveWorker ? (

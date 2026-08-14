@@ -71,8 +71,14 @@ function formatCurrency(value: number) {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
-const fieldClass = "mt-1 h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-[#111017] shadow-inner outline-none [color-scheme:light] placeholder:text-black/35 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/15";
-const textAreaClass = "mt-1 min-h-28 w-full rounded-2xl border border-black/10 bg-white p-4 text-sm font-semibold text-[#111017] shadow-inner outline-none [color-scheme:light] placeholder:text-black/35 focus:border-[#A74758] focus:ring-2 focus:ring-[#A74758]/15";
+const fieldClass = "mt-2 h-[52px] w-full rounded-sm border border-black/15 bg-white px-4 text-sm font-bold text-[#111017] outline-none [color-scheme:light] placeholder:text-black/30 transition focus:border-black focus:ring-1 focus:ring-black";
+const textAreaClass = "mt-2 min-h-28 w-full resize-y rounded-sm border border-black/15 bg-white p-4 text-sm font-semibold text-[#111017] outline-none [color-scheme:light] placeholder:text-black/30 transition focus:border-black focus:ring-1 focus:ring-black";
+const modalBackdropClass = "fixed inset-0 z-[1000] flex items-end justify-center bg-black/65 p-0 backdrop-blur-md sm:items-center sm:p-6";
+const modalPanelClass = "pointer-events-auto flex max-h-[100dvh] w-full flex-col overflow-hidden bg-[#F5F3EF] text-[#111111] shadow-[0_30px_100px_rgba(0,0,0,0.35)] sm:max-h-[92dvh] sm:rounded-sm";
+const modalEyebrowClass = "text-[10px] font-black uppercase tracking-[0.28em] text-[#A74758]";
+const modalLabelClass = "text-[10px] font-black uppercase tracking-[0.18em] text-black/45";
+const secondaryButtonClass = "inline-flex min-h-12 items-center justify-center border border-black/20 bg-transparent px-6 text-xs font-black uppercase tracking-[0.14em] text-black transition hover:border-black hover:bg-white disabled:opacity-40";
+const primaryButtonClass = "inline-flex min-h-12 items-center justify-center gap-2 bg-black px-7 text-xs font-black uppercase tracking-[0.14em] text-white transition hover:bg-[#292929] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function CashActions({
   month,
@@ -384,20 +390,20 @@ export function CashActions({
       </button>
 
       {monthCloseModalOpen ? (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="pointer-events-auto flex max-h-[92vh] w-full max-w-5xl flex-col rounded-[30px] bg-white text-[#111017] shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-black/5 p-5 sm:p-6">
+        <div className={modalBackdropClass}>
+          <div className={`${modalPanelClass} sm:max-w-6xl`}>
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#A74758]">Controllo mese</p>
-                <h2 className="mt-1 text-2xl font-black sm:text-3xl">Conferma chiusura {selectedMonthLabel}</h2>
-                <p className="mt-1 text-sm text-black/50">Controlla chiusure settimanali, chiusure giornaliere e spese prima di salvare.</p>
+                <p className={modalEyebrowClass}>Controllo amministrativo · {selectedMonthLabel}</p>
+                <h2 className="mt-2 font-serif text-3xl leading-none sm:text-4xl">Chiusura del mese</h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-black/55">Rivedi chiusure settimanali, giornaliere e uscite prima della conferma definitiva.</p>
               </div>
-              <button type="button" onClick={() => setMonthCloseModalOpen(false)} className="grid size-10 shrink-0 place-items-center rounded-2xl bg-black/5 text-[#111017]">
+              <button type="button" onClick={() => setMonthCloseModalOpen(false)} aria-label="Chiudi" className="grid size-11 shrink-0 place-items-center border border-black/15 bg-white text-black transition hover:bg-black hover:text-white">
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="space-y-5 overflow-y-auto p-5 sm:p-6">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
               {monthStillOpen ? (
                 <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
                   <AlertTriangle className="mt-0.5 size-5 shrink-0" />
@@ -509,15 +515,15 @@ export function CashActions({
               </MonthSection>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-black/5 p-5 sm:flex-row sm:justify-end">
-              <button type="button" onClick={() => setMonthCloseModalOpen(false)} className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-black/10 bg-white px-5 text-sm font-black text-black">
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-black/10 bg-white px-6 py-4 sm:flex-row sm:justify-end sm:px-8">
+              <button type="button" onClick={() => setMonthCloseModalOpen(false)} className={secondaryButtonClass}>
                 Annulla
               </button>
               <button
                 type="button"
                 onClick={closeMonth}
                 disabled={closing}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#A74758] px-5 text-sm font-black text-white disabled:opacity-50"
+                className={primaryButtonClass}
               >
                 {closing ? <Loader2 className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}
                 Conferma chiusura mese
@@ -528,25 +534,27 @@ export function CashActions({
       ) : null}
 
       {open ? (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
-          <form onSubmit={saveWithdrawal} className="pointer-events-auto w-full max-w-lg rounded-[30px] bg-white p-5 text-[#111017] shadow-2xl">
-            <div className="mb-4 flex items-start justify-between gap-3">
+        <div className={modalBackdropClass}>
+          <form onSubmit={saveWithdrawal} className={`${modalPanelClass} sm:max-w-5xl`}>
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#A74758]">Cassaforte</p>
-                <h2 className="mt-1 text-2xl font-black">Nuovo prelievo</h2>
-                <p className="mt-1 text-sm text-black/50">Scegli salone, giorno, somma, motivo e fotografa lo scontrino.</p>
+                <p className={modalEyebrowClass}>Cassaforte · Nuovo movimento</p>
+                <h2 className="mt-2 font-serif text-3xl leading-none sm:text-4xl">Nuovo prelievo</h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-black/55">Registra il prelievo, indica la motivazione e allega il documento che ne certifica l’uscita.</p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} className="grid size-10 place-items-center rounded-2xl bg-black/5 text-[#111017]">
+              <button type="button" onClick={() => setOpen(false)} aria-label="Chiudi" className="grid size-11 shrink-0 place-items-center border border-black/15 bg-white text-black transition hover:bg-black hover:text-white">
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="space-y-5 px-6 py-6 sm:px-8 sm:py-8 lg:border-r lg:border-black/10">
               {locations.length === 0 ? (
-                <p className="rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700">Nessun salone attivo disponibile per registrare il prelievo.</p>
+                <p className="border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">Nessun salone attivo disponibile per registrare il prelievo.</p>
               ) : null}
-              <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Salone / cassaforte</span>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <label className="block sm:col-span-2">
+                <span className={modalLabelClass}>Salone / cassaforte</span>
                 <select
                   value={locationId}
                   onChange={(event) => setLocationId(event.target.value)}
@@ -562,7 +570,7 @@ export function CashActions({
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Giorno prelievo</span>
+                <span className={modalLabelClass}>Giorno prelievo</span>
                 <input
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
@@ -572,7 +580,7 @@ export function CashActions({
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Somma prelevata</span>
+                <span className={modalLabelClass}>Somma prelevata (€)</span>
                 <input
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
@@ -584,8 +592,8 @@ export function CashActions({
                   style={{ color: "#111017", WebkitTextFillColor: "#111017", backgroundColor: "#ffffff" }}
                 />
               </label>
-              <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Motivo</span>
+              <label className="block sm:col-span-2">
+                <span className={modalLabelClass}>Motivo del prelievo</span>
                 <textarea
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
@@ -595,21 +603,28 @@ export function CashActions({
                   style={{ color: "#111017", WebkitTextFillColor: "#111017", backgroundColor: "#ffffff" }}
                 />
               </label>
-              <div>
-                <span className="text-xs font-black uppercase text-black/40">Foto scontrino *</span>
+              </div>
+              {error ? <p className="border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p> : null}
+              </div>
+
+              <div className="flex flex-col bg-[#EDE9E2] px-6 py-6 sm:px-8 sm:py-8">
+                <div>
+                <span className={modalLabelClass}>Documento giustificativo *</span>
+                <p className="mt-2 text-sm leading-6 text-black/55">Fotografa lo scontrino o carica un’immagine leggibile. Il documento resterà collegato al movimento.</p>
                 {receiptPreview ? (
-                  <div className="mt-2 overflow-hidden rounded-2xl border border-black/10 bg-black/[0.03]">
-                    <img src={receiptPreview} alt="Anteprima scontrino" className="max-h-56 w-full object-contain" />
+                  <div className="mt-5 overflow-hidden border border-black/15 bg-white">
+                    <img src={receiptPreview} alt="Anteprima scontrino" className="h-52 w-full object-contain sm:h-64" />
                   </div>
                 ) : (
-                  <div className="mt-2 grid h-28 place-items-center rounded-2xl border-2 border-dashed border-black/10 bg-black/[0.02] text-center text-sm font-semibold text-black/40">
+                  <div className="mt-5 grid h-52 place-items-center border border-dashed border-black/25 bg-white/70 text-center text-sm font-semibold text-black/45 sm:h-64">
                     <div>
-                      <Camera className="mx-auto mb-2 size-6" />
-                      Scatta o scegli la foto
+                      <Camera className="mx-auto mb-3 size-7 stroke-[1.5]" />
+                      <span className="block font-black text-black/70">Nessun documento caricato</span>
+                      <span className="mt-1 block text-xs font-medium">JPG, PNG o WEBP · massimo 10 MB</span>
                     </div>
                   </div>
                 )}
-                <label className="mt-2 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#F7EDEF] px-4 text-sm font-black text-[#A74758] transition hover:bg-[#F1DFE3]">
+                <label className="mt-4 flex min-h-12 cursor-pointer items-center justify-center gap-2 border border-black bg-transparent px-4 text-xs font-black uppercase tracking-[0.12em] text-black transition hover:bg-black hover:text-white">
                   <Upload className="size-4" />
                   {receipt ? "Sostituisci foto" : "Carica foto scontrino"}
                   <input
@@ -633,41 +648,39 @@ export function CashActions({
                     }}
                   />
                 </label>
-                <p className="mt-1 text-center text-[11px] font-semibold text-black/35">JPG, PNG o WEBP · massimo 10 MB</p>
+                </div>
               </div>
-              {error ? <p className="rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p> : null}
             </div>
 
-            <button
-              type="button"
-              onClick={() => saveWithdrawal()}
-              disabled={saving || !locationId || !receipt || locations.length === 0}
-              className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#111017] px-4 text-sm font-black text-white disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-              Salva prelievo cassaforte
-            </button>
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-black/10 bg-white px-6 py-4 sm:flex-row sm:justify-end sm:px-8">
+              <button type="button" onClick={() => setOpen(false)} className={secondaryButtonClass}>Annulla</button>
+              <button type="submit" disabled={saving || !locationId || !receipt || locations.length === 0} className={primaryButtonClass}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+                Registra prelievo
+              </button>
+            </div>
           </form>
         </div>
       ) : null}
 
       {manualOpen ? (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
-          <form onSubmit={saveManualClosing} className="pointer-events-auto w-full max-w-lg rounded-[30px] bg-white p-5 text-[#111017] shadow-2xl">
-            <div className="mb-4 flex items-start justify-between gap-3">
+        <div className={modalBackdropClass}>
+          <form onSubmit={saveManualClosing} className={`${modalPanelClass} sm:max-w-4xl`}>
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#A74758]">Chiusura manuale</p>
-                <h2 className="mt-1 text-2xl font-black">Aggiungi chiusura</h2>
-                <p className="mt-1 text-sm text-black/50">Per quando un lavoratore dimentica di compilare la chiusura dalla cassa.</p>
+                <p className={modalEyebrowClass}>Cassa · Rettifica amministrativa</p>
+                <h2 className="mt-2 font-serif text-3xl leading-none sm:text-4xl">Aggiungi chiusura</h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-black/55">Inserisci una chiusura mancante mantenendo traccia del salone e del lavoratore responsabile.</p>
               </div>
-              <button type="button" onClick={() => setManualOpen(false)} className="grid size-10 place-items-center rounded-2xl bg-black/5 text-[#111017]">
+              <button type="button" onClick={() => setManualOpen(false)} aria-label="Chiudi" className="grid size-11 shrink-0 place-items-center border border-black/15 bg-white text-black transition hover:bg-black hover:text-white">
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+              <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
               <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Salone</span>
+                <span className={modalLabelClass}>Salone</span>
                 <select
                   value={manualLocationId}
                   onChange={(event) => {
@@ -684,7 +697,7 @@ export function CashActions({
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Chi ha fatto la chiusura</span>
+                <span className={modalLabelClass}>Lavoratore responsabile</span>
                 <select
                   value={manualUserId}
                   onChange={(event) => setManualUserId(event.target.value)}
@@ -698,52 +711,49 @@ export function CashActions({
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Data chiusura</span>
+                <span className={modalLabelClass}>Data chiusura</span>
                 <input value={manualDate} onChange={(event) => setManualDate(event.target.value)} type="date" className={fieldClass} />
               </label>
-              <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-xs font-black uppercase text-black/40">Importo prelevato</span>
+                  <span className={modalLabelClass}>Importo dichiarato (€)</span>
                   <input value={manualWithdrawn} onChange={(event) => setManualWithdrawn(event.target.value)} type="number" inputMode="decimal" step="0.01" placeholder="0.00" className={fieldClass} />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-black uppercase text-black/40">Fondo cassa</span>
+                  <span className={modalLabelClass}>Fondo cassa (€)</span>
                   <input value={manualFund} onChange={(event) => setManualFund(event.target.value)} type="number" inputMode="decimal" step="0.01" placeholder="50.00" className={fieldClass} />
                 </label>
-              </div>
-              <label className="block">
-                <span className="text-xs font-black uppercase text-black/40">Nota admin</span>
+              <label className="block sm:col-span-2">
+                <span className={modalLabelClass}>Nota amministrativa</span>
                 <textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} rows={3} placeholder="Esempio: inserita da admin per dimenticanza del lavoratore..." className={textAreaClass} />
               </label>
-              {manualError ? <p className="rounded-2xl bg-red-50 p-3 text-sm font-bold text-red-700">{manualError}</p> : null}
+              {manualError ? <p className="border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 sm:col-span-2">{manualError}</p> : null}
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => saveManualClosing()}
-              disabled={manualSaving || !manualLocationId || !manualUserId}
-              className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#111017] px-4 text-sm font-black text-white disabled:opacity-50"
-            >
-              {manualSaving ? <Loader2 className="size-4 animate-spin" /> : null}
-              Salva chiusura manuale
-            </button>
+            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-black/10 bg-white px-6 py-4 sm:flex-row sm:justify-end sm:px-8">
+              <button type="button" onClick={() => setManualOpen(false)} className={secondaryButtonClass}>Annulla</button>
+              <button type="submit" disabled={manualSaving || !manualLocationId || !manualUserId} className={primaryButtonClass}>
+                {manualSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+                Salva chiusura
+              </button>
+            </div>
           </form>
         </div>
       ) : null}
 
       {weekCloseModalOpen ? (
-        <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="pointer-events-auto w-full max-w-2xl rounded-[30px] bg-white p-6 text-[#111017] shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="mb-4 flex items-start justify-between gap-3">
+        <div className={modalBackdropClass}>
+          <div className={`${modalPanelClass} sm:max-w-5xl`}>
+            <div className="flex shrink-0 items-start justify-between gap-6 border-b border-black/10 bg-white px-6 py-5 sm:px-8 sm:py-7">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#A74758]">Salone</p>
-                <h2 className="mt-1 text-2xl font-black">Chiusura Settimanale</h2>
+                <p className={modalEyebrowClass}>Salone · Controllo settimanale</p>
+                <h2 className="mt-2 font-serif text-3xl leading-none sm:text-4xl">Chiusura settimanale</h2>
                 {(() => {
                   const mon = new Date((weekKey || "") + "T00:00:00");
                   const sun = new Date(mon);
                   sun.setDate(sun.getDate() + 6);
                   return (
-                    <p className="mt-1 text-sm text-black/50">
+                    <p className="mt-3 text-sm text-black/55">
                       Settimana dal <strong>{mon.toLocaleDateString("it-IT")}</strong> al <strong>{sun.toLocaleDateString("it-IT")}</strong>
                     </p>
                   );
@@ -752,13 +762,14 @@ export function CashActions({
               <button
                 type="button"
                 onClick={() => setWeekCloseModalOpen(false)}
-                className="grid size-10 place-items-center rounded-2xl bg-black/5 text-[#111017]"
+                aria-label="Chiudi"
+                className="grid size-11 shrink-0 place-items-center border border-black/15 bg-white text-black transition hover:bg-black hover:text-white"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
               <label className="block">
                 <span className="text-xs font-black uppercase text-black/40">Seleziona Salone</span>
                 <select
