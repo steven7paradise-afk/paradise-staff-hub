@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { parseIcal } from "@/lib/ical-parser";
@@ -17,6 +18,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set<Role>(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+const INTERNAL_NOTES_SETTING_KEY = "online_consultation_internal_notes";
 
 function toIsoBoundary(date: Date, endOfDay = false) {
   const copy = new Date(date);
@@ -76,7 +78,9 @@ export default async function ConsulenzaOnlinePage() {
 
   try {
     const res = await fetch(icalUrl, {
-      next: { revalidate: 60 }, // Cache it for 1 minute
+      // The private iCal feed is currently larger than Next.js' 2 MB data-cache
+      // limit. Avoid a failed cache write on every request and stream it directly.
+      cache: "no-store",
       headers: {
         "Cache-Control": "no-cache",
       }
@@ -114,10 +118,21 @@ export default async function ConsulenzaOnlinePage() {
       const consultations = bookings.filter((booking) => !booking.is_canceled && isOnlineConsultationBooking(booking));
 
       if (consultations.length > 0) {
-        const syncResult = await syncCowlendarConsultations(consultations);
-        if ((syncResult as any)?.success === false) {
-          cowlendarSyncError = String((syncResult as any).error || "Sincronizzazione CowCalendar non riuscita.");
-        }
+        // The page already renders the CowCalendar records below. Keep Google
+        // Calendar aligned after the response instead of blocking the operator.
+        after(async () => {
+          try {
+            const syncResult = await syncCowlendarConsultations(consultations);
+            if ((syncResult as any)?.success === false) {
+              console.error(
+                "CowCalendar background sync failed:",
+                (syncResult as any).error || "Sincronizzazione non riuscita.",
+              );
+            }
+          } catch (error) {
+            console.error("CowCalendar background sync failed:", error);
+          }
+        });
       }
 
       const existingCowlendarIds = new Set(events.map((event) => cowlendarIdFromConsultationDescription(event.description)).filter(Boolean));
@@ -147,10 +162,17 @@ export default async function ConsulenzaOnlinePage() {
   }
 
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
+  const internalNotesSetting = await prisma.setting.findUnique({
+    where: { key: INTERNAL_NOTES_SETTING_KEY },
+    select: { value: true },
+  });
+  const internalNotes = internalNotesSetting?.value && typeof internalNotesSetting.value === "object" && !Array.isArray(internalNotesSetting.value)
+    ? internalNotesSetting.value
+    : {};
 
   return (
-    <AppShell title="Consulenza Online" subtitle="Calendario appuntamenti e disponibilità." role={role} hideHeader>
-      <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+    <AppShell title="Consulenze online" subtitle="Agenda digitale e contatti cliente." role={role} hideHeader>
+      <div className="space-y-4 p-3 sm:p-5 lg:p-7">
         {loadError && (
           <div className="rounded-[24px] border border-red-100 bg-[#FFF6F7] p-5 text-sm text-[#A15062] shadow-sm">
             Errore nel caricamento del calendario Google: {loadError}
@@ -161,9 +183,10 @@ export default async function ConsulenzaOnlinePage() {
             CowCalendar letto, ma sincronizzazione Google Calendar non completata: {cowlendarSyncError}
           </div>
         )}
-        <OnlineConsultationsBrowser 
-          initialEvents={events} 
-          serviceAccountEmail={serviceAccountEmail} 
+        <OnlineConsultationsBrowser
+          initialEvents={events}
+          initialNotes={internalNotes as Record<string, { note: string; updatedAt: string; updatedBy: string; orderNumber?: string | null }>}
+          serviceAccountEmail={serviceAccountEmail}
         />
       </div>
     </AppShell>
