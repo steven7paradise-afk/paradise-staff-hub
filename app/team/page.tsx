@@ -148,13 +148,16 @@ function isWorkCategory(category?: { code: string; name: string } | null) {
     code === "F" || code === "FE" ||
     code === "P" || code === "PE" ||
     code === "M" || code === "MA" || code === "ML" ||
-    code === "A" || code === "AI" || code === "NL" || code === "ND" ||
+    code === "A" || code === "AI" || code === "NL" || code === "ND" || code === "NLA" ||
+    code === "C" || code === "CH" || code === "C3" ||
     name.includes("riposo") ||
     name.includes("ferie") ||
     name.includes("permesso") ||
     name.includes("malattia") ||
     name.includes("assenza") ||
-    name.includes("non lavora")
+    name.includes("chiuso") ||
+    name.includes("non lavora") ||
+    name.includes("no lavoro")
   ) {
     return false;
   }
