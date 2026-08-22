@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Activity, AlertTriangle, BadgeCheck, BarChart3, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, ListChecks, Mail, MapPin, PieChart, Star, Timer, UserRound, Users } from "lucide-react";
+import type { Prisma } from "@prisma/client";
+import { Activity, AlertTriangle, BadgeCheck, BarChart3, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, Mail, MapPin, PieChart, Star, Timer, UserRound, Users } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { TaskEvaluationActions } from "@/components/task-evaluation-actions";
@@ -22,6 +23,39 @@ function Avatar({ name, photoUrl, size = "size-24" }: { name: string; photoUrl: 
   return (
     <div className={`${size} grid shrink-0 place-items-center overflow-hidden rounded-full bg-paradise-softPink text-2xl font-bold`}>
       {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={name} className="size-full object-cover" /> : name.slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
+function DashboardStat({
+  icon,
+  label,
+  value,
+  detail,
+  tone = "neutral",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  detail?: string;
+  tone?: "neutral" | "green" | "pink" | "gold" | "violet";
+}) {
+  const tones = {
+    neutral: "bg-[#F7F4F5] text-black dark:bg-white/[0.07] dark:text-white",
+    green: "bg-emerald-50 text-emerald-950 dark:bg-emerald-400/10 dark:text-emerald-100",
+    pink: "bg-[#FFF0F5] text-[#5B2632] dark:bg-[#C66170]/15 dark:text-[#FFDCE6]",
+    gold: "bg-amber-50 text-amber-950 dark:bg-amber-400/10 dark:text-amber-100",
+    violet: "bg-[#F4F0FF] text-[#302752] dark:bg-[#8064D8]/15 dark:text-[#E6DEFF]",
+  };
+
+  return (
+    <div className={`min-w-0 rounded-[22px] p-4 ${tones[tone]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-black uppercase tracking-[0.13em] opacity-55">{label}</p>
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/70 shadow-sm dark:bg-white/10">{icon}</span>
+      </div>
+      <p className="mt-4 truncate text-3xl font-black tracking-[-0.04em]">{value}</p>
+      {detail ? <p className="mt-1 truncate text-xs font-semibold opacity-55">{detail}</p> : null}
     </div>
   );
 }
@@ -202,7 +236,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   }
 
   const params = await searchParams;
-  const where = role === "RESPONSABILE"
+  const where: Prisma.UserWhereInput = role === "RESPONSABILE"
     ? { active: true, sede_id: session.user.sedeId ?? undefined, role: { notIn: ["ZERO", "SUPER_ADMIN"] } }
     : { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } };
 
@@ -400,16 +434,22 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
   return (
     <AppShell title="Team" subtitle="Panoramica personale e stato task aggiornato in tempo reale." role={role}>
       <AutoRefresh interval={12000} />
-      <div className="grid gap-5 xl:grid-cols-[330px_1fr]">
-        <Card className="bg-white">
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.16em] text-black/35">Personale task</p>
-          <div className="grid max-h-[72dvh] gap-2 overflow-y-auto pr-1">
+      <div className="grid items-start gap-5 xl:grid-cols-[290px_minmax(0,1fr)]">
+        <Card className="bg-white p-4 xl:sticky xl:top-5 dark:bg-[#17151A]">
+          <div className="mb-4 flex items-center justify-between gap-3 px-1">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-black/40 dark:text-white/45">Personale</p>
+              <p className="mt-1 text-sm font-semibold text-black/55 dark:text-white/60">Seleziona un profilo</p>
+            </div>
+            <span className="grid size-9 place-items-center rounded-full bg-[#F8EEF2] text-sm font-black text-[#A9475A] dark:bg-white/10 dark:text-white">{workers.length}</span>
+          </div>
+          <div className="grid max-h-[calc(100dvh-230px)] gap-1.5 overflow-y-auto pr-1">
             {workers.map((worker) => (
-              <Link key={worker.id} href={`/team?user=${worker.id}`} className={`flex items-center gap-3 rounded-2xl border p-3 transition ${selected?.id === worker.id ? "border-[#C66170]/35 bg-paradise-softPink/45" : "border-black/5 bg-white hover:bg-[#FBF7F9]"}`}>
+              <Link key={worker.id} href={`/team?user=${worker.id}&year=${year}`} className={`flex min-h-16 items-center gap-3 rounded-[20px] border p-2.5 transition ${selected?.id === worker.id ? "border-[#C66170]/35 bg-[#FFF0F5] shadow-sm dark:bg-[#C66170]/15" : "border-transparent hover:border-black/5 hover:bg-[#FBF7F9] dark:hover:bg-white/[0.06]"}`}>
                 <Avatar name={worker.name} photoUrl={worker.photo_url} size="size-11" />
                 <div className="min-w-0">
-                  <p className="truncate font-semibold">{worker.name}</p>
-                  <p className="truncate text-xs text-black/45">{worker.location?.name ?? "Senza salone"}</p>
+                  <p className="truncate text-sm font-bold">{worker.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-black/45 dark:text-white/45">{worker.location?.name ?? "Senza salone"}</p>
                 </div>
               </Link>
             ))}
@@ -443,106 +483,67 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
               </div>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[1fr_2fr]">
-              <Card className="overflow-hidden border border-white/70 bg-white/70 p-2 shadow-[0_24px_60px_rgba(31,31,31,0.12)] backdrop-blur-2xl">
-                <div className="relative min-h-[340px] overflow-hidden rounded-[30px] border border-white/70 bg-[#EFF3F1]">
-                  {selected.photo_url ? (
-                    <img src={resolveDrivePhotoUrl(selected.photo_url)} alt={selected.name} className="absolute inset-0 size-full object-cover" />
-                  ) : (
-                    <div className="absolute inset-0 grid place-items-center bg-paradise-softPink text-7xl font-black text-paradise-noir">
-                      {selected.name.slice(0, 2).toUpperCase()}
+            <Card className="overflow-hidden border-white/80 bg-white/80 p-5 dark:bg-[#17151A]/90">
+              <div className="grid gap-5 lg:grid-cols-[minmax(240px,0.8fr)_minmax(0,2.2fr)] lg:items-center">
+                <div className="flex min-w-0 items-center gap-4">
+                  <Avatar name={selected.name} photoUrl={selected.photo_url} size="size-24" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="truncate text-2xl font-black tracking-[-0.03em]">{selected.name}</h2>
+                      <BadgeCheck className="size-5 shrink-0 fill-emerald-500 text-white" />
                     </div>
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white/92 via-white/74 to-transparent p-6 pt-24 backdrop-blur-[2px]">
-                    <h2 className="flex items-center gap-2 text-3xl font-black tracking-tight text-paradise-noir">
-                      {selected.name}
-                      <BadgeCheck className="size-7 fill-emerald-500 text-white" />
-                    </h2>
-                    <div className="mt-2">
-                      <Badge tone="pink">{selected.location?.name ?? "Senza salone"}</Badge>
-                    </div>
-                    <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-black/60"><Mail className="size-4" /> {selected.email}</p>
-                    <div className="mt-6 flex flex-wrap items-center gap-5">
-                      <span className="inline-flex items-center gap-2 text-sm font-black text-black/80">
-                        <Users className="size-4 text-black/45" />
-                        {workers.length}
-                        <span className="text-xs font-semibold text-black/45">dipendenti</span>
-                      </span>
-                      <span className="inline-flex items-center gap-2 text-sm font-black text-black/80">
-                        <ListChecks className="size-4 text-black/45" />
-                        {active.length}
-                        <span className="text-xs font-semibold text-black/45">task in corso</span>
-                      </span>
-                    </div>
+                    <p className="mt-1 truncate text-sm font-semibold text-black/50 dark:text-white/50">{selected.location?.name ?? "Senza salone"}</p>
+                    <p className="mt-2 flex items-center gap-2 truncate text-xs text-black/45 dark:text-white/45"><Mail className="size-3.5 shrink-0" /> {selected.email}</p>
                   </div>
                 </div>
-              </Card>
-              <div className="grid gap-3 sm:grid-cols-4">
-                <Card className="bg-white p-4"><CheckCircle2 className="size-5 text-emerald-600" /><p className="mt-4 text-3xl font-semibold">{completed.length}</p><p className="text-sm text-black/45">Task completate</p></Card>
-                <Card className="bg-white p-4"><Clock3 className="size-5 text-[#8B78D6]" /><p className="mt-4 text-3xl font-semibold">{active.length}</p><p className="text-sm text-black/45">Task in corso</p></Card>
-                <Card className="bg-white p-4"><Timer className="size-5 text-[#E2B719]" /><p className="mt-4 text-3xl font-semibold">{punctuality}%</p><p className="text-sm text-black/45">Puntualita</p></Card>
-                <Card className="bg-white p-4"><Star className="size-5 text-[#C66170]" /><p className="mt-4 text-3xl font-semibold">{avgRating ? avgRating.toFixed(1) : "-"}</p><p className="text-sm text-black/45">Valutazione</p></Card>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <DashboardStat icon={<CheckCircle2 className="size-4 text-emerald-600" />} label="Task completate" value={completed.length} tone="green" />
+                  <DashboardStat icon={<Clock3 className="size-4 text-[#8064D8]" />} label="Task in corso" value={active.length} tone="violet" />
+                  <DashboardStat icon={<Timer className="size-4 text-amber-600" />} label="Puntualità" value={`${punctuality}%`} tone="gold" />
+                  <DashboardStat icon={<Star className="size-4 text-[#C66170]" />} label="Valutazione" value={avgRating ? avgRating.toFixed(1) : "—"} tone="pink" />
+                </div>
               </div>
-            </div>
+            </Card>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <Card className="bg-white p-4">
-                <BarChart3 className="size-5 text-[#8064D8]" />
-                <p className="mt-4 text-3xl font-semibold">{behaviorScore}%</p>
-                <p className="text-sm text-black/45">Indice comportamento</p>
+            <div className="grid items-start gap-5 xl:grid-cols-2">
+              <Card className="bg-white p-5 dark:bg-[#17151A]">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.15em] text-[#A9475A]">Performance</p>
+                    <h3 className="mt-1 text-xl font-black">Qualità operativa</h3>
+                  </div>
+                  <BarChart3 className="size-5 text-[#8064D8]" />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <DashboardStat icon={<BarChart3 className="size-4 text-[#8064D8]" />} label="Comportamento" value={`${behaviorScore}%`} tone="violet" />
+                  <DashboardStat icon={<CalendarDays className="size-4 text-amber-600" />} label="Planning" value={`${respectedPlanning}%`} tone="gold" />
+                  <DashboardStat icon={<ClipboardCheck className="size-4 text-emerald-600" />} label="Clienti" value={clientStats.clients} detail="controlli registrati" tone="green" />
+                  <DashboardStat icon={<AlertTriangle className="size-4 text-[#C66170]" />} label="Task scadute" value={overdueTasks.length} detail="ancora aperte" tone="pink" />
+                  <DashboardStat icon={<Users className="size-4" />} label="Team" value={workers.length} detail="dipendenti attivi" />
+                </div>
               </Card>
-              <Card className="bg-white p-4">
-                <AlertTriangle className="size-5 text-[#C66170]" />
-                <p className="mt-4 text-3xl font-semibold">{overdueTasks.length}</p>
-                <p className="text-sm text-black/45">Task scadute aperte</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <CalendarDays className="size-5 text-[#E2B719]" />
-                <p className="mt-4 text-3xl font-semibold">{respectedPlanning}%</p>
-                <p className="text-sm text-black/45">Planning rispettato</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <Timer className="size-5 text-orange-500" />
-                <p className="mt-4 text-3xl font-semibold">{lateDays.length}</p>
-                <p className="text-sm text-black/45">Ingressi in ritardo · {formatTimer(totalLateMinutes * 60)}</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <ClipboardCheck className="size-5 text-emerald-600" />
-                <p className="mt-4 text-3xl font-semibold">{clientStats.clients}</p>
-                <p className="text-sm text-black/45">Clienti controllo cliente</p>
-              </Card>
-            </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <Card className="bg-white p-4">
-                <BadgeCheck className="size-5 text-emerald-600" />
-                <p className="mt-4 text-3xl font-semibold">{justifiedAbsenceDays.length}</p>
-                <p className="text-sm text-black/45">Assenze giustificate</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <AlertTriangle className="size-5 text-[#C66170]" />
-                <p className="mt-4 text-3xl font-semibold">{unjustifiedAbsenceDays.length}</p>
-                <p className="text-sm text-black/45">Assenze non giustificate</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <Clock3 className="size-5 text-[#E2B719]" />
-                <p className="mt-4 text-3xl font-semibold">{pauseLateDays.length}</p>
-                <p className="text-sm text-black/45">Rientri pausa tardi · {formatTimer(totalPauseLateMinutes * 60)}</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <Timer className="size-5 text-[#8064D8]" />
-                <p className="mt-4 text-3xl font-semibold">{formatHours(overtimeSummary.overtime)}</p>
-                <p className="text-sm text-black/45">Straordinari anno</p>
-              </Card>
-              <Card className="bg-white p-4">
-                <Clock3 className="size-5 text-orange-500" />
-                <p className="mt-4 text-3xl font-semibold">{formatHours(overtimeSummary.missing)}</p>
-                <p className="text-sm text-black/45">Ore mancanti</p>
+              <Card className="bg-white p-5 dark:bg-[#17151A]">
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.15em] text-[#A9475A]">Presenze</p>
+                    <h3 className="mt-1 text-xl font-black">Assenze, ritardi e ore</h3>
+                  </div>
+                  <Clock3 className="size-5 text-[#C66170]" />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <DashboardStat icon={<Timer className="size-4 text-orange-500" />} label="Ingressi tardi" value={lateDays.length} detail={formatTimer(totalLateMinutes * 60)} tone="gold" />
+                  <DashboardStat icon={<BadgeCheck className="size-4 text-emerald-600" />} label="Giustificate" value={justifiedAbsenceDays.length} tone="green" />
+                  <DashboardStat icon={<AlertTriangle className="size-4 text-[#C66170]" />} label="Non giustificate" value={unjustifiedAbsenceDays.length} tone="pink" />
+                  <DashboardStat icon={<Clock3 className="size-4 text-amber-600" />} label="Rientri tardi" value={pauseLateDays.length} detail={formatTimer(totalPauseLateMinutes * 60)} tone="gold" />
+                  <DashboardStat icon={<Timer className="size-4 text-[#8064D8]" />} label="Straordinari" value={formatHours(overtimeSummary.overtime)} tone="violet" />
+                  <DashboardStat icon={<Clock3 className="size-4 text-orange-500" />} label="Ore mancanti" value={formatHours(overtimeSummary.missing)} tone="pink" />
+                </div>
               </Card>
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-              <Card className="bg-white">
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+              <Card className="bg-white dark:bg-[#17151A]">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Planning, ritardi e presenza</h3>
                   <Badge tone={respectedPlanning >= 90 ? "green" : respectedPlanning >= 70 ? "gold" : "pink"}>{respectedPlanning}% rispettato</Badge>
@@ -569,7 +570,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                     <p className="mt-2 text-2xl font-semibold">{pendingLeaveRequests.length}</p>
                   </div>
                 </div>
-                <div className="mt-5 divide-y divide-black/5">
+                <div className="mt-5 max-h-[390px] divide-y divide-black/5 overflow-y-auto pr-2 dark:divide-white/10">
                   {planningByDay.filter((day) => day.lateMinutes > 10 || day.pauseLateMinutes > 0 || day.noShow).slice(0, 6).map((day) => (
                     <div key={day.key} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center">
                       <div>
@@ -597,7 +598,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
                 </div>
               </Card>
 
-              <Card className="bg-white">
+              <Card className="self-start bg-white dark:bg-[#17151A]">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold">Controllo clienti</h3>
                   <MapPin className="size-5 text-black/35" />
