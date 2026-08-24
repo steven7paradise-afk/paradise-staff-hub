@@ -17,11 +17,11 @@ type OrderLabelField = { id: string; label: string; value: any };
 const ORDER_PHOTO_KEY = "__orderPhoto";
 
 // Il self-test indica un supporto da 102 × 90 mm, ma il driver della bobina
-// espone 90 mm come larghezza stampabile e 102 mm come avanzamento. Un PDF
-// orizzontale viene ruotato dal driver e diviso su due etichette consecutive.
+// espone 102 mm come larghezza stampabile e 90 mm come avanzamento. Un PDF
+// con i lati invertiti viene diviso dal driver su due etichette consecutive.
 // Il gap da 5 mm è gestito dal sensore e non va aggiunto alla pagina.
-const ORDER_LABEL_WIDTH_MM = 90;
-const ORDER_LABEL_HEIGHT_MM = 102;
+const ORDER_LABEL_WIDTH_MM = 102;
+const ORDER_LABEL_HEIGHT_MM = 90;
 const ORDER_LABEL_CANVAS_WIDTH = 900;
 const ORDER_LABEL_CANVAS_HEIGHT = 1020;
 
@@ -286,7 +286,7 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
-    orientation: "portrait",
+    orientation: "landscape",
     unit: "mm",
     format: [ORDER_LABEL_WIDTH_MM, ORDER_LABEL_HEIGHT_MM],
     compress: true,
@@ -342,12 +342,22 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <text x="480" y="675" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
       <text x="480" y="741" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
 
-      <text x="450" y="954" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#121216">Paradise Beauty · Etichetta ordine · 90 × 102 mm</text>
+      <text x="450" y="954" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#121216">Paradise Beauty · Etichetta ordine · 102 × 90 mm</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
-  doc.addImage(labelImageDataUrl, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
-  return { doc, fileName: `Etichetta-verticale-90x102-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
+  const imageRatio = ORDER_LABEL_CANVAS_WIDTH / ORDER_LABEL_CANVAS_HEIGHT;
+  const pageRatio = pageWidth / pageHeight;
+  const imageWidth = imageRatio > pageRatio ? pageWidth : pageHeight * imageRatio;
+  const imageHeight = imageRatio > pageRatio ? pageWidth / imageRatio : pageHeight;
+  const imageX = (pageWidth - imageWidth) / 2;
+  const imageY = (pageHeight - imageHeight) / 2;
+  doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
+  return {
+    doc,
+    labelImageDataUrl,
+    fileName: `Etichetta-102x90-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`,
+  };
 }
 
 export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
@@ -356,24 +366,46 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
 }
 
 export async function printOrderLabelPdf(order: OrderLabelResponse) {
-  const { doc, fileName } = await buildOrderLabelPdf(order);
-  const blobUrl = URL.createObjectURL(doc.output("blob"));
-  const printWindow = window.open(blobUrl, "_blank", "noopener,noreferrer");
+  // Apriamo subito la finestra per non farla bloccare dal browser. La stampa
+  // HTML non impone formato o orientamento: usa il supporto predefinito della
+  // PM-241 e mantiene l'intera etichetta su una sola pagina.
+  const printWindow = window.open("", "_blank");
   if (!printWindow) {
+    const { doc, fileName } = await buildOrderLabelPdf(order);
     doc.save(fileName);
     return;
   }
-  let hasPrinted = false;
-  const print = () => {
-    // Il PDF può notificare `load` dopo il fallback temporizzato. Senza questa
-    // protezione la finestra di stampa si apriva due volte e la stampante
-    // produceva due etichette per lo stesso ordine.
-    if (hasPrinted) return;
-    hasPrinted = true;
-    printWindow.focus();
-    printWindow.print();
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-  };
-  printWindow.addEventListener("load", print, { once: true });
-  window.setTimeout(print, 800);
+  printWindow.opener = null;
+
+  try {
+    const { labelImageDataUrl } = await buildOrderLabelPdf(order);
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Etichetta ordine</title>
+          <style>
+            @page { margin: 0; }
+            html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #fff; }
+            main { position: fixed; inset: 0; display: grid; place-items: center; break-inside: avoid; page-break-inside: avoid; }
+            img { display: block; width: 100%; height: 100%; object-fit: contain; }
+          </style>
+        </head>
+        <body>
+          <main><img src="${labelImageDataUrl}" alt="Etichetta ordine" /></main>
+        </body>
+      </html>`);
+    printWindow.document.close();
+    const image = printWindow.document.querySelector("img");
+    const print = () => window.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 150);
+    if (image?.complete) print();
+    else image?.addEventListener("load", print, { once: true });
+  } catch (error) {
+    printWindow.close();
+    throw error;
+  }
 }
