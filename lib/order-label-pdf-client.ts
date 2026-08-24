@@ -301,13 +301,9 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
     .catch(() => "");
 
-  const initials = client.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   const phoneField = findField(fields, ["telefono", "whatsapp"]);
-  const weightField = findField(fields, ["peso sulla bilancia", "peso", "grammi", "grammo"]);
-  const service = orderItems(order) || fieldValue(order, ["servizio", "trattamento"]) || "Non indicato";
   const cleanOrderNo = `#${orderNo.replace(/^#/, "")}`;
   const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
-  const weight = weightField ? displayValue(weightField.value) : "Non indicato";
   const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
     ? `<image href="${logoDataUrl}" x="44" y="38" width="280" height="116" preserveAspectRatio="xMinYMid meet" />`
@@ -315,34 +311,24 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
-      ${logoImage}
-      <rect x="660" y="42" width="196" height="62" rx="16" fill="#ec5391"/>
-      <text x="758" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
-      <text x="758" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+      <g transform="rotate(180 450 96)">
+        ${logoImage}
+        <rect x="660" y="42" width="196" height="62" rx="16" fill="#ec5391"/>
+        <text x="758" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
+        <text x="758" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+      </g>
       <line x1="44" y1="192" x2="856" y2="192" stroke="#ec5391" stroke-width="6"/>
 
-      <circle cx="100" cy="295" r="48" fill="#ec5391"/>
-      <text x="100" y="312" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
-      <text x="172" y="281" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 27))}</text>
-      <text x="172" y="330" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 49))}</text>
+      <text x="54" y="282" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2" fill="#ec5391">NOME CLIENTE</text>
+      <text x="54" y="348" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 31))}</text>
+      <line x1="54" y1="392" x2="846" y2="392" stroke="#e7e7eb" stroke-width="3"/>
 
-      <rect x="44" y="390" width="812" height="430" rx="22" fill="#ffffff" stroke="#f9c4de" stroke-width="5"/>
-      <line x1="450" y1="390" x2="450" y2="820" stroke="#f9c4de" stroke-width="4"/>
-      <line x1="44" y1="605" x2="856" y2="605" stroke="#f9c4de" stroke-width="4"/>
+      <text x="54" y="484" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2" fill="#ec5391">NUMERO DI TELEFONO</text>
+      <text x="54" y="550" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#121216">${escapeSvgText(shortSvgText(phone, 24))}</text>
+      <line x1="54" y1="594" x2="846" y2="594" stroke="#e7e7eb" stroke-width="3"/>
 
-      <text x="74" y="460" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
-      <text x="74" y="526" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
-
-      <text x="480" y="460" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
-      <text x="480" y="526" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 17))}</text>
-
-      <text x="74" y="675" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
-      <text x="74" y="741" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
-
-      <text x="480" y="675" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
-      <text x="480" y="741" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
-
-      <text x="450" y="954" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#121216">Paradise Beauty · Etichetta ordine · 102 × 90 mm</text>
+      <text x="54" y="686" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2" fill="#ec5391">DATA</text>
+      <text x="54" y="752" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" fill="#121216">${escapeSvgText(createdAt)}</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
