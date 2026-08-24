@@ -1792,6 +1792,7 @@ export function AppointmentsBrowser({
   }
 
   const [showTodayOrdersDropdown, setShowTodayOrdersDropdown] = useState(false);
+  const [showShopifyOrdersPanel, setShowShopifyOrdersPanel] = useState(false);
   const [todayOrdersList, setTodayOrdersList] = useState<ShopifyClientOrder[]>([]);
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
 
@@ -3702,24 +3703,68 @@ export function AppointmentsBrowser({
               </section>
 
               {/* 1° e 2° Ordine Shopify Card */}
-              <div className="relative space-y-3 rounded-[28px] border border-neutral-200 bg-white p-4 shadow-[0_10px_30px_rgba(17,17,17,0.04)] sm:p-5">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
-                    <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (ACCONTO + ORDINE FINALE)
+              <div className="rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_30px_rgba(17,17,17,0.04)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowShopifyOrdersPanel((previous) => {
+                      const next = !previous;
+                      if (!next) setShowTodayOrdersDropdown(false);
+                      return next;
+                    });
+                  }}
+                  aria-expanded={showShopifyOrdersPanel}
+                  aria-controls="client-control-shopify-orders"
+                  className="flex w-full items-center gap-4 rounded-[28px] px-5 py-4 text-left transition hover:bg-[#FFF9FC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94]/40 sm:px-6"
+                >
+                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F]">
+                    <ShoppingBag className="size-5" />
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTodayOrdersDropdown((prev) => !prev);
-                      if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black text-white shadow-2xs hover:opacity-95 transition active:scale-95"
-                    title="Mostra tutto lo storico ordini Shopify della cliente"
-                  >
-                    <Sparkles className="size-3 text-white" />
-                    <span>{loadingTodayOrders ? "Carico..." : `TUTTI GLI ORDINI${todayOrdersList.length ? ` (${todayOrdersList.length})` : ""}`}</span>
-                  </button>
-                </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
+                      Ordini Shopify
+                    </span>
+                    <span className="mt-1 block text-sm font-black text-[#1F1F1F]">
+                      Acconto e pagamento finale
+                    </span>
+                    <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-black/50">
+                      <span>Acconto: {clientControlForm.shopifyOrder ? `#${clientControlForm.shopifyOrder}` : "da collegare"}</span>
+                      <span>Saldo: {clientControlForm.secondShopifyOrder ? `#${clientControlForm.secondShopifyOrder}` : "da collegare"}</span>
+                      {secondOrderDetails ? (
+                        <span className={String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" ? "text-emerald-700" : "text-amber-700"}>
+                          {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" ? "Pagamento verificato" : "Pagamento da verificare"}
+                        </span>
+                      ) : null}
+                    </span>
+                  </span>
+                  <span className="hidden rounded-full border border-neutral-200 bg-[#FAFAFA] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-black/55 sm:inline-flex">
+                    {showShopifyOrdersPanel ? "Nascondi" : "Gestisci"}
+                  </span>
+                  <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform duration-200 ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
+                </button>
+
+                {showShopifyOrdersPanel ? (
+                <div id="client-control-shopify-orders" className="space-y-4 border-t border-neutral-200 px-4 pb-5 pt-4 sm:px-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black text-[#1F1F1F]">Collega i due pagamenti della cliente</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-black/45">Apri lo storico soltanto se devi cercare o sostituire un ordine.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTodayOrdersDropdown((prev) => !prev);
+                        if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                      }}
+                      aria-expanded={showTodayOrdersDropdown}
+                      aria-controls="client-control-shopify-order-history"
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#F6C6DE] bg-[#FFF7FB] px-4 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition hover:bg-[#FCE5F3] active:scale-[0.98]"
+                    >
+                      <Sparkles className="size-3.5" />
+                      <span>{loadingTodayOrders ? "Caricamento..." : `Cerca negli ordini${todayOrdersList.length ? ` (${todayOrdersList.length})` : ""}`}</span>
+                      <ChevronDown className={`size-4 transition-transform ${showTodayOrdersDropdown ? "rotate-180" : ""}`} />
+                    </button>
+                  </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Codice Ordine Acconto */}
@@ -3922,7 +3967,10 @@ export function AppointmentsBrowser({
 
                 {/* Dropdown list for today's orders */}
                 {showTodayOrdersDropdown && (
-                  <div className="absolute left-0 top-full z-50 mt-1.5 w-full max-w-[680px] rounded-2xl border border-[#F6E1EB] bg-white p-3.5 shadow-2xl animate-in fade-in duration-150">
+                  <div
+                    id="client-control-shopify-order-history"
+                    className="rounded-2xl border border-[#F6E1EB] bg-[#FFFDFE] p-3.5 shadow-[0_12px_30px_rgba(184,61,127,0.08)] animate-in fade-in slide-in-from-top-2 duration-150"
+                  >
                     <div className="flex items-center justify-between pb-2 border-b border-black/5">
                       <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
                         STORICO COMPLETO ORDINI ({sortedTodayOrdersList.length})
@@ -4067,6 +4115,8 @@ export function AppointmentsBrowser({
                     </div>
                   </div>
                 )}
+                </div>
+                ) : null}
               </div>
 
               {/* Acconto, Pagato & Collaboratrice - Griglia a 3 Colonne Perfettamente Bilanciata */}
