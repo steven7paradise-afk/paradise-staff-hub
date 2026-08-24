@@ -16,13 +16,14 @@ type OrderLabelField = { id: string; label: string; value: any };
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
 
-// Formato rilevato dal self-test della stampante: 102 × 90 mm, gap 5 mm.
-// Il gap viene gestito dal driver/sensore della stampante e non va sommato
-// all'altezza della pagina PDF.
-const ORDER_LABEL_WIDTH_MM = 102;
-const ORDER_LABEL_HEIGHT_MM = 90;
-const ORDER_LABEL_CANVAS_WIDTH = 1020;
-const ORDER_LABEL_CANVAS_HEIGHT = 900;
+// Il supporto rilevato dal self-test misura 102 × 90 mm. Per stampare
+// l'etichetta in verticale generiamo quindi una pagina larga 90 mm e alta
+// 102 mm. Il gap da 5 mm è gestito dal driver/sensore della stampante e non
+// deve essere aggiunto all'altezza del PDF.
+const ORDER_LABEL_WIDTH_MM = 90;
+const ORDER_LABEL_HEIGHT_MM = 102;
+const ORDER_LABEL_CANVAS_WIDTH = 900;
+const ORDER_LABEL_CANVAS_HEIGHT = 1020;
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
@@ -285,7 +286,7 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
-    orientation: "landscape",
+    orientation: "portrait",
     unit: "mm",
     format: [ORDER_LABEL_WIDTH_MM, ORDER_LABEL_HEIGHT_MM],
     compress: true,
@@ -309,44 +310,44 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const weight = weightField ? displayValue(weightField.value) : "Non indicato";
   const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="48" y="42" width="310" height="126" preserveAspectRatio="xMinYMid meet" />`
-    : `<text x="50" y="120" font-size="42" font-weight="800" fill="#111">Paradise Beauty</text>`;
+    ? `<image href="${logoDataUrl}" x="44" y="38" width="280" height="116" preserveAspectRatio="xMinYMid meet" />`
+    : `<text x="46" y="112" font-size="38" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1020" height="900" viewBox="0 0 1020 900">
-      <rect width="1020" height="900" fill="#ffffff"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
+      <rect width="900" height="1020" fill="#ffffff"/>
       ${logoImage}
-      <rect x="786" y="44" width="184" height="68" rx="17" fill="#ec5391"/>
-      <text x="878" y="88" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#ffffff">ORDINE</text>
-      <text x="878" y="170" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
-      <line x1="48" y1="212" x2="972" y2="212" stroke="#ec5391" stroke-width="6"/>
+      <rect x="660" y="42" width="196" height="62" rx="16" fill="#ec5391"/>
+      <text x="758" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
+      <text x="758" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+      <line x1="44" y1="192" x2="856" y2="192" stroke="#ec5391" stroke-width="6"/>
 
-      <circle cx="110" cy="330" r="50" fill="#ec5391"/>
-      <text x="110" y="347" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
-      <text x="185" y="315" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 28))}</text>
-      <text x="185" y="370" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 52))}</text>
+      <circle cx="100" cy="295" r="48" fill="#ec5391"/>
+      <text x="100" y="312" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
+      <text x="172" y="281" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 27))}</text>
+      <text x="172" y="330" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 49))}</text>
 
-      <rect x="48" y="430" width="924" height="320" rx="22" fill="#ffffff" stroke="#f9c4de" stroke-width="5"/>
-      <line x1="510" y1="430" x2="510" y2="750" stroke="#f9c4de" stroke-width="4"/>
-      <line x1="48" y1="590" x2="972" y2="590" stroke="#f9c4de" stroke-width="4"/>
+      <rect x="44" y="390" width="812" height="430" rx="22" fill="#ffffff" stroke="#f9c4de" stroke-width="5"/>
+      <line x1="450" y1="390" x2="450" y2="820" stroke="#f9c4de" stroke-width="4"/>
+      <line x1="44" y1="605" x2="856" y2="605" stroke="#f9c4de" stroke-width="4"/>
 
-      <text x="78" y="485" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
-      <text x="78" y="545" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 22))}</text>
+      <text x="74" y="460" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
+      <text x="74" y="526" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
 
-      <text x="540" y="485" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
-      <text x="540" y="545" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 18))}</text>
+      <text x="480" y="460" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
+      <text x="480" y="526" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 17))}</text>
 
-      <text x="78" y="645" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
-      <text x="78" y="705" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
+      <text x="74" y="675" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
+      <text x="74" y="741" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
 
-      <text x="540" y="645" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
-      <text x="540" y="705" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
+      <text x="480" y="675" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
+      <text x="480" y="741" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
 
-      <text x="510" y="840" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" fill="#121216">Paradise Beauty · Etichetta ordine · 102 × 90 mm</text>
+      <text x="450" y="954" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" fill="#121216">Paradise Beauty · Etichetta ordine · 90 × 102 mm</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
   doc.addImage(labelImageDataUrl, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
-  return { doc, fileName: `Etichetta-102x90-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
+  return { doc, fileName: `Etichetta-verticale-90x102-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
 }
 
 export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
@@ -362,7 +363,13 @@ export async function printOrderLabelPdf(order: OrderLabelResponse) {
     doc.save(fileName);
     return;
   }
+  let hasPrinted = false;
   const print = () => {
+    // Il PDF può notificare `load` dopo il fallback temporizzato. Senza questa
+    // protezione la finestra di stampa si apriva due volte e la stampante
+    // produceva due etichette per lo stesso ordine.
+    if (hasPrinted) return;
+    hasPrinted = true;
     printWindow.focus();
     printWindow.print();
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
