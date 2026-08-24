@@ -3555,13 +3555,13 @@ export function AppointmentsBrowser({
       )}
 
       {clientControlOpen ? (
-        <div className="fixed inset-0 z-[120] bg-[radial-gradient(circle_at_8%_0%,rgba(255,199,226,0.44),transparent_34%),radial-gradient(circle_at_94%_4%,rgba(226,216,255,0.52),transparent_32%),#F8F3F6]">
-          <div className="flex h-dvh w-full flex-col overflow-hidden bg-transparent">
+        <div className="fixed inset-0 z-[120] isolate bg-white text-[#171717]">
+          <div className="relative z-10 flex h-dvh w-full flex-col overflow-hidden bg-white">
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-white/70 bg-white/72 px-6 pt-6 pb-5 shadow-[0_8px_30px_rgba(74,36,57,0.06)] backdrop-blur-2xl sm:px-10 lg:px-14">
+            <div className="shrink-0 border-b border-neutral-200 bg-white px-6 pt-6 pb-5 shadow-[0_8px_24px_rgba(17,17,17,0.04)] sm:px-10 lg:px-14">
               <div className="mx-auto flex w-full max-w-[1480px] items-start justify-between gap-4">
                 <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
                   Store manager
                 </span>
                 <h2 className="mt-2 text-3xl font-black tracking-tight text-[#1F1F1F] sm:text-4xl">
@@ -3577,7 +3577,7 @@ export function AppointmentsBrowser({
                     setClientControlOpen(false);
                     setIsStaffDropdownOpen(false);
                   }}
-                  className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/70 shadow-2xs transition hover:bg-neutral-100 active:scale-95"
+                  className="grid size-11 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-black/70 shadow-sm transition hover:border-neutral-300 hover:bg-neutral-50 active:scale-95"
                   aria-label="Torna agli appuntamenti"
                 >
                   <X className="size-5" />
@@ -3586,15 +3586,16 @@ export function AppointmentsBrowser({
             </div>
 
             {/* Scrollable Content */}
-            <div className="mx-auto min-h-0 w-full max-w-[1480px] flex-1 space-y-6 overflow-y-auto px-5 py-7 sm:px-8 lg:px-12">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
+              <div className="mx-auto w-full max-w-[1480px] space-y-6 px-5 py-7 sm:px-8 lg:px-12">
               {/* Info cliente da Card */}
-              <section className="rounded-[28px] border border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-5 shadow-2xs">
+              <section className="rounded-[28px] border border-neutral-200 bg-[#FAFAFA] p-5 shadow-[0_10px_30px_rgba(17,17,17,0.04)]">
                 <div className="flex items-center gap-2 text-xs font-bold text-black/60">
                   <User className="size-4 text-[#D96B94]" />
                   <span className="uppercase tracking-wider font-black text-[11px] text-[#B83D7F]">Info cliente & Ordini Shopify</span>
                 </div>
                 <div className="mt-3.5 flex flex-wrap gap-2.5">
-                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                     <Receipt className="size-3.5 text-[#D96B94]" />
                     <span>Codice Acconto: #{clientControlForm.shopifyOrder || "---"}</span>
                     {clientControlForm.shopifyOrder && (
@@ -3609,7 +3610,7 @@ export function AppointmentsBrowser({
                     )}
                   </span>
                   {clientControlForm.secondShopifyOrder ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#D96B94] bg-[#FFF0F6] backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#B83D7F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#D96B94] bg-[#FFF4F8] px-4 py-2.5 text-xs font-black text-[#B83D7F] shadow-2xs">
                       <ShoppingBag className="size-3.5 text-[#D96B94]" />
                       <span>Codice Ordine Finale: #{clientControlForm.secondShopifyOrder}</span>
                       <a
@@ -3623,24 +3624,24 @@ export function AppointmentsBrowser({
                     </span>
                   ) : null}
                   {clientControlForm.email ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <Mail className="size-3.5 text-[#D96B94]" />
                       <span className="truncate max-w-[200px]">{clientControlForm.email}</span>
                     </span>
                   ) : null}
                   {clientControlForm.phone ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <Phone className="size-3.5 text-[#D96B94]" />
                       <span>{clientControlForm.phone}</span>
                     </span>
                   ) : null}
                   {clientControlForm.serviceTitle ? (
-                    <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                    <span className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                       <CalendarDays className="size-3.5 text-[#D96B94]" />
                       <span className="truncate max-w-[280px]">{clientControlForm.serviceTitle}</span>
                     </span>
                   ) : null}
-                  <span className="inline-flex items-center gap-2 rounded-2xl border border-[#F6C6DE] bg-white/90 backdrop-blur-xs px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
+                  <span className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-black text-[#1F1F1F] shadow-2xs">
                     <AtSign className="size-3.5 text-[#D96B94]" />
                     <input
                       type="text"
@@ -3659,7 +3660,7 @@ export function AppointmentsBrowser({
               </section>
 
               {/* 1° e 2° Ordine Shopify Card */}
-              <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
+              <div className="relative space-y-3 rounded-[28px] border border-neutral-200 bg-white p-4 shadow-[0_10px_30px_rgba(17,17,17,0.04)] sm:p-5">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">
                     <ShoppingBag className="size-4 text-[#D96B94]" /> ORDINI SHOPIFY (ACCONTO + ORDINE FINALE)
@@ -3680,7 +3681,7 @@ export function AppointmentsBrowser({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Codice Ordine Acconto */}
-                  <div className="rounded-2xl border border-black/5 bg-white/80 p-3 shadow-2xs">
+                  <div className="rounded-2xl border border-neutral-200 bg-[#FAFAFA] p-3 shadow-2xs">
                     {(() => {
                       const isDepositLocked = Boolean(
                         (selectedBooking?.bookingStr || (clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "")) &&
@@ -4439,7 +4440,7 @@ export function AppointmentsBrowser({
                 />
               </div>
 
-              <section className="rounded-[28px] border border-[#E8DDE3] bg-white/88 p-5 shadow-[0_18px_45px_rgba(76,39,59,0.08)] backdrop-blur-xl sm:p-6">
+              <section className="rounded-[28px] border border-neutral-200 bg-white p-5 shadow-[0_10px_30px_rgba(17,17,17,0.04)] sm:p-6">
                 <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
                   <div>
                     <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
@@ -4464,7 +4465,7 @@ export function AppointmentsBrowser({
                     {[...clientControlAppointmentComments].reverse().map((comment) => (
                       <article
                         key={comment.id}
-                        className="rounded-[20px] border border-black/5 bg-[#FCFAFB] px-4 py-4"
+                        className="rounded-[20px] border border-neutral-200 bg-[#FAFAFA] px-4 py-4"
                       >
                         <p className="text-sm font-bold leading-6 text-[#332A2F]">
                           {comment.message}
@@ -4476,7 +4477,7 @@ export function AppointmentsBrowser({
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-4 rounded-2xl bg-[#FCFAFB] px-4 py-5 text-sm font-semibold text-black/40">
+                  <p className="mt-4 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 py-5 text-sm font-semibold text-black/40">
                     Nessuna modifica registrata per questo appuntamento.
                   </p>
                 )}
@@ -4535,10 +4536,11 @@ export function AppointmentsBrowser({
                   {clientControlMessage.text}
                 </p>
               ) : null}
+              </div>
             </div>
 
             {/* Footer Actions */}
-            <div className="border-t border-white/70 bg-white/78 px-5 py-4 shadow-[0_-8px_30px_rgba(74,36,57,0.06)] backdrop-blur-2xl sm:px-8 lg:px-14">
+            <div className="shrink-0 border-t border-neutral-200 bg-white px-5 py-4 shadow-[0_-8px_24px_rgba(17,17,17,0.04)] sm:px-8 lg:px-14">
               <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4">
               <button
                 type="button"
