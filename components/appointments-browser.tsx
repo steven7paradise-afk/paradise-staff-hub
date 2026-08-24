@@ -1245,7 +1245,12 @@ export function AppointmentsBrowser({
           const payload = (await response.json()) as {
             updates?: Record<string, CustomerArrivalUpdate>;
           };
-          if (!stopped && payload.updates) setLiveCustomerUpdates(payload.updates);
+          if (!stopped && payload.updates) {
+            setLiveCustomerUpdates((current) => {
+              const next = payload.updates as Record<string, CustomerArrivalUpdate>;
+              return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+            });
+          }
         }
       } catch {
         // A temporary network error must not interrupt appointment management.
@@ -3299,13 +3304,10 @@ export function AppointmentsBrowser({
     return { formFields, otherFields };
   }, [selectedBooking]);
 
-  const StatusControl = ({
-    booking,
+  function renderStatusControl(
+    booking: AppointmentRecord,
     compact = false,
-  }: {
-    booking: AppointmentRecord;
-    compact?: boolean;
-  }) => {
+  ) {
     if (booking.isCanceled) {
       return (
         <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
@@ -3410,7 +3412,7 @@ export function AppointmentsBrowser({
         ) : null}
       </div>
     );
-  };
+  }
 
   const ClientControlStaffPicker = ({ booking }: { booking: AppointmentRecord }) => {
     const assignedIds = new Set(getBookingTeam(booking).map((mate) => mate.id));
@@ -5259,7 +5261,7 @@ export function AppointmentsBrowser({
                         className="space-y-1.5"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        <StatusControl booking={booking} compact />
+                        {renderStatusControl(booking, true)}
                         {booking.isCanceled ? (
                           <span className="inline-flex rounded-full border border-red-100 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Annullato
@@ -5472,7 +5474,7 @@ export function AppointmentsBrowser({
                     Stato
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <StatusControl booking={selectedBooking} />
+                    {renderStatusControl(selectedBooking!)}
                     <WhatsAppSheetNote booking={selectedBooking} />
                   </div>
                   {selectedBooking.statusUpdatedBy ? (
@@ -5950,7 +5952,7 @@ export function AppointmentsBrowser({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                      <StatusControl booking={booking} compact />
+                      {renderStatusControl(booking, true)}
                       {!booking.isCanceled ? (
                         <span
                           className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}
@@ -6125,7 +6127,7 @@ export function AppointmentsBrowser({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <StatusControl booking={booking} compact />
+                      {renderStatusControl(booking, true)}
                       {!booking.isCanceled ? (
                         <span
                           className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${appointmentStatusClasses[status]}`}
@@ -6634,7 +6636,7 @@ export function AppointmentsBrowser({
                       {getSalonLabel(selectedBooking.inferredSalon)}
                     </p>
                     <div className="mt-3">
-                      <StatusControl booking={selectedBooking} />
+                      {renderStatusControl(selectedBooking!)}
                     </div>
                     <div className="mt-3">
                       <WhatsAppSheetNote booking={selectedBooking} />
