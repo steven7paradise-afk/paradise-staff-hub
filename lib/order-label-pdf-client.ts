@@ -16,12 +16,13 @@ type OrderLabelField = { id: string; label: string; value: any };
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
 
-// Etichetta compatta: 102 mm di larghezza e 70 mm di avanzamento.
-// Il gap della bobina è gestito dal sensore e non va aggiunto alla pagina.
-const ORDER_LABEL_WIDTH_MM = 102;
-const ORDER_LABEL_HEIGHT_MM = 70;
-const ORDER_LABEL_CANVAS_WIDTH = 1020;
-const ORDER_LABEL_CANVAS_HEIGHT = 700;
+// Lo stesso supporto fisico 102 x 90 mm viene inviato al driver in verticale:
+// 90 mm di larghezza e 102 mm di avanzamento. In questo modo Chrome/PM-241
+// mostrano "Verticale" e mantengono tutto il contenuto su una sola etichetta.
+const ORDER_LABEL_WIDTH_MM = 90;
+const ORDER_LABEL_HEIGHT_MM = 102;
+const ORDER_LABEL_CANVAS_WIDTH = 900;
+const ORDER_LABEL_CANVAS_HEIGHT = 1020;
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
@@ -284,7 +285,7 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({
-    orientation: "landscape",
+    orientation: "portrait",
     unit: "mm",
     format: [ORDER_LABEL_WIDTH_MM, ORDER_LABEL_HEIGHT_MM],
     compress: true,
@@ -304,18 +305,18 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
   const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="50" y="38" width="300" height="116" preserveAspectRatio="xMinYMid meet" />`
+    ? `<image href="${logoDataUrl}" x="50" y="38" width="260" height="116" preserveAspectRatio="xMinYMid meet" />`
     : `<text x="52" y="112" font-size="38" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1020" height="700" viewBox="0 0 1020 700">
-      <rect width="1020" height="700" fill="#ffffff"/>
-      <g transform="rotate(180 510 96)">
+    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
+      <rect width="900" height="1020" fill="#ffffff"/>
+      <g transform="rotate(180 450 96)">
         ${logoImage}
-        <rect x="760" y="42" width="210" height="62" rx="16" fill="#ec5391"/>
-        <text x="865" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
-        <text x="865" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+        <rect x="640" y="42" width="210" height="62" rx="16" fill="#ec5391"/>
+        <text x="745" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
+        <text x="745" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
       </g>
-      <line x1="50" y1="192" x2="970" y2="192" stroke="#ec5391" stroke-width="5"/>
+      <line x1="50" y1="192" x2="850" y2="192" stroke="#ec5391" stroke-width="5"/>
 
       <text x="54" y="244" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 27))}</text>
       <text x="54" y="280" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="650" fill="#24242a">${escapeSvgText(shortSvgText(phone, 24))}</text>
@@ -333,7 +334,7 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   return {
     doc,
     labelImageDataUrl,
-    fileName: `Etichetta-102x70-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`,
+    fileName: `Etichetta-102x90-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`,
   };
 }
 
@@ -343,46 +344,27 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
 }
 
 export async function printOrderLabelPdf(order: OrderLabelResponse) {
-  // Apriamo subito la finestra per non farla bloccare dal browser. La stampa
-  // HTML non impone formato o orientamento: usa il supporto predefinito della
-  // PM-241 e mantiene l'intera etichetta su una sola pagina.
+  // Apriamo subito la finestra per non farla bloccare dal browser. Stampiamo
+  // direttamente il PDF 102 x 90: la pagina HTML intermedia aggiungeva
+  // intestazioni/piè di pagina e poteva dividere il layout in due fogli.
   const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    const { doc, fileName } = await buildOrderLabelPdf(order);
-    doc.save(fileName);
-    return;
-  }
-  printWindow.opener = null;
 
   try {
-    const { labelImageDataUrl } = await buildOrderLabelPdf(order);
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>Etichetta ordine</title>
-          <style>
-            @page { size: 102mm 70mm; margin: 0; }
-            html, body { width: 102mm; height: 70mm; margin: 0; overflow: hidden; background: #fff; }
-            main { position: fixed; inset: 0; display: grid; place-items: center; break-inside: avoid; page-break-inside: avoid; }
-            img { display: block; width: 100%; height: 100%; object-fit: contain; }
-          </style>
-        </head>
-        <body>
-          <main><img src="${labelImageDataUrl}" alt="Etichetta ordine" /></main>
-        </body>
-      </html>`);
-    printWindow.document.close();
-    const image = printWindow.document.querySelector("img");
-    const print = () => window.setTimeout(() => {
-      printWindow.focus();
-      printWindow.print();
-    }, 150);
-    if (image?.complete) print();
-    else image?.addEventListener("load", print, { once: true });
+    const { doc, fileName } = await buildOrderLabelPdf(order);
+    doc.setProperties({ title: fileName });
+    doc.autoPrint({ variant: "non-conform" });
+
+    if (!printWindow) {
+      doc.save(fileName);
+      return;
+    }
+
+    printWindow.opener = null;
+    const pdfUrl = URL.createObjectURL(doc.output("blob"));
+    printWindow.location.replace(pdfUrl);
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 10 * 60 * 1000);
   } catch (error) {
-    printWindow.close();
+    printWindow?.close();
     throw error;
   }
 }
