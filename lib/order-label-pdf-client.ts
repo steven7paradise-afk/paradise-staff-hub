@@ -305,22 +305,24 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
   const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="50" y="38" width="260" height="116" preserveAspectRatio="xMinYMid meet" />`
-    : `<text x="52" y="112" font-size="38" font-weight="800" fill="#111">Paradise Beauty</text>`;
+    ? `<image href="${logoDataUrl}" x="55" y="28" width="330" height="148" preserveAspectRatio="xMinYMid meet" />`
+    : `<text x="58" y="125" font-size="46" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
-      <g transform="rotate(180 450 96)">
-        ${logoImage}
-        <rect x="640" y="42" width="210" height="62" rx="16" fill="#ec5391"/>
-        <text x="745" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
-        <text x="745" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
-      </g>
-      <line x1="50" y1="192" x2="850" y2="192" stroke="#ec5391" stroke-width="5"/>
+      <g transform="translate(0 270)">
+        <g transform="rotate(180 450 110)">
+          ${logoImage}
+          <rect x="570" y="30" width="280" height="76" rx="18" fill="#ec5391"/>
+          <text x="710" y="80" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="#ffffff">ORDINE</text>
+          <text x="710" y="178" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+        </g>
+        <line x1="55" y1="225" x2="845" y2="225" stroke="#ec5391" stroke-width="5"/>
 
-      <text x="54" y="244" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 27))}</text>
-      <text x="54" y="280" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="650" fill="#24242a">${escapeSvgText(shortSvgText(phone, 24))}</text>
-      <text x="54" y="309" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" letter-spacing="0.4" fill="#5b5b64">${escapeSvgText(createdAt)}</text>
+        <text x="450" y="315" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 27))}</text>
+        <text x="450" y="365" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="#24242a">${escapeSvgText(shortSvgText(phone, 24))}</text>
+        <text x="450" y="410" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="0.4" fill="#5b5b64">${escapeSvgText(createdAt)}</text>
+      </g>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
