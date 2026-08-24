@@ -3657,6 +3657,48 @@ export function AppointmentsBrowser({
                     />
                   </span>
                 </div>
+
+                {/* Spunte di verifica collegate al profilo cliente */}
+                <div className="mt-5 border-t border-neutral-200 pt-4">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
+                    Verifiche e controlli
+                  </span>
+                  <div className="mt-2.5 flex flex-wrap gap-2.5">
+                    {[
+                      ["notes", "Note Shopify"],
+                      ["beforeMedia", "Prima foto/video"],
+                      ["afterMedia", "Dopo foto/video"],
+                      ["products", "Prodotti"],
+                      ["review", "Recensione"],
+                    ].map(([fieldKey, fieldLabel]) => {
+                      const checked = Boolean((clientControlForm as any)[fieldKey]);
+                      return (
+                        <label
+                          key={fieldKey}
+                          className={[
+                            "flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
+                            checked
+                              ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                              : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) =>
+                              setClientControlForm((prev) => ({
+                                ...prev,
+                                [fieldKey]: event.target.checked,
+                              }))
+                            }
+                            className="size-4 accent-[#D96B94]"
+                          />
+                          <span>{fieldLabel}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </section>
 
               {/* 1° e 2° Ordine Shopify Card */}
@@ -4492,48 +4534,6 @@ export function AppointmentsBrowser({
                   </p>
                 )}
               </section>
-
-              {/* Spunte di Verifica (I 5 Checkbox) */}
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
-                  VERIFICHE E CONTROLLI
-                </span>
-                <div className="mt-2.5 flex flex-wrap gap-2.5">
-                  {[
-                    ["notes", "Note Shopify"],
-                    ["beforeMedia", "Prima foto/video"],
-                    ["afterMedia", "Dopo foto/video"],
-                    ["products", "Prodotti"],
-                    ["review", "Recensione"],
-                  ].map(([fieldKey, fieldLabel]) => {
-                    const checked = Boolean((clientControlForm as any)[fieldKey]);
-                    return (
-                      <label
-                        key={fieldKey}
-                        className={[
-                          "flex cursor-pointer items-center gap-2 rounded-2xl border px-4 py-2.5 text-xs font-black transition active:scale-95 shadow-2xs",
-                          checked
-                            ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
-                            : "border-black/10 bg-white text-black/70 hover:bg-neutral-50",
-                        ].join(" ")}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(event) =>
-                            setClientControlForm((prev) => ({
-                              ...prev,
-                              [fieldKey]: event.target.checked,
-                            }))
-                          }
-                          className="size-4 accent-[#D96B94]"
-                        />
-                        <span>{fieldLabel}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
 
               {clientControlMessage ? (
                 <p
