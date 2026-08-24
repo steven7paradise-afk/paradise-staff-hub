@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const cleanClientName = clientNameParam ? clientNameParam.trim().toLowerCase() : "";
 
   try {
-    const [comments, shopifyNote, cowlendarOrderNote, rawResponses] = await Promise.all([
+    const [comments, shopifyNote, cowlendarOrderNote, responseByBooking, rawResponses] = await Promise.all([
       prisma.shopifyOrderComment.findMany({
         where: {
           OR: [
@@ -35,14 +35,23 @@ export async function GET(request: NextRequest) {
       }),
       orderName ? getShopifyOrderNoteText(orderName) : Promise.resolve(null),
       orderName ? getShopifyOrderCowlendarText(orderName) : Promise.resolve(null),
+      cleanBookingId
+        ? prisma.serviceFormResponse.findFirst({
+            where: {
+              answers: { path: ["booking_id"], equals: cleanBookingId },
+            },
+            orderBy: { updated_at: "desc" },
+            select: { id: true, answers: true, created_at: true },
+          })
+        : Promise.resolve(null),
       prisma.serviceFormResponse.findMany({
         orderBy: { created_at: "desc" },
-        take: 100,
+        take: 250,
         select: { id: true, answers: true, created_at: true },
       }),
     ]);
 
-    const existingControl = rawResponses.find((r) => {
+    const existingControl = responseByBooking || rawResponses.find((r) => {
       const ans = (r.answers || {}) as Record<string, any>;
       const rBookingId = String(ans.booking_id || "").trim();
       const rOrder = String(ans.client_control_shopify_order || "").replace(/^#/, "").trim();

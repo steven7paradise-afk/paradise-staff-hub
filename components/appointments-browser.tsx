@@ -1520,6 +1520,24 @@ export function AppointmentsBrowser({
     return compatible.length === 1 ? compatible[0].id : null;
   }
 
+  function matchEmployeeIdsForStoredStaff(
+    storedStaff: unknown,
+    employees: ClientControlEmployee[],
+  ) {
+    const names = (Array.isArray(storedStaff) ? storedStaff : [storedStaff])
+      .flatMap((value) =>
+        typeof value === "string" ? value.split(/[,;\n]+/) : [],
+      )
+      .map((name) => normalizeSearchValue(name))
+      .filter(Boolean);
+
+    return employees
+      .filter((employee) =>
+        names.includes(normalizeSearchValue(employee.name)),
+      )
+      .map((employee) => employee.id);
+  }
+
   const [clientControlOpen, setClientControlOpen] = useState(false);
   const [clientControlEmployees, setClientControlEmployees] = useState<
     ClientControlEmployee[]
@@ -2234,6 +2252,12 @@ export function AppointmentsBrowser({
     const preferredEmployeeId = preferredTeammate
       ? matchEmployeeIdForTeammate(preferredTeammate, employees)
       : null;
+    const storedStaffIds = existingAnswers
+      ? matchEmployeeIdsForStoredStaff(
+          existingAnswers[CLIENT_CONTROL_FIELD_IDS.serviceStaff],
+          employees,
+        )
+      : [];
 
     setClientControlForm((current) => {
       if (current.bookingId !== booking.id) return current;
@@ -2242,6 +2266,8 @@ export function AppointmentsBrowser({
           ...current,
           staffIds: preferredEmployeeId
             ? [preferredEmployeeId]
+            : storedStaffIds.length
+            ? storedStaffIds
             : current.staffIds.length
             ? current.staffIds
             : matchEmployeeIdsForBooking(booking, employees),
@@ -2377,6 +2403,49 @@ export function AppointmentsBrowser({
 
       const clientName = clientControlForm.clientName || "Cliente";
       const targetBookingId = clientControlForm.bookingId || selectedBooking?.id;
+      const targetBooking = targetBookingId
+        ? initialBookings.find((booking) => booking.id === targetBookingId)
+        : null;
+      const selectedStaff = clientControlEmployeeOptions
+        .filter((employee) => clientControlForm.staffIds.includes(employee.id))
+        .map((employee) => ({
+          id: employee.id,
+          name: employee.name,
+          photoUrl:
+            corsoTeamOptions.find((option) => option.id === employee.id)
+              ?.photoUrl || null,
+        }));
+
+      let teamSyncWarning = "";
+      if (
+        targetBookingId &&
+        selectedStaff.length > 0 &&
+        normalizeSalonName(clientControlForm.salon).includes("buenos aires")
+      ) {
+        const teamResponse = await fetch("/api/appointments/team", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookingId: targetBookingId,
+            orderName:
+              targetBooking?.bookingStr || clientControlForm.shopifyOrder,
+            teammateIds: selectedStaff.map((employee) => employee.id),
+            teammates: selectedStaff,
+          }),
+        });
+
+        if (teamResponse.ok) {
+          setTeamByBooking((current) => ({
+            ...current,
+            [targetBookingId]: selectedStaff,
+          }));
+        } else {
+          const teamError = await teamResponse.json().catch(() => null);
+          teamSyncWarning =
+            teamError?.error ||
+            "La scheda è salvata, ma la collaboratrice non è stata aggiornata nella lista appuntamenti.";
+        }
+      }
 
       if (targetBookingId) {
         setStatusByBooking((prev) => ({
@@ -2386,20 +2455,26 @@ export function AppointmentsBrowser({
       }
 
       showPushToast(
-        "✓ Salvato con successo!",
-        `Scheda controllo per ${clientName} registrata. Stato cambiato in Completato.`
+        teamSyncWarning ? "Scheda salvata con avviso" : "✓ Salvato con successo!",
+        teamSyncWarning ||
+          `Scheda controllo per ${clientName} registrata. Collaboratrice e stato aggiornati.`,
+        teamSyncWarning ? "error" : undefined,
       );
       setClientControlMessage({
-        type: "success",
-        text: "✓ Scheda controllo salvata! Stato appuntamento: COMPLETATO",
+        type: teamSyncWarning ? "error" : "success",
+        text:
+          teamSyncWarning ||
+          "✓ Scheda controllo salvata! Collaboratrice aggiornata e stato appuntamento: COMPLETATO",
       });
       setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
 
       router.refresh();
 
-      setTimeout(() => {
-        setClientControlOpen(false);
-      }, 1000);
+      if (!teamSyncWarning) {
+        setTimeout(() => {
+          setClientControlOpen(false);
+        }, 1000);
+      }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Errore durante il salvataggio.";
       showPushToast("❌ Errore di salvataggio", errMsg, "error");
