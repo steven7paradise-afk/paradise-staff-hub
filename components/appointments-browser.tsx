@@ -767,6 +767,35 @@ function formatAppointmentTimer(totalSeconds: number) {
     .join(":");
 }
 
+function LiveAppointmentTimer({
+  startedAt,
+  elapsedSeconds = 0,
+}: {
+  startedAt?: string | null;
+  elapsedSeconds?: number;
+}) {
+  const calculateElapsed = () => {
+    const startedAtMs = startedAt ? new Date(startedAt).getTime() : Number.NaN;
+    return Number.isFinite(startedAtMs)
+      ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000))
+      : Math.max(0, Number(elapsedSeconds || 0));
+  };
+  const [currentElapsed, setCurrentElapsed] = useState(calculateElapsed);
+
+  useEffect(() => {
+    setCurrentElapsed(calculateElapsed());
+    if (!startedAt || !Number.isFinite(new Date(startedAt).getTime())) return;
+
+    const interval = window.setInterval(
+      () => setCurrentElapsed(calculateElapsed()),
+      1000,
+    );
+    return () => window.clearInterval(interval);
+  }, [startedAt, elapsedSeconds]);
+
+  return <>{formatAppointmentTimer(currentElapsed)}</>;
+}
+
 function PcStaffLockScreen({
   salon,
   onUnlock,
@@ -1413,18 +1442,6 @@ export function AppointmentsBrowser({
       ]),
     ),
   );
-  const [appointmentNow, setAppointmentNow] = useState(Date.now());
-
-  useEffect(() => {
-    const hasRunningAppointment = initialBookings.some(
-      (booking) => getBookingStatus(booking) === "INIZIATO",
-    );
-    if (!hasRunningAppointment) return;
-    setAppointmentNow(Date.now());
-    const interval = window.setInterval(() => setAppointmentNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [initialBookings, statusByBooking]);
-
   const normalizedSearch = normalizeSearchValue(searchTerm);
   function getBookingTeam(booking?: AppointmentRecord | null): BookingTeammate[] {
     if (!booking) return [];
@@ -3181,17 +3198,12 @@ export function AppointmentsBrowser({
     const status = getBookingStatus(booking);
     const customerUpdate = liveCustomerUpdates[booking.id] || booking.customerUpdate;
     const timing = statusTimingByBooking[booking.id] || {};
-    const startedAtMs = timing.startedAt
-      ? new Date(timing.startedAt).getTime()
-      : Number.NaN;
-    const elapsedSeconds =
-      status === "INIZIATO" && Number.isFinite(startedAtMs)
-        ? Math.max(0, Math.floor((appointmentNow - startedAtMs) / 1000))
-        : Math.max(0, Number(timing.elapsedSeconds || 0));
+    const elapsedSeconds = Math.max(0, Number(timing.elapsedSeconds || 0));
 
     return (
       <div
         className="flex flex-col gap-1"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
@@ -3232,7 +3244,10 @@ export function AppointmentsBrowser({
                 Tempo trascorso
               </span>
               <span className="block font-mono text-sm font-black tabular-nums tracking-[0.08em]">
-                {formatAppointmentTimer(elapsedSeconds)}
+                <LiveAppointmentTimer
+                  startedAt={timing.startedAt}
+                  elapsedSeconds={elapsedSeconds}
+                />
               </span>
             </span>
           </div>
