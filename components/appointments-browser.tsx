@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarCheck,
@@ -1556,6 +1556,15 @@ export function AppointmentsBrowser({
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
   const [clientControlExistingId, setClientControlExistingId] = useState<string | null>(null);
+
+  function closeClientControl() {
+    setClientControlOpen(false);
+    setIsStaffDropdownOpen(false);
+    // Refresh the appointment list only after the editor has been closed.
+    // Refreshing immediately after a save remounts this component and makes
+    // the full-page editor disappear a few seconds after the operation.
+    router.refresh();
+  }
   const [clientControlPolishing, setClientControlPolishing] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{
     type: "success" | "error";
@@ -1685,21 +1694,7 @@ export function AppointmentsBrowser({
     message: "",
     type: "success",
   });
-  const toastDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function dismissPushToast() {
-    if (toastDismissTimerRef.current) {
-      clearTimeout(toastDismissTimerRef.current);
-      toastDismissTimerRef.current = null;
-    }
-    setToastNotification((prev) => ({ ...prev, show: false }));
-  }
-
   function showPushToast(title: string, message: string, type: "success" | "error" = "success") {
-    if (toastDismissTimerRef.current) {
-      clearTimeout(toastDismissTimerRef.current);
-    }
-
     setToastNotification({
       show: true,
       title,
@@ -1717,15 +1712,10 @@ export function AppointmentsBrowser({
       }
     }
 
-    toastDismissTimerRef.current = setTimeout(() => {
+    setTimeout(() => {
       setToastNotification((prev) => ({ ...prev, show: false }));
-      toastDismissTimerRef.current = null;
-    }, 10_000);
+    }, 4000);
   }
-
-  useEffect(() => () => {
-    if (toastDismissTimerRef.current) clearTimeout(toastDismissTimerRef.current);
-  }, []);
 
   const [shopifyLookupLoading, setShopifyLookupLoading] = useState(false);
   const [secondShopifyLookupLoading, setSecondShopifyLookupLoading] = useState(false);
@@ -2529,7 +2519,6 @@ export function AppointmentsBrowser({
         }
       }
 
-      router.refresh();
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Errore durante il salvataggio.";
       showPushToast("❌ Errore di salvataggio", errMsg, "error");
@@ -3593,14 +3582,6 @@ export function AppointmentsBrowser({
               {toastNotification.message}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={dismissPushToast}
-            className="ml-1 grid size-8 shrink-0 place-items-center rounded-full text-white/80 transition hover:bg-white/15 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/70"
-            aria-label="Chiudi avviso"
-          >
-            <X className="size-4" strokeWidth={2.5} />
-          </button>
         </div>
       )}
 
@@ -3623,10 +3604,7 @@ export function AppointmentsBrowser({
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setClientControlOpen(false);
-                    setIsStaffDropdownOpen(false);
-                  }}
+                  onClick={closeClientControl}
                   className="grid size-11 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-black/70 shadow-sm transition hover:border-neutral-300 hover:bg-neutral-50 active:scale-95"
                   aria-label="Torna agli appuntamenti"
                 >
@@ -4716,10 +4694,7 @@ export function AppointmentsBrowser({
               <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4">
               <button
                 type="button"
-                onClick={() => {
-                  setClientControlOpen(false);
-                  setIsStaffDropdownOpen(false);
-                }}
+                onClick={closeClientControl}
                 className="rounded-2xl border border-black/10 bg-neutral-100 px-8 py-3.5 text-xs font-black text-black/70 transition hover:bg-neutral-200 active:scale-95"
               >
                 Annulla
@@ -6228,7 +6203,7 @@ export function AppointmentsBrowser({
               </div>
               <button
                 type="button"
-                onClick={() => setClientControlOpen(false)}
+                onClick={closeClientControl}
                 className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black shadow-sm transition hover:bg-black/[0.02] active:scale-95"
               >
                 <X className="size-5" />
