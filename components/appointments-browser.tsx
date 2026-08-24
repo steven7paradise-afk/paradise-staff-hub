@@ -1544,6 +1544,7 @@ export function AppointmentsBrowser({
   >([]);
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
+  const [clientControlExistingId, setClientControlExistingId] = useState<string | null>(null);
   const [clientControlPolishing, setClientControlPolishing] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{
     type: "success" | "error";
@@ -2154,6 +2155,7 @@ export function AppointmentsBrowser({
     preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
   ) {
     setClientControlMessage(null);
+    setClientControlExistingId(null);
     setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);
     setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
@@ -2246,6 +2248,9 @@ export function AppointmentsBrowser({
     ]);
 
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
+    setClientControlExistingId(
+      bookingNotes?.existingControl?.id ? String(bookingNotes.existingControl.id) : null,
+    );
     setClientControlAppointmentComments(
       Array.isArray(bookingNotes?.comments) ? bookingNotes.comments : [],
     );
@@ -2401,6 +2406,9 @@ export function AppointmentsBrowser({
       if (!response.ok)
         throw new Error(data?.error || "Errore durante il salvataggio.");
 
+      const savedOperation = data?.operation === "updated" ? "updated" : "created";
+      if (data?.id) setClientControlExistingId(String(data.id));
+
       const clientName = clientControlForm.clientName || "Cliente";
       const targetBookingId = clientControlForm.bookingId || selectedBooking?.id;
       const targetBooking = targetBookingId
@@ -2464,17 +2472,26 @@ export function AppointmentsBrowser({
         type: teamSyncWarning ? "error" : "success",
         text:
           teamSyncWarning ||
-          "✓ Scheda controllo salvata! Collaboratrice aggiornata e stato appuntamento: COMPLETATO",
+          (savedOperation === "updated"
+            ? "✓ Appuntamento modificato e salvato. Puoi continuare a fare altre modifiche."
+            : "✓ Appuntamento salvato. Puoi continuare a modificarlo."),
       });
       setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
 
-      router.refresh();
-
-      if (!teamSyncWarning) {
-        setTimeout(() => {
-          setClientControlOpen(false);
-        }, 1000);
+      if (targetBookingId) {
+        const historyResponse = await fetch(
+          `/api/appointments/comments?bookingId=${encodeURIComponent(targetBookingId)}${targetBooking?.bookingStr ? `&orderName=${encodeURIComponent(targetBooking.bookingStr)}` : ""}${clientControlForm.clientName ? `&clientName=${encodeURIComponent(clientControlForm.clientName)}` : ""}`,
+          { cache: "no-store" },
+        ).catch(() => null);
+        if (historyResponse?.ok) {
+          const historyData = await historyResponse.json().catch(() => null);
+          setClientControlAppointmentComments(
+            Array.isArray(historyData?.comments) ? historyData.comments : [],
+          );
+        }
       }
+
+      router.refresh();
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Errore durante il salvataggio.";
       showPushToast("❌ Errore di salvataggio", errMsg, "error");
@@ -3538,32 +3555,38 @@ export function AppointmentsBrowser({
       )}
 
       {clientControlOpen ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-black/10 bg-white shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
+        <div className="fixed inset-0 z-[120] bg-[radial-gradient(circle_at_8%_0%,rgba(255,199,226,0.44),transparent_34%),radial-gradient(circle_at_94%_4%,rgba(226,216,255,0.52),transparent_32%),#F8F3F6]">
+          <div className="flex h-dvh w-full flex-col overflow-hidden bg-transparent">
             {/* Header */}
-            <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-white/95 px-6 pt-7 pb-5 sm:px-8">
-              <div>
+            <div className="flex items-start justify-between gap-4 border-b border-white/70 bg-white/72 px-6 pt-6 pb-5 shadow-[0_8px_30px_rgba(74,36,57,0.06)] backdrop-blur-2xl sm:px-10 lg:px-14">
+              <div className="mx-auto flex w-full max-w-[1480px] items-start justify-between gap-4">
+                <div>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white shadow-2xs">
                   Store manager
                 </span>
                 <h2 className="mt-2 text-3xl font-black tracking-tight text-[#1F1F1F] sm:text-4xl">
                   {clientControlForm.clientName || "Sara Capelli Lisci"}
                 </h2>
+                <p className="mt-1 text-sm font-semibold text-black/45">
+                  {clientControlExistingId ? "Modifica controllo cliente" : "Nuovo controllo cliente"}
+                </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientControlOpen(false);
+                    setIsStaffDropdownOpen(false);
+                  }}
+                  className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white text-black/70 shadow-2xs transition hover:bg-neutral-100 active:scale-95"
+                  aria-label="Torna agli appuntamenti"
+                >
+                  <X className="size-5" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setClientControlOpen(false);
-                  setIsStaffDropdownOpen(false);
-                }}
-                className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-neutral-50 text-black/70 shadow-2xs transition hover:bg-neutral-100 active:scale-95"
-              >
-                <X className="size-5" />
-              </button>
             </div>
 
             {/* Scrollable Content */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 space-y-6">
+            <div className="mx-auto min-h-0 w-full max-w-[1480px] flex-1 space-y-6 overflow-y-auto px-5 py-7 sm:px-8 lg:px-12">
               {/* Info cliente da Card */}
               <section className="rounded-[28px] border border-[#F9D5E7] bg-gradient-to-br from-[#FFF7FB] via-[#FFF0F6] to-[#FFEBF4] p-5 shadow-2xs">
                 <div className="flex items-center gap-2 text-xs font-bold text-black/60">
@@ -3634,35 +3657,6 @@ export function AppointmentsBrowser({
                   </span>
                 </div>
               </section>
-
-              {clientControlAppointmentComments.length ? (
-                <section className="rounded-[24px] border border-[#E8DDE3] bg-white p-4 shadow-2xs sm:p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
-                      <Clock3 className="size-4 text-[#D96B94]" />
-                      Note e tempo del processo
-                    </span>
-                    <span className="rounded-full bg-[#FFF0F6] px-2.5 py-1 text-[10px] font-black text-[#B83D7F]">
-                      {clientControlAppointmentComments.length}
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {clientControlAppointmentComments.slice(-4).reverse().map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="rounded-2xl border border-black/5 bg-[#FCFAFB] px-4 py-3"
-                      >
-                        <p className="text-xs font-bold leading-5 text-[#332A2F]">
-                          {comment.message}
-                        </p>
-                        <p className="mt-1 text-[10px] font-semibold text-black/40">
-                          {comment.user_name} · {formatDateTime(comment.created_at)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
 
               {/* 1° e 2° Ordine Shopify Card */}
               <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
@@ -4445,6 +4439,49 @@ export function AppointmentsBrowser({
                 />
               </div>
 
+              <section className="rounded-[28px] border border-[#E8DDE3] bg-white/88 p-5 shadow-[0_18px_45px_rgba(76,39,59,0.08)] backdrop-blur-xl sm:p-6">
+                <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
+                  <div>
+                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                      <Clock3 className="size-4 text-[#D96B94]" />
+                      Note e tempo del processo
+                    </span>
+                    <p className="mt-1 text-xs font-semibold text-black/45">
+                      Cronologia completa di stati, tempi, assegnazioni e salvataggi.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-black/45">
+                      Solo lettura
+                    </span>
+                    <span className="rounded-full bg-[#FFF0F6] px-3 py-1.5 text-[10px] font-black text-[#B83D7F]">
+                      {clientControlAppointmentComments.length}
+                    </span>
+                  </div>
+                </div>
+                {clientControlAppointmentComments.length ? (
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {[...clientControlAppointmentComments].reverse().map((comment) => (
+                      <article
+                        key={comment.id}
+                        className="rounded-[20px] border border-black/5 bg-[#FCFAFB] px-4 py-4"
+                      >
+                        <p className="text-sm font-bold leading-6 text-[#332A2F]">
+                          {comment.message}
+                        </p>
+                        <p className="mt-2 text-[11px] font-semibold text-black/40">
+                          {comment.user_name} · {formatDateTime(comment.created_at)}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-2xl bg-[#FCFAFB] px-4 py-5 text-sm font-semibold text-black/40">
+                    Nessuna modifica registrata per questo appuntamento.
+                  </p>
+                )}
+              </section>
+
               {/* Spunte di Verifica (I 5 Checkbox) */}
               <div>
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
@@ -4501,7 +4538,8 @@ export function AppointmentsBrowser({
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between border-t border-black/5 bg-white/95 px-6 py-5 sm:px-8">
+            <div className="border-t border-white/70 bg-white/78 px-5 py-4 shadow-[0_-8px_30px_rgba(74,36,57,0.06)] backdrop-blur-2xl sm:px-8 lg:px-14">
+              <div className="mx-auto flex w-full max-w-[1480px] items-center justify-between gap-4">
               <button
                 type="button"
                 onClick={() => {
@@ -4519,8 +4557,15 @@ export function AppointmentsBrowser({
                 className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-8 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60"
               >
                 <Save className="size-4" />
-                <span>{clientControlSubmitting ? "Salvataggio..." : "Salva appuntamento"}</span>
+                <span>
+                  {clientControlSubmitting
+                    ? "Salvataggio..."
+                    : clientControlExistingId
+                    ? "Salva modifiche"
+                    : "Salva appuntamento"}
+                </span>
               </button>
+              </div>
             </div>
           </div>
         </div>

@@ -426,6 +426,7 @@ export async function POST(request: NextRequest) {
     }) || null;
   }
 
+  const operation = existingResponse ? "updated" : "created";
   let response: { id: string; created_at: Date };
 
   if (existingResponse) {
@@ -462,6 +463,25 @@ export async function POST(request: NextRequest) {
       },
       select: { id: true, created_at: true },
     });
+  }
+
+  if (bookingId) {
+    const auditAuthor = operationalUser?.name || operationalUser?.email || "Staff";
+    try {
+      await prisma.shopifyOrderComment.create({
+        data: {
+          order_name: bookingId,
+          user_name: auditAuthor,
+          user_role: operationalUser?.role || "DIPENDENTE",
+          message:
+            operation === "updated"
+              ? `Controllo Cliente modificato e salvato. Collaboratrice: ${staffNames.join(", ") || "non assegnata"}.`
+              : `Controllo Cliente creato e salvato. Collaboratrice: ${staffNames.join(", ") || "non assegnata"}.`,
+        },
+      });
+    } catch (auditError) {
+      console.error("Impossibile registrare la cronologia del Controllo Cliente:", auditError);
+    }
   }
 
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
@@ -507,5 +527,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, id: response.id, createdAt: response.created_at.toISOString() });
+  return NextResponse.json({
+    ok: true,
+    id: response.id,
+    operation,
+    createdAt: response.created_at.toISOString(),
+  });
 }
