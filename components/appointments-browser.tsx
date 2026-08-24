@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarCheck,
@@ -1685,8 +1685,21 @@ export function AppointmentsBrowser({
     message: "",
     type: "success",
   });
+  const toastDismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function dismissPushToast() {
+    if (toastDismissTimerRef.current) {
+      clearTimeout(toastDismissTimerRef.current);
+      toastDismissTimerRef.current = null;
+    }
+    setToastNotification((prev) => ({ ...prev, show: false }));
+  }
 
   function showPushToast(title: string, message: string, type: "success" | "error" = "success") {
+    if (toastDismissTimerRef.current) {
+      clearTimeout(toastDismissTimerRef.current);
+    }
+
     setToastNotification({
       show: true,
       title,
@@ -1704,10 +1717,15 @@ export function AppointmentsBrowser({
       }
     }
 
-    setTimeout(() => {
+    toastDismissTimerRef.current = setTimeout(() => {
       setToastNotification((prev) => ({ ...prev, show: false }));
-    }, 4000);
+      toastDismissTimerRef.current = null;
+    }, 10_000);
   }
+
+  useEffect(() => () => {
+    if (toastDismissTimerRef.current) clearTimeout(toastDismissTimerRef.current);
+  }, []);
 
   const [shopifyLookupLoading, setShopifyLookupLoading] = useState(false);
   const [secondShopifyLookupLoading, setSecondShopifyLookupLoading] = useState(false);
@@ -3575,6 +3593,14 @@ export function AppointmentsBrowser({
               {toastNotification.message}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={dismissPushToast}
+            className="ml-1 grid size-8 shrink-0 place-items-center rounded-full text-white/80 transition hover:bg-white/15 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/70"
+            aria-label="Chiudi avviso"
+          >
+            <X className="size-4" strokeWidth={2.5} />
+          </button>
         </div>
       )}
 
