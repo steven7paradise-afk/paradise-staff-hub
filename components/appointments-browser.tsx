@@ -187,6 +187,9 @@ type AppointmentRecord = {
   localStatus?: AppointmentStatusValue | string | null;
   statusUpdatedAt?: string | null;
   statusUpdatedBy?: string | null;
+  statusStartedAt?: string | null;
+  statusStoppedAt?: string | null;
+  statusElapsedSeconds?: number | null;
   sheetMatched?: boolean;
   sheetNote?: string | null;
   customerUpdate?: {
@@ -199,6 +202,15 @@ type AppointmentRecord = {
   updatedAt?: string | null;
   notesText?: string | null;
   extraDetails?: Array<{ label: string; value: string }>;
+};
+
+type AppointmentComment = {
+  id: string;
+  order_name: string;
+  user_name: string;
+  user_role: string;
+  message: string;
+  created_at: string;
 };
 
 type CustomerArrivalUpdate = NonNullable<AppointmentRecord["customerUpdate"]>;
@@ -743,6 +755,16 @@ function formatPcBreakTimer(startedAt: string, now: number) {
   const seconds = elapsedSeconds % 60;
   const parts = hours > 0 ? [hours, minutes, seconds] : [minutes, seconds];
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
+}
+
+function formatAppointmentTimer(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
 }
 
 function PcStaffLockScreen({
@@ -1373,6 +1395,35 @@ export function AppointmentsBrowser({
         ),
     ),
   );
+  const [statusTimingByBooking, setStatusTimingByBooking] = useState<
+    Record<string, {
+      startedAt?: string | null;
+      stoppedAt?: string | null;
+      elapsedSeconds?: number;
+    }>
+  >(() =>
+    Object.fromEntries(
+      initialBookings.map((booking) => [
+        booking.id,
+        {
+          startedAt: booking.statusStartedAt ?? null,
+          stoppedAt: booking.statusStoppedAt ?? null,
+          elapsedSeconds: Number(booking.statusElapsedSeconds || 0),
+        },
+      ]),
+    ),
+  );
+  const [appointmentNow, setAppointmentNow] = useState(Date.now());
+
+  useEffect(() => {
+    const hasRunningAppointment = initialBookings.some(
+      (booking) => getBookingStatus(booking) === "INIZIATO",
+    );
+    if (!hasRunningAppointment) return;
+    setAppointmentNow(Date.now());
+    const interval = window.setInterval(() => setAppointmentNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [initialBookings, statusByBooking]);
 
   const normalizedSearch = normalizeSearchValue(searchTerm);
   function getBookingTeam(booking?: AppointmentRecord | null): BookingTeammate[] {
@@ -1463,6 +1514,8 @@ export function AppointmentsBrowser({
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [clientControlAppointmentComments, setClientControlAppointmentComments] =
+    useState<AppointmentComment[]>([]);
   const [selectedGrammi, setSelectedGrammi] = useState("");
   const [customGrammiInput, setCustomGrammiInput] = useState("");
   const [selectedLunghezza, setSelectedLunghezza] = useState("");
@@ -2066,6 +2119,7 @@ export function AppointmentsBrowser({
     preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
   ) {
     setClientControlMessage(null);
+    setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);
     setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
     setSelectedGrammi("");
@@ -2157,6 +2211,9 @@ export function AppointmentsBrowser({
     ]);
 
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
+    setClientControlAppointmentComments(
+      Array.isArray(bookingNotes?.comments) ? bookingNotes.comments : [],
+    );
     const preferredEmployeeId = preferredTeammate
       ? matchEmployeeIdForTeammate(preferredTeammate, employees)
       : null;
@@ -2495,8 +2552,11 @@ export function AppointmentsBrowser({
   useEffect(() => {
     const bookingFromUrl = searchParams.get("booking");
     const orderFromUrl = searchParams.get("order");
-    if (bookingFromUrl && initialBookings.some((booking) => booking.id === bookingFromUrl)) {
-      setSelectedBookingId(bookingFromUrl);
+    const booking = bookingFromUrl
+      ? initialBookings.find((item) => item.id === bookingFromUrl)
+      : null;
+    if (booking) {
+      void openClientControlForBooking(booking);
     } else if (orderFromUrl) {
       setSearchTerm(orderFromUrl);
     }
@@ -2514,15 +2574,6 @@ export function AppointmentsBrowser({
       setSelectedBookingId(null);
     }
   }, [filteredBookings, selectedBookingId]);
-
-  type AppointmentComment = {
-    id: string;
-    order_name: string;
-    user_name: string;
-    user_role: string;
-    message: string;
-    created_at: string;
-  };
 
   const [dbComments, setDbComments] = useState<AppointmentComment[]>([]);
   const [shopifyNote, setShopifyNote] = useState<string | null>(null);
@@ -2724,12 +2775,13 @@ export function AppointmentsBrowser({
             ? `${current.trim()}\n\n${newBlock}`
             : newBlock;
         });
+        showPushToast("Nota salvata", "La nota interna è stata aggiunta all’appuntamento.");
       } else {
-        alert("Errore durante l'aggiunta del commento.");
+        showPushToast("Nota non salvata", "Errore durante l'aggiunta del commento.", "error");
       }
     } catch (err) {
       console.error("Failed to post comment", err);
-      alert("Impossibile salvare il commento.");
+      showPushToast("Nota non salvata", "Impossibile salvare il commento.", "error");
     } finally {
       setSubmittingComment(false);
     }
@@ -2739,7 +2791,7 @@ export function AppointmentsBrowser({
     e.preventDefault();
     if (!selectedBooking || !newCommentText.trim() || submittingComment) return;
 
-    const orderName = selectedBooking.bookingStr;
+    const orderName = selectedBooking.bookingStr ?? null;
     const bookingId = selectedBooking.id;
     const messageText = newCommentText.trim();
 
@@ -2763,13 +2815,14 @@ export function AppointmentsBrowser({
       });
       if (res.ok) {
         setDbComments((current) => current.filter((c) => c.id !== commentId));
+        showPushToast("Modifica salvata", "La nota è stata eliminata.");
       } else {
         const data = await res.json();
-        alert(data.error || "Impossibile eliminare il commento.");
+        showPushToast("Modifica non salvata", data.error || "Impossibile eliminare il commento.", "error");
       }
     } catch (err) {
       console.error("Failed to delete comment", err);
-      alert("Errore durante l'eliminazione.");
+      showPushToast("Modifica non salvata", "Errore durante l'eliminazione.", "error");
     }
   }
 
@@ -2784,8 +2837,41 @@ export function AppointmentsBrowser({
     nextStatus: AppointmentStatusValue,
     signedBy?: string,
   ) {
-    const previousStatus = statusByBooking[bookingId];
+    const booking = initialBookings.find((item) => item.id === bookingId);
+    const previousStatus = booking
+      ? getBookingStatus(booking)
+      : statusByBooking[bookingId];
+    const previousTiming = statusTimingByBooking[bookingId] || {};
+    const transitionAt = new Date();
+    const optimisticTiming = { ...previousTiming };
+
+    if (
+      nextStatus === "INIZIATO" &&
+      (previousStatus !== "INIZIATO" || !optimisticTiming.startedAt)
+    ) {
+      optimisticTiming.startedAt = transitionAt.toISOString();
+      optimisticTiming.stoppedAt = null;
+      optimisticTiming.elapsedSeconds = 0;
+    } else if (
+      nextStatus !== "INIZIATO" &&
+      previousStatus === "INIZIATO" &&
+      optimisticTiming.startedAt
+    ) {
+      optimisticTiming.stoppedAt = transitionAt.toISOString();
+      optimisticTiming.elapsedSeconds = Math.max(
+        0,
+        Math.floor(
+          (transitionAt.getTime() - new Date(optimisticTiming.startedAt).getTime()) /
+            1000,
+        ),
+      );
+    }
+
     setStatusByBooking((current) => ({ ...current, [bookingId]: nextStatus }));
+    setStatusTimingByBooking((current) => ({
+      ...current,
+      [bookingId]: optimisticTiming,
+    }));
     setSavingStatusId(bookingId);
 
     try {
@@ -2801,9 +2887,27 @@ export function AppointmentsBrowser({
       }
 
       const data = await response.json().catch(() => null);
+      if (data?.status) {
+        setStatusTimingByBooking((current) => ({
+          ...current,
+          [bookingId]: {
+            startedAt: data.status.startedAt ?? null,
+            stoppedAt: data.status.stoppedAt ?? null,
+            elapsedSeconds: Number(data.status.elapsedSeconds || 0),
+          },
+        }));
+      }
       if (data?.statusComment && selectedBooking?.id === bookingId) {
         setDbComments((current) => [...current, data.statusComment]);
       }
+      const elapsedMessage =
+        previousStatus === "INIZIATO" && nextStatus !== "INIZIATO"
+          ? ` Tempo trascorso: ${formatAppointmentTimer(Number(data?.status?.elapsedSeconds || optimisticTiming.elapsedSeconds || 0))}.`
+          : "";
+      showPushToast(
+        "Modifica salvata",
+        `Stato aggiornato: ${appointmentStatusLabels[nextStatus]}.${elapsedMessage}`,
+      );
     } catch (error) {
       console.error("Failed to save appointment status:", error);
       setStatusByBooking((current) => {
@@ -2812,10 +2916,16 @@ export function AppointmentsBrowser({
         else delete copy[bookingId];
         return copy;
       });
-      alert(
+      setStatusTimingByBooking((current) => ({
+        ...current,
+        [bookingId]: previousTiming,
+      }));
+      showPushToast(
+        "Modifica non salvata",
         error instanceof Error
           ? error.message
           : "Non sono riuscito a salvare lo stato. Riprova.",
+        "error",
       );
     } finally {
       setSavingStatusId(null);
@@ -2881,8 +2991,15 @@ export function AppointmentsBrowser({
       }
       const data = await response.json().catch(() => null);
       if (booking.bookingStr && data?.shopifyNoteSaved === false) {
-        alert(
-          "Collaboratrice salvata in Paradise. La nota Shopify non è stata aggiornata: riprova tra poco.",
+        showPushToast(
+          "Collaboratrice salvata",
+          "Modifica salvata in Paradise; la nota Shopify non è stata aggiornata.",
+          "error",
+        );
+      } else {
+        showPushToast(
+          "Modifica salvata",
+          `Collaboratrice aggiornata: ${nextTeam.map((mate) => mate.name).join(", ")}.`,
         );
       }
       return true;
@@ -2892,10 +3009,12 @@ export function AppointmentsBrowser({
         ...current,
         [booking.id]: previousTeam,
       }));
-      alert(
+      showPushToast(
+        "Modifica non salvata",
         error instanceof Error
           ? error.message
           : "Non sono riuscito a salvare il team. Riprova.",
+        "error",
       );
       return false;
     } finally {
@@ -3061,6 +3180,14 @@ export function AppointmentsBrowser({
 
     const status = getBookingStatus(booking);
     const customerUpdate = liveCustomerUpdates[booking.id] || booking.customerUpdate;
+    const timing = statusTimingByBooking[booking.id] || {};
+    const startedAtMs = timing.startedAt
+      ? new Date(timing.startedAt).getTime()
+      : Number.NaN;
+    const elapsedSeconds =
+      status === "INIZIATO" && Number.isFinite(startedAtMs)
+        ? Math.max(0, Math.floor((appointmentNow - startedAtMs) / 1000))
+        : Math.max(0, Number(timing.elapsedSeconds || 0));
 
     return (
       <div
@@ -3093,6 +3220,27 @@ export function AppointmentsBrowser({
         {savingStatusId === booking.id ? (
           <span className="text-[10px] font-bold text-black/35">
             Salvataggio...
+          </span>
+        ) : null}
+        {status === "INIZIATO" ? (
+          <div className="mt-1 inline-flex w-fit items-center gap-2 rounded-[14px] border border-[#E5C1D4] bg-[linear-gradient(135deg,#211820,#38212F)] px-3 py-2 text-white shadow-[0_8px_20px_rgba(54,24,42,0.16)]">
+            <span className="grid size-7 place-items-center rounded-full bg-white/10 text-[#FFB9D8]">
+              <Clock3 className="size-4" />
+            </span>
+            <span>
+              <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-white/55">
+                Tempo trascorso
+              </span>
+              <span className="block font-mono text-sm font-black tabular-nums tracking-[0.08em]">
+                {formatAppointmentTimer(elapsedSeconds)}
+              </span>
+            </span>
+          </div>
+        ) : null}
+        {status !== "INIZIATO" && elapsedSeconds > 0 ? (
+          <span className="mt-1 inline-flex w-fit items-center gap-1.5 rounded-full border border-black/8 bg-white px-2.5 py-1 text-[10px] font-black text-black/55">
+            <Clock3 className="size-3.5 text-[#B83D7F]" />
+            Tempo trascorso {formatAppointmentTimer(elapsedSeconds)}
           </span>
         ) : null}
         {customerUpdate ? (
@@ -3396,6 +3544,35 @@ export function AppointmentsBrowser({
                   </span>
                 </div>
               </section>
+
+              {clientControlAppointmentComments.length ? (
+                <section className="rounded-[24px] border border-[#E8DDE3] bg-white p-4 shadow-2xs sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                      <Clock3 className="size-4 text-[#D96B94]" />
+                      Note e tempo del processo
+                    </span>
+                    <span className="rounded-full bg-[#FFF0F6] px-2.5 py-1 text-[10px] font-black text-[#B83D7F]">
+                      {clientControlAppointmentComments.length}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {clientControlAppointmentComments.slice(-4).reverse().map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="rounded-2xl border border-black/5 bg-[#FCFAFB] px-4 py-3"
+                      >
+                        <p className="text-xs font-bold leading-5 text-[#332A2F]">
+                          {comment.message}
+                        </p>
+                        <p className="mt-1 text-[10px] font-semibold text-black/40">
+                          {comment.user_name} · {formatDateTime(comment.created_at)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
               {/* 1° e 2° Ordine Shopify Card */}
               <div className="rounded-[28px] border border-[#F6C6DE] bg-[#FFF8FB] p-4 sm:p-5 space-y-3 relative shadow-2xs">
@@ -4664,12 +4841,12 @@ export function AppointmentsBrowser({
                       role="button"
                       tabIndex={0}
                       onClick={() => {
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                       }}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter" && event.key !== " ") return;
                         event.preventDefault();
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                       }}
                       className={[
                         "group grid w-full cursor-pointer gap-5 px-5 py-5 text-left transition duration-200 xl:grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] xl:items-center",
@@ -4739,7 +4916,7 @@ export function AppointmentsBrowser({
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          setSelectedBookingId(booking.id);
+                          void openClientControlForBooking(booking);
                         }}
                         className="group/staff min-w-0 rounded-[18px] border border-[#F3E8ED] bg-[#FFFBFD] p-3 text-left transition hover:border-[#E88AC5] hover:bg-[#FFF1F8] xl:border-transparent xl:bg-transparent xl:p-2"
                         title="Cambia collaboratrice"
@@ -5275,7 +5452,7 @@ export function AppointmentsBrowser({
                           <button
                             key={booking.id}
                             type="button"
-                            onClick={() => setSelectedBookingId(booking.id)}
+                            onClick={() => void openClientControlForBooking(booking)}
                             className="w-full rounded-[16px] border border-[#F0DCE3] bg-[#FFF9FB] px-2.5 py-2 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF1F6]"
                             title={`${booking.customerName}${booking.bookingStr ? ` - Ordine ${formatOrderCode(booking.bookingStr)}` : ""}`}
                           >
@@ -5335,7 +5512,7 @@ export function AppointmentsBrowser({
                         <button
                           key={booking.id}
                           type="button"
-                          onClick={() => setSelectedBookingId(booking.id)}
+                          onClick={() => void openClientControlForBooking(booking)}
                           className="w-full rounded-[16px] border border-[#F0DCE3] bg-white px-3 py-2 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF8FB]"
                         >
                           <p className="truncate text-xs font-black text-[#171717]">
@@ -5381,10 +5558,10 @@ export function AppointmentsBrowser({
                     key={booking.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedBookingId(booking.id)}
+                    onClick={() => void openClientControlForBooking(booking)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ")
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                     }}
                     className="grid w-full gap-4 rounded-[22px] border border-black/5 bg-[#FFFDFD] px-4 py-4 text-left transition hover:border-[#EAA1BB] hover:bg-[#FFF8FB] lg:grid-cols-[2fr_0.75fr_1.35fr_1.15fr_0.95fr] lg:items-center"
                   >
@@ -5544,10 +5721,10 @@ export function AppointmentsBrowser({
                     key={booking.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedBookingId(booking.id)}
+                    onClick={() => void openClientControlForBooking(booking)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ")
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                     }}
                     className="grid w-full gap-4 px-5 py-5 text-left transition hover:bg-[#FFF8FB] lg:grid-cols-[2.1fr_0.8fr_1.35fr_1.25fr_1fr_40px] lg:items-center"
                   >
@@ -5670,10 +5847,10 @@ export function AppointmentsBrowser({
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setSelectedBookingId(booking.id);
+                        void openClientControlForBooking(booking);
                       }}
                       className="grid size-10 place-items-center rounded-full border border-black/5 bg-white text-black/45 transition hover:border-[#F1A7C3] hover:text-[#C66170]"
-                      aria-label="Apri dettaglio prenotazione"
+                      aria-label="Apri controllo cliente"
                     >
                       <MoreVertical className="size-5" />
                     </button>

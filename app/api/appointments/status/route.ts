@@ -30,7 +30,24 @@ const statusLabels: Record<CowlendarAppointmentStatus, string> = {
 
 function normalizeStatusMap(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>;
+  return value as Record<string, {
+    status?: string;
+    updatedAt?: string;
+    updatedBy?: string;
+    startedAt?: string | null;
+    stoppedAt?: string | null;
+    elapsedSeconds?: number;
+  }>;
+}
+
+function formatElapsedTime(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
 }
 
 export async function POST(request: NextRequest) {
@@ -47,6 +64,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const bookingId = String(body?.bookingId || "").trim();
     const status = String(body?.status || "").trim().toUpperCase();
+    const transitionAt = new Date();
 
     if (!bookingId || !allowedStatuses.has(status)) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
@@ -71,16 +89,36 @@ export async function POST(request: NextRequest) {
 
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentMap = normalizeStatusMap(currentSetting?.value);
-    const previousStatus = currentMap[bookingId]?.status;
+    const previousEntry = currentMap[bookingId] || {};
+    const previousStatus = previousEntry.status;
     const signedBy = String(body?.signedBy || "").trim();
     const updatedBy = signedBy ? signedBy : sessionUserName;
+
+    let startedAt = previousEntry.startedAt ?? null;
+    let stoppedAt = previousEntry.stoppedAt ?? null;
+    let elapsedSeconds = Number(previousEntry.elapsedSeconds || 0);
+
+    if (status === "INIZIATO" && (previousStatus !== "INIZIATO" || !startedAt)) {
+      startedAt = transitionAt.toISOString();
+      stoppedAt = null;
+      elapsedSeconds = 0;
+    } else if (status !== "INIZIATO" && previousStatus === "INIZIATO" && startedAt) {
+      const startedAtMs = new Date(startedAt).getTime();
+      if (Number.isFinite(startedAtMs)) {
+        elapsedSeconds = Math.max(0, Math.floor((transitionAt.getTime() - startedAtMs) / 1000));
+      }
+      stoppedAt = transitionAt.toISOString();
+    }
 
     const updatedMap = {
       ...currentMap,
       [bookingId]: {
         status,
-        updatedAt: new Date().toISOString(),
+        updatedAt: transitionAt.toISOString(),
         updatedBy: signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy,
+        startedAt,
+        stoppedAt,
+        elapsedSeconds,
       },
     };
 
@@ -94,14 +132,17 @@ export async function POST(request: NextRequest) {
       ? statusLabels[previousStatus as CowlendarAppointmentStatus]
       : null;
     const nextLabel = statusLabels[status as CowlendarAppointmentStatus];
+    const elapsedNote = previousStatus === "INIZIATO" && status !== "INIZIATO"
+      ? ` Tempo trascorso: ${formatElapsedTime(elapsedSeconds)}.`
+      : "";
     const statusComment = await prisma.shopifyOrderComment.create({
       data: {
         order_name: bookingId,
         user_name: updatedBy,
         user_role: sessionUserRole,
         message: previousLabel && previousLabel !== nextLabel
-          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
-          : `Stato appuntamento impostato su ${nextLabel}.${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
+          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
+          : `Stato appuntamento impostato su ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
       },
     });
 

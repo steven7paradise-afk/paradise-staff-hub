@@ -436,7 +436,14 @@ export default async function AppointmentsPage({
 
   const statusOverrides =
     statusSetting?.value && typeof statusSetting.value === "object" && !Array.isArray(statusSetting.value)
-      ? (statusSetting.value as Record<string, { status?: string; updatedAt?: string; updatedBy?: string }>)
+      ? (statusSetting.value as Record<string, {
+          status?: string;
+          updatedAt?: string;
+          updatedBy?: string;
+          startedAt?: string | null;
+          stoppedAt?: string | null;
+          elapsedSeconds?: number;
+        }>)
       : {};
   const botUpdates =
     botUpdateSetting?.value && typeof botUpdateSetting.value === "object" && !Array.isArray(botUpdateSetting.value)
@@ -595,6 +602,9 @@ export default async function AppointmentsPage({
         localStatus: sheetStatusOverrides[String(booking.id)]?.status ?? statusOverrides[String(booking.id)]?.status ?? null,
         statusUpdatedAt: sheetStatusOverrides[String(booking.id)]?.updatedAt ?? statusOverrides[String(booking.id)]?.updatedAt ?? null,
         statusUpdatedBy: sheetStatusOverrides[String(booking.id)]?.updatedBy ?? statusOverrides[String(booking.id)]?.updatedBy ?? null,
+        statusStartedAt: statusOverrides[String(booking.id)]?.startedAt ?? null,
+        statusStoppedAt: statusOverrides[String(booking.id)]?.stoppedAt ?? null,
+        statusElapsedSeconds: statusOverrides[String(booking.id)]?.elapsedSeconds ?? 0,
         sheetMatched: Boolean(sheetStatusOverrides[String(booking.id)]),
         sheetNote: sheetStatusOverrides[String(booking.id)]?.sheetNote ?? null,
         customerUpdate: botUpdates[String(booking.id)] ?? null,
