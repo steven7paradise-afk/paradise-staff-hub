@@ -16,14 +16,12 @@ type OrderLabelField = { id: string; label: string; value: any };
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
 
-// Il self-test indica un supporto da 102 × 90 mm, ma il driver della bobina
-// espone 102 mm come larghezza stampabile e 90 mm come avanzamento. Un PDF
-// con i lati invertiti viene diviso dal driver su due etichette consecutive.
-// Il gap da 5 mm è gestito dal sensore e non va aggiunto alla pagina.
+// Etichetta compatta: 102 mm di larghezza e 70 mm di avanzamento.
+// Il gap della bobina è gestito dal sensore e non va aggiunto alla pagina.
 const ORDER_LABEL_WIDTH_MM = 102;
-const ORDER_LABEL_HEIGHT_MM = 90;
-const ORDER_LABEL_CANVAS_WIDTH = 900;
-const ORDER_LABEL_CANVAS_HEIGHT = 1020;
+const ORDER_LABEL_HEIGHT_MM = 70;
+const ORDER_LABEL_CANVAS_WIDTH = 1020;
+const ORDER_LABEL_CANVAS_HEIGHT = 700;
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
@@ -306,29 +304,30 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
   const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="44" y="38" width="280" height="116" preserveAspectRatio="xMinYMid meet" />`
-    : `<text x="46" y="112" font-size="38" font-weight="800" fill="#111">Paradise Beauty</text>`;
+    ? `<image href="${logoDataUrl}" x="50" y="38" width="300" height="116" preserveAspectRatio="xMinYMid meet" />`
+    : `<text x="52" y="112" font-size="38" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
-      <rect width="900" height="1020" fill="#ffffff"/>
-      <g transform="rotate(180 450 96)">
+    <svg xmlns="http://www.w3.org/2000/svg" width="1020" height="700" viewBox="0 0 1020 700">
+      <rect width="1020" height="700" fill="#ffffff"/>
+      <g transform="rotate(180 510 96)">
         ${logoImage}
-        <rect x="660" y="42" width="196" height="62" rx="16" fill="#ec5391"/>
-        <text x="758" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
-        <text x="758" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+        <rect x="760" y="42" width="210" height="62" rx="16" fill="#ec5391"/>
+        <text x="865" y="83" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#ffffff">ORDINE</text>
+        <text x="865" y="154" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
       </g>
-      <line x1="44" y1="192" x2="856" y2="192" stroke="#ec5391" stroke-width="6"/>
+      <line x1="50" y1="192" x2="970" y2="192" stroke="#ec5391" stroke-width="5"/>
 
-      <text x="54" y="282" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2" fill="#ec5391">NOME CLIENTE</text>
-      <text x="54" y="348" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 31))}</text>
-      <line x1="54" y1="392" x2="846" y2="392" stroke="#e7e7eb" stroke-width="3"/>
+      <text x="54" y="262" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" letter-spacing="1.5" fill="#ec5391">NOME CLIENTE</text>
+      <text x="54" y="304" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" fill="#121216">${escapeSvgText(shortSvgText(client, 21))}</text>
 
-      <text x="54" y="484" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2" fill="#ec5391">NUMERO DI TELEFONO</text>
-      <text x="54" y="550" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#121216">${escapeSvgText(shortSvgText(phone, 24))}</text>
-      <line x1="54" y1="594" x2="846" y2="594" stroke="#e7e7eb" stroke-width="3"/>
+      <line x1="370" y1="236" x2="370" y2="330" stroke="#e7e7eb" stroke-width="3"/>
+      <text x="398" y="262" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" letter-spacing="1.5" fill="#ec5391">TELEFONO</text>
+      <text x="398" y="304" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
 
-      <text x="54" y="686" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="900" letter-spacing="2" fill="#ec5391">DATA</text>
-      <text x="54" y="752" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" fill="#121216">${escapeSvgText(createdAt)}</text>
+      <line x1="710" y1="236" x2="710" y2="330" stroke="#e7e7eb" stroke-width="3"/>
+      <text x="738" y="262" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" letter-spacing="1.5" fill="#ec5391">DATA</text>
+      <text x="738" y="304" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="800" fill="#121216">${escapeSvgText(createdAt)}</text>
+      <line x1="50" y1="350" x2="970" y2="350" stroke="#e7e7eb" stroke-width="3"/>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
@@ -342,7 +341,7 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   return {
     doc,
     labelImageDataUrl,
-    fileName: `Etichetta-102x90-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`,
+    fileName: `Etichetta-102x70-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf`,
   };
 }
 
@@ -372,8 +371,8 @@ export async function printOrderLabelPdf(order: OrderLabelResponse) {
           <meta charset="utf-8" />
           <title>Etichetta ordine</title>
           <style>
-            @page { margin: 0; }
-            html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #fff; }
+            @page { size: 102mm 70mm; margin: 0; }
+            html, body { width: 102mm; height: 70mm; margin: 0; overflow: hidden; background: #fff; }
             main { position: fixed; inset: 0; display: grid; place-items: center; break-inside: avoid; page-break-inside: avoid; }
             img { display: block; width: 100%; height: 100%; object-fit: contain; }
           </style>
