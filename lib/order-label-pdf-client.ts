@@ -16,6 +16,14 @@ type OrderLabelField = { id: string; label: string; value: any };
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
 
+// Formato rilevato dal self-test della stampante: 102 × 90 mm, gap 5 mm.
+// Il gap viene gestito dal driver/sensore della stampante e non va sommato
+// all'altezza della pagina PDF.
+const ORDER_LABEL_WIDTH_MM = 102;
+const ORDER_LABEL_HEIGHT_MM = 90;
+const ORDER_LABEL_CANVAS_WIDTH = 1020;
+const ORDER_LABEL_CANVAS_HEIGHT = 900;
+
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
   "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
@@ -196,8 +204,8 @@ function svgToDataUrl(svg: string) {
   return new Promise<string>((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
-      const sourceWidth = 1520;
-      const sourceHeight = 1020;
+      const sourceWidth = ORDER_LABEL_CANVAS_WIDTH;
+      const sourceHeight = ORDER_LABEL_CANVAS_HEIGHT;
       const canvas = document.createElement("canvas");
       canvas.width = sourceWidth;
       canvas.height = sourceHeight;
@@ -276,7 +284,12 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [152, 102] });
+  const doc = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: [ORDER_LABEL_WIDTH_MM, ORDER_LABEL_HEIGHT_MM],
+    compress: true,
+  });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
@@ -296,45 +309,44 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const weight = weightField ? displayValue(weightField.value) : "Non indicato";
   const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="80" y="70" width="420" height="170" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="90" y="155" font-size="52" font-weight="800" fill="#111">Paradise Beauty</text>`;
+    ? `<image href="${logoDataUrl}" x="48" y="42" width="310" height="126" preserveAspectRatio="xMinYMid meet" />`
+    : `<text x="50" y="120" font-size="42" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1520" height="1020" viewBox="0 0 1520 1020">
-      <rect width="1520" height="1020" fill="#ffffff"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1020" height="900" viewBox="0 0 1020 900">
+      <rect width="1020" height="900" fill="#ffffff"/>
       ${logoImage}
-      <rect x="1210" y="78" width="220" height="96" rx="22" fill="#ec5391"/>
-      <text x="1320" y="138" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#ffffff">ORDINE</text>
-      <text x="1320" y="295" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
-      <line x1="80" y1="355" x2="1440" y2="355" stroke="#ec5391" stroke-width="8"/>
+      <rect x="786" y="44" width="184" height="68" rx="17" fill="#ec5391"/>
+      <text x="878" y="88" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#ffffff">ORDINE</text>
+      <text x="878" y="170" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
+      <line x1="48" y1="212" x2="972" y2="212" stroke="#ec5391" stroke-width="6"/>
 
-      <circle cx="158" cy="520" r="70" fill="#ec5391"/>
-      <text x="158" y="543" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
-      <text x="270" y="500" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 34))}</text>
-      <text x="270" y="570" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 58))}</text>
+      <circle cx="110" cy="330" r="50" fill="#ec5391"/>
+      <text x="110" y="347" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="900" fill="#ffffff">${escapeSvgText(initials || "PB")}</text>
+      <text x="185" y="315" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" fill="#121216">${escapeSvgText(shortSvgText(client, 28))}</text>
+      <text x="185" y="370" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="500" fill="#5c5c69">${escapeSvgText(shortSvgText(service, 52))}</text>
 
-      <rect x="80" y="662" width="1360" height="214" rx="28" fill="#ffffff" stroke="#f9c4de" stroke-width="7"/>
-      <text x="120" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
-      <text x="120" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
-      <line x1="120" y1="848" x2="545" y2="848" stroke="#f9c4de" stroke-width="6"/>
+      <rect x="48" y="430" width="924" height="320" rx="22" fill="#ffffff" stroke="#f9c4de" stroke-width="5"/>
+      <line x1="510" y1="430" x2="510" y2="750" stroke="#f9c4de" stroke-width="4"/>
+      <line x1="48" y1="590" x2="972" y2="590" stroke="#f9c4de" stroke-width="4"/>
 
-      <text x="610" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
-      <text x="610" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 18))}</text>
-      <line x1="610" y1="848" x2="880" y2="848" stroke="#f9c4de" stroke-width="6"/>
+      <text x="78" y="485" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">TELEFONO CLIENTE</text>
+      <text x="78" y="545" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(phone, 22))}</text>
 
-      <text x="940" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
-      <text x="940" y="810" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
-      <line x1="940" y1="848" x2="1185" y2="848" stroke="#f9c4de" stroke-width="6"/>
+      <text x="540" y="485" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">PESO BILANCIA</text>
+      <text x="540" y="545" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="700" fill="#121216">${escapeSvgText(shortSvgText(weight, 18))}</text>
 
-      <text x="1240" y="745" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
-      <text x="1240" y="810" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
-      <line x1="1240" y1="848" x2="1400" y2="848" stroke="#f9c4de" stroke-width="6"/>
+      <text x="78" y="645" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">DATA CREAZIONE</text>
+      <text x="78" y="705" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="700" fill="#121216">${escapeSvgText(createdAt)}</text>
 
-      <text x="760" y="952" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" fill="#121216">Paradise Beauty - Etichetta ordine</text>
+      <text x="540" y="645" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="900" fill="#ec5391">NUMERO ORDINE</text>
+      <text x="540" y="705" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#121216">${escapeSvgText(cleanOrderNo)}</text>
+
+      <text x="510" y="840" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" fill="#121216">Paradise Beauty · Etichetta ordine · 102 × 90 mm</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
   doc.addImage(labelImageDataUrl, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
-  return { doc, fileName: `Etichetta-orizzontale-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
+  return { doc, fileName: `Etichetta-102x90-${cleanPdfFileName(orderNo)}-${cleanPdfFileName(client)}.pdf` };
 }
 
 export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
