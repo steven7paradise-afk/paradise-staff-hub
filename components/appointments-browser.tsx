@@ -4441,43 +4441,53 @@ export function AppointmentsBrowser({
               </div>
 
               <section className="rounded-[28px] border border-neutral-200 bg-white p-5 shadow-[0_10px_30px_rgba(17,17,17,0.04)] sm:p-6">
-                <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
+                <div className="flex items-center justify-between gap-3 border-b border-neutral-200 pb-4">
                   <div>
                     <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
                       <Clock3 className="size-4 text-[#D96B94]" />
-                      Note e tempo del processo
+                      Timeline del processo
                     </span>
-                    <p className="mt-1 text-xs font-semibold text-black/45">
-                      Cronologia completa di stati, tempi, assegnazioni e salvataggi.
+                    <p className="mt-1 text-[11px] font-semibold text-black/45">
+                      Stati, tempi, assegnazioni e modifiche in ordine cronologico.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-black/5 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-black/45">
+                    <span className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.16em] text-black/45">
                       Solo lettura
                     </span>
-                    <span className="rounded-full bg-[#FFF0F6] px-3 py-1.5 text-[10px] font-black text-[#B83D7F]">
+                    <span className="grid size-7 place-items-center rounded-full bg-[#FFF0F6] text-[10px] font-black text-[#B83D7F]">
                       {clientControlAppointmentComments.length}
                     </span>
                   </div>
                 </div>
                 {clientControlAppointmentComments.length ? (
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {[...clientControlAppointmentComments].reverse().map((comment) => (
-                      <article
-                        key={comment.id}
-                        className="rounded-[20px] border border-neutral-200 bg-[#FAFAFA] px-4 py-4"
-                      >
-                        <p className="text-sm font-bold leading-6 text-[#332A2F]">
-                          {comment.message}
-                        </p>
-                        <p className="mt-2 text-[11px] font-semibold text-black/40">
-                          {comment.user_name} · {formatDateTime(comment.created_at)}
-                        </p>
+                  <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-neutral-200">
+                    {[...clientControlAppointmentComments].reverse().map((comment, index) => (
+                      <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
+                        <span
+                          className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-white shadow-[0_0_0_1px_rgba(217,107,148,0.28)] ${
+                            index === 0 ? "bg-[#D96B94]" : "bg-[#E8DDE3]"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <div className={`rounded-2xl border px-4 py-3 ${index === 0 ? "border-[#F0C4D7] bg-[#FFF8FB]" : "border-neutral-200 bg-[#FAFAFA]"}`}>
+                          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                            <p className="min-w-0 text-[12px] font-bold leading-[1.55] text-[#332A2F]">
+                              {comment.message}
+                            </p>
+                            <time className="shrink-0 text-[9px] font-bold tabular-nums text-black/35">
+                              {formatDateTime(comment.created_at)}
+                            </time>
+                          </div>
+                          <p className="mt-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B607B]">
+                            {comment.user_name}
+                          </p>
+                        </div>
                       </article>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-4 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 py-5 text-sm font-semibold text-black/40">
+                  <p className="mt-4 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 py-5 text-[11px] font-semibold text-black/40">
                     Nessuna modifica registrata per questo appuntamento.
                   </p>
                 )}
