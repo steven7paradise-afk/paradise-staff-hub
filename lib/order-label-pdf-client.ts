@@ -317,17 +317,9 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       </g>
       <line x1="50" y1="192" x2="970" y2="192" stroke="#ec5391" stroke-width="5"/>
 
-      <text x="54" y="262" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" letter-spacing="1.5" fill="#ec5391">NOME CLIENTE</text>
-      <text x="54" y="304" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" fill="#121216">${escapeSvgText(shortSvgText(client, 21))}</text>
-
-      <line x1="370" y1="236" x2="370" y2="330" stroke="#e7e7eb" stroke-width="3"/>
-      <text x="398" y="262" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" letter-spacing="1.5" fill="#ec5391">TELEFONO</text>
-      <text x="398" y="304" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#121216">${escapeSvgText(shortSvgText(phone, 20))}</text>
-
-      <line x1="710" y1="236" x2="710" y2="330" stroke="#e7e7eb" stroke-width="3"/>
-      <text x="738" y="262" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="900" letter-spacing="1.5" fill="#ec5391">DATA</text>
-      <text x="738" y="304" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="800" fill="#121216">${escapeSvgText(createdAt)}</text>
-      <line x1="50" y1="350" x2="970" y2="350" stroke="#e7e7eb" stroke-width="3"/>
+      <text x="54" y="244" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 27))}</text>
+      <text x="54" y="280" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="650" fill="#24242a">${escapeSvgText(shortSvgText(phone, 24))}</text>
+      <text x="54" y="309" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="800" letter-spacing="0.4" fill="#5b5b64">${escapeSvgText(createdAt)}</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
