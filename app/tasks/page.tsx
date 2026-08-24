@@ -5,7 +5,7 @@ import { TaskDashboard } from "@/components/task-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
-import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
+import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
 
 export const dynamic = "force-dynamic";
 
@@ -37,33 +37,9 @@ export default async function TasksPage() {
         ],
       };
 
-  const mentionUserWhere: Prisma.UserWhereInput = canSeeAllTaskLocations
-    ? {
-        active: true,
-        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
-        OR: [
-          { role: "ADMIN" as const },
-          { role: "RESPONSABILE" as const },
-          { mansione: { contains: "responsabile salone", mode: "insensitive" as const } },
-          { mansione: { contains: "vice responsabile salone", mode: "insensitive" as const } },
-        ],
-      }
-    : {
-        active: true,
-        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
-        OR: [
-          { role: "ADMIN" as const },
-          { role: "RESPONSABILE" as const, sede_id: currentUser?.sede_id ?? undefined },
-          {
-            sede_id: currentUser?.sede_id ?? undefined,
-            mansione: { contains: "responsabile salone", mode: "insensitive" as const },
-          },
-          {
-            sede_id: currentUser?.sede_id ?? undefined,
-            mansione: { contains: "vice responsabile salone", mode: "insensitive" as const },
-          },
-        ],
-      };
+  const mentionUserWhere: Prisma.UserWhereInput = taskEscalationRecipientWhere(
+    canSeeAllTaskLocations ? null : currentUser?.sede_id,
+  );
 
   const [workers, mentionableUsers, tasks, categorySetting] = await Promise.all([
     prisma.user.findMany({

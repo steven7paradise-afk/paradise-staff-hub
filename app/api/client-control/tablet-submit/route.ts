@@ -34,6 +34,71 @@ function sameSalon(a?: string | null, b?: string | null) {
   return normalize(a) === normalize(b);
 }
 
+type AuditValueKind = "text" | "money" | "boolean" | "list";
+
+function normalizedAuditValue(value: unknown, kind: AuditValueKind) {
+  if (kind === "boolean") return value === true;
+  if (kind === "money") return moneyValue(value);
+  if (kind === "list") {
+    return (Array.isArray(value) ? value : value ? [value] : [])
+      .map((item) => textValue(item))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "it"));
+  }
+  return textValue(value);
+}
+
+function auditValuesAreEqual(previous: unknown, next: unknown, kind: AuditValueKind) {
+  return JSON.stringify(normalizedAuditValue(previous, kind)) === JSON.stringify(normalizedAuditValue(next, kind));
+}
+
+function displayAuditValue(value: unknown, kind: AuditValueKind) {
+  const normalized = normalizedAuditValue(value, kind);
+  if (kind === "boolean") return normalized ? "Sì" : "No";
+  if (kind === "money") {
+    return `${Number(normalized).toFixed(2).replace(".", ",")} €`;
+  }
+  if (kind === "list") {
+    return Array.isArray(normalized) && normalized.length ? normalized.join(", ") : "Nessuno";
+  }
+  return String(normalized || "Non indicato");
+}
+
+function clientControlChangeSummary(
+  previousAnswers: Record<string, unknown>,
+  nextAnswers: Record<string, unknown>,
+) {
+  const fields: Array<{ key: string; label: string; kind: AuditValueKind }> = [
+    { key: CLIENT_CONTROL_FIELD_IDS.location, label: "Sede", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.clientName, label: "Cliente", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.email, label: "Email", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.phone, label: "Telefono", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.depositPaid, label: "Acconto", kind: "money" },
+    { key: CLIENT_CONTROL_FIELD_IDS.paid, label: "Totale pagato", kind: "money" },
+    { key: CLIENT_CONTROL_FIELD_IDS.paymentMethod, label: "Metodo di pagamento", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.serviceStaff, label: "Collaboratrici", kind: "list" },
+    { key: CLIENT_CONTROL_FIELD_IDS.shopifyOrder, label: "Ordine acconto", kind: "text" },
+    { key: "second_shopify_order", label: "Ordine saldo", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.instagramTag, label: "Profilo Instagram", kind: "text" },
+    { key: CLIENT_CONTROL_FIELD_IDS.notes, label: "Note Shopify completate", kind: "boolean" },
+    { key: CLIENT_CONTROL_FIELD_IDS.beforeMedia, label: "Foto/video prima", kind: "boolean" },
+    { key: CLIENT_CONTROL_FIELD_IDS.afterMedia, label: "Foto/video dopo", kind: "boolean" },
+    { key: CLIENT_CONTROL_FIELD_IDS.products, label: "Prodotti", kind: "boolean" },
+    { key: CLIENT_CONTROL_FIELD_IDS.review, label: "Recensione", kind: "boolean" },
+    { key: "custom_grammi", label: "Grammi", kind: "text" },
+    { key: "custom_lunghezza", label: "Lunghezza", kind: "text" },
+    { key: "custom_fasce", label: "Fasce", kind: "text" },
+    { key: "custom_atteggiamento", label: "Atteggiamento cliente", kind: "text" },
+  ];
+
+  return fields.flatMap(({ key, label, kind }) => {
+    const previous = previousAnswers[key];
+    const next = nextAnswers[key];
+    if (auditValuesAreEqual(previous, next, kind)) return [];
+    return [`${label}: ${displayAuditValue(previous, kind)} → ${displayAuditValue(next, kind)}`];
+  });
+}
+
 export async function POST(request: NextRequest) {
   const session = await auth();
   const operationalUser = await getOperationalUser(request);
@@ -427,6 +492,9 @@ export async function POST(request: NextRequest) {
   }
 
   const operation = existingResponse ? "updated" : "created";
+  const previousAnswers = existingResponse
+    ? ((existingResponse.answers || {}) as Record<string, unknown>)
+    : null;
   let response: { id: string; created_at: Date };
 
   if (existingResponse) {
@@ -467,18 +535,23 @@ export async function POST(request: NextRequest) {
 
   if (bookingId) {
     const auditAuthor = operationalUser?.name || operationalUser?.email || "Staff";
+    const changes = previousAnswers
+      ? clientControlChangeSummary(previousAnswers, answers as Record<string, unknown>)
+      : [];
     try {
-      await prisma.shopifyOrderComment.create({
-        data: {
-          order_name: bookingId,
-          user_name: auditAuthor,
-          user_role: operationalUser?.role || "DIPENDENTE",
-          message:
-            operation === "updated"
-              ? `Controllo Cliente modificato e salvato. Collaboratrice: ${staffNames.join(", ") || "non assegnata"}.`
-              : `Controllo Cliente creato e salvato. Collaboratrice: ${staffNames.join(", ") || "non assegnata"}.`,
-        },
-      });
+      if (operation === "created" || changes.length > 0) {
+        await prisma.shopifyOrderComment.create({
+          data: {
+            order_name: bookingId,
+            user_name: auditAuthor,
+            user_role: operationalUser?.role || "DIPENDENTE",
+            message:
+              operation === "updated"
+                ? `MODIFICA CONTROLLO CLIENTE · ${changes.join("; ")}`
+                : `CREAZIONE CONTROLLO CLIENTE · Collaboratrici: ${staffNames.join(", ") || "non assegnate"}`,
+          },
+        });
+      }
     } catch (auditError) {
       console.error("Impossibile registrare la cronologia del Controllo Cliente:", auditError);
     }

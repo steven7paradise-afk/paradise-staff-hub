@@ -10,7 +10,7 @@ function normalized(value?: string | null) {
 }
 
 export function hasTaskAccess(role?: Role | string | null, mansione?: string | null, locationName?: string | null) {
-  if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN") return true;
+  if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "DIPENDENTE") return true;
   const job = normalized(mansione);
   const place = normalized(locationName);
   return (
@@ -38,6 +38,25 @@ export function taskWorkerWhere(): Prisma.UserWhereInput {
       { location: { name: { contains: "ufficio", mode: "insensitive" as const } } },
       { mansione: { contains: "responsabile salone", mode: "insensitive" as const } },
       { mansione: { contains: "vice responsabile salone", mode: "insensitive" as const } },
+    ],
+  };
+}
+
+export function taskEscalationRecipientWhere(locationId?: string | null): Prisma.UserWhereInput {
+  return {
+    active: true,
+    OR: [
+      { role: "SUPER_ADMIN" as const },
+      { role: "ADMIN" as const },
+      { role: "RESPONSABILE" as const, ...(locationId ? { sede_id: locationId } : {}) },
+      {
+        ...(locationId ? { sede_id: locationId } : {}),
+        mansione: { contains: "responsabile salone", mode: "insensitive" as const },
+      },
+      {
+        ...(locationId ? { sede_id: locationId } : {}),
+        mansione: { contains: "vice responsabile salone", mode: "insensitive" as const },
+      },
     ],
   };
 }

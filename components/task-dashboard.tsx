@@ -379,6 +379,7 @@ function workerMentionSlug(name: string) {
 }
 
 function workerMentionRoleLabel(worker: Worker) {
+  if (worker.role === "SUPER_ADMIN") return "Super Admin";
   if (worker.role === "ADMIN") return "Admin";
   return "Responsabile";
 }
@@ -395,12 +396,8 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
 
 export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
   const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
-  
-  const initialAllowedWorkers = (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN")
-    ? workers
-    : currentUserLocationId
-      ? workers.filter((w) => w.locationId === currentUserLocationId)
-      : [];
+  const canAssignAcrossTeam = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+  const initialAllowedWorkers = canAssignAcrossTeam ? workers : mentionableUsers;
 
   const [tasks, setTasks] = useState(initialTasks);
   const [view, setView] = useState<TaskView>("HOME");
@@ -488,10 +485,10 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const timerAttendance = attendanceTimerState(todayAttendanceLogs);
   const activeMentionQuery = getActiveMentionQuery(commentText);
   const mentionSuggestions = activeMentionQuery === null
-    ? mentionableUsers.slice(0, 5)
+    ? mentionableUsers
     : mentionableUsers
         .filter((worker) => worker.name.toLowerCase().includes(activeMentionQuery.toLowerCase()) || workerMentionSlug(worker.name).toLowerCase().includes(activeMentionQuery.toLowerCase()))
-        .slice(0, 5);
+        .slice(0, 8);
   const mentionedWorkers = extractMentionedWorkers(commentText, mentionableUsers);
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
 
@@ -2110,7 +2107,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Scadenza</span><Field type="datetime-local" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></label>
                 <label className="space-y-2"><span className="text-xs font-black uppercase tracking-[0.12em] text-black/55">Priorità</span><Select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select></label>
                 <div className="space-y-2 md:col-span-2">
-                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">Assegnato a <span className="normal-case tracking-normal text-black/40">· seleziona uno o più dipendenti</span></span>
+                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-black/55">Assegna a <span className="normal-case tracking-normal text-black/40">· {canAssignAcrossTeam ? "seleziona una o più persone" : "Admin o Responsabile"}</span></span>
                   <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto rounded-2xl border border-black/10 bg-white p-3 shadow-sm sm:grid-cols-2">
                     {initialAllowedWorkers.map((worker) => {
                       const isSelected = form.assignedToIds.includes(worker.id);

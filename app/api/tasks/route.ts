@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
+import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -102,9 +102,9 @@ export async function POST(request: NextRequest) {
   const title = String(payload.title ?? "").trim();
   const description = String(payload.description ?? "").trim();
   
-  const workerIds = Array.isArray(payload.assignedToIds)
+  const workerIds: string[] = Array.from(new Set<string>(Array.isArray(payload.assignedToIds)
     ? payload.assignedToIds.map(String).filter(Boolean)
-    : [String(payload.assignedToId ?? "")].filter(Boolean);
+    : [String(payload.assignedToId ?? "")].filter(Boolean)));
 
   const priority = String(payload.priority ?? "MEDIA").toUpperCase();
   const category = String(payload.category ?? "Operativa").trim() || "Operativa";
@@ -122,22 +122,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Inserisci titolo, descrizione e almeno un lavoratore." }, { status: 400 });
   }
 
+  const canAssignAcrossLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const assignmentWhere = canAssignAcrossLocations
+    ? taskWorkerWhere()
+    : taskEscalationRecipientWhere(currentUser.sede_id);
   const workers = await prisma.user.findMany({
-    where: { ...taskWorkerWhere(), id: { in: workerIds } }
+    where: { ...assignmentWhere, id: { in: workerIds } },
   });
-  if (workers.length === 0) {
-    return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
+  if (workers.length !== workerIds.length) {
+    return NextResponse.json({ error: "Puoi assegnare la task solo agli Admin o ai Responsabili autorizzati." }, { status: 403 });
   }
 
-  const firstLocationId = workers[0]?.sede_id;
+  const firstLocationId = canAssignAcrossLocations ? workers[0]?.sede_id : currentUser.sede_id;
   if (!firstLocationId) {
     return NextResponse.json({ error: "I lavoratori selezionati devono essere assegnati a un salone." }, { status: 400 });
   }
   
-  if (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== firstLocationId) {
-    return NextResponse.json({ error: "Puoi assegnare task solo al tuo salone." }, { status: 403 });
-  }
-
   const task = await prisma.staffTask.create({
     data: {
       title,
@@ -248,7 +248,9 @@ export async function PATCH(request: NextRequest) {
   const isEvaluation = ["LIKE", "OK", "DISLIKE"].includes(evaluation) && !status;
   
   const isAssignee = task.assignees.some(u => u.id === session.user.id);
-  const canEdit = isEvaluation ? managerRoles.has(session.user.role) : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id || hasTaskAccess(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const canEdit = isEvaluation
+    ? managerRoles.has(session.user.role)
+    : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
   if (!canEdit || (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== task.location_id)) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
@@ -306,9 +308,9 @@ export async function PUT(request: NextRequest) {
   const title = String(payload.title ?? "").trim();
   const description = String(payload.description ?? "").trim();
   
-  const workerIds = Array.isArray(payload.assignedToIds)
+  const workerIds: string[] = Array.from(new Set<string>(Array.isArray(payload.assignedToIds)
     ? payload.assignedToIds.map(String).filter(Boolean)
-    : [String(payload.assignedToId ?? "")].filter(Boolean);
+    : [String(payload.assignedToId ?? "")].filter(Boolean)));
 
   const priority = String(payload.priority ?? "MEDIA").toUpperCase();
   const category = String(payload.category ?? "Operativa").trim() || "Operativa";
@@ -324,19 +326,27 @@ export async function PUT(request: NextRequest) {
   const task = await prisma.staffTask.findUnique({ where: { id }, include: { assignees: true } });
   if (!task) return NextResponse.json({ error: "Task non trovata." }, { status: 404 });
 
-  const workers = await prisma.user.findMany({
-    where: { ...taskWorkerWhere(), id: { in: workerIds } }
-  });
-  if (workers.length === 0) {
-    return NextResponse.json({ error: "Nessun lavoratore valido selezionato." }, { status: 400 });
+  const canAssignAcrossLocations = isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name);
+  const isAssignee = task.assignees.some((worker) => worker.id === session.user.id);
+  const canEditTask = canAssignAcrossLocations
+    || session.user.role === "RESPONSABILE"
+    || task.created_by_id === session.user.id
+    || isAssignee;
+  if (!canEditTask) {
+    return NextResponse.json({ error: "Puoi modificare soltanto le task create da te o assegnate a te." }, { status: 403 });
   }
 
-  const firstLocationId = workers[0]?.sede_id;
-  if (!firstLocationId) {
-    return NextResponse.json({ error: "Lavoratori senza salone." }, { status: 400 });
+  const assignmentWhere = canAssignAcrossLocations
+    ? taskWorkerWhere()
+    : taskEscalationRecipientWhere(currentUser.sede_id);
+  const workers = await prisma.user.findMany({
+    where: { ...assignmentWhere, id: { in: workerIds } },
+  });
+  if (workers.length !== workerIds.length) {
+    return NextResponse.json({ error: "Puoi assegnare la task solo agli Admin o ai Responsabili autorizzati." }, { status: 403 });
   }
-  
-  if (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && (currentUser.sede_id !== task.location_id || currentUser.sede_id !== firstLocationId)) {
+
+  if (!canAssignAcrossLocations && currentUser.sede_id !== task.location_id) {
     return NextResponse.json({ error: "Puoi modificare task solo nel tuo salone." }, { status: 403 });
   }
 
@@ -372,7 +382,7 @@ export async function PUT(request: NextRequest) {
       assignees: {
         set: workers.map(w => ({ id: w.id }))
       },
-      location_id: firstLocationId,
+      location_id: task.location_id,
       due_date: dueDate && !Number.isNaN(dueDate.valueOf()) ? dueDate : null,
     },
     include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },

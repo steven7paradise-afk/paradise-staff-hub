@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -68,15 +69,17 @@ export async function POST(request: NextRequest) {
     ? await prisma.user.findMany({
         where: {
           active: true,
-          role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+          role: { not: "ZERO" },
           OR: canMentionAcrossLocations
             ? [
+                { role: "SUPER_ADMIN" },
                 { role: "ADMIN" },
                 { role: "RESPONSABILE" },
                 { mansione: { contains: "responsabile salone", mode: "insensitive" } },
                 { mansione: { contains: "vice responsabile salone", mode: "insensitive" } },
               ]
             : [
+                { role: "SUPER_ADMIN" },
                 { role: "ADMIN" },
                 { role: "RESPONSABILE", sede_id: task.location_id },
                 { sede_id: task.location_id, mansione: { contains: "responsabile salone", mode: "insensitive" } },
@@ -130,12 +133,11 @@ export async function PATCH(request: NextRequest) {
   const canEdit = comment.user_id === session.user.id || session.user.role === "ZERO" || session.user.role === "SUPER_ADMIN";
   if (!canEdit) return NextResponse.json({ error: "Puoi modificare solo i tuoi commenti." }, { status: 403 });
   const files = payload.files !== undefined ? await normalizeTaskCommentFiles(payload.files, comment.task_id) : undefined;
+  const data: Prisma.StaffTaskCommentUpdateInput = { message };
+  if (files !== undefined && files !== null) data.files = files as Prisma.InputJsonValue;
   const updated = await prisma.staffTaskComment.update({ 
     where: { id }, 
-    data: { 
-      message, 
-      files: files !== undefined ? files : undefined 
-    }, 
+    data,
     include: { user: true } 
   });
   return NextResponse.json(updated);

@@ -41,6 +41,7 @@ import {
   Save,
   DollarSign,
   ExternalLink,
+  History,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
@@ -212,6 +213,16 @@ type AppointmentComment = {
   message: string;
   created_at: string;
 };
+
+function isClientControlAuditComment(comment: AppointmentComment) {
+  const message = comment.message.trim().toUpperCase();
+  return (
+    message.startsWith("MODIFICA CONTROLLO CLIENTE") ||
+    message.startsWith("CREAZIONE CONTROLLO CLIENTE") ||
+    message.startsWith("CONTROLLO CLIENTE MODIFICATO") ||
+    message.startsWith("CONTROLLO CLIENTE CREATO")
+  );
+}
 
 type CustomerArrivalUpdate = NonNullable<AppointmentRecord["customerUpdate"]>;
 
@@ -1552,6 +1563,14 @@ export function AppointmentsBrowser({
   } | null>(null);
   const [clientControlAppointmentComments, setClientControlAppointmentComments] =
     useState<AppointmentComment[]>([]);
+  const clientControlChangeComments = useMemo(
+    () => clientControlAppointmentComments.filter(isClientControlAuditComment),
+    [clientControlAppointmentComments],
+  );
+  const clientControlProcessComments = useMemo(
+    () => clientControlAppointmentComments.filter((comment) => !isClientControlAuditComment(comment)),
+    [clientControlAppointmentComments],
+  );
   const [selectedGrammi, setSelectedGrammi] = useState("");
   const [customGrammiInput, setCustomGrammiInput] = useState("");
   const [selectedLunghezza, setSelectedLunghezza] = useState("");
@@ -4548,13 +4567,13 @@ export function AppointmentsBrowser({
                       Solo lettura
                     </span>
                     <span className="grid size-7 place-items-center rounded-full bg-[#FFF0F6] text-[10px] font-black text-[#B83D7F]">
-                      {clientControlAppointmentComments.length}
+                      {clientControlProcessComments.length}
                     </span>
                   </div>
                 </div>
-                {clientControlAppointmentComments.length ? (
+                {clientControlProcessComments.length ? (
                   <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-neutral-200">
-                    {[...clientControlAppointmentComments].reverse().map((comment, index) => (
+                    {[...clientControlProcessComments].reverse().map((comment, index) => (
                       <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
                         <span
                           className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-white shadow-[0_0_0_1px_rgba(217,107,148,0.28)] ${
@@ -4581,6 +4600,69 @@ export function AppointmentsBrowser({
                 ) : (
                   <p className="mt-4 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 py-5 text-[11px] font-semibold text-black/40">
                     Nessuna modifica registrata per questo appuntamento.
+                  </p>
+                )}
+              </section>
+
+              <section className="rounded-[28px] border border-[#EBC7D8] bg-[#FFF9FC] p-5 shadow-[0_10px_30px_rgba(184,61,127,0.06)] sm:p-6">
+                <div className="flex items-center justify-between gap-3 border-b border-[#F0D6E2] pb-4">
+                  <div>
+                    <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                      <History className="size-4 text-[#D96B94]" />
+                      Cronologia modifiche
+                    </span>
+                    <p className="mt-1 text-[11px] font-semibold text-black/45">
+                      Variazioni salvate dopo la creazione del Controllo Cliente.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-[#EBC7D8] bg-white px-3 py-1.5 text-[8px] font-black uppercase tracking-[0.16em] text-black/45">
+                      Solo lettura
+                    </span>
+                    <span className="grid size-7 place-items-center rounded-full bg-[#F6D7E6] text-[10px] font-black text-[#B83D7F]">
+                      {clientControlChangeComments.length}
+                    </span>
+                  </div>
+                </div>
+                {clientControlChangeComments.length ? (
+                  <div className="relative mt-5 space-y-0 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-px before:bg-[#E8C8D7]">
+                    {[...clientControlChangeComments].reverse().map((comment, index) => {
+                      const cleanMessage = comment.message
+                        .replace(/^MODIFICA CONTROLLO CLIENTE\s*[·:-]?\s*/i, "")
+                        .replace(/^CREAZIONE CONTROLLO CLIENTE\s*[·:-]?\s*/i, "")
+                        .replace(/^CONTROLLO CLIENTE (?:MODIFICATO|CREATO)(?: E SALVATO)?\.?\s*/i, "");
+                      const isCreation = /^(CREAZIONE|CONTROLLO CLIENTE CREATO)/i.test(comment.message.trim());
+                      return (
+                        <article key={comment.id} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-4 last:pb-0">
+                          <span
+                            className={`relative z-10 mt-1 grid size-[15px] place-items-center rounded-full border-[3px] border-[#FFF9FC] shadow-[0_0_0_1px_rgba(217,107,148,0.32)] ${
+                              index === 0 ? "bg-[#C83F82]" : "bg-[#DDB8CA]"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <div className={`rounded-2xl border px-4 py-3 ${index === 0 ? "border-[#E8B8CF] bg-white" : "border-[#EED5E1] bg-white/70"}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.13em] text-[#A52E6B]">
+                                {isCreation ? "Creazione" : "Modifica salvata"}
+                              </span>
+                              <time className="shrink-0 text-[9px] font-bold tabular-nums text-black/35">
+                                {formatDateTime(comment.created_at)}
+                              </time>
+                            </div>
+                            <p className="mt-2 text-[11px] font-bold leading-[1.65] text-[#332A2F]">
+                              {cleanMessage || "Controllo Cliente salvato."}
+                            </p>
+                            <p className="mt-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-[#9B607B]">
+                              {comment.user_name}
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-2xl border border-[#EED5E1] bg-white px-4 py-5 text-[11px] font-semibold text-black/40">
+                    Le modifiche successive al primo salvataggio compariranno qui.
                   </p>
                 )}
               </section>
