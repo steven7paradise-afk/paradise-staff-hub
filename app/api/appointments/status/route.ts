@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { auth } from "@/lib/auth";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
-import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { getOperationalUser } from "@/lib/operational-session";
 
 const SETTING_KEY = "appointment_status_overrides";
@@ -70,23 +67,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
     }
 
-    let cowlendarSync:
-      | Awaited<ReturnType<typeof updateCowlendarBookingStatus>>
-      | { ok: false; error: string }
-      | undefined;
-    try {
-      cowlendarSync = await updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus);
-    } catch (error) {
-      console.error("Failed to sync appointment status with Cowlendar:", error);
-      cowlendarSync = {
-        ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Cowlendar non ha accettato l'aggiornamento dello stato.",
-      };
-    }
-
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentMap = normalizeStatusMap(currentSetting?.value);
     const previousEntry = currentMap[bookingId] || {};
@@ -135,16 +115,48 @@ export async function POST(request: NextRequest) {
     const elapsedNote = previousStatus === "INIZIATO" && status !== "INIZIATO"
       ? ` Tempo trascorso: ${formatElapsedTime(elapsedSeconds)}.`
       : "";
-    const statusComment = await prisma.shopifyOrderComment.create({
-      data: {
-        order_name: bookingId,
-        user_name: updatedBy,
-        user_role: sessionUserRole,
-        message: previousLabel && previousLabel !== nextLabel
-          ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
-          : `Stato appuntamento impostato su ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
-      },
-    });
+    // The local override is the source used by the appointments UI. Notes and
+    // the external Cowlendar sync are useful audit/integration work, but they
+    // must never make an already persisted status look as if it failed.
+    let statusComment = null;
+    try {
+      statusComment = await prisma.shopifyOrderComment.create({
+        data: {
+          order_name: bookingId,
+          user_name: updatedBy,
+          user_role: sessionUserRole,
+          message: previousLabel && previousLabel !== nextLabel
+            ? `Stato appuntamento cambiato da ${previousLabel} a ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`
+            : `Stato appuntamento impostato su ${nextLabel}.${elapsedNote}${signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""}`,
+        },
+      });
+    } catch (error) {
+      console.error("Appointment status saved, but audit note creation failed:", error);
+    }
+
+    let cowlendarSync:
+      | Awaited<ReturnType<typeof updateCowlendarBookingStatus>>
+      | { ok: false; error: string };
+    try {
+      cowlendarSync = await Promise.race([
+        updateCowlendarBookingStatus(bookingId, status as CowlendarAppointmentStatus),
+        new Promise<{ ok: false; error: string }>((resolve) => {
+          setTimeout(
+            () => resolve({ ok: false, error: "Sincronizzazione Cowlendar in attesa." }),
+            3500,
+          );
+        }),
+      ]);
+    } catch (error) {
+      console.error("Appointment status saved, but Cowlendar sync failed:", error);
+      cowlendarSync = {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Cowlendar non ha accettato l'aggiornamento dello stato.",
+      };
+    }
 
     return NextResponse.json({ success: true, status: updatedMap[bookingId], statusComment, cowlendarSync });
   } catch (error) {

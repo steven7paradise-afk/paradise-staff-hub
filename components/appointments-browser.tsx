@@ -3316,17 +3316,21 @@ export function AppointmentsBrowser({
       <div
         className="flex flex-col gap-1"
         onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
         <select
           value={status}
-          onChange={(event) =>
+          onChange={(event) => {
+            event.stopPropagation();
             handleStatusChange(
               booking.id,
               event.target.value as AppointmentStatusValue,
-            )
-          }
+            );
+          }}
           disabled={savingStatusId === booking.id}
           className={[
             "rounded-full border px-3 font-black outline-none transition focus:ring-2 focus:ring-[#FBE1EB]",
@@ -5119,7 +5123,15 @@ export function AppointmentsBrowser({
                       key={booking.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => {
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement;
+                        if (
+                          target.closest(
+                            "button, select, option, input, textarea, a, [role='menu'], [role='listbox']",
+                          )
+                        ) {
+                          return;
+                        }
                         void openClientControlForBooking(booking);
                       }}
                       onKeyDown={(event) => {
