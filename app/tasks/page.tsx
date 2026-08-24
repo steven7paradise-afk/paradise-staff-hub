@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { AppShell } from "@/components/app-shell";
 import { TaskDashboard } from "@/components/task-dashboard";
 import { auth } from "@/lib/auth";
@@ -36,11 +37,44 @@ export default async function TasksPage() {
         ],
       };
 
-  const [workers, tasks, categorySetting] = await Promise.all([
+  const mentionUserWhere: Prisma.UserWhereInput = canSeeAllTaskLocations
+    ? {
+        active: true,
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+        OR: [
+          { role: "ADMIN" as const },
+          { role: "RESPONSABILE" as const },
+          { mansione: { contains: "responsabile salone", mode: "insensitive" as const } },
+          { mansione: { contains: "vice responsabile salone", mode: "insensitive" as const } },
+        ],
+      }
+    : {
+        active: true,
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+        OR: [
+          { role: "ADMIN" as const },
+          { role: "RESPONSABILE" as const, sede_id: currentUser?.sede_id ?? undefined },
+          {
+            sede_id: currentUser?.sede_id ?? undefined,
+            mansione: { contains: "responsabile salone", mode: "insensitive" as const },
+          },
+          {
+            sede_id: currentUser?.sede_id ?? undefined,
+            mansione: { contains: "vice responsabile salone", mode: "insensitive" as const },
+          },
+        ],
+      };
+
+  const [workers, mentionableUsers, tasks, categorySetting] = await Promise.all([
     prisma.user.findMany({
       where: workerWhere,
       select: { id: true, name: true, sede_id: true, photo_url: true, mansione: true, role: true },
       orderBy: [{ location: { name: "asc" } }, { name: "asc" }],
+    }),
+    prisma.user.findMany({
+      where: mentionUserWhere,
+      select: { id: true, name: true, sede_id: true, photo_url: true, mansione: true, role: true },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
     }),
     prisma.staffTask.findMany({
       where: taskWhere,
@@ -78,9 +112,11 @@ export default async function TasksPage() {
         role={role}
         userId={session.user.id}
         userName={session.user.name ?? "Paradise"}
+        currentUserLocationId={currentUser?.sede_id ?? null}
         canManageTasks={canSeeAllTasks}
         categories={taskCategories}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, locationId: worker.sede_id, photoUrl: worker.photo_url, mansione: worker.mansione, role: worker.role }))}
+        mentionableUsers={mentionableUsers.map((user) => ({ id: user.id, name: user.name, locationId: user.sede_id, photoUrl: user.photo_url, mansione: user.mansione, role: user.role }))}
         initialTasks={tasks.map((task) => ({
           id: task.id,
           title: task.title,

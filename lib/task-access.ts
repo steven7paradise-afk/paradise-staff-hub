@@ -1,4 +1,5 @@
 import type { Role } from "@/lib/roles";
+import type { Prisma } from "@prisma/client";
 
 function normalized(value?: string | null) {
   return (value ?? "")
@@ -26,7 +27,7 @@ export function isTaskOfficeUser(role?: Role | string | null, mansione?: string 
   return normalized(mansione).includes("ufficio") || normalized(locationName).includes("ufficio");
 }
 
-export function taskWorkerWhere() {
+export function taskWorkerWhere(): Prisma.UserWhereInput {
   return {
     active: true,
     role: { notIn: ["ZERO", "SUPER_ADMIN"] },

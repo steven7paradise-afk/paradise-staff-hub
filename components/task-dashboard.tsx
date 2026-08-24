@@ -378,6 +378,11 @@ function workerMentionSlug(name: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+function workerMentionRoleLabel(worker: Worker) {
+  if (worker.role === "ADMIN") return "Admin";
+  return "Responsabile";
+}
+
 function getActiveMentionQuery(value: string) {
   return value.match(/(^|\s)@([a-zA-Z0-9_]*)$/)?.[2] ?? null;
 }
@@ -388,14 +393,13 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, workers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; workers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
+export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
   const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   
-  const currentUserSedeId = workers.find((w) => w.id === userId)?.locationId ?? null;
   const initialAllowedWorkers = (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN")
     ? workers
-    : currentUserSedeId
-      ? workers.filter((w) => w.locationId === currentUserSedeId)
+    : currentUserLocationId
+      ? workers.filter((w) => w.locationId === currentUserLocationId)
       : [];
 
   const [tasks, setTasks] = useState(initialTasks);
@@ -484,11 +488,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
   const timerAttendance = attendanceTimerState(todayAttendanceLogs);
   const activeMentionQuery = getActiveMentionQuery(commentText);
   const mentionSuggestions = activeMentionQuery === null
-    ? []
-    : workers
+    ? mentionableUsers.slice(0, 5)
+    : mentionableUsers
         .filter((worker) => worker.name.toLowerCase().includes(activeMentionQuery.toLowerCase()) || workerMentionSlug(worker.name).toLowerCase().includes(activeMentionQuery.toLowerCase()))
         .slice(0, 5);
-  const mentionedWorkers = extractMentionedWorkers(commentText, workers);
+  const mentionedWorkers = extractMentionedWorkers(commentText, mentionableUsers);
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
 
   useEffect(() => {
@@ -1876,9 +1880,11 @@ export function TaskDashboard({ role, userId, userName, workers, categories: ini
                         key={worker.id}
                         type="button"
                         onClick={() => insertMention(worker)}
+                        title={`Tagga ${worker.name} · ${workerMentionRoleLabel(worker)}`}
                         className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-[#8064D8] ring-1 ring-black/5 hover:bg-[#F5F1FF]"
                       >
                         @{workerMentionSlug(worker.name)}
+                        <span className="ml-1 font-semibold text-black/35">· {workerMentionRoleLabel(worker)}</span>
                       </button>
                     ))}
                     {mentionedWorkers.map((worker) => (

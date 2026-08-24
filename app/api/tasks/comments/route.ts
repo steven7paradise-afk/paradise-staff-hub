@@ -63,9 +63,26 @@ export async function POST(request: NextRequest) {
   });
 
   const mentionTags = extractMentionTags(message);
+  const canMentionAcrossLocations = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role);
   const mentionedUsers = mentionTags.length > 0
     ? await prisma.user.findMany({
-        where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        where: {
+          active: true,
+          role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+          OR: canMentionAcrossLocations
+            ? [
+                { role: "ADMIN" },
+                { role: "RESPONSABILE" },
+                { mansione: { contains: "responsabile salone", mode: "insensitive" } },
+                { mansione: { contains: "vice responsabile salone", mode: "insensitive" } },
+              ]
+            : [
+                { role: "ADMIN" },
+                { role: "RESPONSABILE", sede_id: task.location_id },
+                { sede_id: task.location_id, mansione: { contains: "responsabile salone", mode: "insensitive" } },
+                { sede_id: task.location_id, mansione: { contains: "vice responsabile salone", mode: "insensitive" } },
+              ],
+        },
         select: { id: true, name: true },
       }).then((users) => users.filter((user) => mentionTags.includes(mentionSlug(user.name))))
     : [];
