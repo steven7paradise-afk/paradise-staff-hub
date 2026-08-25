@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
+  ExternalLink,
   FileImage,
   Flag,
   Kanban,
@@ -755,21 +756,30 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
   async function attachPhoto(file: File | undefined) {
     if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      alert("Il file supera il limite di 50 MB.");
+      return;
+    }
     const dataUrl = await fileToDataUrl(file);
     setForm((current) => ({ ...current, attachmentName: file.name, photoUrl: dataUrl }));
   }
 
   async function attachMainFile(file: File | undefined) {
     if (!file) return;
-    if (file.type.startsWith("image/")) {
-      await attachPhoto(file);
+    if (file.size > 50 * 1024 * 1024) {
+      alert("Il file supera il limite di 50 MB.");
       return;
     }
-    setForm((current) => ({ ...current, attachmentName: file.name }));
+    const dataUrl = await fileToDataUrl(file);
+    setForm((current) => ({ ...current, attachmentName: file.name, photoUrl: dataUrl }));
   }
 
   async function attachDescriptionImage(file: File | undefined) {
     if (!selected || !file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      alert("Il file supera il limite di 50 MB.");
+      return;
+    }
     const dataUrl = await fileToDataUrl(file);
     const response = await fetch("/api/tasks", {
       method: "PATCH",
@@ -1004,11 +1014,8 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   async function attachCompletionFiles(files: FileList | null) {
     const next: CompletionFile[] = [];
     for (const file of Array.from(files ?? [])) {
-      if (file.type.startsWith("image/")) {
-        next.push({ name: file.name, url: await fileToDataUrl(file) });
-      } else {
-        next.push({ name: file.name });
-      }
+      if (file.size > 50 * 1024 * 1024) continue;
+      next.push({ name: file.name, url: await fileToDataUrl(file) });
     }
     setCompletion((current) => ({ ...current, files: next }));
   }
@@ -1125,7 +1132,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             type="button"
             variant="soft"
             disabled={!url}
-            onClick={() => url && setAttachmentPreview({ name, url, kind })}
+            onClick={() => {
+              if (!url) return;
+              if (kind === "image") {
+                setAttachmentPreview({ name, url, kind });
+              } else {
+                window.open(url, "_blank", "noopener,noreferrer");
+              }
+            }}
           >
             Apri allegato
           </Button>
@@ -2063,11 +2077,21 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               {attachmentPreview.kind === "image" ? (
                 <img src={attachmentPreview.url} alt={attachmentPreview.name} className="mx-auto max-h-[70dvh] w-full object-contain" />
               ) : (
-                <div className="grid min-h-64 place-items-center rounded-2xl bg-white text-center">
+                <div className="grid min-h-64 place-items-center rounded-2xl bg-white p-6 text-center shadow-sm">
                   <div>
-                    <Paperclip className="mx-auto size-10 text-black/45" />
-                    <p className="mt-3 font-semibold">{attachmentPreview.name}</p>
-                    <p className="mt-1 text-sm text-black/45">Anteprima non disponibile per questo tipo di file.</p>
+                    <Paperclip className="mx-auto size-12 text-[#A74758]" />
+                    <p className="mt-3 text-lg font-bold text-black/80">{attachmentPreview.name}</p>
+                    <p className="mt-1 text-sm text-black/45">File allegato disponibile su Google Drive.</p>
+                    {attachmentPreview.url ? (
+                      <a
+                        href={attachmentPreview.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#8E334E] px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#73273E]"
+                      >
+                        <ExternalLink className="size-4" /> Apri file in Google Drive
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               )}

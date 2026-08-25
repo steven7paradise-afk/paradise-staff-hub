@@ -32,12 +32,34 @@ async function readMultipartUpload(request: NextRequest): Promise<MultipartUploa
   if (contentType.includes("application/json")) {
     throw new Error("OLD_PAGE");
   }
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > MAX_FILE_BYTES + 2 * 1024 * 1024) throw new Error("TOO_LARGE");
+
+  const nativeFormData = await request.clone().formData().catch(() => null);
+  if (nativeFormData) {
+    const taskId = String(nativeFormData.get("taskId") ?? "").trim();
+    const preferredFile = nativeFormData.get("file");
+    const candidate =
+      preferredFile && typeof preferredFile !== "string"
+        ? preferredFile
+        : Array.from(nativeFormData.values()).find((value) => typeof value !== "string" && typeof value.arrayBuffer === "function");
+    if (taskId && candidate && typeof candidate !== "string") {
+      const buffer = Buffer.from(await candidate.arrayBuffer());
+      if (buffer.length <= 0) throw new Error("EMPTY_FILE");
+      if (buffer.length > MAX_FILE_BYTES) throw new Error("TOO_LARGE");
+      return {
+        taskId,
+        fileName: candidate.name || "file",
+        mimeType: candidate.type || "application/octet-stream",
+        buffer,
+      };
+    }
+  }
+
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   const boundary = boundaryMatch?.[1] || boundaryMatch?.[2]?.trim();
   if (!boundary) throw new Error("NO_BOUNDARY");
 
-  const declaredLength = Number(request.headers.get("content-length") || 0);
-  if (declaredLength > MAX_FILE_BYTES + 2 * 1024 * 1024) throw new Error("TOO_LARGE");
   const body = Buffer.from(await request.arrayBuffer());
   if (body.length > MAX_FILE_BYTES + 2 * 1024 * 1024) throw new Error("TOO_LARGE");
 
@@ -69,7 +91,7 @@ async function readMultipartUpload(request: NextRequest): Promise<MultipartUploa
     const payload = body.subarray(headersEnd + 4, payloadEnd);
 
     if (fieldName === "taskId") taskId = payload.toString("utf8").trim();
-    if (fieldName === "file") {
+    if (fieldName === "file" || regularFileName || encodedFileName) {
       fileName = encodedFileName ? decodeURIComponent(encodedFileName) : regularFileName;
       mimeType = headers.match(/content-type:\s*([^\r\n]+)/i)?.[1]?.trim() || mimeType;
       fileBuffer = Buffer.from(payload);

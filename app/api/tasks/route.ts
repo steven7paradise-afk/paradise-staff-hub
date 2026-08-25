@@ -1,10 +1,94 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+
+function safeTaskFileName(name: string, taskId: string) {
+  const ext = String(name || "").split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "file";
+  const base = String(name || "allegato")
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .replace(/[\/\\:*?"<>|]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "") || "allegato";
+  const cleanTaskId = String(taskId || "task").replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 36);
+  return `${new Date().toISOString().slice(0, 10)}-${cleanTaskId}-${base}.${ext}`;
+}
+
+async function normalizeTaskAttachment(attachmentName: string | null, photoUrl: string | null, taskId: string) {
+  let cleanName = attachmentName?.trim() || null;
+  let cleanPhotoUrl = photoUrl?.trim() || null;
+  let attachmentUrl: string | null = null;
+
+  if (cleanPhotoUrl && cleanPhotoUrl.startsWith("data:")) {
+    const match = cleanPhotoUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      const mimeType = match[1] || "application/octet-stream";
+      const buffer = Buffer.from(match[2], "base64");
+      const nameToUse = cleanName || (mimeType.startsWith("image/") ? "foto-task.jpg" : "file-task");
+      const fileName = safeTaskFileName(nameToUse, taskId);
+
+      try {
+        const driveFile = await uploadTaskImageToGoogleDrive(buffer, fileName, mimeType);
+        cleanName = cleanName || driveFile.name;
+        attachmentUrl = driveFile.driveFileUrl || driveFile.webViewLink || driveFile.webContentLink || null;
+        if (mimeType.startsWith("image/")) {
+          cleanPhotoUrl = driveFile.previewUrl || driveFile.webViewLink || null;
+        } else {
+          cleanPhotoUrl = null;
+        }
+      } catch (err) {
+        console.error("Failed to upload task attachment to Google Drive:", err);
+      }
+    }
+  }
+
+  return {
+    attachmentName: cleanName,
+    attachmentUrl,
+    photoUrl: cleanPhotoUrl,
+  };
+}
+
+async function normalizeCompletionFilesForDb(files: Array<{ name: string; url?: string | null }>, taskId: string) {
+  const result = [];
+  for (const file of files) {
+    if (!file.url || !file.url.startsWith("data:")) {
+      result.push(file);
+      continue;
+    }
+    const match = file.url.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) {
+      result.push(file);
+      continue;
+    }
+    const mimeType = match[1] || "application/octet-stream";
+    const buffer = Buffer.from(match[2], "base64");
+    const fileName = safeTaskFileName(file.name || "completamento", taskId);
+    try {
+      const driveFile = await uploadTaskImageToGoogleDrive(buffer, fileName, mimeType);
+      const isImage = mimeType.startsWith("image/");
+      const driveUrl = driveFile.driveFileUrl || driveFile.webViewLink || driveFile.webContentLink;
+      result.push({
+        name: driveFile.name || file.name,
+        url: isImage ? driveFile.previewUrl : driveUrl,
+        previewUrl: isImage ? driveFile.previewUrl : null,
+        driveFileId: driveFile.id,
+        driveFileUrl: driveUrl,
+        type: mimeType,
+      });
+    } catch (err) {
+      console.error("Failed to upload completion file to Google Drive:", err);
+      result.push(file);
+    }
+  }
+  return result;
+}
+
 
 async function getAuthorizedTaskUser(userId: string, role: string) {
   const user = await prisma.user.findUnique({
@@ -138,6 +222,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "I lavoratori selezionati devono essere assegnati a un salone." }, { status: 400 });
   }
   
+  const tempTaskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const normalized = await normalizeTaskAttachment(attachmentName, photoUrl, tempTaskId);
+
   const task = await prisma.staffTask.create({
     data: {
       title,
@@ -146,8 +233,9 @@ export async function POST(request: NextRequest) {
       category,
       checklist,
       link_url: linkUrl || null,
-      attachment_name: attachmentName || null,
-      photo_url: photoUrl || null,
+      attachment_name: normalized.attachmentName,
+      attachment_url: normalized.attachmentUrl,
+      photo_url: normalized.photoUrl,
       assignees: {
         connect: workers.map(w => ({ id: w.id }))
       },
@@ -257,12 +345,19 @@ export async function PATCH(request: NextRequest) {
 
   let updated;
   try {
+    const normalizedImage = isDescriptionImageUpdate
+      ? await normalizeTaskAttachment(attachmentName, photoUrl, id)
+      : null;
+    const normalizedCompletionFiles = status === "COMPLETED"
+      ? await normalizeCompletionFilesForDb(completionFiles, id)
+      : null;
+
     updated = await prisma.staffTask.update({
       where: { id },
       data: isNotesUpdate
         ? { notes: notes || null }
         : isDescriptionImageUpdate
-        ? { photo_url: photoUrl || null, attachment_name: attachmentName || null }
+        ? { photo_url: normalizedImage?.photoUrl, attachment_name: normalizedImage?.attachmentName, attachment_url: normalizedImage?.attachmentUrl }
         : isChecklistUpdate
         ? { checklist }
         : isEvaluation
@@ -274,7 +369,7 @@ export async function PATCH(request: NextRequest) {
             completed_at: status === "COMPLETED" ? new Date() : null,
             completion_note: status === "COMPLETED" ? completionNote || task.completion_note : task.completion_note,
             completion_links: status === "COMPLETED" ? completionLinks : task.completion_links,
-            completion_files: status === "COMPLETED" ? completionFiles : task.completion_files,
+            completion_files: status === "COMPLETED" ? (normalizedCompletionFiles ?? completionFiles) : task.completion_files,
           },
       include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
     });
@@ -368,6 +463,8 @@ export async function PUT(request: NextRequest) {
         })
     : existingChecklist.map((item) => ({ text: item.text, done: Boolean(item.done), completedBy: item.completedBy ?? null, completedAt: item.completedAt ?? null }));
 
+  const normalized = await normalizeTaskAttachment(attachmentName, photoUrl, id);
+
   const updated = await prisma.staffTask.update({
     where: { id },
     data: {
@@ -377,8 +474,9 @@ export async function PUT(request: NextRequest) {
       category,
       checklist,
       link_url: linkUrl || null,
-      attachment_name: attachmentName || null,
-      photo_url: photoUrl || null,
+      attachment_name: normalized.attachmentName,
+      attachment_url: normalized.attachmentUrl || (normalized.photoUrl ? null : task.attachment_url),
+      photo_url: normalized.photoUrl,
       assignees: {
         set: workers.map(w => ({ id: w.id }))
       },
