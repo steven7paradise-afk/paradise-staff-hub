@@ -7,7 +7,7 @@ import {
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
   Archive, Plus, Trash2, UserPlus, Printer, RefreshCw,
-  ChevronLeft, Copy, Check, HeartPulse
+  ChevronLeft, Copy, Check, HeartPulse, Users, UserX, AlarmClock
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -218,6 +218,7 @@ export function StaffDirectory({
   const [filterRole, setFilterRole] = useState("");
   const [filterManager, setFilterManager] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
+  const [expiryMode, setExpiryMode] = useState(false);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   
@@ -314,11 +315,34 @@ export function StaffDirectory({
   const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
   const archivedCount = staff.filter(isArchivedEmployee).length;
+  const activeStaffCount = staff.filter((employee) => !isArchivedEmployee(employee)).length;
+  const formerEmployeeCount = staff.filter((employee) => employee.employeeStatus === "Ex dipendente").length;
+  const isUpcomingContractExpiry = (employee: Employee) => {
+    if (isArchivedEmployee(employee) || !employee.contractEnd || employee.contractRenewalStatus === "RINNOVATO") return false;
+    const end = new Date(`${employee.contractEnd}T23:59:59`);
+    if (Number.isNaN(end.getTime())) return false;
+    const now = new Date();
+    const limit = new Date(now);
+    limit.setDate(limit.getDate() + 30);
+    return end.getTime() >= now.getTime() && end.getTime() <= limit.getTime();
+  };
+  const upcomingExpiryCount = staff.filter(isUpcomingContractExpiry).length;
+
+  const selectOverview = (mode: "active" | "former" | "expiring") => {
+    setSearchQuery("");
+    setFilterLocation("");
+    setFilterRole("");
+    setFilterManager("");
+    setArchiveMode(mode === "former");
+    setExpiryMode(mode === "expiring");
+    setFilterStatus(mode === "former" ? "Ex dipendente" : "");
+  };
 
   // Filters
   const filteredStaff = staff.filter((emp) => {
     const archived = isArchivedEmployee(emp);
     if (archiveMode ? !archived : archived) return false;
+    if (expiryMode && !isUpcomingContractExpiry(emp)) return false;
 
     const fullName = emp.name.toLowerCase();
     const query = searchQuery.toLowerCase();
@@ -1626,6 +1650,65 @@ export function StaffDirectory({
 
   return (
     <div className="w-full space-y-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[
+          {
+            key: "active" as const,
+            label: "Personale attivo",
+            value: activeStaffCount,
+            detail: "Visualizza lo staff operativo",
+            icon: Users,
+            selected: !archiveMode && !expiryMode,
+            tone: "emerald",
+          },
+          {
+            key: "former" as const,
+            label: "Ex dipendenti",
+            value: formerEmployeeCount,
+            detail: "Visualizza archivio e documenti",
+            icon: UserX,
+            selected: archiveMode && filterStatus === "Ex dipendente",
+            tone: "violet",
+          },
+          {
+            key: "expiring" as const,
+            label: "Prossimi in scadenza",
+            value: upcomingExpiryCount,
+            detail: "Contratti entro 30 giorni",
+            icon: AlarmClock,
+            selected: expiryMode,
+            tone: "rose",
+          },
+        ].map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => selectOverview(item.key)}
+              className={cn(
+                "group flex min-h-28 items-center justify-between rounded-[26px] border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+                item.selected ? "border-[#D96B94] ring-2 ring-[#FCE5F3]" : "border-black/5",
+              )}
+            >
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{item.label}</p>
+                <p className="mt-1 text-3xl font-black text-neutral-900">{item.value}</p>
+                <p className="mt-1 text-xs font-semibold text-neutral-500">{item.detail}</p>
+              </div>
+              <span className={cn(
+                "grid size-12 shrink-0 place-items-center rounded-2xl",
+                item.tone === "emerald" && "bg-emerald-50 text-emerald-700",
+                item.tone === "violet" && "bg-violet-50 text-violet-700",
+                item.tone === "rose" && "bg-rose-50 text-rose-700",
+              )}>
+                <Icon className="size-6" />
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Top Filter Bar */}
       <div className="bg-white/70 p-5 rounded-3xl border border-black/5 dark:bg-neutral-900/40 dark:border-white/10 space-y-4">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -1670,6 +1753,7 @@ export function StaffDirectory({
               variant={archiveMode ? "dark" : "soft"}
               onClick={() => {
                 setArchiveMode((current) => !current);
+                setExpiryMode(false);
                 setFilterStatus("");
               }}
               className={cn(
@@ -1782,7 +1866,7 @@ export function StaffDirectory({
               <h2 className="mt-1 text-lg font-black">Account bloccati ed ex dipendenti</h2>
               <p className="mt-1 text-xs opacity-75">Qui trovi solo profili disattivati o segnati come ex dipendente.</p>
             </div>
-            <Button type="button" variant="soft" onClick={() => setArchiveMode(false)} className="bg-white">
+              <Button type="button" variant="soft" onClick={() => selectOverview("active")} className="bg-white">
               Torna allo staff attivo
             </Button>
           </div>
