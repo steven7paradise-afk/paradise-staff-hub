@@ -56,6 +56,10 @@ export function resolveNotificationActionUrl(item: NotificationActionItem, optio
     return `/notifications?notice=${encodeURIComponent(item.id)}&section=attendance`;
   }
 
+  if (item.type === "TASK" && (!item.actionUrl || /^\/tasks\/?$/i.test(item.actionUrl))) {
+    return `/tasks?notification=${encodeURIComponent(item.id)}`;
+  }
+
   const responseId = serviceFormResponseId(item.actionUrl);
   if (responseId) {
     const text = `${item.title} ${item.message}`.toLowerCase();

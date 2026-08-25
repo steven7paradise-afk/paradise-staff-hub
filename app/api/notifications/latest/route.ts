@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
 
 export async function GET() {
   const session = await auth();
@@ -29,7 +30,13 @@ export async function GET() {
             id: latest.id,
             title: latest.title,
             message: latest.message,
-            actionUrl: latest.type === "COMUNICAZIONE" ? `/notifications?communication=${latest.id}` : latest.action_url,
+            actionUrl: resolveNotificationActionUrl({
+              id: latest.id,
+              title: latest.title,
+              message: latest.message,
+              type: latest.type,
+              actionUrl: latest.action_url,
+            }),
             createdAt: latest.created_at.toISOString(),
             type: latest.type,
           }
@@ -38,7 +45,13 @@ export async function GET() {
         id: item.id,
         title: item.title,
         message: item.message,
-        actionUrl: item.type === "COMUNICAZIONE" ? `/notifications?communication=${item.id}` : item.action_url,
+        actionUrl: resolveNotificationActionUrl({
+          id: item.id,
+          title: item.title,
+          message: item.message,
+          type: item.type,
+          actionUrl: item.action_url,
+        }),
         createdAt: item.created_at.toISOString(),
         read: item.read,
         type: item.type,

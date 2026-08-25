@@ -15,6 +15,18 @@ test("una notifica task apre direttamente la task collegata", () => {
   assert.equal(resolveNotificationActionUrl(notification), "/tasks?task=task-123");
 });
 
+test("una vecchia notifica task viene risolta tramite il suo id", () => {
+  const notification = {
+    id: "legacy-notification",
+    title: "Nuova task: Sistemare ordine",
+    message: "Controlla i dettagli",
+    type: "TASK",
+    actionUrl: "/tasks",
+  };
+
+  assert.equal(resolveNotificationActionUrl(notification), "/tasks?notification=legacy-notification");
+});
+
 test("una notifica di timbratura resta un avviso e non apre Presenze", () => {
   const notification = {
     id: "notification-2",

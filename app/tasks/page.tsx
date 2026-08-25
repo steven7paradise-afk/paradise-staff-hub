@@ -9,7 +9,7 @@ import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWork
 
 export const dynamic = "force-dynamic";
 
-export default async function TasksPage({ searchParams }: { searchParams: Promise<{ task?: string }> }) {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ task?: string; notification?: string }> }) {
   const params = await searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -80,7 +80,23 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     }),
     prisma.setting.findUnique({ where: { key: "task_categories" } }),
   ]);
-  const requestedTaskId = params.task?.trim() || null;
+  let requestedTaskId = params.task?.trim() || null;
+  if (!requestedTaskId && params.notification?.trim()) {
+    const legacyNotification = await prisma.notification.findFirst({
+      where: { id: params.notification.trim(), user_id: session.user.id, type: "TASK" },
+      select: { title: true },
+    });
+    const legacyTaskTitle = legacyNotification?.title
+      .replace(/^\s*(?:nuova task|task assegnata|task completata|nuovo commento|ti hanno taggato)\s*:\s*/i, "")
+      .trim();
+    if (legacyTaskTitle) {
+      requestedTaskId = (await prisma.staffTask.findFirst({
+        where: { AND: [taskWhere, { title: { equals: legacyTaskTitle, mode: "insensitive" } }] },
+        orderBy: { created_at: "desc" },
+        select: { id: true },
+      }))?.id ?? null;
+    }
+  }
   const linkedTask = requestedTaskId && !tasks.some((task) => task.id === requestedTaskId)
     ? await prisma.staffTask.findFirst({
         where: { AND: [taskWhere, { id: requestedTaskId }] },
