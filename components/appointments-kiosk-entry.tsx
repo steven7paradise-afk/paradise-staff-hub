@@ -221,6 +221,11 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
                 <h3 className="mt-2 font-serif text-3xl font-light text-neutral-950">
                   {selectedWorker.name.split(" ")[0] || selectedWorker.name}
                 </h3>
+                {error ? (
+                  <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold leading-5 text-red-800" role="alert" aria-live="polite">
+                    {error}
+                  </div>
+                ) : null}
                 <div className="mx-auto mt-5 grid h-14 w-32 grid-cols-2 items-center gap-3 rounded-2xl border border-[#D8B7A7]/70 bg-white/75 px-4">
                   {[0, 1].map((index) => (
                     <span
