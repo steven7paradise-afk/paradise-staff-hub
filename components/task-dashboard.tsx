@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Clock3,
   ExternalLink,
+  FileText,
   FileImage,
   Flag,
   Kanban,
@@ -324,11 +325,17 @@ function isImageName(name?: string | null) {
 }
 
 function isPreviewableImage(url?: string | null) {
-  return Boolean(url && (/^data:image\//i.test(url) || /^https?:\/\//i.test(url)));
+  return Boolean(url && (/^data:image\//i.test(url) || /^blob:/i.test(url) || url.startsWith("/api/drive-image")));
 }
 
 function attachmentKind(url?: string | null, name?: string | null): AttachmentPreview["kind"] {
-  return isPreviewableImage(url) || isImageName(name) ? "image" : "file";
+  if (isImageName(name)) return "image";
+  if (name && /\.[a-z0-9]{2,8}$/i.test(name)) return "file";
+  return isPreviewableImage(url) ? "image" : "file";
+}
+
+function isPdfName(name?: string | null) {
+  return Boolean(name && /\.pdf$/i.test(name));
 }
 
 function taskFilePreviewUrl(file: { url?: string | null; previewUrl?: string | null; driveFileId?: string | null }) {
@@ -1239,6 +1246,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
   function AttachmentCard({ name, url }: { name: string; url?: string | null }) {
     const kind = attachmentKind(url, name);
+    const isPdf = isPdfName(name);
     if (!url && isImageName(name)) return <MissingImagePreview name={name} />;
 
     return (
@@ -1248,12 +1256,12 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             {kind === "image" && url ? (
               <img src={url} alt={name} className="size-full object-cover" />
             ) : (
-              <Paperclip className="size-6 text-black/45" />
+              isPdf ? <FileText className="size-7 text-[#C66170]" /> : <Paperclip className="size-6 text-black/45" />
             )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-black/70">{name}</p>
-            <p className="mt-1 text-xs text-black/40">{kind === "image" ? "Immagine allegata" : "File allegato"}</p>
+            <p className="mt-1 text-xs text-black/40">{kind === "image" ? "Immagine allegata" : isPdf ? "PDF allegato" : "File allegato"}</p>
           </div>
           <Button
             type="button"
@@ -1268,7 +1276,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               }
             }}
           >
-            Apri allegato
+            {isPdf ? "Apri PDF" : "Apri allegato"}
           </Button>
         </div>
       </div>
