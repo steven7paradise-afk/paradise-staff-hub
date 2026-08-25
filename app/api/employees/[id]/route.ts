@@ -77,6 +77,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return apiError("Solo Zero può modificare i ruoli di sistema.", 403);
     }
     const role = requestedRole ?? current.role;
+    const currentWorkforceData = current.workforce_data && typeof current.workforce_data === "object" && !Array.isArray(current.workforce_data)
+      ? current.workforce_data as Record<string, unknown>
+      : {};
+    const contractWorkforceData = data.contractType !== undefined || data.contractRenewalStatus !== undefined
+      ? {
+          ...currentWorkforceData,
+          ...(data.contractType !== undefined ? { contractType: String(data.contractType ?? "").trim() } : {}),
+          ...(data.contractRenewalStatus !== undefined ? { contractRenewalStatus: String(data.contractRenewalStatus ?? "DA_VALUTARE") } : {}),
+        }
+      : undefined;
 
     const nextSedeId = data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined;
     const baseUpdate = {
@@ -97,9 +107,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
       access_list: data.accessList !== undefined ? data.accessList : undefined,
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
-      workforce_data: data.workforceData !== undefined
+      workforce_data: contractWorkforceData ?? (data.workforceData !== undefined
         ? (data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData) ? data.workforceData : {})
-        : undefined,
+        : undefined),
       google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
       google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : undefined,
       contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,

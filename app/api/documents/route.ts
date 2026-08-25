@@ -19,6 +19,8 @@ export async function POST(request: NextRequest) {
   const type = String(data.get("type") ?? "DOCUMENTO").trim();
   const month = Number(data.get("month") ?? 0) || null;
   const year = Number(data.get("year") ?? 0) || null;
+  const documentDateValue = String(data.get("documentDate") ?? "").trim();
+  const documentDate = documentDateValue ? new Date(`${documentDateValue}T12:00:00`) : null;
   if (!(file instanceof File) || !userId || !title || file.size > 15 * 1024 * 1024) {
     return NextResponse.json({ error: "Inserisci dipendente, titolo e file fino a 15 MB." }, { status: 400 });
   }
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
         type,
         month,
         year,
+        document_date: documentDate && !Number.isNaN(documentDate.getTime()) ? documentDate : null,
         uploaded_by: session.user.id,
         file_url: driveFile.webViewLink || driveFile.webContentLink || `https://drive.google.com/file/d/${driveFile.id}/view`,
         storage_path: null,

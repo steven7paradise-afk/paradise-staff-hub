@@ -12,6 +12,7 @@ import {
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
+import { EmployeeContractDocuments, type EmployeeContractDocument } from "@/components/employee-contract-documents";
 
 type Employee = {
   id: string;
@@ -35,7 +36,10 @@ type Employee = {
   hrNotes: string;
   accessList: string[];
   iban?: string;
+  contractType?: string;
+  contractRenewalStatus?: string;
   contractHistory?: ContractHistoryItem[] | null;
+  documents?: EmployeeContractDocument[];
   sicknessStats?: {
     totalDays: number;
     justifiedDays: number;
@@ -184,16 +188,28 @@ const DEFAULT_MANSIONI = [
   "Vice responsabile salone"
 ];
 
+const CONTRACT_TYPE_OPTIONS = [
+  "Tempo indeterminato",
+  "Tempo determinato",
+  "Apprendistato",
+  "Tirocinio / Stage",
+  "Somministrazione",
+  "Collaborazione / Partita IVA",
+  "Altro",
+];
+
 export function StaffDirectory({
   initialStaff,
   locations,
   managers,
-  userRole
+  userRole,
+  focusEmployeeId,
 }: {
   initialStaff: Employee[];
   locations: Location[];
   managers: Manager[];
   userRole: string;
+  focusEmployeeId?: string | null;
 }) {
   const [staff, setStaff] = useState<Employee[]>(initialStaff);
   const [searchQuery, setSearchQuery] = useState("");
@@ -245,6 +261,15 @@ export function StaffDirectory({
   const [submitting, setSubmitting] = useState(false);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
   const [syncingDrivePhotos, setSyncingDrivePhotos] = useState(false);
+
+  useEffect(() => {
+    if (!focusEmployeeId) return;
+    const employee = initialStaff.find((item) => item.id === focusEmployeeId);
+    if (!employee) return;
+    setSelectedEmployee(employee);
+    setEditForm({ ...employee });
+    setIsEditing(true);
+  }, [focusEmployeeId, initialStaff]);
 
   const [mansioniList, setMansioniList] = useState<string[]>(DEFAULT_MANSIONI);
   const [customMansioneEdit, setCustomMansioneEdit] = useState(false);
@@ -460,6 +485,8 @@ export function StaffDirectory({
           hrNotes: editForm.hrNotes || undefined,
           iban: editForm.iban || undefined,
           contractHistory: getContractHistory(editForm),
+          contractType: editForm.contractType || "",
+          contractRenewalStatus: editForm.contractRenewalStatus || "DA_VALUTARE",
           pin: pinInput || undefined,
           password: passwordInput || undefined
         })
@@ -497,6 +524,9 @@ export function StaffDirectory({
         accessList: (data.access_list as string[]) ?? [],
         iban: data.iban ?? "",
         contractHistory: Array.isArray(data.contract_history) ? data.contract_history : [],
+        contractType: data.workforce_data?.contractType ?? editForm.contractType ?? "",
+        contractRenewalStatus: data.workforce_data?.contractRenewalStatus ?? editForm.contractRenewalStatus ?? "DA_VALUTARE",
+        documents: editForm.documents ?? [],
         sicknessStats: editForm.sicknessStats,
       };
 
@@ -1289,6 +1319,29 @@ export function StaffDirectory({
                         </Select>
                       </label>
 
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipologia di contratto</span>
+                        <Select
+                          value={editForm.contractType || ""}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, contractType: e.target.value } : null)}
+                        >
+                          <option value="">Non specificata</option>
+                          {CONTRACT_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+                        </Select>
+                      </label>
+
+                      <label className="block space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Stato rinnovo</span>
+                        <Select
+                          value={editForm.contractRenewalStatus || "DA_VALUTARE"}
+                          onChange={(e) => setEditForm(prev => prev ? { ...prev, contractRenewalStatus: e.target.value } : null)}
+                        >
+                          <option value="DA_VALUTARE">Da valutare — avvisi 7, 3, 1 e 0 giorni</option>
+                          <option value="NON_RINNOVATO">Non rinnovato — avvisi 1 e 0 giorni</option>
+                          <option value="RINNOVATO">Rinnovato — ferma avvisi scadenza corrente</option>
+                        </Select>
+                      </label>
+
                       <div className="grid grid-cols-2 gap-3">
                         <label className="block space-y-1">
                           <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Inizio contratto</span>
@@ -1418,7 +1471,10 @@ export function StaffDirectory({
                   <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
                     <ClipboardList className="size-4" />
                   </div>
-                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
+                  <div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
+                    <p className="mt-1 text-[10px] font-bold text-[#B83D7F]">{editForm.contractType || "Tipologia contratto non specificata"}</p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1541,6 +1597,19 @@ export function StaffDirectory({
                 </table>
               </div>
             </div>
+
+            <EmployeeContractDocuments
+              employeeId={editForm.id}
+              employeeName={editForm.name}
+              documents={editForm.documents ?? []}
+              onUploaded={(document) => {
+                setEditForm((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
+                setSelectedEmployee((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
+                setStaff((prev) => prev.map((employee) => employee.id === editForm.id
+                  ? { ...employee, documents: [document, ...(employee.documents ?? [])] }
+                  : employee));
+              }}
+            />
           </form>
         </div>
       </div>

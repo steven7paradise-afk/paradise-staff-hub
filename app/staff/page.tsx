@@ -6,7 +6,12 @@ import { normalizeAccessRoutes } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-export default async function StaffPage() {
+export default async function StaffPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ employee?: string }>;
+}) {
+  const params = searchParams ? await searchParams : {};
   const currentYear = new Date().getFullYear();
   const sicknessStart = new Date(currentYear, 0, 1);
   const sicknessEnd = new Date(currentYear, 11, 31, 23, 59, 59, 999);
@@ -37,7 +42,19 @@ export default async function StaffPage() {
         },
         last_edited_by: {
           select: { name: true }
-        }
+        },
+        documents: {
+          orderBy: [{ document_date: "desc" }, { created_at: "desc" }],
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            file_url: true,
+            storage_path: true,
+            document_date: true,
+            created_at: true,
+          },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -76,6 +93,10 @@ export default async function StaffPage() {
             { totalDays: 0, justifiedDays: 0, unjustifiedDays: 0 }
           );
 
+          const workforceData = user.workforce_data && typeof user.workforce_data === "object" && !Array.isArray(user.workforce_data)
+            ? user.workforce_data as Record<string, unknown>
+            : {};
+
           return {
             id: user.id,
             name: user.name,
@@ -102,7 +123,18 @@ export default async function StaffPage() {
                 ? normalizeAccessRoutes((user.access_list as { view?: unknown }).view)
                 : [],
             iban: user.iban ?? "",
+            contractType: typeof workforceData.contractType === "string" ? workforceData.contractType : "",
+            contractRenewalStatus: typeof workforceData.contractRenewalStatus === "string" ? workforceData.contractRenewalStatus : "DA_VALUTARE",
             contractHistory: Array.isArray(user.contract_history) ? user.contract_history as any[] : [],
+            documents: user.documents.map((document) => ({
+              id: document.id,
+              title: document.title,
+              type: document.type,
+              fileUrl: document.file_url,
+              storagePath: document.storage_path,
+              documentDate: document.document_date?.toISOString().slice(0, 10) ?? "",
+              createdAt: document.created_at.toISOString(),
+            })),
             sicknessStats,
             lastEditedByName: user.last_edited_by?.name ?? null,
             lastEditedAt: user.last_edited_at?.toISOString() ?? null,
@@ -111,6 +143,7 @@ export default async function StaffPage() {
         locations={locations.map((loc) => ({ id: loc.id, name: loc.name }))}
         managers={managers.map((m) => ({ id: m.id, name: m.name, role: m.role }))}
         userRole={session?.user?.role ?? "DIPENDENTE"}
+        focusEmployeeId={params.employee ?? null}
       />
     </AppShell>
   );
