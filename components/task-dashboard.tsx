@@ -237,6 +237,32 @@ function fileToDataUrl(file: File) {
   });
 }
 
+function extractPastedFiles(event: React.ClipboardEvent | ClipboardEvent): File[] {
+  const files: File[] = [];
+  const items = event.clipboardData?.items;
+  if (items) {
+    for (const item of Array.from(items)) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          if (!file.name || file.name === "image.png" || file.name === "blob") {
+            const ext = (file.type.split("/")[1] || "png").replace(/[^a-z0-9]/g, "");
+            const renamed = new File([file], `imm-incollata-${Date.now()}.${ext}`, { type: file.type });
+            files.push(renamed);
+          } else {
+            files.push(file);
+          }
+        }
+      }
+    }
+  } else if (event.clipboardData?.files) {
+    for (const file of Array.from(event.clipboardData.files)) {
+      files.push(file);
+    }
+  }
+  return files;
+}
+
 function isImageName(name?: string | null) {
   return Boolean(name && /\.(png|jpe?g|webp|gif|avif)$/i.test(name));
 }
@@ -524,6 +550,46 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    function handleGlobalPaste(event: ClipboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+
+      const pastedFiles = extractPastedFiles(event);
+      if (pastedFiles.length === 0) return;
+
+      const imageFile = pastedFiles.find((f) => f.type.startsWith("image/") || f.size > 0);
+      if (!imageFile) return;
+
+      if (open) {
+        event.preventDefault();
+        void attachPhoto(imageFile);
+        return;
+      }
+
+      if (completionTarget) {
+        event.preventDefault();
+        void attachCompletionFiles([imageFile]);
+        return;
+      }
+
+      if (selected) {
+        const isInput = tagName === "input" || tagName === "textarea";
+        const isPureImagePaste = Array.from(event.clipboardData?.items || []).some(
+          (item) => item.kind === "file" && item.type.startsWith("image/")
+        );
+
+        if (!isInput || isPureImagePaste) {
+          event.preventDefault();
+          void attachCommentFiles([imageFile]);
+        }
+      }
+    }
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => window.removeEventListener("paste", handleGlobalPaste);
+  }, [open, completionTarget, selected]);
   const timelineEvents = useMemo(() => {
     if (!selected) return [];
     const events: {
@@ -1011,23 +1077,27 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     });
   }
 
-  async function attachCompletionFiles(files: FileList | null) {
+  async function attachCompletionFiles(files: FileList | File[] | null) {
+    const fileList = Array.isArray(files) ? files : Array.from(files ?? []);
     const next: CompletionFile[] = [];
-    for (const file of Array.from(files ?? [])) {
+    for (const file of fileList) {
       if (file.size > 50 * 1024 * 1024) continue;
       next.push({ name: file.name, url: await fileToDataUrl(file) });
     }
-    setCompletion((current) => ({ ...current, files: next }));
+    setCompletion((current) => ({ ...current, files: [...current.files, ...next] }));
   }
 
 
-  async function attachCommentFiles(files: FileList | null) {
+  async function attachCommentFiles(files: FileList | File[] | null) {
     if (!files || !selected) return;
+    const fileList = Array.isArray(files) ? files : Array.from(files);
+    if (fileList.length === 0) return;
+
     setCommentError("");
     setCommentUploading(true);
     const uploaded: NonNullable<TaskComment["files"]> = [];
     try {
-      for (const file of Array.from(files)) {
+      for (const file of fileList) {
         if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 50 MB.`);
         const uploadBody = new FormData();
         uploadBody.append("taskId", selected.id);
@@ -1923,7 +1993,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     className="min-h-16 w-full resize-none rounded-xl border border-black/5 bg-white px-3 py-2 text-sm shadow-xs outline-none transition focus:border-[#8064D8] md:min-h-20" 
                     value={commentText} 
                     onChange={(event) => setCommentText(event.target.value)} 
-                    placeholder="Scrivi un aggiornamento, nota o commento... usa @nome per taggare una persona" 
+                    onPaste={(event) => {
+                      const files = extractPastedFiles(event);
+                      if (files.length > 0) {
+                        event.preventDefault();
+                        void attachCommentFiles(files);
+                      }
+                    }}
+                    placeholder="Scrivi un aggiornamento o incolla un'immagine (Cmd+V / Ctrl+V)... usa @nome per taggare una persona" 
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @ seguito dal nome</span>
