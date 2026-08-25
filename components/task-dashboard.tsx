@@ -431,6 +431,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const [commentFiles, setCommentFiles] = useState<NonNullable<TaskComment["files"]>>([]);
   const [commentUploading, setCommentUploading] = useState(false);
   const [commentSaving, setCommentSaving] = useState(false);
+  const [commentError, setCommentError] = useState("");
   const [todayAttendanceLogs, setTodayAttendanceLogs] = useState<TodayAttendanceLog[]>([]);
   const [completion, setCompletion] = useState({ note: "", link: "", files: [] as CompletionFile[] });
   const [form, setForm] = useState({
@@ -1008,15 +1009,27 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
 
   async function attachCommentFiles(files: FileList | null) {
-    if (!files) return;
+    if (!files || !selected) return;
+    setCommentError("");
     setCommentUploading(true);
-    const next = [...commentFiles];
-    for (const file of Array.from(files)) {
-      const url = await fileToDataUrl(file);
-      next.push({ name: file.name, url });
+    const uploaded: NonNullable<TaskComment["files"]> = [];
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 5 MB.`);
+        const body = new FormData();
+        body.set("taskId", selected.id);
+        body.set("file", file);
+        const response = await fetch("/api/tasks/comments/upload", { method: "POST", body });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error || `Non riesco a caricare ${file.name}.`);
+        uploaded.push(data);
+      }
+      setCommentFiles((current) => [...current, ...uploaded]);
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : "Caricamento non riuscito.");
+    } finally {
+      setCommentUploading(false);
     }
-    setCommentFiles(next);
-    setCommentUploading(false);
   }
 
   function removeCommentFile(index: number) {
@@ -1028,41 +1041,45 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     const trimmed = commentText.trim();
     if (commentSaving || (!trimmed && commentFiles.length === 0)) return;
     const isEdit = Boolean(editingCommentId);
+    setCommentError("");
     setCommentSaving(true);
-    const response = await fetch("/api/tasks/comments", {
-      method: isEdit ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        isEdit 
-          ? { id: editingCommentId, message: trimmed, files: commentFiles } 
-          : { taskId: selected.id, message: trimmed, files: commentFiles }
-      ),
-    });
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/tasks/comments", {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isEdit
+            ? { id: editingCommentId, message: trimmed, files: commentFiles }
+            : { taskId: selected.id, message: trimmed, files: commentFiles }
+        ),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || "Non riesco a salvare il commento.");
+      const comment: TaskComment = {
+        id: data.id,
+        message: data.message,
+        userId: data.user_id,
+        userName: data.user.name,
+        userPhoto: data.user.photo_url ?? null,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        files: data.files ? (typeof data.files === "string" ? JSON.parse(data.files) : data.files) : []
+      };
+      const commentAlreadyExists = selected.comments.some((item) => item.id === comment.id);
+      const comments = isEdit || commentAlreadyExists
+        ? selected.comments.map((item) => item.id === comment.id ? comment : item)
+        : [...selected.comments, comment];
+      const updated = { ...selected, comments };
+      setSelected(updated);
+      setTasks((current) => current.map((item) => item.id === selected.id ? updated : item));
+      setCommentText("");
+      setCommentFiles([]);
+      setEditingCommentId(null);
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : "Invio non riuscito.");
+    } finally {
       setCommentSaving(false);
-      return;
     }
-    const data = await response.json();
-    const comment: TaskComment = {
-      id: data.id,
-      message: data.message,
-      userId: data.user_id,
-      userName: data.user.name,
-      userPhoto: data.user.photo_url ?? null,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      files: data.files ? (typeof data.files === "string" ? JSON.parse(data.files) : data.files) : []
-    };
-    const commentAlreadyExists = selected.comments.some((item) => item.id === comment.id);
-    const comments = isEdit || commentAlreadyExists
-      ? selected.comments.map((item) => item.id === comment.id ? comment : item)
-      : [...selected.comments, comment];
-    const updated = { ...selected, comments };
-    setSelected(updated);
-    setTasks((current) => current.map((item) => item.id === selected.id ? updated : item));
-    setCommentText("");
-    setCommentFiles([]);
-    setEditingCommentId(null);
     setCommentSaving(false);
   }
 
@@ -1924,6 +1941,10 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     </div>
                   )}
 
+                  {commentError ? (
+                    <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{commentError}</p>
+                  ) : null}
+
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold text-black/60 transition hover:bg-[#FAF7F9] hover:text-[#C66170]">
@@ -1943,7 +1964,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                         </Button>
                       )}
                       <Button className="h-9 min-w-24 text-xs" disabled={commentUploading || commentSaving} onClick={saveComment}>
-                        <Send className="size-3.5" /> {commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
+                        <Send className="size-3.5" /> {commentUploading ? "Carico file..." : commentSaving ? "Salvo..." : editingCommentId ? "Salva" : "Invia"}
                       </Button>
                     </div>
                   </div>
