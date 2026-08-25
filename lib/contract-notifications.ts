@@ -34,8 +34,9 @@ export async function ensureContractExpiryNotifications() {
     include: { location: true },
   });
   const recipients = await prisma.user.findMany({
-    where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"] } },
-    select: { id: true, role: true, sede_id: true },
+    // Le scadenze contrattuali sono informazioni amministrative riservate.
+    where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] } },
+    select: { id: true },
   });
 
   let created = 0;
@@ -66,9 +67,7 @@ export async function ensureContractExpiryNotifications() {
       const dateKey = deadline.date.toISOString().slice(0, 10);
       const title = days === 0 ? "Scadenza contratto oggi" : "Contratto in scadenza";
       const message = `${worker.name} - ${worker.location?.name ?? "Nessun salone"}: ${deadline.label} ${reminderText(days)} (${dateKey}).`;
-      const scopedRecipients = recipients.filter((recipient) => recipient.role !== "RESPONSABILE" || recipient.sede_id === worker.sede_id);
-
-      for (const recipient of scopedRecipients) {
+      for (const recipient of recipients) {
         const existing = await prisma.notification.findFirst({ where: { user_id: recipient.id, title, message } });
         if (existing) continue;
         await createNotification({

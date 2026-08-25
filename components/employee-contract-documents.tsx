@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
+import { createPortal } from "react-dom";
 import { Download, ExternalLink, Eye, FileCheck2, FileText, Upload, X } from "lucide-react";
 import { Field, Select } from "@/components/ui";
 
@@ -98,17 +100,26 @@ export function EmployeeContractDocuments({
           </div>
           <div>
             <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Contratti e documenti fiscali</h2>
-            <p className="text-[10px] font-semibold text-neutral-400">Scorciatoie documenti di {employeeName}</p>
+            <p className="text-[10px] font-semibold text-neutral-400">Documenti recuperati automaticamente dall'archivio Cedolini di {employeeName}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowUpload((value) => !value)}
-          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#D96B94] px-4 text-xs font-bold text-white transition hover:bg-[#C85982]"
-        >
-          <Upload className="size-4" />
-          Carica documento
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/cedolini?employee=${encodeURIComponent(employeeId)}`}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[#D96B94] bg-white px-4 text-xs font-bold text-[#B83D7F]"
+          >
+            <ExternalLink className="size-4" />
+            Apri archivio Cedolini
+          </Link>
+          <button
+            type="button"
+            onClick={() => setShowUpload((value) => !value)}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#D96B94] px-4 text-xs font-bold text-white transition hover:bg-[#C85982]"
+          >
+            <Upload className="size-4" />
+            Carica in Cedolini
+          </button>
+        </div>
       </div>
 
       {status ? <p className="mt-3 rounded-2xl bg-[#FFF8FC] px-4 py-3 text-xs font-bold text-[#B83D7F]">{status}</p> : null}
@@ -178,16 +189,50 @@ export function EmployeeContractDocuments({
         })}
       </div>
 
-      {preview ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-3 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Anteprima ${preview.title}`}>
-          <div className="flex h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
-            <header className="flex items-center justify-between border-b border-black/5 p-4">
-              <div><p className="text-xs font-black text-neutral-900">{preview.title}</p><p className="text-[10px] text-neutral-400">{formatDate(preview.documentDate)}</p></div>
-              <button type="button" onClick={() => setPreview(null)} className="grid size-10 place-items-center rounded-full bg-neutral-100" aria-label="Chiudi anteprima"><X className="size-4" /></button>
+      {preview ? createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Anteprima ${preview.title}`}
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPreview(null);
+          }}
+        >
+          <div className="flex h-[calc(100dvh-1.5rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl sm:h-[calc(100dvh-3rem)] sm:rounded-[28px]">
+            <header className="flex shrink-0 items-center justify-between gap-4 border-b border-black/10 bg-white px-4 py-3 sm:px-5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-neutral-900">{preview.title}</p>
+                <p className="mt-0.5 text-[11px] font-semibold text-neutral-400">{formatDate(preview.documentDate)}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={`/api/documents/${preview.id}/download?download=1`}
+                  className="hidden min-h-10 items-center gap-2 rounded-full bg-[#D96B94] px-4 text-xs font-bold text-white sm:inline-flex"
+                >
+                  <Download className="size-4" />
+                  Scarica PDF
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreview(null)}
+                  className="grid size-10 place-items-center rounded-full bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200"
+                  aria-label="Chiudi anteprima"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
             </header>
-            <iframe title={`Anteprima ${preview.title}`} src={`/api/documents/${preview.id}/download#toolbar=1&view=FitH`} className="min-h-0 flex-1 bg-neutral-100" />
+            <div className="min-h-0 flex-1 bg-neutral-200 p-2 sm:p-3">
+              <iframe
+                title={`Anteprima ${preview.title}`}
+                src={`/api/documents/${preview.id}/download#toolbar=1&navpanes=0&view=FitH`}
+                className="h-full w-full rounded-xl border-0 bg-white"
+              />
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

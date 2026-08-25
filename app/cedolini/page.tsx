@@ -9,13 +9,19 @@ export const dynamic = "force-dynamic";
 
 const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
-export default async function CedoliniPage() {
+export default async function CedoliniPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ employee?: string; type?: string }>;
+}) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   
   if (!allowedRoles.has(session.user.role)) {
     redirect("/dashboard");
   }
+
+  const params = await searchParams;
 
   const [documents, workers] = await Promise.all([
     prisma.document.findMany({
@@ -55,7 +61,13 @@ export default async function CedoliniPage() {
         <DocumentUpload workers={workers} />
       </div>
       
-      <DocumentsViewer documents={documentItems} employeeView={false} workers={workers} />
+      <DocumentsViewer
+        documents={documentItems}
+        employeeView={false}
+        workers={workers}
+        initialWorkerId={params.employee ?? ""}
+        initialType={params.type ?? "ALL"}
+      />
     </AppShell>
   );
 }

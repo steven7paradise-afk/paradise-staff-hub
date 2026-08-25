@@ -323,20 +323,27 @@ export function DocumentsViewer({
   documents,
   employeeView,
   workers = [],
+  initialWorkerId = "",
+  initialType = "ALL",
 }: {
   documents: DocumentRecord[];
   employeeView: boolean;
   workers?: { id: string; name: string; role?: string; mansione?: string | null }[];
+  initialWorkerId?: string;
+  initialType?: string;
 }) {
   const router = useRouter();
   const [deletingId, setDeletingId] = useState("");
-  const [selectedId, setSelectedId] = useState(documents[0]?.id ?? "");
+  const initialDocuments = initialWorkerId
+    ? documents.filter((document) => document.user.id === initialWorkerId && (initialType === "ALL" || document.type === initialType))
+    : documents;
+  const [selectedId, setSelectedId] = useState(initialDocuments[0]?.id ?? "");
   const [mobilePreview, setMobilePreview] = useState<DocumentRecord | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(documents[0]?.id ?? null);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedWorkerId, setSelectedWorkerId] = useState("");
-  const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedWorkerId, setSelectedWorkerId] = useState(initialWorkerId);
+  const [selectedType, setSelectedType] = useState(initialType);
   const [selectedYear, setSelectedYear] = useState("ALL");
 
   // Delivery status verification states
