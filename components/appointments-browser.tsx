@@ -1761,9 +1761,9 @@ export function AppointmentsBrowser({
         setClientControlForm((prev) => {
           const newOrder = data.orderName ? data.orderName.replace(/^#/, "") : prev.shopifyOrder;
           const newDeposit = data.totalPrice != null ? String(data.totalPrice) : prev.depositPaid;
-          const newEmail = data.email || prev.email;
-          const newPhone = data.phone || prev.phone;
-          const newClientName = data.clientName || prev.clientName;
+          const newEmail = prev.email.trim() ? prev.email : (data.email || "");
+          const newPhone = prev.phone.trim() ? prev.phone : (data.phone || "");
+          const newClientName = prev.clientName.trim() ? prev.clientName : (data.clientName || "");
 
           return {
             ...prev,
@@ -1866,9 +1866,9 @@ export function AppointmentsBrowser({
           ...prev,
           secondShopifyOrder: cleanName,
           paid: orderPriceStr || prev.paid,
-          email: order.email || prev.email,
-          phone: order.phone || prev.phone,
-          clientName: order.clientName || prev.clientName,
+          email: prev.email.trim() ? prev.email : (order.email || ""),
+          phone: prev.phone.trim() ? prev.phone : (order.phone || ""),
+          clientName: prev.clientName.trim() ? prev.clientName : (order.clientName || ""),
         };
       });
       void handleSecondShopifyOrderLookup(cleanName);
@@ -1880,9 +1880,9 @@ export function AppointmentsBrowser({
           ...prev,
           shopifyOrder: cleanName,
           depositPaid: orderPriceStr || prev.depositPaid,
-          email: order.email || prev.email,
-          phone: order.phone || prev.phone,
-          clientName: order.clientName || prev.clientName,
+          email: prev.email.trim() ? prev.email : (order.email || ""),
+          phone: prev.phone.trim() ? prev.phone : (order.phone || ""),
+          clientName: prev.clientName.trim() ? prev.clientName : (order.clientName || ""),
         };
       });
     }

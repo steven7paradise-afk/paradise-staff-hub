@@ -260,8 +260,7 @@ export async function POST(request: NextRequest) {
   const isFinalPaymentVerified = Boolean(
     secondOrderDetails &&
     verifiedPaymentStatus === "paid" &&
-    verifiedPaymentMethod !== "DA_VERIFICARE" &&
-    finalOrderMatchesClient
+    verifiedPaymentMethod !== "DA_VERIFICARE"
   );
 
   if (!isFinito && !isNoShow) {
@@ -280,9 +279,6 @@ export async function POST(request: NextRequest) {
         error: "Shopify non ha indicato chiaramente il metodo di pagamento. Seleziona il metodo usato dalla cliente.",
         paymentGateways: secondOrderDetails.paymentGateways,
       }, { status: 422 });
-    }
-    if (!finalOrderMatchesClient) {
-      return NextResponse.json({ error: "Il secondo ordine Shopify non appartiene alla cliente selezionata. Verifica il numero ordine." }, { status: 400 });
     }
   }
 
