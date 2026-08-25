@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, Card, Field, Select } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-type Worker = { id: string; name: string };
+type Worker = { id: string; name: string; role?: string; mansione?: string | null; photo_url?: string | null };
 
 type BulkFileItem = {
   id: string;
@@ -268,7 +268,11 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
                   <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Dipendente</span>
                   <Select name="userId" required>
                     <option value="">Scegli dipendente</option>
-                    {workers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
+                    {workers.map((worker) => (
+                      <option key={worker.id} value={worker.id}>
+                        {worker.name} {worker.mansione ? `(${worker.mansione})` : ""}
+                      </option>
+                    ))}
                   </Select>
                 </label>
 

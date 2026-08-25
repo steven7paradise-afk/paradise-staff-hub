@@ -30,7 +30,7 @@ export default async function CedoliniPage({
     }),
     prisma.user.findMany({
       where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
-      select: { id: true, name: true, role: true, mansione: true },
+      select: { id: true, name: true, role: true, mansione: true, photo_url: true, email: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -48,6 +48,7 @@ export default async function CedoliniPage({
       id: document.user.id,
       name: document.user.name,
       email: document.user.email,
+      photo_url: document.user.photo_url ?? null,
     },
   }));
 
