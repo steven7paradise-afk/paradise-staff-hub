@@ -35,24 +35,30 @@ async function readMultipartUpload(request: NextRequest): Promise<MultipartUploa
   const declaredLength = Number(request.headers.get("content-length") || 0);
   if (declaredLength > MAX_FILE_BYTES + 2 * 1024 * 1024) throw new Error("TOO_LARGE");
 
-  const nativeFormData = await request.clone().formData().catch(() => null);
-  if (nativeFormData) {
-    const taskId = String(nativeFormData.get("taskId") ?? "").trim();
-    const preferredFile = nativeFormData.get("file");
-    const candidate =
-      preferredFile && typeof preferredFile !== "string"
-        ? preferredFile
-        : Array.from(nativeFormData.values()).find((value) => typeof value !== "string" && typeof value.arrayBuffer === "function");
-    if (taskId && candidate && typeof candidate !== "string") {
-      const buffer = Buffer.from(await candidate.arrayBuffer());
-      if (buffer.length <= 0) throw new Error("EMPTY_FILE");
-      if (buffer.length > MAX_FILE_BYTES) throw new Error("TOO_LARGE");
-      return {
-        taskId,
-        fileName: candidate.name || "file",
-        mimeType: candidate.type || "application/octet-stream",
-        buffer,
-      };
+  try {
+    const nativeFormData = await request.formData();
+    if (nativeFormData) {
+      const taskId = String(nativeFormData.get("taskId") ?? "").trim();
+      const preferredFile = nativeFormData.get("file");
+      const candidate =
+        preferredFile && typeof preferredFile !== "string"
+          ? preferredFile
+          : Array.from(nativeFormData.values()).find((value) => typeof value !== "string" && typeof (value as any).arrayBuffer === "function");
+      if (taskId && candidate && typeof candidate !== "string") {
+        const buffer = Buffer.from(await (candidate as unknown as File).arrayBuffer());
+        if (buffer.length <= 0) throw new Error("EMPTY_FILE");
+        if (buffer.length > MAX_FILE_BYTES) throw new Error("TOO_LARGE");
+        return {
+          taskId,
+          fileName: (candidate as unknown as File).name || "file",
+          mimeType: (candidate as unknown as File).type || "application/octet-stream",
+          buffer,
+        };
+      }
+    }
+  } catch (err: any) {
+    if (err.message === "TOO_LARGE" || err.message === "EMPTY_FILE" || err.message === "OLD_PAGE") {
+      throw err;
     }
   }
 
