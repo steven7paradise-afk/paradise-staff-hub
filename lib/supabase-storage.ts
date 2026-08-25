@@ -88,6 +88,19 @@ export async function uploadPrivateDocumentBytes(userId: string, bytes: ArrayBuf
   return path;
 }
 
+export async function createSignedTaskAttachmentUpload(userId: string, taskId: string, filename: string) {
+  const client = storageClient();
+  const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";
+  const path = `task-attachments/${safeName(taskId)}/${safeName(userId)}/${Date.now()}-${safeName(filename)}`;
+  const { data, error } = await client.storage.from(bucket).createSignedUploadUrl(path);
+  if (error) throw new Error(error.message);
+  return {
+    path,
+    signedUrl: data.signedUrl,
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "",
+  };
+}
+
 export async function signedDocumentUrl(path: string) {
   const client = storageClient();
   const bucket = process.env.SUPABASE_DOCUMENTS_BUCKET ?? "staff-documents";

@@ -1,32 +1,25 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
+import { createSignedTaskAttachmentUpload } from "@/lib/supabase-storage";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
-
-function safeFilePart(value: string) {
-  return String(value || "allegato-task")
-    .trim()
-    .replace(/[\/\\:*?"<>|]+/g, " ")
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9._-]/g, "")
-    .replace(/^-+|-+$/g, "") || "allegato-task";
-}
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
 
-  const form = await request.formData();
-  const taskId = String(form.get("taskId") ?? "").trim();
-  const file = form.get("file");
-  if (!taskId || !(file instanceof File) || file.size === 0) {
-    return NextResponse.json({ error: "Seleziona un file valido." }, { status: 400 });
+  const body = await request.json().catch(() => null);
+  const taskId = String(body?.taskId ?? "").trim();
+  const fileName = String(body?.fileName ?? "").trim();
+  const fileSize = Number(body?.fileSize ?? 0);
+  const fileType = String(body?.fileType ?? "application/octet-stream");
+  if (!taskId || !fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
+    return NextResponse.json({ error: "Dati del file non validi." }, { status: 400 });
   }
-  if (file.size > MAX_FILE_BYTES) {
-    return NextResponse.json({ error: "Il file supera il limite di 5 MB." }, { status: 413 });
+  if (fileSize > MAX_FILE_BYTES) {
+    return NextResponse.json({ error: "Il file supera il limite di 50 MB." }, { status: 413 });
   }
 
   const task = await prisma.staffTask.findUnique({ where: { id: taskId }, include: { assignees: true } });
@@ -38,21 +31,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const mimeType = file.type || "application/octet-stream";
-    const stored = await uploadTaskImageToGoogleDrive(
-      Buffer.from(await file.arrayBuffer()),
-      `${new Date().toISOString().slice(0, 10)}-${taskId}-${safeFilePart(file.name)}`,
-      mimeType,
-    );
-    const isImage = mimeType.startsWith("image/");
+    const upload = await createSignedTaskAttachmentUpload(session.user.id, taskId, fileName);
     return NextResponse.json({
-      name: stored.name || file.name,
-      url: isImage ? stored.previewUrl : (stored.webViewLink || stored.webContentLink || stored.previewUrl),
-      previewUrl: isImage ? stored.previewUrl : null,
-      driveFileId: stored.id,
-      driveFileUrl: stored.webViewLink,
-      webContentLink: stored.webContentLink,
-      type: mimeType,
+      ...upload,
+      fileType,
+      fileUrl: `/api/tasks/comments/files?taskId=${encodeURIComponent(taskId)}&path=${encodeURIComponent(upload.path)}`,
     });
   } catch (error) {
     console.error("Task attachment upload failed:", error);

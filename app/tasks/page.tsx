@@ -5,7 +5,7 @@ import { TaskDashboard } from "@/components/task-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
-import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
+import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +38,17 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         ],
       };
 
-  const mentionUserWhere: Prisma.UserWhereInput = taskEscalationRecipientWhere(
-    canSeeAllTaskLocations ? null : currentUser?.sede_id,
-  );
+  const mentionUserWhere: Prisma.UserWhereInput = {
+    active: true,
+    employee_status: { not: "Ex dipendente" },
+    role: { not: "ZERO" },
+    ...(canSeeAllTaskLocations ? {} : {
+      OR: [
+        { role: { in: ["SUPER_ADMIN", "ADMIN"] } },
+        { sede_id: currentUser?.sede_id ?? undefined },
+      ],
+    }),
+  };
   const taskListSelect = {
     id: true,
     title: true,

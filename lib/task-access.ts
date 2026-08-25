@@ -30,6 +30,7 @@ export function isTaskOfficeUser(role?: Role | string | null, mansione?: string 
 export function taskWorkerWhere(): Prisma.UserWhereInput {
   return {
     active: true,
+    employee_status: { not: "Ex dipendente" },
     role: { notIn: ["ZERO", "SUPER_ADMIN"] },
     OR: [
       { role: "ADMIN" as const },

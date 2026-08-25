@@ -9,7 +9,7 @@ import {
   checkPCAuthorization,
 } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
-import { isPinValidForUser } from "@/lib/pin";
+import { isPinPrefixValidForUser } from "@/lib/pin";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +30,8 @@ export async function POST(request: NextRequest) {
   if (!workerId) {
     return NextResponse.json({ error: "Profilo non valido." }, { status: 400 });
   }
-  if (!/^\d{4,6}$/.test(pinPrefix)) {
-    return NextResponse.json({ error: "Inserisci il tuo PIN." }, { status: 400 });
+  if (!/^\d{2}$/.test(pinPrefix)) {
+    return NextResponse.json({ error: "Inserisci le prime 2 cifre del PIN." }, { status: 400 });
   }
 
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
@@ -49,7 +49,6 @@ export async function POST(request: NextRequest) {
       id: true,
       name: true,
       pin_lookup: true,
-      pin_hash: true,
       attendance_logs: {
         where: { date: { gte: today, lt: tomorrow } },
         select: { type: true, timestamp: true },
@@ -62,10 +61,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
 
-  const isPinValid = await isPinValidForUser(worker.id, pinPrefix, worker.pin_hash, worker.pin_lookup);
+  const isPinValid = isPinPrefixValidForUser(pinPrefix, worker.pin_lookup);
 
   if (!isPinValid) {
-    return NextResponse.json({ error: "Il PIN inserito non corrisponde a questo profilo." }, { status: 403 });
+    return NextResponse.json({ error: "Le prime 2 cifre non corrispondono a questo profilo." }, { status: 403 });
   }
 
   const state = deriveAttendanceState(worker.attendance_logs);

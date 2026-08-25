@@ -103,3 +103,19 @@ export async function isPinValidForUser(userId: string, pin: string, pinHash: st
   }
   return valid;
 }
+
+export function isPinPrefixValidForUser(pinPrefix: string, storedLookup?: string | null) {
+  const prefix = pinPrefix.replace(/\D/g, "");
+  if (!/^\d{2}$/.test(prefix) || !storedLookup) return false;
+
+  // Il PIN completo non viene mai decifrato: sul PC Cassa autorizzato verifichiamo
+  // le prime due cifre confrontando gli hash delle possibili combinazioni 4–6 cifre.
+  for (let suffixLength = 2; suffixLength <= 4; suffixLength += 1) {
+    const combinations = 10 ** suffixLength;
+    for (let value = 0; value < combinations; value += 1) {
+      const candidate = `${prefix}${String(value).padStart(suffixLength, "0")}`;
+      if (pinLookup(candidate) === storedLookup) return true;
+    }
+  }
+  return false;
+}

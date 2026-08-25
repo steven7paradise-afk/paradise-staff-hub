@@ -86,7 +86,7 @@ type TaskComment = {
   userPhoto: string | null; 
   createdAt: string; 
   updatedAt: string;
-  files?: { name: string; url?: string; previewUrl?: string; driveFileId?: string; driveFileUrl?: string }[] | null;
+  files?: { name: string; url?: string; previewUrl?: string; driveFileId?: string; driveFileUrl?: string; storagePath?: string; type?: string }[] | null;
 };
 type TaskView = "HOME" | "TABLE" | "BOARD" | "CALENDAR" | "LIST";
 type TaskFilter = "TODAY" | "ACTIVE" | "NEW" | "WAITING" | "COMPLETED";
@@ -381,7 +381,8 @@ function workerMentionSlug(name: string) {
 function workerMentionRoleLabel(worker: Worker) {
   if (worker.role === "SUPER_ADMIN") return "Super Admin";
   if (worker.role === "ADMIN") return "Admin";
-  return "Responsabile";
+  if (worker.role === "RESPONSABILE" || worker.mansione?.toLowerCase().includes("responsabile")) return "Responsabile";
+  return worker.mansione || "Collaboratore reparto";
 }
 
 function getActiveMentionQuery(value: string) {
@@ -494,12 +495,17 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const featuredTask = todayTasks[0] ?? activeTasks[0] ?? newTasks[0] ?? null;
   const timerAttendance = attendanceTimerState(todayAttendanceLogs);
   const activeMentionQuery = getActiveMentionQuery(commentText);
-  const mentionSuggestions = activeMentionQuery === null
-    ? mentionableUsers
-    : mentionableUsers
+  const allowedMentionUsers = mentionableUsers.filter((worker) =>
+    worker.role === "SUPER_ADMIN"
+    || worker.role === "ADMIN"
+    || Boolean(selected?.locationId && worker.locationId === selected.locationId)
+  );
+  const mentionSuggestions = activeMentionQuery && activeMentionQuery.length > 0
+    ? allowedMentionUsers
         .filter((worker) => worker.name.toLowerCase().includes(activeMentionQuery.toLowerCase()) || workerMentionSlug(worker.name).toLowerCase().includes(activeMentionQuery.toLowerCase()))
-        .slice(0, 8);
-  const mentionedWorkers = extractMentionedWorkers(commentText, mentionableUsers);
+        .slice(0, 8)
+    : [];
+  const mentionedWorkers = extractMentionedWorkers(commentText, allowedMentionUsers);
   const completedChecklist = selected?.checklist.filter((item) => item.done).length ?? 0;
 
   useEffect(() => {
@@ -1015,14 +1021,30 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     const uploaded: NonNullable<TaskComment["files"]> = [];
     try {
       for (const file of Array.from(files)) {
-        if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 5 MB.`);
-        const body = new FormData();
-        body.set("taskId", selected.id);
-        body.set("file", file);
-        const response = await fetch("/api/tasks/comments/upload", { method: "POST", body });
+        if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 50 MB.`);
+        const response = await fetch("/api/tasks/comments/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId: selected.id, fileName: file.name, fileSize: file.size, fileType: file.type }),
+        });
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || `Non riesco a caricare ${file.name}.`);
-        uploaded.push(data);
+        const uploadBody = new FormData();
+        uploadBody.append("cacheControl", "3600");
+        uploadBody.append("", file);
+        const directUpload = await fetch(data.signedUrl, {
+          method: "PUT",
+          headers: data.anonKey ? { apikey: data.anonKey, Authorization: `Bearer ${data.anonKey}` } : undefined,
+          body: uploadBody,
+        });
+        if (!directUpload.ok) throw new Error(`${file.name}: caricamento nello storage non riuscito.`);
+        uploaded.push({
+          name: file.name,
+          url: data.fileUrl,
+          previewUrl: file.type.startsWith("image/") ? data.fileUrl : null,
+          storagePath: data.path,
+          type: file.type || "application/octet-stream",
+        });
       }
       setCommentFiles((current) => [...current, ...uploaded]);
     } catch (error) {
@@ -1080,7 +1102,6 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     } finally {
       setCommentSaving(false);
     }
-    setCommentSaving(false);
   }
 
   function insertMention(worker: Worker) {
@@ -1897,7 +1918,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     placeholder="Scrivi un aggiornamento, nota o commento... usa @nome per taggare una persona" 
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @nome oppure scegli</span>
+                    <span className="text-[11px] font-semibold text-black/40">Tag: scrivi @ seguito dal nome</span>
                     {mentionSuggestions.map((worker) => (
                       <button
                         key={worker.id}
