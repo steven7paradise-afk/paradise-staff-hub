@@ -20,6 +20,17 @@ function taskFileName(name: string, taskId: string) {
   return `${new Date().toISOString().slice(0, 10)}-${safeFilePart(taskId).slice(0, 36)}-${cleanName}`;
 }
 
+function isUploadedFile(value: FormDataEntryValue | null): value is File {
+  if (!value || typeof value === "string") return false;
+  const candidate = value as Partial<File>;
+  return (
+    typeof candidate.name === "string" &&
+    candidate.name.trim().length > 0 &&
+    typeof candidate.size === "number" &&
+    typeof candidate.arrayBuffer === "function"
+  );
+}
+
 function driveErrorMessage(error: unknown) {
   const detail = error instanceof Error ? error.message : String(error || "");
   if (/credentials|private key|service account/i.test(detail)) {
@@ -36,10 +47,19 @@ export async function POST(request: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
 
   const formData = await request.formData().catch(() => null);
+  if (!formData) {
+    return NextResponse.json({ error: "Il server non ha ricevuto correttamente il file. Aggiorna la pagina e riprova." }, { status: 400 });
+  }
   const taskId = String(formData?.get("taskId") ?? "").trim();
   const file = formData?.get("file");
-  if (!taskId || !(file instanceof File) || file.size <= 0) {
-    return NextResponse.json({ error: "Dati del file non validi." }, { status: 400 });
+  if (!taskId) {
+    return NextResponse.json({ error: "Task non riconosciuta. Chiudi e riapri la task, poi riprova." }, { status: 400 });
+  }
+  if (!isUploadedFile(file)) {
+    return NextResponse.json({ error: "Il file non è arrivato al server. Selezionalo nuovamente e riprova." }, { status: 400 });
+  }
+  if (file.size <= 0) {
+    return NextResponse.json({ error: "Il file selezionato è vuoto." }, { status: 400 });
   }
   if (file.size > MAX_FILE_BYTES) {
     return NextResponse.json({ error: "Il file supera il limite di 50 MB." }, { status: 413 });
