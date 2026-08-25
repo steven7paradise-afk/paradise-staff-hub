@@ -67,8 +67,9 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
   if (!session?.user?.id) return null;
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, role: true, location: { select: { name: true } } },
+    select: { id: true, name: true, email: true, role: true, sede_id: true, active: true, location: { select: { name: true } } },
   }).catch(() => null);
+  if (!dbUser?.active) return null;
   if (
     dbUser &&
     isShiftProtectedPath(request.nextUrl.pathname) &&
@@ -76,11 +77,11 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
   ) return null;
 
   return {
-    id: session.user.id,
-    name: session.user.name ?? null,
-    email: session.user.email ?? null,
-    role: String(session.user.role ?? ""),
-    sedeId: session.user.sedeId ?? null,
+    id: dbUser.id,
+    name: dbUser.name,
+    email: dbUser.email,
+    role: dbUser.role,
+    sedeId: dbUser.sede_id,
     isPC: false,
   };
 }

@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   const note = payload.note ? String(payload.note) : null;
   const ip = requestIp(request.headers);
 
-  if (!deviceId || !employeeId || !/^\d{2,6}$/.test(pin) || !Object.values(AttendanceType).includes(type)) {
+  if (!deviceId || !employeeId || !/^\d{4,6}$/.test(pin) || !Object.values(AttendanceType).includes(type)) {
     return NextResponse.json({ error: "Dati timbratura incompleti" }, { status: 400 });
   }
 

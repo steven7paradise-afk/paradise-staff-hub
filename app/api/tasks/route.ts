@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
       title: `Nuova task: ${title}`,
       message: description,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
       read: false,
     }).catch(err => console.error("Notification failed for", worker.id, err))
   ));
@@ -289,7 +289,7 @@ export async function PATCH(request: NextRequest) {
         title: `Task completata: ${task.title}`,
         message: `${session.user.name} ha completato la task in ${Math.floor((updated.timer_seconds ?? 0) / 60)} min.`,
         type: "TASK",
-        action_url: "/tasks",
+        action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
     }).catch((error) => console.error("Task completion notification failed:", error));
   }
   return NextResponse.json(updated);
@@ -397,7 +397,7 @@ export async function PUT(request: NextRequest) {
       title: `Task assegnata: ${title}`,
       message: description,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(updated.id)}`,
       read: false,
     }).catch(err => console.error("Notification failed for", worker.id, err))
   ));

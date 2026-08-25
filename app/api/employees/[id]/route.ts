@@ -48,18 +48,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const pin = data.pin ? String(data.pin) : "";
     const password = data.password ? String(data.password) : "";
-    const role = String(data.role ?? "DIPENDENTE") as UserRole;
+    const requestedRole = data.role !== undefined ? String(data.role) as UserRole : undefined;
     const birthDate = data.birthDate ? new Date(String(data.birthDate)) : null;
     const contractStart = data.contractStart ? new Date(String(data.contractStart)) : null;
     const contractEnd = data.contractEnd ? new Date(String(data.contractEnd)) : null;
 
-    if (pin && !/^\d{2,6}$/.test(pin)) {
+    if (pin && !/^\d{4,6}$/.test(pin)) {
       return apiError("Il PIN deve avere da 4 a 6 numeri.", 400);
     }
     if (password && password.length < 8) {
       return apiError("La password deve avere almeno 8 caratteri.", 400);
     }
-    if (!Object.values(UserRole).includes(role)) {
+    if (requestedRole !== undefined && !Object.values(UserRole).includes(requestedRole)) {
       return apiError("Ruolo non valido.", 400);
     }
     if (pin && await isPinAlreadyAssigned(pin, id)) {
@@ -70,6 +70,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     if (!current) {
       return apiError("Utente non trovato.", 404);
     }
+    if (current.role === "ZERO" || requestedRole === "ZERO") {
+      return apiError("Il ruolo Zero non è modificabile da questo endpoint.", 403);
+    }
+    if (requestedRole !== undefined && requestedRole !== current.role && session.user.role !== "ZERO") {
+      return apiError("Solo Zero può modificare i ruoli di sistema.", 403);
+    }
+    const role = requestedRole ?? current.role;
 
     const nextSedeId = data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined;
     const baseUpdate = {

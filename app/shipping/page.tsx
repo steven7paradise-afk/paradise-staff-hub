@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { ShippingManager } from "@/components/shipping-manager";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,11 @@ export default async function ShippingPage() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, email: true, role: true, photo_url: true, sede_id: true, active: true },
+    select: { id: true, name: true, email: true, role: true, photo_url: true, sede_id: true, active: true, mansione: true, access_list: true },
   }).catch(() => null);
 
-  if (dbUser && !dbUser.active) redirect("/login");
+  if (!dbUser?.active) redirect("/login");
+  if (!(await canAccessForUser(prisma, "/shipping", dbUser))) redirect("/dashboard");
 
   const role = dbUser?.role || session.user.role || "DIPENDENTE";
   const currentUser = {
@@ -162,7 +164,7 @@ export default async function ShippingPage() {
   });
 
   return (
-    <AppShell user={currentUser} role={role}>
+    <AppShell title="Spedizioni" subtitle="Preparazione, verifica e tracciamento degli ordini Shopify." role={role}>
       <ShippingManager initialOrders={initialOrders} currentUserName={currentUser.name} />
     </AppShell>
   );

@@ -218,7 +218,6 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const isDarwin = session.user.id === "cmpms4o9h0003l809zof30mni" || !!session.user.email?.toLowerCase().includes("darwin");
   const role = session.user.role as Role;
 
   const accessUser = await prisma.user.findUnique({
@@ -228,7 +227,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
   const canAccessPage = accessUser 
     ? await canAccessForUser(prisma, "/cash", accessUser)
-    : (role !== "DIPENDENTE" || isDarwin);
+    : role !== "DIPENDENTE";
 
   if (!canAccessPage) redirect("/dashboard");
 

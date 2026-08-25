@@ -8,8 +8,7 @@ const allowedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
 export async function POST(request: Request) {
   const session = await auth();
-  const isDarwin = session?.user?.id === "cmpms4o9h0003l809zof30mni" || !!session?.user?.email?.toLowerCase().includes("darwin");
-  if (!session?.user?.id || (!allowedRoles.has(session.user.role ?? "") && !isDarwin)) {
+  if (!session?.user?.id || !allowedRoles.has(session.user.role ?? "")) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -29,7 +28,7 @@ export async function POST(request: Request) {
     where: { id: session.user.id },
     select: { id: true, role: true, mansione: true, access_list: true },
   });
-  const hasFullCashAccess = isDarwin || (accessUser ? await canAccessForUser(prisma, "/cash", accessUser) : false);
+  const hasFullCashAccess = accessUser ? await canAccessForUser(prisma, "/cash", accessUser) : false;
 
   if (session.user.role === "RESPONSABILE" && session.user.sedeId && locationId !== session.user.sedeId && !hasFullCashAccess) {
     return NextResponse.json({ error: "Puoi aggiungere chiusure solo per il tuo salone." }, { status: 403 });

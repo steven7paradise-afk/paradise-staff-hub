@@ -73,6 +73,10 @@ function isAcceptedImage(file: File) {
 }
 
 export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  }
   const form = await ensureFotoForm();
   const rows = await prisma.serviceFormResponse.findMany({
     where: { form_id: form.id },

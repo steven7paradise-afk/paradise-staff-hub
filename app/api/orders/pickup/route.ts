@@ -188,7 +188,7 @@ function collectOrderAttachments(order: any) {
 
   Object.entries(answers).forEach(([key, value]) => {
     if (key === "__pickup") return;
-    const label = key === "__orderPhoto" ? "Foto ordine" : labelById.get(key) || key;
+    const label = String(key === "__orderPhoto" ? "Foto ordine" : labelById.get(key) || key);
     if (Array.isArray(value)) {
       value.forEach((item, index) => addAttachment(`${label} ${index + 1}`, item));
       return;

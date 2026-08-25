@@ -394,7 +394,7 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean }) {
+export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null }) {
   const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const canAssignAcrossTeam = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const initialAllowedWorkers = canAssignAcrossTeam ? workers : mentionableUsers;
@@ -408,6 +408,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const [selectedExtrasLoading, setSelectedExtrasLoading] = useState(false);
   const [selectedLoadError, setSelectedLoadError] = useState("");
   const detailRequestRef = useRef(0);
+  const initialTaskOpenedRef = useRef(false);
   const taskDetailPageRef = useRef<HTMLDivElement | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("ACTIVE");
   const [assignmentFilter, setAssignmentFilter] = useState<"ALL" | "ASSIGNED_TO_ME" | "ASSIGNED_BY_ME">("ASSIGNED_TO_ME");
@@ -450,6 +451,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     if (!selected?.id) return;
     taskDetailPageRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [selected?.id]);
+
+  useEffect(() => {
+    if (!initialTaskId || initialTaskOpenedRef.current) return;
+    const linkedTask = initialTasks.find((task) => task.id === initialTaskId);
+    if (!linkedTask) return;
+    initialTaskOpenedRef.current = true;
+    void openTask(linkedTask);
+  }, [initialTaskId, initialTasks]);
 
   const baseTasks = useMemo(() => {
     return canAssign 

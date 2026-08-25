@@ -38,7 +38,7 @@ export default async function SettingsPage() {
   const role = session.user.role;
   const canAccessPage = accessUser
     ? await canAccessForUser(prisma, "/settings", accessUser)
-    : (role === "ZERO" || role === "ZERO" || role === "ADMIN");
+    : role === "ADMIN";
 
   if (!canAccessPage) {
     redirect("/dashboard");

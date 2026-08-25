@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       title: `Nuovo commento: ${task.title}`,
       message: notificationMessage,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(taskId)}`,
     }).catch((err) => console.error("Notification failed for comment on task:", userId, err))
   ));
 
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       title: `Ti hanno taggato: ${task.title}`,
       message: `${session.user.name} ti ha menzionato in un commento: ${notificationMessage}`,
       type: "TASK",
-      action_url: "/tasks",
+      action_url: `/tasks?task=${encodeURIComponent(taskId)}`,
     }).catch((err) => console.error("Mention notification failed for task:", userId, err))
   ));
 

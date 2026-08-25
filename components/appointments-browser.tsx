@@ -5560,6 +5560,9 @@ export function AppointmentsBrowser({
     </div>
   );
 
+  const selectedBookingForView = selectedBooking as AppointmentRecord;
+  const clientControlMessageForView = clientControlMessage as NonNullable<typeof clientControlMessage>;
+
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <section className="rounded-[28px] border border-black/5 bg-white p-5 shadow-sm">
@@ -6453,11 +6456,11 @@ export function AppointmentsBrowser({
                   ))}
                 </div>
 
-                {clientControlMessage ? (
+                {clientControlMessageForView ? (
                   <p
-                    className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessage.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                    className={`mt-5 rounded-2xl px-4 py-3 text-sm font-black ${clientControlMessageForView.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
                   >
-                    {clientControlMessage.text}
+                    {clientControlMessageForView.text}
                   </p>
                 ) : null}
 
@@ -6553,7 +6556,7 @@ export function AppointmentsBrowser({
         </div>
       ) : null}
 
-      {selectedBooking ? (
+      {selectedBookingForView ? (
         <div className="fixed inset-0 z-[90] bg-black/45 p-4 backdrop-blur-sm">
           <div className="mx-auto flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-black/5 px-5 py-5">
@@ -6562,17 +6565,17 @@ export function AppointmentsBrowser({
                   Dettaglio appuntamento
                 </p>
                 <h3 className="mt-2 text-3xl font-black text-[#171717]">
-                  {selectedBooking.customerName}
+                  {selectedBookingForView.customerName}
                 </h3>
                 <p className="mt-2 text-sm text-black/55">
-                  {selectedBooking.serviceTitle}
+                  {selectedBookingForView.serviceTitle}
                 </p>
                 <div className="mt-3">
-                  <WhatsAppSheetNote booking={selectedBooking} always />
+                  <WhatsAppSheetNote booking={selectedBookingForView} always />
                 </div>
-                {selectedBooking.bookingStr ? (
+                {selectedBookingForView.bookingStr ? (
                   <p className="mt-3 inline-flex rounded-full bg-[#FFF1F5] px-3 py-1 text-xs font-black text-[#C66170]">
-                    Ordine Shopify {formatOrderCode(selectedBooking.bookingStr)}
+                    Ordine Shopify {formatOrderCode(selectedBookingForView.bookingStr)}
                   </p>
                 ) : null}
               </div>
@@ -6588,8 +6591,8 @@ export function AppointmentsBrowser({
             <div className="grid flex-1 gap-6 overflow-auto p-5 lg:grid-cols-[1.15fr_0.85fr] min-h-0">
               <div className="space-y-5">
                 <ServiceImage
-                  title={selectedBooking.serviceTitle}
-                  imageUrl={selectedBooking.serviceImageUrl}
+                  title={selectedBookingForView.serviceTitle}
+                  imageUrl={selectedBookingForView.serviceImageUrl}
                 />
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -6598,7 +6601,7 @@ export function AppointmentsBrowser({
                       Note Cowlendar
                     </p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#5D4A42]">
-                      {selectedBooking!.notesText?.trim() ||
+                      {selectedBookingForView!.notesText?.trim() ||
                         cowlendarOrderNote?.trim() ||
                         "Nessuna nota presente in questo appuntamento."}
                     </p>
@@ -6608,7 +6611,7 @@ export function AppointmentsBrowser({
                       Note Shopify
                     </p>
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-[#7C3E14]">
-                      {selectedBooking!.bookingStr
+                      {selectedBookingForView!.bookingStr
                         ? shopifyNote?.trim() ||
                           "Nessuna nota presente su Shopify."
                         : "Nessun ordine Shopify collegato."}
@@ -6622,10 +6625,10 @@ export function AppointmentsBrowser({
                       Data e ora
                     </p>
                     <p className="mt-2 text-lg font-black text-[#171717]">
-                      {formatDateTime(selectedBooking.startDate)}
+                      {formatDateTime(selectedBookingForView.startDate)}
                     </p>
                     <p className="mt-1 text-sm text-black/55">
-                      Fine: {formatDateTime(selectedBooking.endDate)}
+                      Fine: {formatDateTime(selectedBookingForView.endDate)}
                     </p>
                   </div>
                   <div className="rounded-[24px] border border-black/5 bg-[#FFFCFD] p-4">
@@ -6633,29 +6636,29 @@ export function AppointmentsBrowser({
                       Salone / stato
                     </p>
                     <p className="mt-2 text-lg font-black text-[#171717]">
-                      {getSalonLabel(selectedBooking.inferredSalon)}
+                      {getSalonLabel(selectedBookingForView.inferredSalon)}
                     </p>
                     <div className="mt-3">
-                      {renderStatusControl(selectedBooking!)}
+                      {renderStatusControl(selectedBookingForView!)}
                     </div>
                     <div className="mt-3">
-                      <WhatsAppSheetNote booking={selectedBooking} />
+                      <WhatsAppSheetNote booking={selectedBookingForView} />
                     </div>
-                    {selectedBooking.statusUpdatedBy ? (
+                    {selectedBookingForView.statusUpdatedBy ? (
                       <p className="mt-2 text-xs font-bold text-black/40">
-                        Ultima modifica: {selectedBooking.statusUpdatedBy}
-                        {selectedBooking.statusUpdatedAt
-                          ? ` · ${formatDateTime(selectedBooking.statusUpdatedAt)}`
+                        Ultima modifica: {selectedBookingForView.statusUpdatedBy}
+                        {selectedBookingForView.statusUpdatedAt
+                          ? ` · ${formatDateTime(selectedBookingForView.statusUpdatedAt)}`
                           : ""}
                       </p>
                     ) : null}
-                    {selectedBooking.sheetNote ? (
+                    {selectedBookingForView.sheetNote ? (
                       <div className="mt-3 rounded-2xl border border-black/5 bg-[#FFF6F7] p-3">
                         <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#A15062]">
                           Nota conferma
                         </p>
                         <p className="mt-1 whitespace-pre-wrap text-xs font-semibold leading-5 text-[#5D4A42]">
-                          {selectedBooking.sheetNote}
+                          {selectedBookingForView.sheetNote}
                         </p>
                       </div>
                     ) : null}
@@ -6672,7 +6675,7 @@ export function AppointmentsBrowser({
                         Nome
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.customerName}
+                        {selectedBookingForView.customerName}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6680,7 +6683,7 @@ export function AppointmentsBrowser({
                         Telefono
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.customerPhone || "-"}
+                        {selectedBookingForView.customerPhone || "-"}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3 sm:col-span-2">
@@ -6688,7 +6691,7 @@ export function AppointmentsBrowser({
                         Email
                       </p>
                       <p className="mt-2 break-all text-sm font-bold text-[#171717]">
-                        {selectedBooking.customerEmail || "-"}
+                        {selectedBookingForView.customerEmail || "-"}
                       </p>
                     </div>
                   </div>
@@ -6704,7 +6707,7 @@ export function AppointmentsBrowser({
                         Servizio
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.serviceTitle}
+                        {selectedBookingForView.serviceTitle}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6713,8 +6716,8 @@ export function AppointmentsBrowser({
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
                         {formatMoney(
-                          selectedBooking.priceAmount,
-                          selectedBooking.priceCurrency,
+                          selectedBookingForView.priceAmount,
+                          selectedBookingForView.priceCurrency,
                         )}
                       </p>
                     </div>
@@ -6723,7 +6726,7 @@ export function AppointmentsBrowser({
                         Tipo booking
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {selectedBooking.bookingType || "-"}
+                        {selectedBookingForView.bookingType || "-"}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6731,7 +6734,7 @@ export function AppointmentsBrowser({
                         Ordine Shopify
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {formatOrderCode(selectedBooking.bookingStr)}
+                        {formatOrderCode(selectedBookingForView.bookingStr)}
                       </p>
                     </div>
                   </div>
@@ -6859,7 +6862,7 @@ export function AppointmentsBrowser({
                   </div>
                 </div>
 
-                {selectedBooking.extraDetails?.length ? (
+                {selectedBookingForView.extraDetails?.length ? (
                   <div className="rounded-[24px] border border-black/5 bg-white p-4">
                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-black/40">
                       Dati modulo Cowlendar
@@ -6926,8 +6929,8 @@ export function AppointmentsBrowser({
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">
-                    {getBookingTeam(selectedBooking!).length ? (
-                      getBookingTeam(selectedBooking!).map((mate) => (
+                    {getBookingTeam(selectedBookingForView!).length ? (
+                      getBookingTeam(selectedBookingForView!).map((mate) => (
                         <div
                           key={mate.id}
                           className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3"
@@ -6942,7 +6945,7 @@ export function AppointmentsBrowser({
                               {mate.name}
                             </p>
                             <p className="text-xs text-black/45">
-                              {getSalonLabel(selectedBooking!.inferredSalon)}
+                              {getSalonLabel(selectedBookingForView!.inferredSalon)}
                             </p>
                           </div>
                         </div>
@@ -6954,7 +6957,7 @@ export function AppointmentsBrowser({
                     )}
                   </div>
                   <div className="mt-4">
-                    <ClientControlStaffPicker booking={selectedBooking!} />
+                    <ClientControlStaffPicker booking={selectedBookingForView!} />
                   </div>
                 </div>
 
@@ -6978,7 +6981,7 @@ export function AppointmentsBrowser({
                         Creato
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {formatDateTime(selectedBooking.createdAt)}
+                        {formatDateTime(selectedBookingForView.createdAt)}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-[#FAFAFA] p-3">
@@ -6986,7 +6989,7 @@ export function AppointmentsBrowser({
                         Aggiornato
                       </p>
                       <p className="mt-2 text-sm font-bold text-[#171717]">
-                        {formatDateTime(selectedBooking.updatedAt)}
+                        {formatDateTime(selectedBookingForView.updatedAt)}
                       </p>
                     </div>
                   </div>
@@ -7010,14 +7013,14 @@ export function AppointmentsBrowser({
                     <div className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3 text-sm text-[#171717]">
                       <Mail className="size-4 text-[#C66170]" />
                       <span className="break-all">
-                        {selectedBooking.customerEmail ||
+                        {selectedBookingForView.customerEmail ||
                           "Email non disponibile"}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 rounded-2xl border border-black/5 bg-[#FFFCFD] p-3 text-sm text-[#171717]">
                       <Phone className="size-4 text-[#C66170]" />
                       <span>
-                        {selectedBooking.customerPhone ||
+                        {selectedBookingForView.customerPhone ||
                           "Telefono non disponibile"}
                       </span>
                     </div>

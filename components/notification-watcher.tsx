@@ -9,6 +9,7 @@ type LatestNotification = {
   message: string;
   actionUrl: string | null;
   createdAt: string;
+  type: string;
 };
 
 function playNotificationSound() {
@@ -137,6 +138,11 @@ export function NotificationWatcher({ initialUnread }: { initialUnread: number }
           });
           browserNotification.onclick = () => {
             window.focus();
+            if (data.latest?.type === "TIMBRATURA") {
+              const pauseExceeded = /pausa.*superat|superamento.*pausa/i.test(`${data.latest.title} ${data.latest.message}`);
+              window.alert(`${pauseExceeded ? "Attenzione: pausa superata" : "Avviso timbratura"}\n\n${data.latest.message}`);
+              return;
+            }
             window.location.href = data.latest?.actionUrl || "/notifications";
           };
         }

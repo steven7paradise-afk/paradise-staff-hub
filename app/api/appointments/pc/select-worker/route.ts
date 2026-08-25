@@ -9,7 +9,7 @@ import {
   checkPCAuthorization,
 } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
-import { isPinLookupMatchingPrefix, isPinValidForUser } from "@/lib/pin";
+import { isPinValidForUser } from "@/lib/pin";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (!workerId) {
     return NextResponse.json({ error: "Profilo non valido." }, { status: 400 });
   }
-  if (!/^\d{2,6}$/.test(pinPrefix)) {
+  if (!/^\d{4,6}$/.test(pinPrefix)) {
     return NextResponse.json({ error: "Inserisci il tuo PIN." }, { status: 400 });
   }
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
 
-  const isPinValid = await isPinValidForUser(worker.id, pinPrefix, worker.pin_hash, worker.pin_lookup) || isPinLookupMatchingPrefix(worker.pin_lookup, pinPrefix);
+  const isPinValid = await isPinValidForUser(worker.id, pinPrefix, worker.pin_hash, worker.pin_lookup);
 
   if (!isPinValid) {
     return NextResponse.json({ error: "Il PIN inserito non corrisponde a questo profilo." }, { status: 403 });

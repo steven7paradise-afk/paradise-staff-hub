@@ -47,7 +47,7 @@ export function TopControls({
   profileHref?: string;
 }) {
   const [dark, setDark] = useState(false);
-  const [activeWorkers, setActiveWorkers] = useState<any[]>([]);
+  const [activeWorkers, setActiveWorkers] = useState<Array<{ id: string; name: string; photo_url: string | null; status: string }>>([]);
 
   useEffect(() => {
     if (userId !== "PC_CASSA") return;

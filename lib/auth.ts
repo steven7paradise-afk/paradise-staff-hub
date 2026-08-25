@@ -5,6 +5,27 @@ import { prisma } from "@/lib/prisma";
 import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
 import { pinLookup } from "@/lib/pin";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
+import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+
+function isPublicOperationalRequest(pathname: string, method: string) {
+  if (pathname === "/login" || pathname === "/login/") return true;
+  if (pathname.startsWith("/api/auth/")) return true;
+  if (pathname === "/api/health") return true;
+  if (pathname === "/appointments/register" || pathname.startsWith("/appointments/register/")) return true;
+  if (pathname === "/tablet-clock" || pathname.startsWith("/tablet-clock/")) return true;
+  if (pathname === "/api/devices/activate") return true;
+  if (["/api/attendance/clock", "/api/attendance/identify", "/api/attendance/status", "/api/tablet-requests"].includes(pathname)) return true;
+  if (pathname === "/api/settings/tablet" && method === "GET") return true;
+  if ([
+    "/api/client-control/analytics",
+    "/api/client-control/note-suggestions",
+    "/api/client-control/polish-note",
+    "/api/client-control/tablet-submit",
+  ].includes(pathname)) return true;
+  if (pathname === "/api/appointments/pc/register") return true;
+  if (pathname === "/api/appointments/bot" || pathname === "/api/attendance/close-open-shifts") return true;
+  return false;
+}
 
 export const authConfig = {
   session: {
@@ -38,7 +59,7 @@ export const authConfig = {
       async authorize(credentials) {
         const pin = String(credentials?.pin ?? "").trim();
         if (pin) {
-          if (!/^\d{2,6}$/.test(pin)) return null;
+          if (!/^\d{4,6}$/.test(pin)) return null;
           const lookup = pinLookup(pin);
           const user = await prisma.user.findUnique({
             where: { pin_lookup: lookup },
@@ -89,13 +110,12 @@ export const authConfig = {
           select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true },
         }).catch(() => null);
 
-        if (dbUser?.active) {
-          token.name = dbUser.name;
-          token.email = dbUser.email;
-          token.role = dbUser.role as Role;
-          token.sedeId = dbUser.sede_id;
-          token.mansione = dbUser.mansione ?? undefined;
-        }
+        if (!dbUser?.active) return null;
+        token.name = dbUser.name;
+        token.email = dbUser.email;
+        token.role = dbUser.role as Role;
+        token.sedeId = dbUser.sede_id ?? undefined;
+        token.mansione = dbUser.mansione ?? undefined;
       }
       return token;
     },
@@ -112,13 +132,12 @@ export const authConfig = {
     },
     async authorized({ auth, request }) {
       const pathname = request.nextUrl.pathname;
-      if (pathname === "/login" || pathname === "/login/") return true;
-      if (pathname.startsWith("/appointments/register")) return true;
-      if (pathname.startsWith("/api/attendance/clock")) return true;
+      if (isPublicOperationalRequest(pathname, request.method)) return true;
 
       // Strict lockdown for Cashier PCs with the operational APIs needed after profile selection.
-      const pcToken = request.cookies.get("appointments_pc_token")?.value;
-      if (pcToken) {
+      const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
+      const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
+      if (pcAuth) {
         const isAllowedPage = 
           pathname === "/appointments" || 
           pathname.startsWith("/appointments/") ||
@@ -153,11 +172,12 @@ export const authConfig = {
             id: true,
             role: true,
             mansione: true,
+            active: true,
             location: { select: { name: true } },
           }
         });
 
-        if (!dbUser) return false;
+        if (!dbUser?.active) return false;
         if (
           isShiftProtectedPath(pathname) &&
           !(await canAccessSalonShiftModules(dbUser))

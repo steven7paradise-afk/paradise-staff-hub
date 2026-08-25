@@ -18,7 +18,8 @@ function serviceFormResponseId(actionUrl: string | null) {
   }
 }
 
-function isAttendanceNotification(item: NotificationActionItem) {
+export function isAttendanceNotification(item: NotificationActionItem) {
+  if (item.type === "TASK" || item.type === "COMUNICAZIONE" || item.type === "FORM") return false;
   const text = `${item.title} ${item.message} ${item.type}`.toLowerCase();
   return item.type === "TIMBRATURA" || /superamento limite pausa|pausa|uscit|timbram|timbratura/.test(text);
 }
@@ -52,7 +53,7 @@ export function resolveNotificationActionUrl(item: NotificationActionItem, optio
   }
 
   if (isAttendanceNotification(item)) {
-    return "/attendance";
+    return `/notifications?notice=${encodeURIComponent(item.id)}&section=attendance`;
   }
 
   const responseId = serviceFormResponseId(item.actionUrl);

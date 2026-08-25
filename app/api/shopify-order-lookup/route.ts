@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
         try {
           while (nextUrl && page < 4) {
-            const res = await fetch(nextUrl, {
+            const res: Response = await fetch(nextUrl, {
               headers: fetchHeaders,
               signal: AbortSignal.timeout(5000),
             });
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
             const data = await res.json();
             if (Array.isArray(data?.orders)) orders.push(...data.orders);
 
-            const nextMatch = res.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i);
+            const nextMatch: RegExpMatchArray | null = res.headers.get("link")?.match(/<([^>]+)>;\s*rel="next"/i) ?? null;
             nextUrl = nextMatch?.[1] || null;
             page += 1;
           }

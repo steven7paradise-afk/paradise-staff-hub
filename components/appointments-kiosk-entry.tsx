@@ -88,7 +88,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
 
   async function enter(worker: ActiveWorker) {
     const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 6);
-    if (!/^\d{2,6}$/.test(cleanPinPrefix)) {
+    if (!/^\d{4,6}$/.test(cleanPinPrefix)) {
       setError("Inserisci il tuo PIN personale.");
       return;
     }

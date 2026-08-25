@@ -2,10 +2,15 @@ import { AppShell } from "@/components/app-shell";
 import { EmployeeManager } from "@/components/employee-manager";
 import { prisma } from "@/lib/prisma";
 import { normalizeAccessRoutes } from "@/lib/roles";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmployeesPage() {
+  const session = await auth();
+  if (!session?.user?.id || !["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role)) redirect("/dashboard");
+
   const [employees, locations] = await Promise.all([
     prisma.user.findMany({
       where: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },

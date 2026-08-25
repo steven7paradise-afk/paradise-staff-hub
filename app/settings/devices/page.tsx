@@ -2,10 +2,15 @@ import { AppShell } from "@/components/app-shell";
 import { DeviceManager } from "@/components/device-manager";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function DeviceSettingsPage() {
+  const session = await auth();
+  if (!session?.user?.id || session.user.role !== "ZERO") redirect("/dashboard");
+
   const [devices, locations, settings, pcsSetting] = await Promise.all([
     prisma.device.findMany({
       where: { archived_at: null, NOT: { device_id: { startsWith: "ADMIN-MANUAL-" } } },

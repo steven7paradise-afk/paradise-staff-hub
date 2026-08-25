@@ -104,7 +104,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Modulo non trovato." }, { status: 404 });
     }
 
-    const answersObj = JSON.parse(answersStr);
+    const isManager = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(sessionUser.role);
+    const allowedRoles = form.allowed_roles as string[] | null;
+    const allowedLocations = form.allowed_location_ids as string[] | null;
+    if (!form.active && !isManager) {
+      return NextResponse.json({ error: "Questo modulo non è attivo." }, { status: 403 });
+    }
+    if (!isManager && allowedRoles?.length && !allowedRoles.includes(sessionUser.role)) {
+      return NextResponse.json({ error: "Il tuo ruolo non può compilare questo modulo." }, { status: 403 });
+    }
+    if (!isManager && allowedLocations?.length && (!sessionUser.sedeId || !allowedLocations.includes(sessionUser.sedeId))) {
+      return NextResponse.json({ error: "Questo modulo non è disponibile per la tua sede." }, { status: 403 });
+    }
+
+    let answersObj: Record<string, any>;
+    try {
+      const parsed = JSON.parse(answersStr);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid answers");
+      answersObj = parsed;
+    } catch {
+      return NextResponse.json({ error: "Risposte del modulo non valide." }, { status: 400 });
+    }
     const isCashClosing = isCashClosingFormName(form.name, form.category);
 
     // Process file fields and upload them to Google Drive.
@@ -128,6 +148,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const missingRequired = fields.find((field) => {
+      if (!field.required) return false;
+      const value = answersObj[field.id];
+      if (value === null || value === undefined) return true;
+      if (typeof value === "string") return value.trim().length === 0;
+      if (Array.isArray(value)) return value.length === 0;
+      return false;
+    });
+    if (missingRequired) {
+      return NextResponse.json({ error: `Il campo "${missingRequired.label}" è obbligatorio.` }, { status: 400 });
+    }
+
     const location = sessionUser.sedeId
       ? await prisma.location.findUnique({ where: { id: sessionUser.sedeId } })
       : null;
@@ -136,7 +168,7 @@ export async function POST(request: NextRequest) {
       const pinField = fields.find((field) => field.type === "pin" || field.id === CASH_CLOSING_FIELD_IDS.pin || field.label.toUpperCase().includes("PIN"));
       const pinValue = pinField ? String(answersObj[pinField.id] ?? "").trim() : "";
 
-      if (!/^\d{2,6}$/.test(pinValue)) {
+      if (!/^\d{4,6}$/.test(pinValue)) {
         return NextResponse.json({ error: "Inserisci un PIN personale valido per firmare la chiusura cassa." }, { status: 401 });
       }
 

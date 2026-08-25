@@ -31,6 +31,7 @@ export async function GET() {
             message: latest.message,
             actionUrl: latest.type === "COMUNICAZIONE" ? `/notifications?communication=${latest.id}` : latest.action_url,
             createdAt: latest.created_at.toISOString(),
+            type: latest.type,
           }
         : null,
       items: items.map((item) => ({

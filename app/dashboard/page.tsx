@@ -4,7 +4,7 @@ import { DashboardRedesignClient } from "@/components/dashboard-redesign-client"
 import { ManagementDashboard, type ManagementDashboardData } from "@/components/management-dashboard";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/app/api/settings/dashboard/route";
+import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";

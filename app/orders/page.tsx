@@ -52,11 +52,7 @@ export default async function OrdersPage() {
 
   const role = (isPC ? "RESPONSABILE" : session!.user.role) as Role;
   const canManageOrders =
-    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role) ||
-    session?.user?.id === "cmpo4y9900001jr09bg1dnqxs" || // Jessinca Inturri (Jessica)
-    session?.user?.id === "cmpms4o9h0003l809zof30mni" || // Biy Darwin Ramirez Castillo (Darwin)
-    !!session?.user?.email?.toLowerCase().includes("jessica") ||
-    !!session?.user?.email?.toLowerCase().includes("darwin");
+    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
 
   const [dbUser] = await Promise.all([
     prisma.user.findUnique({
@@ -71,9 +67,7 @@ export default async function OrdersPage() {
   }
 
   const isSarta =
-    dbUser?.mansione === "sarta" ||
-    session?.user?.id === "cmpo4y9900001jr09bg1dnqxs" ||
-    !!session?.user?.email?.toLowerCase().includes("jessica");
+    dbUser?.mansione?.trim().toLowerCase() === "sarta";
 
   const responses = await prisma.serviceFormResponse.findMany({
     where: {

@@ -6,7 +6,9 @@ import { sendPushNotification } from "@/lib/push-sender";
 type NotificationData = Prisma.NotificationCreateManyInput;
 
 async function sendPushAndWhatsApp(data: NotificationData, actionUrlOverride?: string) {
-  const deliveryActionUrl = actionUrlOverride ?? (data.action_url ? String(data.action_url) : null);
+  const deliveryActionUrl = String(data.type) === "TIMBRATURA"
+    ? "/notifications?section=attendance"
+    : actionUrlOverride ?? (data.action_url ? String(data.action_url) : null);
   const user = await prisma.user.findUnique({
     where: { id: String(data.user_id) },
     select: { whatsapp_phone: true },

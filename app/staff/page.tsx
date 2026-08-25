@@ -102,7 +102,7 @@ export default async function StaffPage() {
                 ? normalizeAccessRoutes((user.access_list as { view?: unknown }).view)
                 : [],
             iban: user.iban ?? "",
-            contractHistory: user.contract_history,
+            contractHistory: Array.isArray(user.contract_history) ? user.contract_history as any[] : [],
             sicknessStats,
             lastEditedByName: user.last_edited_by?.name ?? null,
             lastEditedAt: user.last_edited_at?.toISOString() ?? null,

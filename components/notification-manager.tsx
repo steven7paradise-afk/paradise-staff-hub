@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 import { ResponseDetailModal } from "@/components/response-detail-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { parseNotificationMetadata } from "@/lib/notification-metadata";
-import { resolveNotificationActionUrl } from "@/lib/notification-action-url";
+import { isAttendanceNotification, resolveNotificationActionUrl } from "@/lib/notification-action-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type NotificationItem = {
@@ -374,8 +374,14 @@ export function NotificationManager({
 
   // Open operational notifications in their owning page; only communications use the reader.
   async function selectCommunication(item: NotificationItem) {
-    const meta = parseNotificationMetadata(item, recipients, locations);
     await markRead(item);
+    if (isAttendanceNotification(item)) {
+      setActiveItem(item);
+      const pauseExceeded = /pausa.*superat|superamento.*pausa/i.test(`${item.title} ${item.message}`);
+      window.alert(`${pauseExceeded ? "Attenzione: pausa superata" : "Avviso timbratura"}\n\n${item.message}`);
+      return;
+    }
+    const meta = parseNotificationMetadata(item, recipients, locations);
     window.location.assign(resolveNotificationActionUrl(item, { isOrder: meta.category.isOrder }));
   }
 

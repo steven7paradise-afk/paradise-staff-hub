@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/app/api/settings/dashboard/route";
+import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { ArrowLeft, Calendar, ExternalLink, Share2, Sparkles, Tag, Upload, FileText, CheckCircle2 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
@@ -45,7 +45,7 @@ export default async function PromoDetailPage({ params }: { params: Promise<{ id
   const isBannerExternal = bannerImgUrl ? (bannerImgUrl.startsWith("http://") || bannerImgUrl.startsWith("https://") || bannerImgUrl.startsWith("/api/drive-image")) : false;
 
   return (
-    <AppShell user={user} role={role}>
+    <AppShell title={promo.title || "Promozione"} subtitle={promo.subtitle || "Dettaglio promozione"} role={role}>
       <div className="max-w-4xl mx-auto space-y-6 pb-16 text-left">
         
         {/* Back Link */}

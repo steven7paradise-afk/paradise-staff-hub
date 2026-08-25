@@ -20,6 +20,7 @@ import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import pkg from "@/package.json";
+import { redirect } from "next/navigation";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -43,7 +44,7 @@ const nav = [
   { href: "/social-calendar", label: "Programmazione Social", iconName: "Share2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
+  { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: routePermissions["/shipping"], section: "Planning & Saloni" },
   { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/foto", label: "Foto", iconName: "Camera", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
@@ -142,6 +143,7 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
 export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, edgeToEdgeMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; edgeToEdgeMain?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const isPcCassa = pcMode;
+  if (!session?.user?.id && !isPcCassa) redirect("/login");
   const pcProfileChooserHref = "/appointments/buenos-aires?choose=1";
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
@@ -275,15 +277,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     .filter((item) => item.href !== "/tables" || userHasTablesAccess)
     .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
 
-  const isDarwin = session?.user?.id === "cmpms4o9h0003l809zof30mni" || !!session?.user?.email?.toLowerCase().includes("darwin");
-
-  if (isDarwin && !baseItems.some((item) => item.href === "/cash")) {
-    baseItems = [
-      ...baseItems,
-      { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: [currentRole] as Role[], section: "Planning & Saloni" }
-    ];
-  }
-
   const sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
@@ -332,7 +325,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }
         ] : []),
         ...(userHasTablesAccess ? [tablesNavItem] : []),
-        ...(isDarwin ? [{ href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["DIPENDENTE"] as Role[], section: "Planning & Saloni" }] : []),
       ]
     : baseItems;
 

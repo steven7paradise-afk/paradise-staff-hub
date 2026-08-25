@@ -34,6 +34,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/service-forms": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/foto": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
@@ -68,6 +69,7 @@ export const routePermissions: Record<string, Role[]> = {
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
+  if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
   if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname.startsWith("/settings")) return ["ZERO"];
@@ -283,6 +285,10 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
 
   if (pathname === "/orders" || pathname.startsWith("/orders/")) {
     return ["ADMIN", "RESPONSABILE"].includes(role);
+  }
+
+  if (pathname === "/shipping" || pathname.startsWith("/shipping/")) {
+    return ["ADMIN", "RESPONSABILE", "MAGAZZINO"].includes(role);
   }
 
   if (pathname === "/recruitment" || pathname.startsWith("/recruitment/")) {
