@@ -1022,35 +1022,22 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     try {
       for (const file of Array.from(files)) {
         if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 50 MB.`);
+        const uploadBody = new FormData();
+        uploadBody.append("taskId", selected.id);
+        uploadBody.append("file", file, file.name);
         const response = await fetch("/api/tasks/comments/upload", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ taskId: selected.id, fileName: file.name, fileSize: file.size, fileType: file.type }),
+          body: uploadBody,
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || `Non riesco a caricare ${file.name}.`);
-        const uploadBody = new FormData();
-        uploadBody.append("cacheControl", "3600");
-        uploadBody.append("", file);
-        const directUpload = await fetch(data.signedUrl, {
-          method: "PUT",
-          headers: data.anonKey ? { apikey: data.anonKey, Authorization: `Bearer ${data.anonKey}` } : undefined,
-          body: uploadBody,
-        });
-        if (!directUpload.ok) {
-          const storageError = await directUpload.clone().json().catch(async () => {
-            const text = await directUpload.text().catch(() => "");
-            return text ? { message: text } : null;
-          });
-          const detail = storageError?.message || storageError?.error || `errore ${directUpload.status}`;
-          throw new Error(`${file.name}: caricamento non riuscito (${detail}).`);
-        }
         uploaded.push({
-          name: file.name,
-          url: data.fileUrl,
-          previewUrl: file.type.startsWith("image/") ? data.fileUrl : null,
-          storagePath: data.path,
-          type: file.type || "application/octet-stream",
+          name: data.name || file.name,
+          url: data.url,
+          previewUrl: data.previewUrl,
+          driveFileId: data.driveFileId,
+          driveFileUrl: data.driveFileUrl,
+          type: data.type || file.type || "application/octet-stream",
         });
       }
       setCommentFiles((current) => [...current, ...uploaded]);

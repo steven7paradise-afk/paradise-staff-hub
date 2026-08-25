@@ -1,24 +1,47 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { prisma } from "@/lib/prisma";
-import { createSignedTaskAttachmentUpload } from "@/lib/supabase-storage";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-export async function POST(request: Request) {
+function safeFilePart(value: string) {
+  return String(value || "file")
+    .trim()
+    .replace(/[\/\\:*?"<>|]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .replace(/^-+|-+$/g, "") || "file";
+}
+
+function taskFileName(name: string, taskId: string) {
+  const cleanName = safeFilePart(name).slice(-100);
+  return `${new Date().toISOString().slice(0, 10)}-${safeFilePart(taskId).slice(0, 36)}-${cleanName}`;
+}
+
+function driveErrorMessage(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error || "");
+  if (/credentials|private key|service account/i.test(detail)) {
+    return "Google Drive non configurato sul server. Controlla le credenziali Drive in Coolify.";
+  }
+  if (/permission|forbidden|insufficient|not found|404|403/i.test(detail)) {
+    return "Google Drive non permette di usare la cartella Task. Condividila con la service account configurata.";
+  }
+  return detail ? `Google Drive ha rifiutato il file: ${detail}` : "Caricamento su Google Drive non riuscito.";
+}
+
+export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
 
-  const body = await request.json().catch(() => null);
-  const taskId = String(body?.taskId ?? "").trim();
-  const fileName = String(body?.fileName ?? "").trim();
-  const fileSize = Number(body?.fileSize ?? 0);
-  const fileType = String(body?.fileType ?? "application/octet-stream");
-  if (!taskId || !fileName || !Number.isFinite(fileSize) || fileSize <= 0) {
+  const formData = await request.formData().catch(() => null);
+  const taskId = String(formData?.get("taskId") ?? "").trim();
+  const file = formData?.get("file");
+  if (!taskId || !(file instanceof File) || file.size <= 0) {
     return NextResponse.json({ error: "Dati del file non validi." }, { status: 400 });
   }
-  if (fileSize > MAX_FILE_BYTES) {
+  if (file.size > MAX_FILE_BYTES) {
     return NextResponse.json({ error: "Il file supera il limite di 50 MB." }, { status: 413 });
   }
 
@@ -31,18 +54,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const upload = await createSignedTaskAttachmentUpload(session.user.id, taskId, fileName);
+    const mimeType = file.type || "application/octet-stream";
+    const driveFile = await uploadTaskImageToGoogleDrive(
+      Buffer.from(await file.arrayBuffer()),
+      taskFileName(file.name, taskId),
+      mimeType
+    );
+    const isImage = mimeType.startsWith("image/");
+    const driveFileUrl = driveFile.webViewLink || `https://drive.google.com/file/d/${driveFile.id}/view`;
     return NextResponse.json({
-      ...upload,
-      fileType,
-      fileUrl: `/api/tasks/comments/files?taskId=${encodeURIComponent(taskId)}&path=${encodeURIComponent(upload.path)}`,
+      name: driveFile.name || file.name,
+      url: isImage ? driveFile.previewUrl : driveFileUrl,
+      previewUrl: isImage ? driveFile.previewUrl : null,
+      driveFileId: driveFile.id,
+      driveFileUrl,
+      webContentLink: driveFile.webContentLink,
+      type: mimeType,
     });
   } catch (error) {
-    console.error("Task attachment upload failed:", error);
-    const detail = error instanceof Error ? error.message.trim() : "";
-    const message = detail
-      ? `Caricamento non riuscito: ${detail}`
-      : "Caricamento non riuscito. Riprova tra poco.";
-    return NextResponse.json({ error: message }, { status: 503 });
+    console.error("Task attachment Google Drive upload failed:", error);
+    return NextResponse.json({ error: driveErrorMessage(error) }, { status: 503 });
   }
 }
