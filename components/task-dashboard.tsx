@@ -237,6 +237,62 @@ function fileToDataUrl(file: File) {
   });
 }
 
+const LARGE_IMAGE_OPTIMIZE_THRESHOLD = 8 * 1024 * 1024;
+const LARGE_IMAGE_TARGET_BYTES = 7 * 1024 * 1024;
+
+function canvasToJpeg(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error("Non riesco a ottimizzare questa immagine.")),
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
+async function optimizeLargeImage(file: File) {
+  if (!file.type.startsWith("image/") || file.size <= LARGE_IMAGE_OPTIMIZE_THRESHOLD) return file;
+
+  const bitmap = await createImageBitmap(file);
+  try {
+    let bestBlob: Blob | null = null;
+    const attempts = [
+      { maxSide: 4096, quality: 0.92 },
+      { maxSide: 3600, quality: 0.88 },
+      { maxSide: 3200, quality: 0.84 },
+    ];
+
+    for (const attempt of attempts) {
+      const scale = Math.min(1, attempt.maxSide / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("Il browser non riesce a elaborare questa immagine.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(bitmap, 0, 0, width, height);
+      bestBlob = await canvasToJpeg(canvas, attempt.quality);
+      canvas.width = 1;
+      canvas.height = 1;
+      if (bestBlob.size <= LARGE_IMAGE_TARGET_BYTES) break;
+    }
+
+    if (!bestBlob || bestBlob.size > LARGE_IMAGE_OPTIMIZE_THRESHOLD) {
+      throw new Error(`${file.name}: l'immagine è troppo pesante per il caricamento. Esportala in JPG e riprova.`);
+    }
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "immagine";
+    return new File([bestBlob], `${baseName}-ottimizzata.jpg`, {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
 function extractPastedFiles(event: React.ClipboardEvent | ClipboardEvent): File[] {
   const files: File[] = [];
   const items = event.clipboardData?.items;
@@ -1099,22 +1155,23 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     try {
       for (const file of fileList) {
         if (file.size > 50 * 1024 * 1024) throw new Error(`${file.name}: il file supera il limite di 50 MB.`);
+        const uploadFile = await optimizeLargeImage(file);
         const uploadBody = new FormData();
         uploadBody.append("taskId", selected.id);
-        uploadBody.append("file", file, file.name);
+        uploadBody.append("file", uploadFile, uploadFile.name);
         const response = await fetch("/api/tasks/comments/upload", {
           method: "POST",
           body: uploadBody,
         });
         const data = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(data?.error || `Non riesco a caricare ${file.name}.`);
+        if (!response.ok) throw new Error(data?.error || `Non riesco a caricare ${uploadFile.name}.`);
         uploaded.push({
-          name: data.name || file.name,
+          name: data.name || uploadFile.name,
           url: data.url,
           previewUrl: data.previewUrl,
           driveFileId: data.driveFileId,
           driveFileUrl: data.driveFileUrl,
-          type: data.type || file.type || "application/octet-stream",
+          type: data.type || uploadFile.type || "application/octet-stream",
         });
       }
       setCommentFiles((current) => [...current, ...uploaded]);
