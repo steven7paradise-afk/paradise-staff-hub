@@ -39,6 +39,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Task attachment upload failed:", error);
-    return NextResponse.json({ error: "Caricamento non riuscito. Riprova tra poco." }, { status: 503 });
+    const detail = error instanceof Error ? error.message.trim() : "";
+    const message = detail
+      ? `Caricamento non riuscito: ${detail}`
+      : "Caricamento non riuscito. Riprova tra poco.";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }

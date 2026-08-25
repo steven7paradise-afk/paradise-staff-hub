@@ -1037,7 +1037,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
           headers: data.anonKey ? { apikey: data.anonKey, Authorization: `Bearer ${data.anonKey}` } : undefined,
           body: uploadBody,
         });
-        if (!directUpload.ok) throw new Error(`${file.name}: caricamento nello storage non riuscito.`);
+        if (!directUpload.ok) {
+          const storageError = await directUpload.clone().json().catch(async () => {
+            const text = await directUpload.text().catch(() => "");
+            return text ? { message: text } : null;
+          });
+          const detail = storageError?.message || storageError?.error || `errore ${directUpload.status}`;
+          throw new Error(`${file.name}: caricamento non riuscito (${detail}).`);
+        }
         uploaded.push({
           name: file.name,
           url: data.fileUrl,

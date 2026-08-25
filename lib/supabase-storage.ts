@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 function storageClient() {
-  const url = process.env.SUPABASE_URL;
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_DATABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error("Storage non configurato. Inserisci SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY su Netlify.");
@@ -97,7 +97,11 @@ export async function createSignedTaskAttachmentUpload(userId: string, taskId: s
   return {
     path,
     signedUrl: data.signedUrl,
-    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "",
+    anonKey:
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      "",
   };
 }
 
