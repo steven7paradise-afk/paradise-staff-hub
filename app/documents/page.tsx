@@ -4,6 +4,8 @@ import { DocumentUpload } from "@/components/document-upload";
 import { DocumentsViewer, type DocumentRecord } from "@/components/documents-viewer";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { FormerEmployeeDocumentNotice } from "@/components/former-employee-document-notice";
+import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +14,20 @@ export default async function DocumentsPage() {
   if (!session?.user?.id) redirect("/login");
   const employeeView = true;
   
-  const documents = await prisma.document.findMany({
-    where: { user_id: session.user.id },
-    include: { user: true },
-    orderBy: { created_at: "desc" },
-  });
+  const [documents, currentUser] = await Promise.all([
+    prisma.document.findMany({
+      where: { user_id: session.user.id },
+      include: { user: true },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { employee_status: true, workforce_data: true, last_edited_at: true },
+    }),
+  ]);
+  const formerEmployeeAccess = currentUser?.employee_status === FORMER_EMPLOYEE_STATUS
+    ? formerEmployeeAccessDates(currentUser.workforce_data, currentUser.last_edited_at)
+    : null;
 
   const documentItems: DocumentRecord[] = documents.map((document) => ({
     id: document.id,
@@ -40,6 +51,7 @@ export default async function DocumentsPage() {
       subtitle={employeeView ? "Le tue buste paga e i tuoi documenti HR riservati." : "Buste paga, contratti e documenti HR con accesso riservato al dipendente corretto."}
       hidePageHeaderOnMobile
     >
+      {formerEmployeeAccess ? <FormerEmployeeDocumentNotice accessUntil={formerEmployeeAccess.until.toISOString()} /> : null}
       {!employeeView ? (
         <div className="mb-6">
           <DocumentUpload workers={[]} />

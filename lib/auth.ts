@@ -6,6 +6,7 @@ import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
 import { pinLookup } from "@/lib/pin";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { FORMER_EMPLOYEE_STATUS, hasFormerEmployeeDocumentAccess, isFormerEmployeeAllowedPath } from "@/lib/former-employee";
 
 function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/login" || pathname === "/login/") return true;
@@ -65,6 +66,7 @@ export const authConfig = {
             where: { pin_lookup: lookup },
           });
           if (!user?.active) return null;
+          if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
           return {
             id: user.id,
             name: user.name,
@@ -80,6 +82,7 @@ export const authConfig = {
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.active) return null;
+        if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
 
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return null;
@@ -107,7 +110,7 @@ export const authConfig = {
       } else if (token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true },
+          select: { name: true, email: true, role: true, sede_id: true, mansione: true, active: true, employee_status: true, workforce_data: true, last_edited_at: true },
         }).catch(() => null);
 
         if (!dbUser?.active) return null;
@@ -173,11 +176,21 @@ export const authConfig = {
             role: true,
             mansione: true,
             active: true,
+            employee_status: true,
+            workforce_data: true,
+            last_edited_at: true,
             location: { select: { name: true } },
           }
         });
 
         if (!dbUser?.active) return false;
+        if (dbUser.employee_status === FORMER_EMPLOYEE_STATUS) {
+          if (!hasFormerEmployeeDocumentAccess(dbUser.workforce_data, dbUser.last_edited_at)) {
+            return Response.redirect(new URL("/login?documentAccessExpired=1", request.nextUrl));
+          }
+          if (isFormerEmployeeAllowedPath(pathname)) return true;
+          return Response.redirect(new URL("/documents", request.nextUrl));
+        }
         if (
           isShiftProtectedPath(pathname) &&
           !(await canAccessSalonShiftModules(dbUser))

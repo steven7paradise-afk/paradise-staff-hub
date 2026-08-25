@@ -33,7 +33,7 @@ function normalizeLoginDestination(value?: string | null, fallback = DEFAULT_LOG
 
 type LoginFormVariant = "default" | "mobile-overlay";
 
-export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant }) {
+export function LoginForm({ variant = "default", documentAccessExpired = false }: { variant?: LoginFormVariant; documentAccessExpired?: boolean }) {
   const [loginMode, setLoginMode] = useState<"email" | "pin">("pin");
   const [expandedMode, setExpandedMode] = useState<"email" | "pin" | null>(
     variant === "mobile-overlay" ? null : "pin",
@@ -79,9 +79,16 @@ export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant 
       }
 
       if (result?.error) {
+        const accessStatus = await fetch("/api/auth/document-access-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(loginMode === "pin" ? { pin } : { email, password }),
+        }).then((response) => response.json()).catch(() => ({ expired: false }));
         submittingRef.current = false;
         setLoading(false);
-        setError(loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
+        setError(accessStatus.expired
+          ? "Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato."
+          : loginMode === "pin" ? "PIN personale non corretto." : "Email o password non corretti.");
         return;
       }
 
@@ -97,6 +104,14 @@ export function LoginForm({ variant = "default" }: { variant?: LoginFormVariant 
 
   return (
     <div className={isMobileOverlay ? "space-y-4" : "space-y-5"}>
+      {documentAccessExpired ? (
+        <div className={isMobileOverlay
+          ? "rounded-2xl border border-rose-300/40 bg-rose-500/20 px-4 py-3 text-left text-sm font-bold text-white"
+          : "rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800"}
+        >
+          Sono terminati i 3 mesi previsti per scaricare i documenti. L’accesso è stato disattivato.
+        </div>
+      ) : null}
       {isMobileOverlay ? null : (
         <div className="space-y-2">
           <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-black/40 dark:text-white/40">

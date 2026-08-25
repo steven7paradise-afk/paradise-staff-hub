@@ -21,6 +21,7 @@ import { DynamicIcon } from "@/components/dynamic-icon";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import pkg from "@/package.json";
 import { redirect } from "next/navigation";
+import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -180,6 +181,9 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           header_color: true,
           sidebar_color: true,
           mansione: true,
+          employee_status: true,
+          workforce_data: true,
+          last_edited_at: true,
           location: { select: { name: true } },
         },
       }).catch(() => null)
@@ -195,6 +199,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     unreadNotificationsPromise,
   ]);
   const displayUser = isPcCassa && pcDisplayUser ? pcDisplayUser : currentUser;
+  const isFormerEmployee = currentUser?.employee_status === FORMER_EMPLOYEE_STATUS;
+  if (isFormerEmployee && formerEmployeeAccessDates(currentUser.workforce_data, currentUser.last_edited_at).until.getTime() < Date.now()) {
+    redirect("/login?documentAccessExpired=1");
+  }
   const salonShiftModulesEnabled = isPcCassa || !currentUser || !isSalonCollaborator(currentUser)
     ? true
     : await canAccessSalonShiftModules(currentUser).catch(() => false);
@@ -351,12 +359,16 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     iconName: item.iconName,
     section: item.section,
   }));
+  let effectiveSidebarConfig = sidebarConfig;
+  if (isFormerEmployee) {
+    sidebarItems = sidebarItems.filter((item) => item.href === "/documents");
+    effectiveSidebarConfig = [{ id: "ex-dipendente", title: "Documenti disponibili", routes: ["/documents"] }];
+  }
   if (!salonShiftModulesEnabled) {
     sidebarItems = sidebarItems.filter(
       (item) => item.href !== "/appointments" && item.href !== "/service-forms",
     );
   }
-  let effectiveSidebarConfig = sidebarConfig;
   if (isPcCassa) {
     sidebarItems = sidebarItems
       .filter(item => item.href === "/appointments" || item.href === "/service-forms" || item.href === "/orders")
@@ -395,12 +407,12 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           />
 
           {/* Logo Center */}
-          <Link href="/dashboard" className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">
+          <Link href={isFormerEmployee ? "/documents" : "/dashboard"} className="absolute left-1/2 -translate-x-1/2 select-none flex items-center justify-center max-w-[150px] xs:max-w-[180px] h-8">
             <img src={branding.logo_url || "/logo.png"} alt="Paradise Beauty" className="max-h-full w-auto object-contain dark:invert select-none pointer-events-none" />
           </Link>
 
           {/* Bell & Profile Photo Right */}
-          <div className="flex items-center gap-3.5">
+          {!isFormerEmployee ? <div className="flex items-center gap-3.5">
             <NotificationsPopover initialUnread={unreadNotifications} />
 
             <InstantLink href="/profile" className="relative active:scale-95 transition">
@@ -415,7 +427,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
               </div>
               <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-black" />
             </InstantLink>
-          </div>
+          </div> : <div className="w-9" aria-hidden="true" />}
         </div>
       )}
 
@@ -453,7 +465,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         transparentMobileHeader && !hideMobileHeader && "pt-[calc(env(safe-area-inset-top)+72px)] xl:pt-8",
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
-        <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
+        {!isFormerEmployee ? <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
           <TopControls
             unread={unreadNotifications}
             name={displayUser?.name ?? session?.user?.name ?? "Paradise"}
@@ -461,7 +473,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             userId={isPcCassa ? "PC_CASSA" : session?.user?.id || ""}
             profileHref={isPcCassa ? "/appointments/buenos-aires?choose=1" : "/profile"}
           />
-        </div>
+        </div> : null}
         <div className="sr-only">
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
@@ -481,7 +493,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<>{main}<NotificationWatcher initialUnread={unreadNotifications} /></>}
+      main={<>{main}{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),

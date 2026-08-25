@@ -1035,6 +1035,10 @@ export function StaffDirectory({
                       📅 Inizio Contratto: {formatContractDate(editForm.contractStart)}
                     </span>
                   )}
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F3B5D4] bg-[#FFF0F7] px-3 py-1 text-[11px] font-extrabold text-[#B83D7F]">
+                    <Briefcase className="size-3 shrink-0" />
+                    Tipologia contratto: {editForm.contractType || "Non specificata"}
+                  </span>
                   <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1">
                     <MapPin className="size-3 text-red-500 shrink-0" />
                     <span>{editForm.location}</span>

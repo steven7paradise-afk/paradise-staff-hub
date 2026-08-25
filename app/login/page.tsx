@@ -3,7 +3,13 @@ import { getBrandingTheme, brandingCss } from "@/lib/branding";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ documentAccessExpired?: string }>;
+}) {
+  const params = await searchParams;
+  const documentAccessExpired = params.documentAccessExpired === "1";
   const branding = await getBrandingTheme();
   const themeStyles = brandingCss(branding);
   const logoSrc = branding.logo_url ?? "/logo.png";
@@ -44,7 +50,7 @@ export default async function LoginPage() {
                 </div>
 
                 <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl shadow-[0_24px_60px_rgba(0,0,0,0.28)] sm:p-5">
-                  <LoginForm variant="mobile-overlay" />
+                  <LoginForm variant="mobile-overlay" documentAccessExpired={documentAccessExpired} />
                 </div>
               </div>
             </div>
@@ -134,7 +140,7 @@ export default async function LoginPage() {
                     </div>
                   </div>
 
-                  <LoginForm />
+                  <LoginForm documentAccessExpired={documentAccessExpired} />
 
                   <div className="mt-6 border-t border-black/5 pt-4 dark:border-white/10">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/35 dark:text-white/35">

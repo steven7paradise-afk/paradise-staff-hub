@@ -1,9 +1,10 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
+import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
@@ -77,16 +78,23 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return apiError("Solo Zero può modificare i ruoli di sistema.", 403);
     }
     const role = requestedRole ?? current.role;
-    const currentWorkforceData = current.workforce_data && typeof current.workforce_data === "object" && !Array.isArray(current.workforce_data)
-      ? current.workforce_data as Record<string, unknown>
-      : {};
-    const contractWorkforceData = data.contractType !== undefined || data.contractRenewalStatus !== undefined
-      ? {
-          ...currentWorkforceData,
-          ...(data.contractType !== undefined ? { contractType: String(data.contractType ?? "").trim() } : {}),
-          ...(data.contractRenewalStatus !== undefined ? { contractRenewalStatus: String(data.contractRenewalStatus ?? "DA_VALUTARE") } : {}),
-        }
-      : undefined;
+    const currentWorkforceData = asRecord(current.workforce_data);
+    const requestedEmployeeStatus = data.employeeStatus !== undefined ? String(data.employeeStatus) : current.employee_status;
+    const becomingFormerEmployee = requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS && current.employee_status !== FORMER_EMPLOYEE_STATUS;
+    const leavingFormerEmployee = requestedEmployeeStatus !== FORMER_EMPLOYEE_STATUS && current.employee_status === FORMER_EMPLOYEE_STATUS;
+    let nextWorkforceData = data.workforceData !== undefined
+      ? asRecord(data.workforceData)
+      : { ...currentWorkforceData };
+    if (data.contractType !== undefined) nextWorkforceData.contractType = String(data.contractType ?? "").trim();
+    if (data.contractRenewalStatus !== undefined) nextWorkforceData.contractRenewalStatus = String(data.contractRenewalStatus ?? "DA_VALUTARE");
+    if (becomingFormerEmployee) {
+      const since = new Date();
+      nextWorkforceData.exEmployeeSince = since.toISOString();
+      nextWorkforceData.exDocumentAccessUntil = addCalendarMonths(since, 3).toISOString();
+    } else if (leavingFormerEmployee) {
+      delete nextWorkforceData.exEmployeeSince;
+      delete nextWorkforceData.exDocumentAccessUntil;
+    }
 
     const nextSedeId = data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined;
     const baseUpdate = {
@@ -102,14 +110,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       whatsapp_phone: data.whatsappPhone !== undefined ? (data.whatsappPhone ? String(data.whatsappPhone).trim() : null) : undefined,
       mansione: data.mansione !== undefined ? (data.mansione ? String(data.mansione).trim() : null) : undefined,
       iban: data.iban !== undefined ? (data.iban ? String(data.iban).trim().toUpperCase() : null) : undefined,
-      active: data.active !== undefined ? Boolean(data.active) : undefined,
-      employee_status: data.employeeStatus !== undefined ? String(data.employeeStatus) : undefined,
+      active: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? true : (data.active !== undefined ? Boolean(data.active) : undefined),
+      employee_status: data.employeeStatus !== undefined ? requestedEmployeeStatus : undefined,
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
-      access_list: data.accessList !== undefined ? data.accessList : undefined,
+      access_list: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? ["/documents"] : (data.accessList !== undefined ? data.accessList : undefined),
       hr_notes: data.hrNotes !== undefined ? (data.hrNotes ? String(data.hrNotes) : null) : undefined,
-      workforce_data: contractWorkforceData ?? (data.workforceData !== undefined
-        ? (data.workforceData && typeof data.workforceData === "object" && !Array.isArray(data.workforceData) ? data.workforceData : {})
-        : undefined),
+      workforce_data: nextWorkforceData as Prisma.InputJsonValue,
       google_calendar_id: data.googleCalendarId !== undefined ? (data.googleCalendarId ? String(data.googleCalendarId).trim() : null) : undefined,
       google_calendar_sync: data.googleCalendarSync !== undefined ? Boolean(data.googleCalendarSync) : undefined,
       contract_history: data.contractHistory !== undefined ? data.contractHistory : undefined,
