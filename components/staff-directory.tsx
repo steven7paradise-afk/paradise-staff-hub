@@ -6,7 +6,7 @@ import {
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, Trash2, UserPlus, Printer, RefreshCw,
+  Archive, Plus, Trash2, UserPlus, Printer,
   ChevronLeft, Copy, Check, HeartPulse, Users, UserX, AlarmClock
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -261,7 +261,6 @@ export function StaffDirectory({
   const [successMsg, setSuccessMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
-  const [syncingDrivePhotos, setSyncingDrivePhotos] = useState(false);
 
   useEffect(() => {
     if (!focusEmployeeId) return;
@@ -741,40 +740,6 @@ export function StaffDirectory({
       setErrorMsg(err.message || "Caricamento foto non riuscito.");
     } finally {
       setPhotoUploadingId(null);
-    }
-  }
-
-  async function handleSyncDrivePhotos() {
-    setErrorMsg("");
-    setSuccessMsg("");
-    setSyncingDrivePhotos(true);
-
-    try {
-      const response = await fetch("/api/staff/photos/sync-drive", { method: "POST" });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Import foto da Drive non riuscito.");
-      }
-
-      const updated = Array.isArray(data.updated) ? data.updated : [];
-      if (updated.length) {
-        const photoById = new Map(updated.map((item: { id: string; photoUrl: string }) => [item.id, item.photoUrl]));
-        setStaff((prev) => prev.map((emp) => photoById.has(emp.id) ? { ...emp, photoUrl: String(photoById.get(emp.id)) } : emp));
-        setSelectedEmployee((prev) => prev && photoById.has(prev.id) ? { ...prev, photoUrl: String(photoById.get(prev.id)) } : prev);
-        setEditForm((prev) => prev && photoById.has(prev.id) ? { ...prev, photoUrl: String(photoById.get(prev.id)) } : prev);
-      }
-
-      setSuccessMsg(
-        updated.length
-          ? `Importate ${updated.length} foto già presenti nella cartella Drive.`
-          : "Nessuna nuova foto trovata nella cartella Drive."
-      );
-      setTimeout(() => setSuccessMsg(""), 4500);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Import foto da Drive non riuscito.");
-    } finally {
-      setSyncingDrivePhotos(false);
     }
   }
 
@@ -1711,8 +1676,8 @@ export function StaffDirectory({
 
       {/* Top Filter Bar */}
       <div className="bg-white/70 p-5 rounded-3xl border border-black/5 dark:bg-neutral-900/40 dark:border-white/10 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full sm:max-w-md">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full lg:min-w-[360px] lg:max-w-xl lg:flex-1">
             <Search className="absolute left-4 top-3.5 size-4 text-black/40 dark:text-white/40" />
             <Field 
               value={searchQuery}
@@ -1721,7 +1686,7 @@ export function StaffDirectory({
               className="pl-11 min-h-11"
             />
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
             <Link
               href="/recruitment"
               className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-paradise-noir shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-neutral-900 dark:text-white"
@@ -1736,18 +1701,6 @@ export function StaffDirectory({
             >
               <Printer className="size-4" /> Stampa lista
             </Button>
-            {isAuthorizedToEdit && (
-              <Button
-                type="button"
-                variant="soft"
-                onClick={handleSyncDrivePhotos}
-                disabled={syncingDrivePhotos}
-                className="min-h-11 shrink-0 rounded-2xl bg-white text-paradise-noir"
-              >
-                <RefreshCw className={cn("size-4", syncingDrivePhotos && "animate-spin")} />
-                {syncingDrivePhotos ? "Importo..." : "Importa foto Drive"}
-              </Button>
-            )}
             <Button
               type="button"
               variant={archiveMode ? "dark" : "soft"}
