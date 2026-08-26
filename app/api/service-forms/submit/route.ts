@@ -7,6 +7,7 @@ import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closin
 import { isPinValidForUser, identifyWorkerByPin } from "@/lib/pin";
 import { getOperationalUser } from "@/lib/operational-session";
 import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
+import { isServiceFormFieldVisible } from "@/lib/service-form-visibility";
 
 type FormSessionUser = {
   id: string;
@@ -128,7 +129,14 @@ export async function POST(request: NextRequest) {
     const isCashClosing = isCashClosingFormName(form.name, form.category);
 
     // Process file fields and upload them to Google Drive.
-    const fields = form.fields as Array<{ id: string; label: string; type: string; required?: boolean }>;
+    const fields = form.fields as Array<{
+      id: string;
+      label: string;
+      type: string;
+      required?: boolean;
+      show_if?: { field_id?: string | null; value?: unknown; operator?: string | null } | null;
+      show_ifs?: Array<{ field_id?: string | null; value?: unknown; operator?: string | null }> | null;
+    }>;
     for (const field of fields) {
       if (field.type === "file") {
         const file = data.get(field.id);
@@ -149,7 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     const missingRequired = fields.find((field) => {
-      if (!field.required) return false;
+      if (!field.required || !isServiceFormFieldVisible(field, answersObj)) return false;
       const value = answersObj[field.id];
       if (value === null || value === undefined) return true;
       if (typeof value === "string") return value.trim().length === 0;
