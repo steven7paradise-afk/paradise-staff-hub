@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
@@ -10,6 +10,7 @@ import {
   Eye,
   FileText,
   FolderOpen,
+  Pencil,
   Image as ImageIcon,
   Sparkles,
   UserRound,
@@ -35,6 +36,7 @@ export type DocumentRecord = {
   file_url: string;
   storage_path: string | null;
   created_at: string;
+  document_date?: string | null;
   user: {
     id: string;
     name: string;
@@ -63,6 +65,9 @@ const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno"
 const typeLabels: Record<string, string> = {
   BUSTA_PAGA: "Busta paga",
   CONTRATTO: "Contratto",
+  RINNOVO: "Rinnovo / proroga",
+  PROROGA: "Proroga / rinnovo",
+  CUD: "CUD / Certificazione Unica",
   DOCUMENTO: "Documento HR",
 };
 
@@ -250,11 +255,13 @@ function DesktopPreview({
   document,
   employeeView,
   onDelete,
+  onEdit,
   deletingId
 }: {
   document: DocumentRecord;
   employeeView: boolean;
   onDelete?: (id: string) => void;
+  onEdit?: (document: DocumentRecord) => void;
   deletingId?: string;
 }) {
   const url = getDocumentUrl(document);
@@ -270,6 +277,16 @@ function DesktopPreview({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {!employeeView && onEdit ? (
+            <button
+              type="button"
+              onClick={() => onEdit(document)}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-paradise-noir shadow-sm hover:bg-black/[0.02]"
+            >
+              <Pencil className="size-4" />
+              Modifica
+            </button>
+          ) : null}
           {!employeeView && onDelete && (
             <button
               type="button"
@@ -358,6 +375,8 @@ export function DocumentsViewer({
   const [selectedId, setSelectedId] = useState(initialDocuments[0]?.id ?? "");
   const [mobilePreview, setMobilePreview] = useState<DocumentRecord | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(documents[0]?.id ?? null);
+  const [editingDocument, setEditingDocument] = useState<DocumentRecord | null>(null);
+  const [savingDocument, setSavingDocument] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState(initialWorkerId);
@@ -481,7 +500,7 @@ export function DocumentsViewer({
       if (selectedWorkerId && doc.user?.id !== selectedWorkerId) {
         return false;
       }
-      if (selectedType !== "ALL" && doc.type !== selectedType) {
+      if (selectedType !== "ALL" && (selectedType === "PROROGA" ? !["PROROGA", "RINNOVO"].includes(doc.type) : doc.type !== selectedType)) {
         return false;
       }
       if (selectedYear !== "ALL" && String(doc.year) !== selectedYear) {
@@ -507,6 +526,34 @@ export function DocumentsViewer({
       alert("Errore di connessione.");
     } finally {
       setDeletingId("");
+    }
+  }
+
+  async function handleEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingDocument) return;
+    setSavingDocument(true);
+    const values = new FormData(event.currentTarget);
+    try {
+      const response = await fetch(`/api/documents/${editingDocument.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: values.get("title"),
+          type: values.get("type"),
+          month: values.get("month"),
+          year: values.get("year"),
+          documentDate: values.get("documentDate"),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Modifica non riuscita.");
+      setEditingDocument(null);
+      router.refresh();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Modifica non riuscita.");
+    } finally {
+      setSavingDocument(false);
     }
   }
 
@@ -705,6 +752,8 @@ export function DocumentsViewer({
                   <option value="ALL">Tutti i tipi</option>
                   <option value="BUSTA_PAGA">Busta paga</option>
                   <option value="CONTRATTO">Contratto</option>
+                  <option value="PROROGA">Proroga / rinnovo</option>
+                  <option value="CUD">CUD / Certificazione Unica</option>
                   <option value="DOCUMENTO">Documento HR</option>
                 </select>
 
@@ -1014,6 +1063,8 @@ export function DocumentsViewer({
                     <option value="ALL">Tutti i tipi</option>
                     <option value="BUSTA_PAGA">Busta paga</option>
                     <option value="CONTRATTO">Contratto</option>
+                    <option value="PROROGA">Proroga / rinnovo</option>
+                    <option value="CUD">CUD / Certificazione Unica</option>
                     <option value="DOCUMENTO">Documento HR</option>
                   </select>
 
@@ -1183,6 +1234,7 @@ export function DocumentsViewer({
               document={selectedDocument}
               employeeView={employeeView}
               onDelete={handleDelete}
+              onEdit={setEditingDocument}
               deletingId={deletingId}
             />
           ) : (
@@ -1196,6 +1248,28 @@ export function DocumentsViewer({
           )}
         </div>
       </div>
+
+      {editingDocument ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingDocument(null); }}>
+          <form onSubmit={handleEdit} className="w-full max-w-2xl rounded-[30px] border border-white/40 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#B85B68]">Documento già caricato</p>
+                <h2 className="mt-1 text-2xl font-black text-paradise-noir">Modifica classificazione</h2>
+              </div>
+              <button type="button" onClick={() => setEditingDocument(null)} className="grid size-10 place-items-center rounded-full bg-black/5"><X className="size-5" /></button>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-bold text-black/55">Titolo</span><input name="title" defaultValue={editingDocument.title} required className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Tipologia</span><select name="type" defaultValue={editingDocument.type} required className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="CONTRATTO">Contratto</option><option value="PROROGA">Proroga / rinnovo</option><option value="BUSTA_PAGA">Cedolino / busta paga</option><option value="CUD">CUD / Certificazione Unica</option><option value="DOCUMENTO">Altro documento HR</option></select></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Data documento</span><input name="documentDate" type="date" defaultValue={editingDocument.document_date?.slice(0, 10) ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Mese cedolino</span><select name="month" defaultValue={editingDocument.month ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="">Non indicato</option>{monthNames.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Anno</span><input name="year" type="number" min="2000" max="2100" defaultValue={editingDocument.year ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setEditingDocument(null)} className="min-h-11 rounded-2xl border border-black/10 px-5 text-sm font-bold">Annulla</button><button disabled={savingDocument} className="min-h-11 rounded-2xl bg-paradise-pink px-5 text-sm font-black text-paradise-noir disabled:opacity-50">{savingDocument ? "Salvataggio..." : "Salva modifiche"}</button></div>
+          </form>
+        </div>
+      ) : null}
 
       {mobilePreview ? <MobilePreviewModal document={mobilePreview} employeeView={employeeView} onClose={() => setMobilePreview(null)} /> : null}
     </div>

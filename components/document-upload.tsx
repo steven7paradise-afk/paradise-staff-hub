@@ -286,6 +286,8 @@ export function DocumentUpload({ workers }: { workers: Worker[] }) {
                   <Select name="type" defaultValue="BUSTA_PAGA">
                     <option value="BUSTA_PAGA">Busta paga</option>
                     <option value="CONTRATTO">Contratto</option>
+                    <option value="PROROGA">Proroga / rinnovo</option>
+                    <option value="CUD">CUD / Certificazione Unica</option>
                     <option value="DOCUMENTO">Documento</option>
                   </Select>
                 </label>

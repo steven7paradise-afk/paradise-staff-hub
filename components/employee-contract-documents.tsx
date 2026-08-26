@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { Download, ExternalLink, Eye, FileCheck2, FileText, Upload, X } from "lucide-react";
+import { Download, ExternalLink, Eye, FileCheck2, FileText, Pencil, Upload, X } from "lucide-react";
 import { Field, Select } from "@/components/ui";
 
 export type EmployeeContractDocument = {
@@ -19,12 +19,14 @@ export type EmployeeContractDocument = {
 const GROUPS = [
   { key: "CONTRATTO", label: "Contratti" },
   { key: "RINNOVO", label: "Rinnovi" },
+  { key: "BUSTA_PAGA", label: "Cedolini / buste paga" },
   { key: "CUD", label: "CUD / CU" },
 ] as const;
 
 function documentGroup(document: EmployeeContractDocument) {
   const text = `${document.type} ${document.title}`.toLowerCase();
   if (/rinnovo|proroga/.test(text)) return "RINNOVO";
+  if (/busta.?paga|cedolino/.test(text)) return "BUSTA_PAGA";
   if (/\bcud\b|certificazione unica|\bcu\b/.test(text)) return "CUD";
   if (/contratto/.test(text)) return "CONTRATTO";
   return "ALTRO";
@@ -41,16 +43,20 @@ export function EmployeeContractDocuments({
   employeeName,
   documents,
   onUploaded,
+  onUpdated,
 }: {
   employeeId: string;
   employeeName: string;
   documents: EmployeeContractDocument[];
   onUploaded: (document: EmployeeContractDocument) => void;
+  onUpdated: (document: EmployeeContractDocument) => void;
 }) {
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("");
   const [preview, setPreview] = useState<EmployeeContractDocument | null>(null);
+  const [editing, setEditing] = useState<EmployeeContractDocument | null>(null);
+  const [saving, setSaving] = useState(false);
   const grouped = useMemo(() => {
     const map = new Map<string, EmployeeContractDocument[]>();
     documents.forEach((document) => {
@@ -88,6 +94,39 @@ export function EmployeeContractDocuments({
       setStatus(error instanceof Error ? error.message : "Caricamento non riuscito.");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    setStatus("");
+    const values = new FormData(event.currentTarget);
+    try {
+      const response = await fetch(`/api/documents/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: values.get("title"),
+          type: values.get("type"),
+          documentDate: values.get("documentDate"),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Modifica non riuscita.");
+      onUpdated({
+        ...editing,
+        title: data.title,
+        type: data.type,
+        documentDate: data.document_date ? String(data.document_date).slice(0, 10) : "",
+      });
+      setEditing(null);
+      setStatus("Documento aggiornato.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Modifica non riuscita.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -130,7 +169,8 @@ export function EmployeeContractDocuments({
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo documento</span>
             <Select name="type" defaultValue="CONTRATTO" required>
               <option value="CONTRATTO">Contratto</option>
-              <option value="RINNOVO">Rinnovo / proroga</option>
+              <option value="PROROGA">Proroga / rinnovo</option>
+              <option value="BUSTA_PAGA">Cedolino / busta paga</option>
               <option value="CUD">CUD / Certificazione Unica</option>
               <option value="DOCUMENTO">Altro documento HR</option>
             </Select>
@@ -154,7 +194,34 @@ export function EmployeeContractDocuments({
         </form>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      {editing ? (
+        <form onSubmit={saveEdit} className="mt-4 grid gap-3 rounded-[22px] border border-[#D96B94] bg-[#FFF8FC] p-4 md:grid-cols-3">
+          <label className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo documento</span>
+            <Select name="type" defaultValue={editing.type} required>
+              <option value="CONTRATTO">Contratto</option>
+              <option value="PROROGA">Proroga / rinnovo</option>
+              <option value="BUSTA_PAGA">Cedolino / busta paga</option>
+              <option value="CUD">CUD / Certificazione Unica</option>
+              <option value="DOCUMENTO">Altro documento HR</option>
+            </Select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Titolo</span>
+            <Field name="title" defaultValue={editing.title} required />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data documento</span>
+            <Field name="documentDate" type="date" defaultValue={editing.documentDate} />
+          </label>
+          <div className="flex justify-end gap-2 md:col-span-3">
+            <button type="button" onClick={() => setEditing(null)} className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-xs font-bold text-neutral-600">Annulla</button>
+            <button disabled={saving} className="rounded-2xl bg-[#D96B94] px-4 py-2 text-xs font-bold text-white disabled:opacity-60">{saving ? "Salvataggio..." : "Salva modifiche"}</button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {GROUPS.map((group) => {
           const items = grouped.get(group.key) ?? [];
           return (
@@ -177,6 +244,7 @@ export function EmployeeContractDocuments({
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <button type="button" onClick={() => setPreview(document)} className="inline-flex items-center gap-1 rounded-xl bg-[#FFF0F7] px-2.5 py-1.5 text-[10px] font-bold text-[#B83D7F]"><Eye className="size-3" />Vedi</button>
+                        <button type="button" onClick={() => setEditing(document)} className="inline-flex items-center gap-1 rounded-xl border border-[#F3B5D4] bg-white px-2.5 py-1.5 text-[10px] font-bold text-[#B83D7F]"><Pencil className="size-3" />Modifica</button>
                         <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-xl border border-black/10 bg-white px-2.5 py-1.5 text-[10px] font-bold text-neutral-600"><ExternalLink className="size-3" />Apri PDF</a>
                         <a href={`${url}?download=1`} className="inline-flex items-center gap-1 rounded-xl bg-[#D96B94] px-2.5 py-1.5 text-[10px] font-bold text-white"><Download className="size-3" />Scarica PDF</a>
                       </div>

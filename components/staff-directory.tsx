@@ -1714,6 +1714,14 @@ export function StaffDirectory({
                   ? { ...employee, documents: [document, ...(employee.documents ?? [])] }
                   : employee));
               }}
+              onUpdated={(document) => {
+                const replaceDocument = (items: EmployeeContractDocument[] | undefined) => (items ?? []).map((item) => item.id === document.id ? document : item);
+                setEditForm((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
+                setSelectedEmployee((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
+                setStaff((prev) => prev.map((employee) => employee.id === editForm.id
+                  ? { ...employee, documents: replaceDocument(employee.documents) }
+                  : employee));
+              }}
             />
           </form>
         </div>

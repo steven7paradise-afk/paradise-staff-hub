@@ -38,6 +38,7 @@ export default async function DocumentsPage() {
     file_url: document.file_url,
     storage_path: document.storage_path,
     created_at: document.created_at.toISOString(),
+    document_date: document.document_date?.toISOString() ?? null,
     user: {
       id: document.user.id,
       name: document.user.name,
