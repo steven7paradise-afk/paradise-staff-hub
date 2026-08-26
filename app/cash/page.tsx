@@ -23,6 +23,7 @@ import { AppShell } from "@/components/app-shell";
 import { CashActions } from "@/components/cash-actions";
 import { CashHistory } from "@/components/cash-history";
 import { CashReviewActions } from "@/components/cash-review-actions";
+import { CashClosingAmountEditor } from "@/components/cash-closing-amount-editor";
 import { CashDaySelector } from "@/components/cash-day-selector";
 import { Badge, Card } from "@/components/ui";
 import {
@@ -219,6 +220,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   if (!session?.user?.id) redirect("/login");
 
   const role = session.user.role as Role;
+  const canEditClosingAmount = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
 
   const accessUser = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -950,7 +952,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                           </div>
                           <div className="rounded-2xl bg-[#FAF7F9] px-4 py-3 text-right">
                             <p className="text-[10px] font-black uppercase text-black/35">Prelevato</p>
-                            <p className="text-lg font-black text-[#A74758]">{formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))}</p>
+                            <CashClosingAmountEditor closingId={response.id} currentAmount={moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn))} canEdit={canEditClosingAmount} />
                           </div>
                         </div>
 
@@ -1003,7 +1005,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                         </div>
 
                         {answer(response, CASH_CLOSING_FIELD_IDS.notes) ? (
-                          <p className="mt-3 rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
+                          <p className="mt-3 whitespace-pre-wrap rounded-2xl bg-[#FAF7F9] p-3 text-xs leading-5 text-black/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
                         ) : null}
                         <div className="mt-3">
                           <CashReviewActions closingId={response.id} initialReview={cashReview(response)} />
@@ -1124,7 +1126,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       {hasFundIssue ? <AlertTriangle className="size-5 text-[#F7DFA7]" /> : <CheckCircle2 className="size-5 text-emerald-300" />}
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-2">
-                      <MiniDark label="Prelevato" value={formatMoney(moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)))} />
+                      <div className="rounded-2xl bg-white/[0.06] p-3">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-white/35">Prelevato</p>
+                        <div className="mt-1"><CashClosingAmountEditor closingId={response.id} currentAmount={moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn))} canEdit={canEditClosingAmount} dark align="left" /></div>
+                      </div>
                       <MiniDark label="Fondo" value={formatMoney(fund)} />
                     </div>
                     <div className="mt-4 rounded-2xl bg-white/5 p-3">
@@ -1145,7 +1150,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       ) : null}
                     </div>
                     {answer(response, CASH_CLOSING_FIELD_IDS.notes) ? (
-                      <p className="mt-3 rounded-2xl border border-white/10 p-3 text-xs leading-5 text-white/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
+                      <p className="mt-3 whitespace-pre-wrap rounded-2xl border border-white/10 p-3 text-xs leading-5 text-white/55">{String(answer(response, CASH_CLOSING_FIELD_IDS.notes))}</p>
                     ) : null}
                   </div>
                 );
@@ -1289,10 +1294,15 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                         </span>
                       </td>
                       <td className={`px-5 py-4 text-right font-black ${movement.amountClass}`}>
-                        {formatMoney(movement.amount)}
+                        {movement.closing ? (
+                          <CashClosingAmountEditor closingId={movement.closing.id} currentAmount={movement.amount} canEdit={canEditClosingAmount} />
+                        ) : formatMoney(movement.amount)}
                       </td>
                       <td className="max-w-[420px] px-5 py-4 text-xs leading-5 text-black/55">
                         <p className="font-semibold text-black/65">{movement.detail}</p>
+                        {movement.note && movement.note !== "-" ? (
+                          <p className="mt-2 whitespace-pre-wrap rounded-xl border border-black/5 bg-[#FAF7F9] p-3 text-[11px] leading-5 text-black/55">{movement.note}</p>
+                        ) : null}
                         {movement.closing && shopifyRevenue.available ? (
                           <div className="mt-2 rounded-xl border border-black/5 bg-[#FAF7F9] p-3">
                             <p className="text-[9px] font-black uppercase tracking-wider text-black/35">Confronto totale giornata</p>
