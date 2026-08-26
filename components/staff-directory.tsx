@@ -1682,7 +1682,7 @@ export function StaffDirectory({
                     ) : employmentHistory.map((event) => {
                       const occurredAt = new Date(event.occurredAt);
                       const status = event.status.toUpperCase();
-                      const danger = status.includes("ASSENTE") || status.includes("RITARDO") || status.includes("RIFIUTATA");
+                      const danger = status.includes("NON GIUSTIFICATA") || status.includes("ASSENTE") || status.includes("RITARDO") || status.includes("RIFIUTATA");
                       const success = status.includes("APPROVATA") || status.includes("GIUSTIFICATA") || status.includes("ATTIVO");
                       return (
                         <tr key={event.id} className="align-top transition hover:bg-neutral-50/60">
@@ -1690,7 +1690,7 @@ export function StaffDirectory({
                           <td className="whitespace-nowrap py-3 pr-4">{event.timeKnown === false ? "—" : new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
                           <td className="py-3 pr-4 font-extrabold text-neutral-900">{event.type}</td>
                           <td className="py-3 pr-4">
-                            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide", danger ? "bg-rose-50 text-rose-700" : success ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                            <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide", danger ? "border-red-300 bg-red-100 text-red-700" : success ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
                               {event.status}
                             </span>
                           </td>
