@@ -2,9 +2,9 @@
 
 import Papa from "papaparse";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
@@ -372,7 +372,79 @@ export function OrderManager({
   const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
   const [visibleMobileCount, setVisibleMobileCount] = useState(18);
   const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(null);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [scannerMessage, setScannerMessage] = useState("");
+  const scannerVideoRef = useRef<HTMLVideoElement>(null);
+  const scannerStreamRef = useRef<MediaStream | null>(null);
   const requestedStatus = searchParams.get("status")?.toUpperCase() ?? null;
+
+  const stopBarcodeCamera = useCallback(() => {
+    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+    scannerStreamRef.current = null;
+    setCameraActive(false);
+  }, []);
+
+  const findOrderFromBarcode = useCallback((rawValue: string) => {
+    const scanned = rawValue.trim();
+    const normalized = scanned.replace(/^PB-/i, "").replace(/^#/, "").toLowerCase();
+    return orders.find((order) => {
+      const number = orderNumber(order).replace(/^#/, "").trim().toLowerCase();
+      return order.id.toLowerCase() === normalized || number === normalized;
+    }) ?? null;
+  }, [orders]);
+
+  const openOrderFromBarcode = useCallback((rawValue: string) => {
+    const match = findOrderFromBarcode(rawValue);
+    if (!match) {
+      setScannerMessage(`Nessun ordine trovato per il codice “${rawValue.trim()}”.`);
+      return false;
+    }
+    stopBarcodeCamera();
+    setBarcodeInput("");
+    setScannerMessage(`Ordine ${orderNumber(match)} trovato.`);
+    setSelected(match);
+    return true;
+  }, [findOrderFromBarcode, stopBarcodeCamera]);
+
+  async function startBarcodeCamera() {
+    setScannerMessage("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      scannerStreamRef.current = stream;
+      setCameraActive(true);
+      requestAnimationFrame(() => {
+        if (!scannerVideoRef.current) return;
+        scannerVideoRef.current.srcObject = stream;
+        void scannerVideoRef.current.play();
+      });
+    } catch {
+      setScannerMessage("Fotocamera non disponibile. Usa il lettore USB oppure inserisci il codice manualmente.");
+      setCameraActive(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!cameraActive || typeof window === "undefined" || !("BarcodeDetector" in window)) return;
+    const detector = new (window as any).BarcodeDetector({ formats: ["code_128", "code_39", "ean_13", "ean_8"] });
+    const timer = window.setInterval(async () => {
+      const video = scannerVideoRef.current;
+      if (!video || video.readyState < 2) return;
+      try {
+        const detected = await detector.detect(video);
+        const value = detected?.[0]?.rawValue;
+        if (value) openOrderFromBarcode(String(value));
+      } catch {
+        // A frame can fail while the camera is focusing; keep scanning.
+      }
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [cameraActive, openOrderFromBarcode]);
+
+  useEffect(() => () => {
+    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   useEffect(() => {
     const target = searchParams.get("ordine") || searchParams.get("order") || searchParams.get("orderId");
@@ -664,6 +736,19 @@ export function OrderManager({
               <Search className="size-4 text-black/35" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (scannerOpen) stopBarcodeCamera();
+                setScannerOpen((current) => !current);
+                setScannerMessage("");
+              }}
+              className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-[#e8b9ce] bg-[#fff0f6] px-4 text-xs font-black text-[#a94670] transition hover:bg-[#f9dce9]"
+            >
+              <ScanBarcode className="size-4" />
+              Leggi codice
+            </button>
             
             <div className="relative">
               <select
@@ -686,6 +771,45 @@ export function OrderManager({
             </div>
           </div>
         </div>
+        {scannerOpen ? (
+          <div className="mt-5 rounded-3xl border border-[#efc5d7] bg-[#fff8fb] p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-black">Lettore codice a barre</p>
+                <p className="mt-1 text-xs text-black/50">Scansiona l’etichetta con la fotocamera o con un lettore USB.</p>
+                <form
+                  className="mt-3 flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (barcodeInput.trim()) openOrderFromBarcode(barcodeInput);
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={barcodeInput}
+                    onChange={(event) => setBarcodeInput(event.target.value)}
+                    placeholder="Scansiona o inserisci il codice…"
+                    className="min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 py-3 font-mono text-sm outline-none focus:border-[#d8739f]"
+                  />
+                  <button type="submit" className="rounded-2xl bg-[#b74660] px-5 text-sm font-black text-white">Apri</button>
+                </form>
+                {scannerMessage ? <p className="mt-2 text-xs font-bold text-[#a94670]">{scannerMessage}</p> : null}
+              </div>
+              <div className="lg:w-72">
+                {cameraActive ? (
+                  <div className="relative overflow-hidden rounded-2xl bg-black">
+                    <video ref={scannerVideoRef} muted playsInline className="aspect-video w-full object-cover" />
+                    <button type="button" onClick={stopBarcodeCamera} className="absolute right-2 top-2 rounded-full bg-white/90 p-2 text-black"><X className="size-4" /></button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={startBarcodeCamera} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white text-sm font-black text-black">
+                    <Camera className="size-4" /> Usa fotocamera
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
         </div>
 
         <div className="grid grid-cols-3 border-t border-black/[0.06] bg-[#fffafd] sm:grid-cols-5">

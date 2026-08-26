@@ -224,30 +224,8 @@ function svgToDataUrl(svg: string) {
   });
 }
 
-function shopifyBarcodeValue(order: OrderLabelResponse, fields: OrderLabelField[], orderNo: string) {
-  const haystack = [
-    orderNo,
-    JSON.stringify(order.answers ?? {}),
-    ...fields.map((field) => displayValue(field.value)),
-  ].join(" ");
-  const adminMatch = haystack.match(/admin\.shopify\.com\/store\/[^/\s]+\/orders\/(\d+)/i);
-  if (adminMatch?.[1]) return adminMatch[1];
-  const orderUrlMatch = haystack.match(/\/orders\/(\d{8,})/i);
-  if (orderUrlMatch?.[1]) return orderUrlMatch[1];
-  const numericOrder = orderNo.replace(/\D/g, "");
-  return numericOrder || order.id;
-}
-
-async function resolveBarcode(order: OrderLabelResponse, fields: OrderLabelField[], orderNo: string) {
-  const fallback = shopifyBarcodeValue(order, fields, orderNo);
-  try {
-    const response = await fetch(`/api/orders/${encodeURIComponent(order.id)}/shopify-barcode`, { cache: "no-store" });
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.barcodeValue) return fallback;
-    return String(data.barcodeValue);
-  } catch {
-    return fallback;
-  }
+export function orderLabelBarcodeValue(orderId: string) {
+  return `PB-${orderId}`;
 }
 
 function code128Values(value: string) {
@@ -294,34 +272,33 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
   const client = orderClientName(order);
-  const fields = fieldsFor(order);
+  const barcodeValue = orderLabelBarcodeValue(order.id);
   const logoDataUrl = await fetch("/logo-label-paradise.png")
     .then((response) => (response.ok ? response.blob() : null))
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
     .catch(() => "");
 
-  const phoneField = findField(fields, ["telefono", "whatsapp"]);
   const cleanOrderNo = `#${orderNo.replace(/^#/, "")}`;
-  const phone = phoneField ? displayValue(phoneField.value) : "Non indicato";
-  const createdAt = orderDate(order.created_at);
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="55" y="145" width="330" height="148" preserveAspectRatio="xMinYMid meet" />`
-    : `<text x="58" y="238" font-size="46" font-weight="800" fill="#111">Paradise Beauty</text>`;
+    ? `<image href="${logoDataUrl}" x="205" y="35" width="490" height="155" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="450" y="125" text-anchor="middle" font-size="54" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
-      <g transform="rotate(180 450 255)">
-        ${logoImage}
-        <rect x="570" y="145" width="280" height="76" rx="18" fill="#ec5391"/>
-        <text x="710" y="195" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="#ffffff">ORDINE</text>
-        <text x="710" y="295" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#050505">${escapeSvgText(cleanOrderNo)}</text>
-      </g>
+      ${logoImage}
+      <line x1="70" y1="205" x2="830" y2="205" stroke="#ec5391" stroke-width="5"/>
 
-      <line x1="50" y1="510" x2="850" y2="510" stroke="#ec5391" stroke-width="5"/>
+      <text x="450" y="265" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#9b496c">NOME E COGNOME</text>
+      <text x="450" y="335" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 26))}</text>
 
-      <text x="450" y="715" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 27))}</text>
-      <text x="450" y="775" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="#24242a">${escapeSvgText(shortSvgText(phone, 24))}</text>
-      <text x="450" y="825" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" letter-spacing="0.4" fill="#5b5b64">${escapeSvgText(createdAt)}</text>
+      <rect x="120" y="385" width="660" height="150" rx="28" fill="#fff0f6" stroke="#ec5391" stroke-width="3"/>
+      <text x="450" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="450" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 20))}</text>
+
+      <text x="450" y="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
+      <line x1="70" y1="875" x2="830" y2="875" stroke="#d4d4d8" stroke-width="3"/>
+      <text x="280" y="955" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" letter-spacing="2" fill="#111">PRONTO</text>
+      <rect x="520" y="895" width="110" height="78" rx="8" fill="#ffffff" stroke="#111111" stroke-width="7"/>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
@@ -332,6 +309,11 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const imageX = (pageWidth - imageWidth) / 2;
   const imageY = (pageHeight - imageHeight) / 2;
   doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
+  drawCode128(doc, barcodeValue, 8, 64, pageWidth - 16, 20);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(15, 15, 15);
+  doc.text(barcodeValue, pageWidth / 2, 88.5, { align: "center" });
   return {
     doc,
     labelImageDataUrl,
