@@ -69,6 +69,45 @@ type AssistantCard = {
 const tools = [
   {
     type: "function",
+    name: "remember_instruction",
+    description: "Salva nella memoria amministrativa condivisa una regola, preferenza o decisione stabile. Usalo quando l'amministratore dice ricorda, da ora in poi, sempre, oppure esprime chiaramente una regola permanente. Non salvare segreti o dati personali sensibili.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "Regola autosufficiente, sintetica e comprensibile anche in una conversazione futura." },
+        category: { type: "string", enum: ["REGOLA", "PREFERENZA", "GRAFICA", "COMUNICAZIONE", "PROCESSO"] },
+      },
+      required: ["content", "category"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "list_memories",
+    description: "Elenca ciò che Paradise Assistant ricorda. Usalo quando l'amministratore chiede cosa ricordi o cerca una regola salvata.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: { query: { type: ["string", "null"], description: "Filtro testuale opzionale." } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "forget_memory",
+    description: "Disattiva una memoria quando l'amministratore chiede esplicitamente di dimenticare o rimuovere una regola.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "Testo preciso che identifica la memoria da dimenticare." } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
     name: "prepare_communication",
     description: "Prepara una comunicazione professionale a una persona, verificando destinatario e task. Non invia: crea un'anteprima da confermare.",
     strict: true,
@@ -148,6 +187,96 @@ function actionSecret() {
   const secret = process.env.NEXTAUTH_SECRET?.trim() || process.env.AUTH_SECRET?.trim();
   if (!secret) throw new Error("Segreto di sessione non configurato per confermare le azioni.");
   return secret;
+}
+
+function normalizedMemoryContent(value: string) {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim();
+}
+
+function memoryContainsSensitiveData(value: string) {
+  return /\bsk-[a-z0-9_-]{12,}\b/i.test(value)
+    || /\b(password|secret|token|api[ _-]?key)\s*[:=]/i.test(value)
+    || /\bpin\s*(?:è|e|:|=)\s*\d{2,}\b/i.test(value);
+}
+
+async function rememberInstruction(args: Record<string, unknown>, actorId: string) {
+  const content = normalizedMemoryContent(String(args.content || "")).slice(0, 600);
+  const allowedCategories = new Set(["REGOLA", "PREFERENZA", "GRAFICA", "COMUNICAZIONE", "PROCESSO"]);
+  const category = allowedCategories.has(String(args.category)) ? String(args.category) : "REGOLA";
+  if (content.length < 5) return { output: { saved: false, error: "La regola è troppo breve per essere ricordata." } };
+  if (memoryContainsSensitiveData(content)) {
+    return { output: { saved: false, error: "Non posso memorizzare password, PIN, token o chiavi API." } };
+  }
+  const contentHash = createHash("sha256").update(content.toLocaleLowerCase("it")).digest("hex");
+  const memory = await prisma.assistantMemory.upsert({
+    where: { content_hash: contentHash },
+    create: { content, content_hash: contentHash, category, created_by_id: actorId },
+    update: { content, category, active: true, deactivated_at: null, created_by_id: actorId },
+  });
+  await prisma.assistantActionLog.create({
+    data: {
+      user_id: actorId,
+      action: "REMEMBER_INSTRUCTION",
+      target_type: "ASSISTANT_MEMORY",
+      target_id: memory.id,
+      summary: `Memoria salvata: ${content.slice(0, 140)}`,
+      payload: { category, content },
+      status: "COMPLETED",
+      confirmed_at: new Date(),
+    },
+  });
+  return { output: { saved: true, category, content } };
+}
+
+async function listMemories(args: Record<string, unknown>) {
+  const query = typeof args.query === "string" ? normalizedMemoryContent(args.query).slice(0, 120) : "";
+  const memories = await prisma.assistantMemory.findMany({
+    where: { active: true, ...(query ? { content: { contains: query, mode: "insensitive" as const } } : {}) },
+    select: { id: true, content: true, category: true, updated_at: true },
+    orderBy: { updated_at: "desc" },
+    take: 50,
+  });
+  return {
+    output: {
+      count: memories.length,
+      memories: memories.map((memory) => ({ category: memory.category, content: memory.content, updatedAt: memory.updated_at.toISOString() })),
+    },
+  };
+}
+
+async function forgetMemory(args: Record<string, unknown>, actorId: string) {
+  const query = normalizedMemoryContent(String(args.query || "")).slice(0, 180);
+  if (query.length < 3) return { output: { removed: false, error: "Specifica meglio cosa devo dimenticare." } };
+  const matches = await prisma.assistantMemory.findMany({
+    where: { active: true, content: { contains: query, mode: "insensitive" } },
+    select: { id: true, content: true, category: true },
+    take: 6,
+  });
+  if (matches.length !== 1) {
+    return {
+      output: {
+        removed: false,
+        error: matches.length === 0 ? "Non trovo una memoria corrispondente." : "La richiesta corrisponde a più ricordi: indica la frase in modo più preciso.",
+        candidates: matches.map((memory) => ({ category: memory.category, content: memory.content })),
+      },
+    };
+  }
+  await prisma.$transaction([
+    prisma.assistantMemory.update({ where: { id: matches[0].id }, data: { active: false, deactivated_at: new Date() } }),
+    prisma.assistantActionLog.create({
+      data: {
+        user_id: actorId,
+        action: "FORGET_MEMORY",
+        target_type: "ASSISTANT_MEMORY",
+        target_id: matches[0].id,
+        summary: `Memoria disattivata: ${matches[0].content.slice(0, 140)}`,
+        payload: { content: matches[0].content, category: matches[0].category },
+        status: "COMPLETED",
+        confirmed_at: new Date(),
+      },
+    }),
+  ]);
+  return { output: { removed: true, content: matches[0].content } };
 }
 
 function encodeAction(action: CommunicationAction, expiresAt: number) {
@@ -532,6 +661,9 @@ function safeJson(value: string) {
 
 async function executeTool(call: ToolCall, actorId: string) {
   const args = safeJson(call.arguments);
+  if (call.name === "remember_instruction") return rememberInstruction(args, actorId);
+  if (call.name === "list_memories") return listMemories(args);
+  if (call.name === "forget_memory") return forgetMemory(args, actorId);
   if (call.name === "prepare_communication") return prepareCommunication(args, actorId);
   if (call.name === "get_team_status") return { output: await getTeamStatus() };
   if (call.name === "get_task_overview") {
@@ -605,9 +737,22 @@ export async function POST(request: NextRequest) {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user")?.content.trim();
   if (!lastUserMessage) return NextResponse.json({ error: "Scrivi una domanda." }, { status: 400 });
 
+  const persistentMemories = await prisma.assistantMemory.findMany({
+    where: { active: true },
+    select: { category: true, content: true },
+    orderBy: { updated_at: "desc" },
+    take: 50,
+  });
+  const memoryContext = persistentMemories.length
+    ? persistentMemories.map((memory, index) => `${index + 1}. [${memory.category}] ${memory.content}`).join("\n")
+    : "Nessuna memoria amministrativa salvata.";
+
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
+Usa remember_instruction per regole durevoli espresse con “ricorda”, “da ora in poi”, “sempre” o formulazioni equivalenti. Non salvare richieste temporanee. Usa list_memories e forget_memory quando richiesto.
+Le memorie seguenti sono condivise tra gli amministratori e devono orientare le risposte future, salvo conflitto con dati correnti o sicurezza:
+${memoryContext}
 Quando l'amministratore chiede di scrivere, mandare o inviare una comunicazione, usa prepare_communication. Lo strumento prepara un'anteprima: non dire che è stata inviata finché l'utente non preme Conferma e invia.
 Le altre operazioni di scrittura non ancora esposte devono essere indicate come non disponibili, senza simulare risultati.
 Usa navigate_app soltanto quando l'utente chiede esplicitamente "apri", "vai" o "portami" a una pagina.

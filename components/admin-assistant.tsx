@@ -19,7 +19,7 @@ type AssistantCard = {
 };
 type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null; cards?: AssistantCard[] };
 
-const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Quali richieste sono da approvare?"];
+const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Cosa ricordi?"];
 
 export function AdminAssistant() {
   const router = useRouter();

@@ -106,6 +106,7 @@ model User {
   social_posts      SocialPost[]     @relation("CreatedSocialPosts")
   social_post_comments SocialPostComment[]
   assistant_action_logs AssistantActionLog[]
+  assistant_memories AssistantMemory[]
 
   @@map("users")
 }
@@ -510,6 +511,23 @@ model AssistantActionLog {
   @@index([user_id, created_at])
   @@index([status, created_at])
   @@map("assistant_action_logs")
+}
+
+model AssistantMemory {
+  id             String    @id @default(cuid())
+  content        String
+  content_hash   String    @unique
+  category       String    @default("REGOLA")
+  active         Boolean   @default(true)
+  created_by_id  String
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+  deactivated_at DateTime?
+  created_by     User      @relation(fields: [created_by_id], references: [id])
+
+  @@index([active, updated_at])
+  @@index([created_by_id, created_at])
+  @@map("assistant_memories")
 }
 
 model BrandingSetting {
