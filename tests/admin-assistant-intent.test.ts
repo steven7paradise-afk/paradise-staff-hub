@@ -33,3 +33,8 @@ test("forces a database search for task questions", () => {
 test("forces Controllo Cliente search for a named client", () => {
   assert.equal(requiredAssistantTool("Nel controllo cliente chi ha lavorato su Maria Rossi?"), "search_client_controls");
 });
+
+test("forces Controllo Cliente search for a worker client count", () => {
+  assert.equal(requiredAssistantTool("Quante cliente ha fatto Angelica oggi?"), "search_client_controls");
+  assert.equal(requiredAssistantTool("Quante persone ha servito Angelica oggi?"), "search_client_controls");
+});
