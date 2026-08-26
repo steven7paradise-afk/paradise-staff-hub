@@ -5,7 +5,19 @@ import { useRouter } from "next/navigation";
 import { Bot, Check, ExternalLink, LoaderCircle, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
 
 type PendingAction = { token: string; type: "SEND_COMMUNICATION"; label: string; recipient: string; title: string; message: string; expiresAt: string };
-type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null };
+type AssistantCard = {
+  id: string;
+  person: string;
+  photoUrl: string | null;
+  status: string;
+  type: string;
+  location: string;
+  date: string | null;
+  time: string | null;
+  detail: string | null;
+  tone: "green" | "amber" | "red" | "violet" | "blue" | "slate";
+};
+type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null; cards?: AssistantCard[] };
 
 const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Quali richieste sono da approvare?"];
 
@@ -44,6 +56,7 @@ export function AdminAssistant() {
         links?: Array<{ path: string; label: string }>;
         navigation?: { path: string; label: string } | null;
         pendingAction?: PendingAction | null;
+        cards?: AssistantCard[];
       };
       if (!response.ok) throw new Error(payload.error || "Assistente non disponibile.");
       setMessages((current) => [...current, {
@@ -51,6 +64,7 @@ export function AdminAssistant() {
         content: payload.answer || "Operazione completata.",
         links: payload.links,
         pendingAction: payload.pendingAction,
+        cards: payload.cards,
       }]);
       if (payload.navigation?.path) router.push(payload.navigation.path);
     } catch (error) {
@@ -113,6 +127,32 @@ export function AdminAssistant() {
                   ? "max-w-[84%] rounded-[20px] rounded-br-md bg-[#ef93ca] px-4 py-3 text-sm font-medium leading-relaxed text-white"
                   : "max-w-[86%] rounded-[20px] rounded-tl-md bg-black/[0.045] px-4 py-3 text-sm font-medium leading-relaxed text-black/75 dark:bg-white/[0.07] dark:text-white/80"}>
                   <p className="whitespace-pre-wrap">{message.content}</p>
+                  {message.cards?.length ? <div className="mt-3 grid gap-2">{message.cards.map((card) => {
+                    const toneClass = {
+                      green: "border-emerald-200 bg-emerald-50 text-emerald-800",
+                      amber: "border-amber-200 bg-amber-50 text-amber-900",
+                      red: "border-red-200 bg-red-50 text-red-800",
+                      violet: "border-violet-200 bg-violet-50 text-violet-800",
+                      blue: "border-blue-200 bg-blue-50 text-blue-800",
+                      slate: "border-slate-200 bg-slate-50 text-slate-700",
+                    }[card.tone];
+                    const dateLabel = card.date ? new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short" }).format(new Date(card.date)) : null;
+                    return <div key={card.id} className={`overflow-hidden rounded-2xl border ${toneClass}`}>
+                      <div className="flex items-center gap-3 p-3">
+                        {card.photoUrl ? <div className="size-12 shrink-0 rounded-2xl bg-cover bg-center shadow-sm ring-2 ring-white" style={{ backgroundImage: `url(${card.photoUrl})` }} aria-label={`Foto di ${card.person}`} /> : <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/80 text-base font-black shadow-sm">{card.person.split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</div>}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black text-black">{card.person}</p>
+                          <p className="mt-0.5 truncate text-[10px] font-bold text-black/50">{card.type} · {card.location}</p>
+                        </div>
+                        <span className="max-w-28 rounded-full bg-white/75 px-2.5 py-1 text-right text-[9px] font-black uppercase leading-tight shadow-sm">{card.status}</span>
+                      </div>
+                      {(dateLabel || card.time || card.detail) ? <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-current/10 px-3 py-2 text-[10px] font-bold">
+                        {dateLabel ? <span>{dateLabel}</span> : null}
+                        {card.time ? <span>Ore {card.time}</span> : null}
+                        {card.detail ? <span className="w-full text-black/55">{card.detail}</span> : null}
+                      </div> : null}
+                    </div>;
+                  })}</div> : null}
                   {message.links?.length ? <div className="mt-3 flex flex-wrap gap-2">{message.links.map((link) => (
                     <button key={link.path} type="button" onClick={() => router.push(link.path)} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-black text-[#a84a83] shadow-sm transition hover:border-[#ef93ca]/50 dark:border-white/10 dark:bg-white/10 dark:text-[#f3a9d4]">
                       {link.label}<ExternalLink className="size-3" />
@@ -156,9 +196,8 @@ export function AdminAssistant() {
           </form>
         </section>
       ) : (
-        <button type="button" onClick={() => setOpen(true)} className="group flex items-center gap-3 rounded-full bg-[#17151a] p-2.5 pr-5 text-white shadow-[0_16px_45px_rgba(28,20,26,0.32)] transition hover:-translate-y-0.5 hover:bg-black dark:border dark:border-white/10" aria-label="Apri Paradise Assistant">
+        <button type="button" onClick={() => setOpen(true)} className="group rounded-full bg-[#17151a] p-2.5 text-white shadow-[0_16px_45px_rgba(28,20,26,0.32)] transition hover:-translate-y-0.5 hover:bg-black dark:border dark:border-white/10" aria-label="Apri Paradise Assistant">
           <span className="grid size-11 place-items-center rounded-full bg-gradient-to-br from-[#f3a4d2] to-[#db70ad] shadow-inner"><MessageCircleMore className="size-5" /></span>
-          <span className="text-xs font-black tracking-wide">Chiedi all’assistente</span>
         </button>
       )}
     </div>

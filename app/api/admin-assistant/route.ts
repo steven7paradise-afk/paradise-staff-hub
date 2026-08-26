@@ -53,6 +53,18 @@ type PendingAction = {
   message: string;
   expiresAt: string;
 };
+type AssistantCard = {
+  id: string;
+  person: string;
+  photoUrl: string | null;
+  status: string;
+  type: string;
+  location: string;
+  date: string | null;
+  time: string | null;
+  detail: string | null;
+  tone: "green" | "amber" | "red" | "violet" | "blue" | "slate";
+};
 
 const tools = [
   {
@@ -313,6 +325,7 @@ async function getTeamStatus() {
     select: {
       id: true,
       name: true,
+      photo_url: true,
       mansione: true,
       location: { select: { name: true } },
       attendance_logs: {
@@ -328,6 +341,7 @@ async function getTeamStatus() {
     const state = deriveAttendanceState(worker.attendance_logs);
     return {
       name: worker.name,
+      photoUrl: worker.photo_url,
       role: worker.mansione || "Non specificato",
       location: worker.location?.name || "Nessuna sede",
       status: state.status === "IN" ? "IN_TURNO" : state.status === "BREAK" ? "IN_PAUSA" : state.lastExit ? "USCITO" : "NON_ENTRATO",
@@ -412,7 +426,7 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
       reason: true,
       medical_code: true,
       sickness_unjustified: true,
-      user: { select: { name: true, location: { select: { name: true } } } },
+      user: { select: { name: true, photo_url: true, location: { select: { name: true } } } },
     },
     orderBy: [{ status: "asc" }, { start_date: "desc" }],
     take: 30,
@@ -423,6 +437,7 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
     requests: requests.map((request) => ({
       id: request.id,
       person: request.user.name,
+      photoUrl: request.user.photo_url,
       location: request.user.location?.name || "Nessuna sede",
       type: request.reason?.startsWith("RITARDO AUTOMATICO — ") ? "RITARDO" : request.type,
       status: request.status,
@@ -433,6 +448,78 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
       justified: request.type === "MALATTIA" ? Boolean(request.medical_code) && !request.sickness_unjustified : null,
     })),
   };
+}
+
+function assistantCards(toolName: string, output: unknown, question: string): AssistantCard[] {
+  if (!output || typeof output !== "object") return [];
+  const data = output as Record<string, unknown>;
+  const normalizedQuestion = question.toLocaleLowerCase("it");
+
+  if (toolName === "get_team_status" && Array.isArray(data.people)) {
+    let people = data.people as Array<Record<string, unknown>>;
+    if (normalizedQuestion.includes("paus")) people = people.filter((person) => person.status === "IN_PAUSA");
+    else if (normalizedQuestion.includes("assen") || normalizedQuestion.includes("non entr")) people = people.filter((person) => person.status === "NON_ENTRATO");
+    else if (normalizedQuestion.includes("turno") || normalizedQuestion.includes("lavor")) people = people.filter((person) => person.status === "IN_TURNO");
+
+    const statusConfig: Record<string, { label: string; tone: AssistantCard["tone"] }> = {
+      IN_TURNO: { label: "In turno", tone: "green" },
+      IN_PAUSA: { label: "In pausa", tone: "amber" },
+      USCITO: { label: "Uscito", tone: "slate" },
+      NON_ENTRATO: { label: "Assente · non entrato", tone: "red" },
+    };
+    return people.slice(0, 20).map((person, index) => {
+      const config = statusConfig[String(person.status)] || { label: String(person.status || "Stato"), tone: "slate" as const };
+      return {
+        id: `team-${String(person.name)}-${index}`,
+        person: String(person.name || "Dipendente"),
+        photoUrl: typeof person.photoUrl === "string" ? person.photoUrl : null,
+        status: config.label,
+        type: String(person.role || "Personale"),
+        location: String(person.location || "Nessuna sede"),
+        date: typeof data.date === "string" ? data.date : null,
+        time: typeof person.since === "string" ? person.since : null,
+        detail: null,
+        tone: config.tone,
+      };
+    });
+  }
+
+  if (toolName === "get_requests_overview" && Array.isArray(data.requests)) {
+    let requests = data.requests as Array<Record<string, unknown>>;
+    if (normalizedQuestion.includes("ritard")) requests = requests.filter((item) => item.type === "RITARDO");
+    else if (normalizedQuestion.includes("malatt")) requests = requests.filter((item) => item.type === "MALATTIA");
+    else if (normalizedQuestion.includes("ferie")) requests = requests.filter((item) => item.type === "FERIE");
+
+    return requests.slice(0, 20).map((item, index) => {
+      const type = String(item.type || "RICHIESTA");
+      const status = String(item.status || "PENDING");
+      const justified = item.justified;
+      const label = type === "MALATTIA"
+        ? justified === true ? "Malattia giustificata" : "Malattia non giustificata"
+        : type === "RITARDO"
+          ? status === "APPROVED" ? "Ritardo approvato" : "Ritardo da approvare"
+          : `${type.charAt(0)}${type.slice(1).toLowerCase()} · ${status === "APPROVED" ? "approvata" : "in attesa"}`;
+      const tone: AssistantCard["tone"] = type === "MALATTIA"
+        ? justified === true ? "violet" : "amber"
+        : type === "RITARDO"
+          ? "amber"
+          : status === "APPROVED" ? "green" : "blue";
+      return {
+        id: String(item.id || `request-${index}`),
+        person: String(item.person || "Dipendente"),
+        photoUrl: typeof item.photoUrl === "string" ? item.photoUrl : null,
+        status: label,
+        type,
+        location: String(item.location || "Nessuna sede"),
+        date: typeof item.from === "string" ? item.from : null,
+        time: typeof item.time === "string" ? item.time : null,
+        detail: typeof item.reason === "string" ? item.reason.replace(/^RITARDO AUTOMATICO —\s*/i, "") : null,
+        tone,
+      };
+    });
+  }
+
+  return [];
 }
 
 function safeJson(value: string) {
@@ -525,12 +612,14 @@ Quando l'amministratore chiede di scrivere, mandare o inviare una comunicazione,
 Le altre operazioni di scrittura non ancora esposte devono essere indicate come non disponibili, senza simulare risultati.
 Usa navigate_app soltanto quando l'utente chiede esplicitamente "apri", "vai" o "portami" a una pagina.
 Non mostrare identificativi tecnici, segreti, email, telefoni, dati fiscali o medici. Per una malattia indica solo se risulta giustificata o non giustificata.
-Quando elenchi persone o task, usa righe brevi e leggibili.`;
+Quando elenchi persone o task, usa righe brevi e leggibili.
+Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo, scrivi soltanto un riepilogo molto breve: l'interfaccia mostrerà automaticamente le schede grafiche, quindi non ripetere in testo l'intero elenco dei nomi.`;
 
   const input: Array<Record<string, unknown>> = messages.map((message) => ({ role: message.role, content: message.content }));
   const links = new Map<string, { path: string; label: string }>();
   let navigation: { path: string; label: string } | null = null;
   let pendingAction: PendingAction | null = null;
+  const cards: AssistantCard[] = [];
 
   try {
     for (let round = 0; round < 4; round += 1) {
@@ -548,7 +637,7 @@ Quando elenchi persone o task, usa righe brevi e leggibili.`;
       const calls = (response.output || []).filter((item): item is ToolCall => item.type === "function_call") as ToolCall[];
       if (calls.length === 0) {
         const answer = extractOutputText(response) || "Non ho trovato una risposta utile. Prova a riformulare la richiesta.";
-        return NextResponse.json({ answer, links: Array.from(links.values()), navigation, pendingAction });
+        return NextResponse.json({ answer, links: Array.from(links.values()), navigation, pendingAction, cards });
       }
 
       input.push(...(response.output || []));
@@ -562,10 +651,11 @@ Quando elenchi persone o task, usa righe brevi e leggibili.`;
         if (result.link) links.set(result.link.path, result.link);
         if (result.navigation) navigation = result.navigation;
         if (result.pendingAction) pendingAction = result.pendingAction;
+        cards.push(...assistantCards(call.name, result.output, lastUserMessage));
         input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result.output) });
       }
     }
-    return NextResponse.json({ answer: "La richiesta richiede troppi passaggi. Prova a farne una più specifica.", links: Array.from(links.values()), navigation, pendingAction });
+    return NextResponse.json({ answer: "La richiesta richiede troppi passaggi. Prova a farne una più specifica.", links: Array.from(links.values()), navigation, pendingAction, cards });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Il servizio AI non è disponibile in questo momento.";
     return NextResponse.json({ error: message }, { status: 502 });
