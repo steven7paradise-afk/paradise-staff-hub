@@ -21,8 +21,8 @@ const ORDER_PHOTO_KEY = "__orderPhoto";
 // mostrano "Verticale" e mantengono tutto il contenuto su una sola etichetta.
 const ORDER_LABEL_WIDTH_MM = 90;
 const ORDER_LABEL_HEIGHT_MM = 102;
-const ORDER_LABEL_CANVAS_WIDTH = 900;
-const ORDER_LABEL_CANVAS_HEIGHT = 1020;
+const ORDER_LABEL_CANVAS_WIDTH = 1800;
+const ORDER_LABEL_CANVAS_HEIGHT = 2040;
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
@@ -229,7 +229,7 @@ export function orderLabelBarcodeValue(orderId: string, visibleOrderNumber?: str
     .replace(/^#/, "")
     .replace(/[^a-zA-Z0-9._-]/g, "")
     .slice(0, 20);
-  return `PB-${compactOrderNumber || orderId}`;
+  return compactOrderNumber || orderId;
 }
 
 function code128Values(value: string) {
@@ -290,24 +290,23 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
     ? `<image href="${logoDataUrl}" x="205" y="35" width="490" height="155" preserveAspectRatio="xMidYMid meet" />`
     : `<text x="450" y="125" text-anchor="middle" font-size="54" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1020" viewBox="0 0 900 1020">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${ORDER_LABEL_CANVAS_WIDTH}" height="${ORDER_LABEL_CANVAS_HEIGHT}" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
-      ${logoImage}
-      <line x1="70" y1="205" x2="830" y2="205" stroke="#ec5391" stroke-width="5"/>
+      <g transform="translate(-145 -10) scale(0.78)">${logoImage}</g>
+      <rect x="390" y="35" width="440" height="165" rx="24" fill="#fff0f6" stroke="#ec5391" stroke-width="3"/>
+      <line x1="685" y1="55" x2="685" y2="180" stroke="#ec5391" stroke-width="2" opacity="0.55"/>
+      <text x="535" y="82" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="535" y="155" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="61" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
+      <text x="755" y="80" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="900" letter-spacing="1" fill="#111">PRONTO</text>
+      <rect x="715" y="101" width="80" height="64" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
-      <text x="450" y="265" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#9b496c">NOME E COGNOME</text>
-      <text x="450" y="335" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 26))}</text>
+      <line x1="65" y1="225" x2="835" y2="225" stroke="#ec5391" stroke-width="5"/>
+      <text x="450" y="285" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3" fill="#9b496c">NOME E COGNOME</text>
+      <text x="450" y="360" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="57" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 25))}</text>
 
-      <rect x="90" y="385" width="720" height="150" rx="28" fill="#fff0f6" stroke="#ec5391" stroke-width="3"/>
-      <line x1="565" y1="405" x2="565" y2="515" stroke="#ec5391" stroke-width="2" opacity="0.55"/>
-      <text x="325" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3" fill="#9b496c">NUMERO ORDINE</text>
-      <text x="325" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 14))}</text>
-      <text x="685" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" letter-spacing="1.5" fill="#111">PRONTO</text>
-      <rect x="635" y="451" width="100" height="62" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
-
-      <text x="450" y="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
-      ${code128Svg(barcodeValue, 80, 635, 740, 175)}
-      <text x="450" y="850" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111">${escapeSvgText(barcodeValue)}</text>
+      <text x="450" y="445" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
+      ${code128Svg(barcodeValue, 60, 485, 780, 235)}
+      <text x="450" y="775" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="900" letter-spacing="2" fill="#111">${escapeSvgText(barcodeValue)}</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);

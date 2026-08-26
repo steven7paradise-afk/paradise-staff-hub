@@ -376,13 +376,20 @@ export function OrderManager({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
-  const scannerVideoRef = useRef<HTMLVideoElement>(null);
-  const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerInstanceRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
+  const scannerRegionId = "order-barcode-camera";
   const requestedStatus = searchParams.get("status")?.toUpperCase() ?? null;
 
   const stopBarcodeCamera = useCallback(() => {
-    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
-    scannerStreamRef.current = null;
+    const scanner = scannerInstanceRef.current;
+    scannerInstanceRef.current = null;
+    if (scanner) {
+      void scanner.stop()
+        .catch(() => null)
+        .finally(() => {
+          try { scanner.clear(); } catch { /* The reader may already be cleared. */ }
+        });
+    }
     setCameraActive(false);
   }, []);
 
@@ -410,40 +417,42 @@ export function OrderManager({
 
   async function startBarcodeCamera() {
     setScannerMessage("");
+    setCameraActive(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-      scannerStreamRef.current = stream;
-      setCameraActive(true);
-      requestAnimationFrame(() => {
-        if (!scannerVideoRef.current) return;
-        scannerVideoRef.current.srcObject = stream;
-        void scannerVideoRef.current.play();
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const scanner = new Html5Qrcode(scannerRegionId, {
+        verbose: false,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+        ],
       });
+      scannerInstanceRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 12, qrbox: { width: 270, height: 130 }, aspectRatio: 16 / 9 },
+        (decodedText) => { openOrderFromBarcode(decodedText); },
+        () => { /* Frames without a barcode are expected while focusing. */ },
+      );
     } catch {
+      const scanner = scannerInstanceRef.current;
+      scannerInstanceRef.current = null;
+      try { scanner?.clear(); } catch { /* Ignore cleanup errors after denied camera access. */ }
       setScannerMessage("Fotocamera non disponibile. Usa il lettore USB oppure inserisci il codice manualmente.");
       setCameraActive(false);
     }
   }
 
-  useEffect(() => {
-    if (!cameraActive || typeof window === "undefined" || !("BarcodeDetector" in window)) return;
-    const detector = new (window as any).BarcodeDetector({ formats: ["code_128", "code_39", "ean_13", "ean_8"] });
-    const timer = window.setInterval(async () => {
-      const video = scannerVideoRef.current;
-      if (!video || video.readyState < 2) return;
-      try {
-        const detected = await detector.detect(video);
-        const value = detected?.[0]?.rawValue;
-        if (value) openOrderFromBarcode(String(value));
-      } catch {
-        // A frame can fail while the camera is focusing; keep scanning.
-      }
-    }, 350);
-    return () => window.clearInterval(timer);
-  }, [cameraActive, openOrderFromBarcode]);
-
   useEffect(() => () => {
-    scannerStreamRef.current?.getTracks().forEach((track) => track.stop());
+    const scanner = scannerInstanceRef.current;
+    scannerInstanceRef.current = null;
+    if (!scanner) return;
+    void scanner.stop().catch(() => null).finally(() => {
+      try { scanner.clear(); } catch { /* The component is already unmounted. */ }
+    });
   }, []);
 
   useEffect(() => {
@@ -798,11 +807,11 @@ export function OrderManager({
               <div className="lg:w-72">
                 {cameraActive ? (
                   <div className="relative overflow-hidden rounded-2xl bg-black">
-                    <video ref={scannerVideoRef} muted playsInline className="aspect-video w-full object-cover" />
+                    <div id={scannerRegionId} className="aspect-video w-full overflow-hidden bg-black [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
                     <button type="button" onClick={stopBarcodeCamera} className="absolute right-2 top-2 rounded-full bg-white/90 p-2 text-black"><X className="size-4" /></button>
                   </div>
                 ) : (
-                  <button type="button" onClick={startBarcodeCamera} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white text-sm font-black text-black">
+                  <button type="button" onClick={() => { void startBarcodeCamera(); }} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white text-sm font-black text-black">
                     <Camera className="size-4" /> Usa fotocamera
                   </button>
                 )}
