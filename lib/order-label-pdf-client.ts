@@ -224,8 +224,12 @@ function svgToDataUrl(svg: string) {
   });
 }
 
-export function orderLabelBarcodeValue(orderId: string) {
-  return `PB-${orderId}`;
+export function orderLabelBarcodeValue(orderId: string, visibleOrderNumber?: string) {
+  const compactOrderNumber = String(visibleOrderNumber || "")
+    .replace(/^#/, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .slice(0, 20);
+  return `PB-${compactOrderNumber || orderId}`;
 }
 
 function code128Values(value: string) {
@@ -241,17 +245,20 @@ function code128Values(value: string) {
   return [...values, checksum, 106];
 }
 
-function drawCode128(doc: any, value: string, x: number, y: number, width: number, height: number) {
+function code128Svg(value: string, x: number, y: number, width: number, height: number) {
   const patterns = code128Values(value).map((code) => CODE128_PATTERNS[code]).join("");
   const totalModules = patterns.split("").reduce((sum, item) => sum + Number(item), 0);
   const moduleWidth = width / totalModules;
   let cursor = x;
-  doc.setFillColor(0, 0, 0);
+  const rectangles: string[] = [];
   patterns.split("").forEach((item, index) => {
     const segmentWidth = Number(item) * moduleWidth;
-    if (index % 2 === 0) doc.rect(cursor, y, segmentWidth, height, "F");
+    if (index % 2 === 0) {
+      rectangles.push(`<rect x="${cursor.toFixed(2)}" y="${y}" width="${segmentWidth.toFixed(2)}" height="${height}" fill="#000000"/>`);
+    }
     cursor += segmentWidth;
   });
+  return rectangles.join("");
 }
 
 export function isOrderLabelForm(form?: { name?: string | null; category?: string | null } | null) {
@@ -272,7 +279,7 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
   const client = orderClientName(order);
-  const barcodeValue = orderLabelBarcodeValue(order.id);
+  const barcodeValue = orderLabelBarcodeValue(order.id, orderNo);
   const logoDataUrl = await fetch("/logo-label-paradise.png")
     .then((response) => (response.ok ? response.blob() : null))
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
@@ -299,6 +306,8 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <rect x="635" y="451" width="100" height="62" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
       <text x="450" y="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
+      ${code128Svg(barcodeValue, 80, 635, 740, 175)}
+      <text x="450" y="850" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111">${escapeSvgText(barcodeValue)}</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
@@ -309,11 +318,6 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const imageX = (pageWidth - imageWidth) / 2;
   const imageY = (pageHeight - imageHeight) / 2;
   doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
-  drawCode128(doc, barcodeValue, 8, 62, pageWidth - 16, 19);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(15, 15, 15);
-  doc.text(barcodeValue, pageWidth / 2, 84.5, { align: "center" });
   return {
     doc,
     labelImageDataUrl,
