@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Store,
   UserRound,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -214,7 +215,7 @@ function vaultWithdrawalRecordToResponse(record: any) {
   };
 }
 
-export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string; vault?: string }> }) {
+export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string; vault?: string; movements?: string }> }) {
   const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
@@ -222,6 +223,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   const role = session.user.role as Role;
   const canEditClosingAmount = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
   const showAllVaultWithdrawals = searchParams.vault === "all";
+  const movementFilter = searchParams.movements === "closings" ? "closings" : "all";
 
   const accessUser = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -721,6 +723,15 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       vault: response,
     })),
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const visibleMonthlyMovements = movementFilter === "closings"
+    ? monthlyMovements.filter((movement) => Boolean(movement.closing))
+    : monthlyMovements;
+
+  const cashQueryBase = `month=${selectedMonth}`;
+  const availabilityHref = `/cash?${cashQueryBase}#chiusure-sedi`;
+  const selectedDayHref = `/cash?${cashQueryBase}&day=${selectedDayKey}#dettaglio-giorno`;
+  const vaultOutHref = `/cash?${cashQueryBase}&vault=all#prelievi-autorizzati`;
+  const monthlyClosingsHref = `/cash?${cashQueryBase}&movements=closings#movimenti-cassa`;
 
   return (
     <AppShell
@@ -758,10 +769,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
 
           <div className="grid grid-cols-2 border-t border-black/10 lg:grid-cols-4">
-            <MetricCard label="Disponibilità saloni" value={formatMoney(netCash)} icon={CircleDollarSign} tone="gold" />
-            <MetricCard label={`Chiusure ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} value={formatMoney(selectedDayWithdrawn)} icon={ReceiptText} tone="blue" />
-            <MetricCard label="Uscito cassaforte" value={formatMoney(totalVaultOut)} icon={Calculator} tone="pink" />
-            <MetricCard label="Prelevato nel mese" value={formatMoney(totalWithdrawn)} icon={ShieldCheck} tone="green" />
+            <MetricCard href={availabilityHref} label="Disponibilità saloni" value={formatMoney(netCash)} note="Vedi origine e chiusure" icon={CircleDollarSign} tone="gold" />
+            <MetricCard href={selectedDayHref} label={`Chiusure ${selectedDayStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}`} value={formatMoney(selectedDayWithdrawn)} note="Apri le transazioni del giorno" icon={ReceiptText} tone="blue" />
+            <MetricCard href={vaultOutHref} label="Uscito cassaforte" value={formatMoney(totalVaultOut)} note="Vedi tutte le uscite" icon={Calculator} tone="pink" />
+            <MetricCard href={monthlyClosingsHref} label="Prelevato nel mese" value={formatMoney(totalWithdrawn)} note="Vedi le chiusure del mese" icon={ShieldCheck} tone="green" />
           </div>
 
           <div className="grid border-t border-black/10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -902,7 +913,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           userSedeId={session.user.sedeId ?? null}
         />
 
-        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
+        <Card id="dettaglio-giorno" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="border-b border-black/5 p-5">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Dettaglio giorno</p>
             <h2 className="mt-1 text-2xl font-black capitalize">Clicca una data e controlla chiusura + timbrature</h2>
@@ -1051,8 +1062,19 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
         <section id="chiusure-sedi" className="grid scroll-mt-6 gap-4 xl:grid-cols-[1fr_380px]">
           <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
             <div className="border-b border-black/5 p-5">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Tutti i negozi</p>
-              <h2 className="mt-1 text-2xl font-black">Accumulo cash per sede</h2>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Origine della disponibilità</p>
+              <h2 className="mt-1 text-2xl font-black">Da dove provengono i soldi disponibili</h2>
+              <p className="mt-1 text-sm leading-6 text-black/45">Apri ogni sede per controllare giorni, importi e operatori delle singole chiusure.</p>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <StoreValue label="Chiusure accumulate" value={formatMoney(totalWithdrawnCumulative)} />
+                <StoreValue label="Uscite cassaforte aperte" value={`− ${formatMoney(totalVaultOutCumulative - totalClosedVaultOutCumulative)}`} />
+                <StoreValue label="Versamenti banca" value={`− ${formatMoney(totalBankDepositsCumulative)}`} />
+                <StoreValue label="Altre uscite chiuse" value={`− ${formatMoney(totalWeeklyWithdrawalsCumulative)}`} />
+                <div className="flex flex-col justify-between rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-[10px] font-black uppercase leading-none tracking-wider text-emerald-700">Disponibile adesso</p>
+                  <p className="mt-2 text-base font-black leading-none text-emerald-900">{formatMoney(netCash)}</p>
+                </div>
+              </div>
             </div>
             <div className="divide-y divide-black/5">
               {storeRows.map((row) => (
@@ -1077,6 +1099,24 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     ) : (
                       <p className="mt-3 text-xs font-semibold text-black/35">Nessuna chiusura nel mese.</p>
                     )}
+                    {row.responses.length ? (
+                      <details className="group mt-3 rounded-2xl border border-black/5 bg-[#FAF7F9] p-3">
+                        <summary className="cursor-pointer list-none text-xs font-black text-[#A74758] marker:hidden">
+                          Vedi giorni e chiusure ({row.responses.length})
+                        </summary>
+                        <div className="mt-3 divide-y divide-black/5 border-t border-black/5">
+                          {row.responses.map((closing) => (
+                            <div key={closing.id} className="flex items-center justify-between gap-3 py-2 text-[11px]">
+                              <div>
+                                <p className="font-black text-black/70">{cashDate(closing)}</p>
+                                <p className="mt-0.5 font-semibold text-black/40">{signatureName(closing)}</p>
+                              </div>
+                              <strong className="shrink-0 text-[#A74758]">{formatMoney(moneyValue(answer(closing, CASH_CLOSING_FIELD_IDS.withdrawn)))}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
                   </div>
 
                   <div className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:w-[600px] shrink-0">
@@ -1238,9 +1278,18 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
 
         <Card id="movimenti-cassa" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="border-b border-black/5 p-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
-            <h2 className="mt-1 text-2xl font-black">Tutti i movimenti</h2>
-            <p className="mt-1 text-sm text-black/45">Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato.</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
+                <h2 className="mt-1 text-2xl font-black">{movementFilter === "closings" ? "Chiusure cassa del mese" : "Tutti i movimenti"}</h2>
+                <p className="mt-1 text-sm text-black/45">{movementFilter === "closings" ? "Sono mostrate soltanto le somme prelevate nelle chiusure cassa." : "Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato."}</p>
+              </div>
+              {movementFilter === "closings" ? (
+                <Link href={`/cash?month=${selectedMonth}#movimenti-cassa`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 text-xs font-black text-black/65">
+                  <X className="size-4" /> Mostra tutti i movimenti
+                </Link>
+              ) : null}
+            </div>
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
                 <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-sky-700">
@@ -1283,7 +1332,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5">
-                {monthlyMovements.map((movement) => {
+                {visibleMonthlyMovements.map((movement) => {
                   const review = movement.closing ? cashReview(movement.closing) : null;
                   const receipt = movement.vault
                     ? answer(movement.vault, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null
@@ -1344,7 +1393,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     </tr>
                   );
                 })}
-                {monthlyMovements.length === 0 ? (
+                {visibleMonthlyMovements.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-black/40">Nessun movimento nel mese corrente.</td>
                   </tr>
@@ -1358,7 +1407,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   );
 }
 
-function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
+function MetricCard({ href, label, value, note, icon: Icon, tone }: { href: string; label: string; value: string; note: string; icon: LucideIcon; tone: "gold" | "blue" | "pink" | "green" }) {
   const tones = {
     gold: "bg-[#FFF9E9] text-[#8A6A19]",
     blue: "bg-[#F2F5FF] text-[#4D61A8]",
@@ -1366,13 +1415,14 @@ function MetricCard({ label, value, icon: Icon, tone }: { label: string; value: 
     green: "bg-[#EEFBF5] text-emerald-700",
   };
   return (
-    <div className={`min-h-28 border-b border-black/10 p-4 last:border-b-0 odd:border-r lg:border-b-0 lg:border-r lg:last:border-r-0 ${tones[tone]} sm:p-5`}>
+    <Link href={href} className={`group min-h-32 border-b border-black/10 p-4 last:border-b-0 odd:border-r transition hover:brightness-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-black/30 lg:border-b-0 lg:border-r lg:last:border-r-0 ${tones[tone]} sm:p-5`}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-black uppercase tracking-[0.14em] opacity-70">{label}</span>
-        <Icon className="size-4" />
+        <span className="grid size-8 place-items-center rounded-full bg-white/60"><Icon className="size-4" /></span>
       </div>
-      <p className="mt-5 text-xl font-black tracking-tight text-[#111017] sm:text-2xl">{value}</p>
-    </div>
+      <p className="mt-3 text-xl font-black tracking-tight text-[#111017] sm:text-2xl">{value}</p>
+      <p className="mt-2 flex items-center gap-1 text-[11px] font-bold opacity-65">{note}<ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" /></p>
+    </Link>
   );
 }
 
