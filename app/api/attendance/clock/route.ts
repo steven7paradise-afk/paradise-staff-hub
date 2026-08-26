@@ -8,6 +8,8 @@ import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth
 import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
 
+const PAUSE_LATENESS_START_KEY = "2026-08-26";
+
 export async function POST(request: NextRequest) {
   const payload = await request.json();
   const deviceHeader = request.headers.get("x-device-id");
@@ -145,6 +147,15 @@ export async function POST(request: NextRequest) {
     second: "2-digit",
     timeZone: "Europe/Rome",
   }).format(actualTimestamp);
+  let breakDurationMins: number | null = null;
+  let breakDelayMins = 0;
+  if (type === "RIENTRO" && currentState.activePause?.timestamp) {
+    const rawDurationMins = (actualTimestamp.getTime() - currentState.activePause.timestamp.getTime()) / (1000 * 60);
+    breakDurationMins = Math.ceil(rawDurationMins);
+    if (actualLocalDate >= PAUSE_LATENESS_START_KEY && rawDurationMins > rule.breakDurationMinutes) {
+      breakDelayMins = Math.ceil(rawDurationMins - rule.breakDurationMinutes);
+    }
+  }
   const roundedNote = type === "ENTRATA" && actualTime !== time
     ? `Ora rilevata ${actualTime}; arrotondamento entrata Paradise a ${time}${usedEntranceGrace ? "; tolleranza entrata usata" : ""}.`
     : type === "USCITA" && rule.entranceRoundingMinutes > 0 && actualTime !== time
@@ -152,7 +163,10 @@ export async function POST(request: NextRequest) {
     : null;
   const nightNote = shiftDateOnly !== actualDateOnly ? `Timbratura notturna associata al turno del ${new Intl.DateTimeFormat("it-IT").format(shiftDateOnly)}.` : null;
   const tabletNote = `Timbrato su: ${device.device_name} (${device.location.name})`;
-  const storedNote = [note, roundedNote, nightNote, tabletNote].filter(Boolean).join(" - ") || null;
+  const lateBreakNote = breakDelayMins > 0 && breakDurationMins !== null
+    ? `Rientro pausa in ritardo: durata ${breakDurationMins} min; limite ${rule.breakDurationMinutes} min; ritardo ${breakDelayMins} min.`
+    : null;
+  const storedNote = [note, roundedNote, nightNote, tabletNote, lateBreakNote].filter(Boolean).join(" - ") || null;
 
   const log = await prisma.attendanceLog.create({
     data: {
@@ -202,32 +216,26 @@ export async function POST(request: NextRequest) {
   }
 
   // Check break limit on RIENTRO and notify admins/superadmins
-  if (type === "RIENTRO" && currentState.activePause?.timestamp) {
-    const breakDurationMs = actualTimestamp.getTime() - currentState.activePause.timestamp.getTime();
-    const breakDurationMins = breakDurationMs / (1000 * 60);
+  if (type === "RIENTRO" && breakDelayMins > 0 && breakDurationMins !== null) {
     const breakLimit = rule.breakDurationMinutes;
-    if (breakDurationMins > breakLimit) {
-      const admins = await prisma.user.findMany({
-        where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
-        select: { id: true },
-      });
-      await createNotifications(
-        admins.map((admin) => ({
-          user_id: admin.id,
-          title: "Superamento Limite Pausa",
-          message: `Il dipendente ${user.name} ha superato il limite di pausa di ${breakLimit} minuti (pausa effettuata: ${Math.round(breakDurationMins)} minuti).`,
-          type: "TIMBRATURA",
-          action_url: "/attendance",
-        }))
-      ).catch((err) => console.error("Failed to send break limit notifications:", err));
-    }
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, active: true },
+      select: { id: true },
+    });
+    await createNotifications(
+      admins.map((admin) => ({
+        user_id: admin.id,
+        title: "Rientro pausa in ritardo",
+        message: `${user.name} è rientrato con ${breakDelayMins} minuti di ritardo. Pausa: ${breakDurationMins} minuti, limite: ${breakLimit} minuti.`,
+        type: "TIMBRATURA",
+        action_url: `/staff?employee=${encodeURIComponent(user.id)}`,
+      }))
+    ).catch((err) => console.error("Failed to send break limit notifications:", err));
   }
 
   if (type !== "PAUSA") {
     let finalNote = storedNote;
-    if (type === "RIENTRO" && currentState.activePause?.timestamp) {
-      const breakDurationMs = actualTimestamp.getTime() - currentState.activePause.timestamp.getTime();
-      const breakDurationMins = Math.round(breakDurationMs / (1000 * 60));
+    if (type === "RIENTRO" && breakDurationMins !== null) {
       const breakInfo = `Pausa durata: ${breakDurationMins} min`;
       finalNote = finalNote ? `${finalNote} - ${breakInfo}` : breakInfo;
     }

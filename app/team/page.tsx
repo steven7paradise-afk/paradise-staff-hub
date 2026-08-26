@@ -17,6 +17,7 @@ import { calculateClockHours } from "@/lib/work-hours";
 import { isClosedSchedule } from "@/lib/scheduled-attendance";
 
 export const dynamic = "force-dynamic";
+const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
 type CompletionFile = { name: string; url?: string | null };
 
@@ -348,7 +349,7 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
     const actualStart = firstIn ? firstIn.timestamp.getHours() * 60 + firstIn.timestamp.getMinutes() : null;
     const lateMinutes = plannedStart !== null && actualStart !== null ? Math.max(0, actualStart - plannedStart) : 0;
     const breakLimit = breakLimitForEntry(entry.location_id);
-    const pauseLateMinutes = pauseDelayMinutes(dayLogs, breakLimit);
+    const pauseLateMinutes = key >= PAUSE_LATENESS_START_KEY ? pauseDelayMinutes(dayLogs, breakLimit) : 0;
     const isPast = entry.date < now && entry.date.toDateString() !== now.toDateString();
     const noShow = isPast && !firstIn;
     const justifiedAbsence = noShow && isCoveredByApprovedLeave(entry.date);

@@ -87,6 +87,37 @@ type EmploymentHistoryEvent = {
   timeKnown?: boolean;
 };
 
+function employmentHistoryBadgeClass(event: EmploymentHistoryEvent) {
+  const status = event.status.toUpperCase();
+  const type = event.type.toLowerCase();
+
+  if (status.includes("APPROVATA")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (status.includes("NON GIUSTIFICATA")) {
+    return "border-yellow-300 bg-yellow-100 text-yellow-800";
+  }
+  if (status.includes("GIUSTIFICATA")) {
+    return "border-teal-300 bg-teal-100 text-teal-800";
+  }
+  if (type.includes("rientro pausa in ritardo")) {
+    return "border-orange-300 bg-orange-100 text-orange-800";
+  }
+  if (status.includes("ASSENTE") || status.includes("RIFIUTATA") || status.includes("RITARDO")) {
+    return "border-red-300 bg-red-100 text-red-700";
+  }
+  if (type.includes("contratto") || type.includes("rinnovo")) {
+    return "border-pink-300 bg-pink-100 text-pink-800";
+  }
+  if (type.includes("richiesta")) {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  if (status.includes("ATTIVO")) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
 type Location = { id: string; name: string };
 type Manager = { id: string; name: string; role: string };
 
@@ -1681,16 +1712,13 @@ export function StaffDirectory({
                       <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Nessun evento lavorativo registrato.</td></tr>
                     ) : employmentHistory.map((event) => {
                       const occurredAt = new Date(event.occurredAt);
-                      const status = event.status.toUpperCase();
-                      const danger = status.includes("NON GIUSTIFICATA") || status.includes("ASSENTE") || status.includes("RITARDO") || status.includes("RIFIUTATA");
-                      const success = status.includes("APPROVATA") || status.includes("GIUSTIFICATA") || status.includes("ATTIVO");
                       return (
                         <tr key={event.id} className="align-top transition hover:bg-neutral-50/60">
                           <td className="whitespace-nowrap py-3 pr-4 font-extrabold text-neutral-900">{new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
                           <td className="whitespace-nowrap py-3 pr-4">{event.timeKnown === false ? "—" : new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
                           <td className="py-3 pr-4 font-extrabold text-neutral-900">{event.type}</td>
                           <td className="py-3 pr-4">
-                            <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide", danger ? "border-red-300 bg-red-100 text-red-700" : success ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700")}>
+                            <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide", employmentHistoryBadgeClass(event))}>
                               {event.status}
                             </span>
                           </td>
