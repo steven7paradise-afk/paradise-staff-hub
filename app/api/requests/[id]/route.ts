@@ -77,8 +77,12 @@ export async function PATCH(
           ...(status !== undefined ? { status } : {}),
           ...(status === "APPROVED" ? { approved_by: session.user.id, approved_at: new Date() } : status === "REJECTED" || status === "PENDING" ? { approved_by: null, approved_at: null } : {}),
           ...(adminNote !== undefined ? { admin_note: adminNote } : {}),
-          ...(medicalCode !== undefined ? { medical_code: medicalCode, sickness_unjustified: false } : {}),
-          ...(sicknessUnjustified !== undefined ? { sickness_unjustified: sicknessUnjustified, ...(sicknessUnjustified ? { medical_code: null } : {}) } : {}),
+          ...(medicalCode !== undefined ? { medical_code: medicalCode, sickness_unjustified: !medicalCode } : {}),
+          ...(medicalCode === undefined && sicknessUnjustified !== undefined
+            ? sicknessUnjustified
+              ? { sickness_unjustified: true, medical_code: null }
+              : { sickness_unjustified: !existing.medical_code }
+            : {}),
         },
         include: { user: true, approver: true },
       });

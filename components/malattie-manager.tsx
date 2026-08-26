@@ -165,8 +165,8 @@ export function MalattieManager({
       });
       if (!res.ok) throw new Error("Errore durante l'aggiornamento.");
       const data = await res.json();
-      setRequests((curr) => curr.map((r) => r.id === id ? { ...r, medicalCode: data.leaveRequest.medical_code } : r));
-      setMessage("Codice medico aggiornato con successo.");
+      setRequests((curr) => curr.map((r) => r.id === id ? { ...r, medicalCode: data.leaveRequest.medical_code, sicknessUnjustified: data.leaveRequest.sickness_unjustified } : r));
+      setMessage(data.leaveRequest.medical_code ? "Certificato INPS salvato: malattia giustificata." : "Codice rimosso: malattia non giustificata.");
     } catch (err) {
       alert("Impossibile salvare il codice certificato. Riprova.");
     } finally {
@@ -477,6 +477,7 @@ export function MalattieManager({
                         <div className="space-y-2">
                           {req.medicalCode ? (
                             <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-xs font-black uppercase text-emerald-700"><ShieldCheck className="size-3.5" />Giustificata</span>
                               <div className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
                                 <ShieldCheck className="size-3.5 text-emerald-600 shrink-0" />
                                 <span className="font-mono">{req.medicalCode}</span>
@@ -496,9 +497,9 @@ export function MalattieManager({
                               </button>
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-200 animate-pulse">
+                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-black uppercase text-rose-700 border border-rose-300">
                               <AlertCircle className="size-3.5 text-rose-600 shrink-0" />
-                              <span>Senza Certificato</span>
+                              <span>Non giustificata · codice INPS assente</span>
                             </div>
                           )}
 

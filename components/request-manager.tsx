@@ -39,7 +39,7 @@ function requestTypeLabel(request: RequestRecord) {
 }
 
 function needsSicknessJustification(request: RequestRecord) {
-  return request.type === "MALATTIA" && !request.medicalCode && !request.sicknessUnjustified;
+  return request.type === "MALATTIA" && !request.medicalCode;
 }
 
 function formatDate(value: string) {
@@ -250,13 +250,12 @@ function RequestDetailPanel({
                 <ShieldCheck className="size-4" />
                 {request.medicalCode}
               </p>
-            ) : request.sicknessUnjustified ? (
-              <p className="mt-2 flex items-center gap-2 text-sm font-black text-rose-700">
-                <AlertCircle className="size-4" />
-                Non giustificata
-              </p>
             ) : (
               <div className="mt-3 grid gap-2">
+                <p className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-100 px-3 py-2 text-sm font-black text-rose-700">
+                  <AlertCircle className="size-4" />
+                  Non giustificata — codice INPS assente
+                </p>
                 <input
                   type="text"
                   value={medicalDraft}
@@ -264,7 +263,7 @@ function RequestDetailPanel({
                   onChange={(event) => onMedicalDraftChange(event.target.value)}
                   className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
                 />
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
                   <button
                     type="button"
                     disabled={saving === request.id}
@@ -276,14 +275,6 @@ function RequestDetailPanel({
                     className="h-11 rounded-xl bg-rose-600 px-4 text-xs font-black text-white transition hover:bg-rose-700 disabled:opacity-50"
                   >
                     Salva codice
-                  </button>
-                  <button
-                    type="button"
-                    disabled={saving === request.id}
-                    onClick={() => onUpdateSickness(request.id, { sicknessUnjustified: true })}
-                    className="h-11 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-700 transition hover:bg-rose-50 disabled:opacity-50"
-                  >
-                    Non giustificata
                   </button>
                 </div>
               </div>

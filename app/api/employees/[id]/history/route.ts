@@ -149,9 +149,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       events.push({
         id: `request-approved-${request.id}`,
         occurredAt: request.approved_at.toISOString(),
-        type: request.type === "MALATTIA" && request.medical_code ? "Malattia giustificata" : `${requestTypeLabel(request.type, request.reason)} approvata`,
-        status: "APPROVATA",
-        note: `${request.approver?.name ? `Approvata da ${request.approver.name}. ` : ""}${request.medical_code ? `Protocollo medico: ${request.medical_code}.` : request.admin_note || ""}`.trim(),
+        type: request.type === "MALATTIA" ? request.medical_code ? "Malattia giustificata" : "Malattia non giustificata" : `${requestTypeLabel(request.type, request.reason)} approvata`,
+        status: request.type === "MALATTIA" ? request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA" : "APPROVATA",
+        note: `${request.approver?.name ? `Approvata da ${request.approver.name}. ` : ""}${request.medical_code ? `Protocollo medico: ${request.medical_code}.` : request.type === "MALATTIA" ? "Codice Certificato INPS assente." : request.admin_note || ""}`.trim(),
       });
     } else if (request.type === "MALATTIA" && request.medical_code) {
       events.push({

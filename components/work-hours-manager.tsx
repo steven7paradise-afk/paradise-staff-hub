@@ -71,8 +71,7 @@ function getAbsenceLabel(record?: Omit<WorkRecord, "userId" | "date"> & { schedu
   if (type === "RIPOSO" || code === "R" || code === "RI" || code === "R3") return "Riposo";
   if (type === "MALATTIA" || code === "M" || code === "MA" || code === "ML") {
     if (record.medicalCode) return "Malattia giustificata";
-    if (record.sicknessUnjustified) return "Malattia non giustificata";
-    return "Malattia da giustificare";
+    return "Malattia non giustificata";
   }
   if (type === "ALTRO" || code === "A" || code === "AI") return "Altro";
   return "-";
@@ -85,7 +84,6 @@ function getAbsenceClass(label: string) {
   if (label === "Riposo") return "bg-emerald-50 text-emerald-800 border-emerald-200";
   if (label === "Malattia giustificata") return "bg-emerald-50 text-emerald-800 border-emerald-200";
   if (label === "Malattia non giustificata") return "bg-rose-50 text-rose-800 border-rose-200";
-  if (label === "Malattia da giustificare") return "bg-red-50 text-red-800 border-red-200";
   if (label === "Altro") return "bg-neutral-100 text-neutral-700 border-neutral-200";
   return "text-black/35";
 }
