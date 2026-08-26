@@ -57,6 +57,7 @@ export function EmployeeContractDocuments({
   const [preview, setPreview] = useState<EmployeeContractDocument | null>(null);
   const [editing, setEditing] = useState<EmployeeContractDocument | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const grouped = useMemo(() => {
     const map = new Map<string, EmployeeContractDocument[]>();
     documents.forEach((document) => {
@@ -233,6 +234,8 @@ export function EmployeeContractDocuments({
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         {GROUPS.map((group) => {
           const items = grouped.get(group.key) ?? [];
+          const expanded = expandedGroups.has(group.key);
+          const visibleItems = expanded ? items : items.slice(0, 1);
           return (
             <section key={group.key} className="rounded-[22px] border border-[#F4E3EA] bg-[#FCFAFB] p-4">
               <div className="flex items-center justify-between">
@@ -240,7 +243,7 @@ export function EmployeeContractDocuments({
                 <span className="rounded-full bg-[#FCE5F3] px-2 py-1 text-[10px] font-black text-[#B83D7F]">{items.length}</span>
               </div>
               <div className="mt-3 space-y-3">
-                {items.length ? items.map((document) => {
+                {items.length ? visibleItems.map((document) => {
                   const url = `/api/documents/${document.id}/download`;
                   return (
                     <article key={document.id} className="rounded-2xl border border-black/5 bg-white p-3 shadow-sm">
@@ -260,6 +263,20 @@ export function EmployeeContractDocuments({
                     </article>
                   );
                 }) : <p className="rounded-2xl border border-dashed border-black/10 p-4 text-center text-[11px] font-semibold text-neutral-400">Nessun documento trovato.</p>}
+                {items.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedGroups((current) => {
+                      const next = new Set(current);
+                      if (next.has(group.key)) next.delete(group.key);
+                      else next.add(group.key);
+                      return next;
+                    })}
+                    className="w-full rounded-2xl border border-[#F3B5D4] bg-white px-3 py-2.5 text-[11px] font-extrabold text-[#B83D7F] transition hover:bg-[#FFF0F7]"
+                  >
+                    {expanded ? "Mostra solo il più recente" : `Vuoi vedere tutti? Vedi gli altri ${items.length - 1}`}
+                  </button>
+                ) : null}
               </div>
             </section>
           );

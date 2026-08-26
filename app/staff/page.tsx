@@ -138,13 +138,12 @@ export default async function StaffPage({
     }),
     prisma.leaveRequest.findMany({
       where: {
-        status: "APPROVED",
         type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] },
         start_date: { lt: month.end },
         end_date: { gte: month.start },
         user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       },
-      select: { user_id: true, type: true, start_date: true, end_date: true },
+      select: { id: true, user_id: true, type: true, start_date: true, end_date: true, start_time: true, end_time: true, status: true, reason: true, medical_code: true, user: { select: { name: true } } },
     }),
   ]);
 
@@ -167,6 +166,19 @@ export default async function StaffPage({
   }
   const monthlyAbsenceIds = new Set<string>();
   const monthlyLateIds = new Set<string>();
+  const monthlyRecords: Array<{
+    id: string;
+    userId: string;
+    personName: string;
+    category: "ABSENCES" | "HOLIDAYS" | "SICKNESS" | "LATE";
+    dateLabel: string;
+    timeLabel: string;
+    eventLabel: string;
+    status: "GIUSTIFICATA" | "NON GIUSTIFICATA" | "IN ATTESA";
+    note: string;
+  }> = [];
+  const formatMonthlyDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+  const approvedMonthlyLeaves = monthlyLeaves.filter((request) => request.status === "APPROVED");
   const todayKey = today.toISOString().slice(0, 10);
   for (const schedule of monthlySchedules) {
     if (isRestSchedule(schedule.category.name, schedule.category.code) || isClosedSchedule(schedule.category.name, schedule.category.code)) continue;
@@ -174,7 +186,7 @@ export default async function StaffPage({
     const dayLogs = monthLogsByUserDay.get(`${schedule.user_id}:${dayKey}`) ?? [];
     const firstEntry = dayLogs.find((log) => log.type === "ENTRATA");
     const hasClockEntry = dayLogs.some((log) => log.type === "ENTRATA" || log.type === "RIENTRO");
-    const approvedLeave = monthlyLeaves.some((request) => request.user_id === schedule.user_id && request.start_date <= schedule.date && request.end_date >= schedule.date);
+    const approvedLeave = approvedMonthlyLeaves.find((request) => request.user_id === schedule.user_id && request.start_date <= schedule.date && request.end_date >= schedule.date);
     const plannedStart = schedule.start_time || schedule.category.start_time || null;
     const plannedEnd = schedule.end_time || schedule.category.end_time || null;
     const policy = scheduledEntryPolicy({
@@ -182,21 +194,83 @@ export default async function StaffPage({
       plannedEnd,
       locationName: schedule.location?.name || schedule.user.location?.name,
     });
-    if (!approvedLeave && !hasClockEntry && policy.deadlineMinutes !== null && (dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes() > policy.deadlineMinutes))) {
+    if (!hasClockEntry && policy.deadlineMinutes !== null && (dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes() > policy.deadlineMinutes))) {
       monthlyAbsenceIds.add(schedule.user_id);
+      monthlyRecords.push({
+        id: `absence-${schedule.id}`,
+        userId: schedule.user_id,
+        personName: staff.find((user) => user.id === schedule.user_id)?.name || "Dipendente",
+        category: "ABSENCES",
+        dateLabel: formatMonthlyDate(schedule.date),
+        timeLabel: `${plannedStart || "--:--"}–${plannedEnd || "--:--"}`,
+        eventLabel: "Mancata timbratura",
+        status: approvedLeave ? "GIUSTIFICATA" : "NON GIUSTIFICATA",
+        note: approvedLeave ? `${approvedLeave.type} approvata.` : "Nessuna entrata registrata e nessun giustificativo approvato.",
+      });
     }
     if (firstEntry && policy.deadlineMinutes !== null && romeMinutesForInstant(firstEntry.timestamp) > policy.deadlineMinutes) {
       monthlyLateIds.add(schedule.user_id);
-    }
-    if (dayLogs.some((log) => log.type === "RIENTRO" && /Rientro pausa in ritardo:/i.test(log.note || ""))) {
-      monthlyLateIds.add(schedule.user_id);
+      const lateRequest = monthlyLeaves.find((request) => request.id === `auto-late:${schedule.user_id}:${dayKey}` || (request.user_id === schedule.user_id && request.reason?.startsWith("RITARDO AUTOMATICO — ") && request.start_date.toISOString().slice(0, 10) === dayKey));
+      const delay = romeMinutesForInstant(firstEntry.timestamp) - policy.deadlineMinutes;
+      monthlyRecords.push({
+        id: `late-entry-${firstEntry.id}`,
+        userId: schedule.user_id,
+        personName: staff.find((user) => user.id === schedule.user_id)?.name || "Dipendente",
+        category: "LATE",
+        dateLabel: formatMonthlyDate(schedule.date),
+        timeLabel: firstEntry.time || romeClock(firstEntry.timestamp) || "--:--",
+        eventLabel: "Entrata in ritardo",
+        status: lateRequest?.status === "APPROVED" ? "GIUSTIFICATA" : lateRequest?.status === "REJECTED" ? "NON GIUSTIFICATA" : "IN ATTESA",
+        note: `Turno ${plannedStart || "--:--"}–${plannedEnd || "--:--"} · +${delay} minuti oltre il limite.`,
+      });
     }
   }
   for (const log of monthlyAttendanceLogs) {
-    if (log.type === "RIENTRO" && /Rientro pausa in ritardo:/i.test(log.note || "")) monthlyLateIds.add(log.user_id);
+    if (log.type !== "RIENTRO" || !/Rientro pausa in ritardo:/i.test(log.note || "")) continue;
+    monthlyLateIds.add(log.user_id);
+    const delay = log.note?.match(/ritardo (\d+) min/i)?.[1];
+    monthlyRecords.push({
+      id: `late-break-${log.id}`,
+      userId: log.user_id,
+      personName: staff.find((user) => user.id === log.user_id)?.name || "Dipendente",
+      category: "LATE",
+      dateLabel: formatMonthlyDate(log.date),
+      timeLabel: log.time || romeClock(log.timestamp) || "--:--",
+      eventLabel: "Rientro pausa in ritardo",
+      status: "IN ATTESA",
+      note: delay ? `Rientro avvenuto con ${delay} minuti di ritardo.` : (log.note || "Pausa oltre il limite consentito."),
+    });
   }
-  const monthlyHolidayIds = new Set(monthlyLeaves.filter((request) => request.type === "FERIE").map((request) => request.user_id));
-  const monthlySicknessIds = new Set(monthlyLeaves.filter((request) => request.type === "MALATTIA").map((request) => request.user_id));
+  const approvedHolidays = monthlyLeaves.filter((request) => request.type === "FERIE" && request.status === "APPROVED");
+  const approvedSickness = monthlyLeaves.filter((request) => request.type === "MALATTIA" && request.status === "APPROVED");
+  const monthlyHolidayIds = new Set(approvedHolidays.map((request) => request.user_id));
+  const monthlySicknessIds = new Set(approvedSickness.map((request) => request.user_id));
+  for (const request of approvedHolidays) {
+    monthlyRecords.push({
+      id: `holiday-${request.id}`,
+      userId: request.user_id,
+      personName: request.user.name,
+      category: "HOLIDAYS",
+      dateLabel: request.start_date.getTime() === request.end_date.getTime() ? formatMonthlyDate(request.start_date) : `${formatMonthlyDate(request.start_date)} – ${formatMonthlyDate(request.end_date)}`,
+      timeLabel: request.start_time && request.end_time ? `${request.start_time}–${request.end_time}` : "Giornata intera",
+      eventLabel: "Ferie",
+      status: "GIUSTIFICATA",
+      note: request.reason || "Ferie approvate dall’amministrazione.",
+    });
+  }
+  for (const request of approvedSickness) {
+    monthlyRecords.push({
+      id: `sickness-${request.id}`,
+      userId: request.user_id,
+      personName: request.user.name,
+      category: "SICKNESS",
+      dateLabel: request.start_date.getTime() === request.end_date.getTime() ? formatMonthlyDate(request.start_date) : `${formatMonthlyDate(request.start_date)} – ${formatMonthlyDate(request.end_date)}`,
+      timeLabel: "Giornata intera",
+      eventLabel: "Malattia",
+      status: request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA",
+      note: request.medical_code ? `Certificato INPS: ${request.medical_code}` : "Certificato INPS non presente.",
+    });
+  }
 
   return (
     <AppShell
@@ -315,6 +389,7 @@ export default async function StaffPage({
           holidays: Array.from(monthlyHolidayIds),
           sickness: Array.from(monthlySicknessIds),
           late: Array.from(monthlyLateIds),
+          records: monthlyRecords,
         }}
       />
     </AppShell>

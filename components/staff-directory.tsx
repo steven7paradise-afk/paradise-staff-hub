@@ -149,8 +149,20 @@ type MonthlyStaffOverview = {
   holidays: string[];
   sickness: string[];
   late: string[];
+  records: MonthlyOverviewRecord[];
 };
 type MonthlyOverviewMode = "ABSENCES" | "HOLIDAYS" | "SICKNESS" | "LATE";
+type MonthlyOverviewRecord = {
+  id: string;
+  userId: string;
+  personName: string;
+  category: MonthlyOverviewMode;
+  dateLabel: string;
+  timeLabel: string;
+  eventLabel: string;
+  status: "GIUSTIFICATA" | "NON GIUSTIFICATA" | "IN ATTESA";
+  note: string;
+};
 
 async function readJsonResponse(response: Response) {
   const text = await response.text();
@@ -523,6 +535,9 @@ export function StaffDirectory({
 
     return matchesSearch && matchesLocation && matchesStatus && matchesRole && matchesManager;
   });
+  const visibleMonthlyRecords = monthlyOverviewMode
+    ? monthlyOverview.records.filter((record) => record.category === monthlyOverviewMode)
+    : [];
 
   async function printStaffListPdf() {
     const { jsPDF } = await import("jspdf");
@@ -2097,6 +2112,57 @@ export function StaffDirectory({
         </button>
 
       </div>
+
+      {monthlyOverviewMode ? (
+        <section className="overflow-hidden rounded-[24px] border border-[#F4E3EA] bg-white shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
+          <div className="flex flex-col gap-3 border-b border-black/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#D96B94]">Dettaglio mensile</p>
+              <h2 className="mt-1 text-lg font-black text-neutral-900">
+                {monthlyOverviewMode === "ABSENCES" ? "Assenze" : monthlyOverviewMode === "HOLIDAYS" ? "Ferie" : monthlyOverviewMode === "SICKNESS" ? "Malattie" : "Ritardi"} · {monthlyOverview.monthLabel}
+              </h2>
+            </div>
+            <button type="button" onClick={() => setMonthlyOverviewMode(null)} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[#F3B5D4] bg-white px-4 text-xs font-extrabold text-[#B83D7F]">
+              <X className="size-4" /> Chiudi dettaglio
+            </button>
+          </div>
+          <div className="overflow-x-auto px-5 pb-5">
+            <table className="mt-2 min-w-[880px] w-full divide-y divide-black/5 text-left text-xs">
+              <thead>
+                <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                  <th className="py-3 pr-4">Persona</th>
+                  <th className="py-3 pr-4">Giorno</th>
+                  <th className="py-3 pr-4">Ora / turno</th>
+                  <th className="py-3 pr-4">Evento</th>
+                  <th className="py-3 pr-4">Stato</th>
+                  <th className="py-3">Dettagli</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/5 text-neutral-700">
+                {visibleMonthlyRecords.length ? visibleMonthlyRecords.map((record) => (
+                  <tr key={record.id} className="align-top hover:bg-neutral-50/60">
+                    <td className="py-3 pr-4 font-extrabold text-neutral-900">{record.personName}</td>
+                    <td className="whitespace-nowrap py-3 pr-4 font-semibold">{record.dateLabel}</td>
+                    <td className="whitespace-nowrap py-3 pr-4 font-semibold">{record.timeLabel}</td>
+                    <td className="py-3 pr-4 font-bold">{record.eventLabel}</td>
+                    <td className="py-3 pr-4">
+                      <span className={cn(
+                        "inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide",
+                        record.status === "GIUSTIFICATA" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        record.status === "NON GIUSTIFICATA" && "border-red-200 bg-red-50 text-red-700",
+                        record.status === "IN ATTESA" && "border-amber-200 bg-amber-50 text-amber-800",
+                      )}>{record.status}</span>
+                    </td>
+                    <td className="max-w-md py-3 text-neutral-500">{record.note}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="py-8 text-center font-semibold text-neutral-400">Nessun evento registrato nel mese.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       {/* Top Filter Bar */}
       <div className="bg-white/70 p-5 rounded-3xl border border-black/5 dark:bg-neutral-900/40 dark:border-white/10 space-y-4">
