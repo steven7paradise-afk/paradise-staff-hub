@@ -7,7 +7,7 @@ import {
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, Trash2, UserPlus, Printer,
+  Archive, Plus, Trash2, UserPlus, Printer, ExternalLink,
   ChevronLeft, Copy, Check, HeartPulse, Users, UserX, AlarmClock
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -65,6 +65,9 @@ type ContractHistoryItem = {
   status?: string;
   renewedAt?: string;
   note?: string;
+  documentId?: string;
+  documentTitle?: string;
+  documentUrl?: string;
 };
 
 type ContractRow = {
@@ -75,6 +78,8 @@ type ContractRow = {
   rinnovatoIl: string;
   scadenza: string;
   note: string;
+  documentTitle?: string;
+  documentUrl?: string;
   historyIndex?: number;
 };
 
@@ -298,7 +303,7 @@ export function StaffDirectory({
   const [pinConfirmInput, setPinConfirmInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [showRenewalForm, setShowRenewalForm] = useState(false);
-  const [renewalDraft, setRenewalDraft] = useState({ startDate: "", endDate: "", note: "" });
+  const [renewalDraft, setRenewalDraft] = useState({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
   const [stats, setStats] = useState<{
     jobs: { count: number; growth: number };
     hours: { count: number; growth: number };
@@ -372,6 +377,26 @@ export function StaffDirectory({
   const [successMsg, setSuccessMsg] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
+
+  function syncRenewalDocumentInHistory(document: EmployeeContractDocument) {
+    setEmploymentHistory((current) => {
+      const withoutDocument = current.filter((event) => event.id !== `document-renewal-${document.id}`);
+      const normalizedType = document.type.toUpperCase();
+      if (normalizedType !== "PROROGA" && normalizedType !== "RINNOVO") return withoutDocument;
+      const occurredAt = document.documentDate
+        ? new Date(`${document.documentDate}T12:00:00.000Z`).toISOString()
+        : document.createdAt;
+      const event: EmploymentHistoryEvent = {
+        id: `document-renewal-${document.id}`,
+        occurredAt,
+        type: normalizedType === "PROROGA" ? "Proroga contratto" : "Rinnovo contratto",
+        status: "REGISTRATA",
+        note: `${document.title} · documento presente nell'archivio del dipendente.`,
+        timeKnown: !document.documentDate,
+      };
+      return [...withoutDocument, event].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+    });
+  }
 
   useEffect(() => {
     if (!focusEmployeeId) return;
@@ -698,7 +723,7 @@ export function StaffDirectory({
 
   const resetRenewalForm = () => {
     setShowRenewalForm(false);
-    setRenewalDraft({ startDate: "", endDate: "", note: "" });
+    setRenewalDraft({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
   };
 
   const getStatusTone = (status: string) => {
@@ -894,7 +919,7 @@ export function StaffDirectory({
     return Array.isArray(employee?.contractHistory) ? employee.contractHistory : [];
   };
 
-  const buildContractsList = (startStr?: string, endStr?: string, history: ContractHistoryItem[] = []): ContractRow[] => {
+  const buildContractsList = (startStr?: string, endStr?: string, history: ContractHistoryItem[] = [], documents: EmployeeContractDocument[] = []): ContractRow[] => {
     if (!startStr) return [];
     const start = new Date(startStr);
     const end = endStr ? new Date(endStr) : null;
@@ -915,6 +940,7 @@ export function StaffDirectory({
 
     history.forEach((item, historyIndex) => {
       const renewalEnd = item.endDate ? new Date(item.endDate) : null;
+      const linkedDocument = documents.find((document) => document.id === item.documentId);
       list.push({
         tipo: item.tipo || "Rinnovo",
         inizio: item.startDate ? formatContractDate(item.startDate) : "—",
@@ -923,6 +949,8 @@ export function StaffDirectory({
         rinnovatoIl: item.renewedAt ? formatContractDate(item.renewedAt) : "—",
         scadenza: renewalEnd && !isNaN(renewalEnd.getTime()) ? getDaysLabel(renewalEnd) : "—",
         note: item.note || "Da confermare",
+        documentTitle: linkedDocument?.title || item.documentTitle,
+        documentUrl: linkedDocument?.fileUrl || item.documentUrl,
         historyIndex
       });
     });
@@ -954,15 +982,17 @@ export function StaffDirectory({
     if (!editForm) return;
     const suggested = getSuggestedRenewalDates(editForm);
     setRenewalDraft({
+      tipo: "Proroga",
       startDate: suggested.startDate,
       endDate: suggested.endDate,
-      note: "Da confermare"
+      note: "Da confermare",
+      documentId: "",
     });
     setShowRenewalForm(true);
     setErrorMsg("");
   };
 
-  const planContractRenewal = () => {
+  const planContractRenewal = async () => {
     if (!editForm) return;
     if (!renewalDraft.startDate || !renewalDraft.endDate) {
       setErrorMsg("Inserisci data inizio e data fine del rinnovo.");
@@ -980,27 +1010,84 @@ export function StaffDirectory({
       setErrorMsg("La data fine rinnovo deve essere successiva alla data inizio.");
       return;
     }
+    const linkedDocument = (editForm.documents ?? []).find((document) => document.id === renewalDraft.documentId);
+    if (!linkedDocument) {
+      setErrorMsg("Seleziona il documento della proroga o del rinnovo.");
+      return;
+    }
 
-    setEditForm((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        contractHistory: [
-          ...getContractHistory(prev),
-          {
-            tipo: "Rinnovo",
-            startDate: renewalDraft.startDate,
-            endDate: renewalDraft.endDate,
-            status: "Pianificato",
-            renewedAt: "",
-            note: renewalDraft.note.trim() || "Da confermare"
-          }
-        ]
-      };
-    });
-    setShowRenewalForm(false);
-    setRenewalDraft({ startDate: "", endDate: "", note: "" });
+    const nextHistory: ContractHistoryItem[] = [
+      ...getContractHistory(editForm),
+      {
+        tipo: renewalDraft.tipo,
+        startDate: renewalDraft.startDate,
+        endDate: renewalDraft.endDate,
+        status: "Registrata",
+        renewedAt: new Date().toISOString(),
+        note: renewalDraft.note.trim() || "Documento collegato",
+        documentId: linkedDocument.id,
+        documentTitle: linkedDocument.title,
+        documentUrl: linkedDocument.fileUrl,
+      },
+    ];
+    const nextEmployee = { ...editForm, contractHistory: nextHistory };
+    setSubmitting(true);
     setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const response = await fetch(`/api/employees/${editForm.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nextEmployee.name,
+          email: nextEmployee.email,
+          role: nextEmployee.role,
+          sedeId: nextEmployee.sedeId,
+          birthDate: nextEmployee.birthDate || undefined,
+          fiscalCode: nextEmployee.fiscalCode || undefined,
+          contractStart: nextEmployee.contractStart || undefined,
+          contractEnd: nextEmployee.contractEnd || undefined,
+          photoUrl: nextEmployee.photoUrl || undefined,
+          whatsappPhone: nextEmployee.whatsappPhone || undefined,
+          mansione: nextEmployee.mansione || undefined,
+          active: nextEmployee.active,
+          employeeStatus: nextEmployee.employeeStatus,
+          managerId: nextEmployee.managerId || null,
+          accessList: nextEmployee.accessList,
+          hrNotes: nextEmployee.hrNotes || undefined,
+          iban: nextEmployee.iban || undefined,
+          contractHistory: nextHistory,
+          contractType: nextEmployee.contractType || "",
+          contractRenewalStatus: nextEmployee.contractRenewalStatus || "DA_VALUTARE",
+        }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data?.error || "Proroga non salvata.");
+      setEditForm(nextEmployee);
+      setSelectedEmployee(nextEmployee);
+      setStaff((current) => current.map((employee) => employee.id === nextEmployee.id ? nextEmployee : employee));
+      setEmploymentHistory((current) => {
+        const eventId = `contract-renewal-${nextHistory.length - 1}`;
+        const withoutPrevious = current.filter((event) => event.id !== eventId && event.id !== `document-renewal-${linkedDocument.id}`);
+        const event: EmploymentHistoryEvent = {
+          id: eventId,
+          occurredAt: new Date(`${renewalDraft.startDate}T12:00:00.000Z`).toISOString(),
+          type: renewalDraft.tipo === "Proroga" ? "Proroga contratto" : "Rinnovo contratto",
+          status: "REGISTRATA",
+          note: renewalDraft.note.trim() || `Documento collegato: ${linkedDocument.title}.`,
+          timeKnown: false,
+        };
+        return [...withoutPrevious, event].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
+      });
+      setShowRenewalForm(false);
+      setRenewalDraft({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
+      setSuccessMsg(`${renewalDraft.tipo} salvata e collegata al documento ${linkedDocument.title}.`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "Proroga non salvata.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const deleteContractRenewal = (historyIndex: number) => {
@@ -1019,7 +1106,7 @@ export function StaffDirectory({
   const renderFullscreenEditor = () => {
     if (!editForm) return null;
 
-    const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm));
+    const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm), editForm.documents ?? []);
     const initialContractEvent = employmentHistory.find((event) => event.type.toLowerCase() === "inizio contratto") ?? null;
     const compactEmploymentHistory = [
       ...(initialContractEvent ? [initialContractEvent] : []),
@@ -1602,13 +1689,23 @@ export function StaffDirectory({
                   className="inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-[#FCE5F3] px-4 text-xs font-bold text-[#B83D7F] transition hover:bg-[#F9D4E8] active:scale-[0.98]"
                 >
                   <Plus className="size-4" />
-                  Pianifica rinnovo
+                  Aggiungi proroga / rinnovo
                 </button>
               </div>
 
               {showRenewalForm && (
                 <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo</span>
+                      <Select
+                        value={renewalDraft.tipo}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, tipo: e.target.value }))}
+                      >
+                        <option value="Proroga">Proroga</option>
+                        <option value="Rinnovo">Rinnovo</option>
+                      </Select>
+                    </label>
                     <label className="space-y-1">
                       <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data inizio rinnovo</span>
                       <Field
@@ -1633,7 +1730,27 @@ export function StaffDirectory({
                         placeholder="Da confermare"
                       />
                     </label>
+                    <label className="space-y-1 md:col-span-2 xl:col-span-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Documento collegato *</span>
+                      <Select
+                        required
+                        value={renewalDraft.documentId}
+                        onChange={(e) => setRenewalDraft((prev) => ({ ...prev, documentId: e.target.value }))}
+                      >
+                        <option value="">Seleziona documento...</option>
+                        {(editForm.documents ?? []).map((document) => (
+                          <option key={document.id} value={document.id}>
+                            {document.title} · {document.type}{document.documentDate ? ` · ${formatContractDate(document.documentDate)}` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
                   </div>
+                  {(editForm.documents ?? []).length === 0 ? (
+                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                      Prima carica il documento nella sezione “Contratti e documenti fiscali”, poi torna qui per collegarlo.
+                    </p>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
@@ -1648,9 +1765,10 @@ export function StaffDirectory({
                     <button
                       type="button"
                       onClick={planContractRenewal}
+                      disabled={submitting || (editForm.documents ?? []).length === 0}
                       className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#D96B94] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-[0.98]"
                     >
-                      Aggiungi rinnovo
+                      {submitting ? "Salvataggio..." : `Aggiungi ${renewalDraft.tipo.toLowerCase()}`}
                     </button>
                   </div>
                 </div>
@@ -1667,6 +1785,7 @@ export function StaffDirectory({
                       <th className="py-2.5">Rinnovato il</th>
                       <th className="py-2.5">Scadenza tra</th>
                       <th className="py-2.5">Note</th>
+                      <th className="py-2.5">Documento</th>
                       <th className="py-2.5 text-right">Azioni</th>
                     </tr>
                   </thead>
@@ -1682,7 +1801,8 @@ export function StaffDirectory({
                               "px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide",
                               c.stato === "Attivo" && "bg-emerald-50 text-emerald-700 border border-emerald-100",
                               c.stato === "Completato" && "bg-neutral-100 text-neutral-600",
-                              c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100"
+                              c.stato === "Pianificato" && "bg-blue-50 text-blue-700 border border-blue-100",
+                              c.stato === "Registrata" && "bg-pink-100 text-pink-800 border border-pink-200"
                             )}>
                               {c.stato}
                             </span>
@@ -1690,6 +1810,19 @@ export function StaffDirectory({
                           <td className="py-3 text-neutral-500">{c.rinnovatoIl}</td>
                           <td className="py-3 text-[#D96B94] font-bold">{c.scadenza}</td>
                           <td className="py-3 text-neutral-400 text-[11px] font-normal italic">{c.note}</td>
+                          <td className="py-3">
+                            {c.documentUrl ? (
+                              <a
+                                href={c.documentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-xl border border-pink-200 bg-pink-50 px-2.5 py-1.5 text-[10px] font-extrabold text-pink-700 transition hover:bg-pink-100"
+                                title={c.documentTitle || "Apri documento collegato"}
+                              >
+                                <ExternalLink className="size-3" /> Apri PDF
+                              </a>
+                            ) : <span className="text-neutral-300">—</span>}
+                          </td>
                           <td className="py-3 text-right">
                             {c.historyIndex !== undefined ? (
                               <button
@@ -1708,7 +1841,7 @@ export function StaffDirectory({
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8} className="py-6 text-center text-neutral-400 italic">
+                        <td colSpan={9} className="py-6 text-center text-neutral-400 italic">
                           Nessuna data di contratto configurata per questo dipendente.
                         </td>
                       </tr>
@@ -1804,6 +1937,7 @@ export function StaffDirectory({
               employeeName={editForm.name}
               documents={editForm.documents ?? []}
               onUploaded={(document) => {
+                syncRenewalDocumentInHistory(document);
                 setEditForm((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
                 setSelectedEmployee((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
                 setStaff((prev) => prev.map((employee) => employee.id === editForm.id
@@ -1811,6 +1945,7 @@ export function StaffDirectory({
                   : employee));
               }}
               onUpdated={(document) => {
+                syncRenewalDocumentInHistory(document);
                 const replaceDocument = (items: EmployeeContractDocument[] | undefined) => (items ?? []).map((item) => item.id === document.id ? document : item);
                 setEditForm((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
                 setSelectedEmployee((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);

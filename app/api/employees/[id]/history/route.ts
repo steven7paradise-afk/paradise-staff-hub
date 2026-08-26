@@ -83,6 +83,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       contract_end: true,
       contract_history: true,
       location: { select: { name: true } },
+      documents: {
+        where: { type: { in: ["PROROGA", "RINNOVO"] } },
+        select: { id: true, title: true, type: true, document_date: true, created_at: true },
+        orderBy: [{ document_date: "desc" }, { created_at: "desc" }],
+      },
     },
   });
   if (!employee) return NextResponse.json({ error: "Lavoratore non trovato" }, { status: 404 });
@@ -123,20 +128,36 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   }
 
   const contractHistory = Array.isArray(employee.contract_history) ? employee.contract_history : [];
+  const linkedContractDocumentIds = new Set<string>();
   contractHistory.forEach((raw, index) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
     const item = raw as Record<string, unknown>;
     const start = calendarDate(String(item.startDate || item.inizio || ""));
     if (!start) return;
+    const linkedDocumentId = String(item.documentId || "").trim();
+    if (linkedDocumentId) linkedContractDocumentIds.add(linkedDocumentId);
+    const contractEventType = String(item.tipo || "Rinnovo").toLowerCase().includes("proroga") ? "Proroga contratto" : "Rinnovo contratto";
     events.push({
       id: `contract-renewal-${index}`,
       occurredAt: start.toISOString(),
-      type: "Rinnovo contratto",
+      type: contractEventType,
       status: String(item.status || "PIANIFICATO").toUpperCase(),
       note: String(item.note || item.notes || "Rinnovo registrato."),
       timeKnown: false,
     });
   });
+
+  for (const document of employee.documents) {
+    if (linkedContractDocumentIds.has(document.id)) continue;
+    events.push({
+      id: `document-renewal-${document.id}`,
+      occurredAt: (document.document_date ?? document.created_at).toISOString(),
+      type: document.type === "PROROGA" ? "Proroga contratto" : "Rinnovo contratto",
+      status: "REGISTRATA",
+      note: `${document.title} · documento presente nell'archivio del dipendente.`,
+      timeKnown: !document.document_date,
+    });
+  }
 
   for (const request of requests) {
     const range = request.start_date.toISOString().slice(0, 10) === request.end_date.toISOString().slice(0, 10)
