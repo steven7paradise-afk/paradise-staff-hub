@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deriveAttendanceState } from "@/lib/attendance-state";
+import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +34,44 @@ type OpenAIResponse = {
   output_text?: string;
   error?: { message?: string };
 };
+type CommunicationAction = {
+  type: "SEND_COMMUNICATION";
+  auditId: string;
+  recipientId: string;
+  recipientName: string;
+  title: string;
+  message: string;
+  taskId: string | null;
+  taskTitle: string | null;
+};
+type PendingAction = {
+  token: string;
+  type: "SEND_COMMUNICATION";
+  label: string;
+  recipient: string;
+  title: string;
+  message: string;
+  expiresAt: string;
+};
 
 const tools = [
+  {
+    type: "function",
+    name: "prepare_communication",
+    description: "Prepara una comunicazione professionale a una persona, verificando destinatario e task. Non invia: crea un'anteprima da confermare.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        recipient_name: { type: "string", description: "Nome o parte del nome del destinatario." },
+        task_query: { type: ["string", "null"], description: "Titolo o parole della task da collegare, se citata." },
+        title: { type: "string", description: "Titolo professionale e sintetico della comunicazione." },
+        message: { type: "string", description: "Testo professionale completo, pronto per l'anteprima." },
+      },
+      required: ["recipient_name", "task_query", "title", "message"],
+      additionalProperties: false,
+    },
+  },
   {
     type: "function",
     name: "get_team_status",
@@ -94,6 +131,168 @@ const tools = [
     },
   },
 ] as const;
+
+function actionSecret() {
+  const secret = process.env.NEXTAUTH_SECRET?.trim() || process.env.AUTH_SECRET?.trim();
+  if (!secret) throw new Error("Segreto di sessione non configurato per confermare le azioni.");
+  return secret;
+}
+
+function encodeAction(action: CommunicationAction, expiresAt: number) {
+  const body = Buffer.from(JSON.stringify({ action, expiresAt })).toString("base64url");
+  const signature = createHmac("sha256", actionSecret()).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+function decodeAction(token: string) {
+  const [body, signature] = token.split(".");
+  if (!body || !signature) throw new Error("Conferma non valida.");
+  const expected = createHmac("sha256", actionSecret()).update(body).digest("base64url");
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
+    throw new Error("Conferma non valida.");
+  }
+  const decoded = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { action: CommunicationAction; expiresAt: number };
+  if (!decoded?.action || !Number.isFinite(decoded.expiresAt) || decoded.expiresAt < Date.now()) {
+    throw new Error("La conferma è scaduta. Prepara nuovamente l'operazione.");
+  }
+  return decoded.action;
+}
+
+async function prepareCommunication(args: Record<string, unknown>, actorId: string) {
+  const recipientQuery = String(args.recipient_name || "").trim().slice(0, 100);
+  const taskQuery = typeof args.task_query === "string" ? args.task_query.trim().slice(0, 140) : "";
+  const title = String(args.title || "").trim().slice(0, 120);
+  const message = String(args.message || "").trim().slice(0, 3_000);
+  if (recipientQuery.length < 2 || !title || !message) {
+    return { output: { prepared: false, error: "Destinatario, titolo o messaggio mancanti." } };
+  }
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      active: true,
+      employee_status: { not: "Ex dipendente" },
+      name: { contains: recipientQuery, mode: "insensitive" },
+    },
+    select: { id: true, name: true, location: { select: { name: true } } },
+    orderBy: { name: "asc" },
+    take: 6,
+  });
+  const exact = candidates.find((candidate) => candidate.name.toLocaleLowerCase("it").trim() === recipientQuery.toLocaleLowerCase("it").trim());
+  const recipient = exact || (candidates.length === 1 ? candidates[0] : null);
+  if (!recipient) {
+    return {
+      output: {
+        prepared: false,
+        error: candidates.length ? "Destinatario ambiguo: chiedi all'amministratore di scegliere il nome completo." : "Nessun destinatario attivo trovato.",
+        candidates: candidates.map((candidate) => ({ name: candidate.name, location: candidate.location?.name || "Nessuna sede" })),
+      },
+    };
+  }
+
+  const task = taskQuery
+    ? await prisma.staffTask.findFirst({
+        where: {
+          assignees: { some: { id: recipient.id } },
+          OR: [
+            { title: { contains: taskQuery, mode: "insensitive" } },
+            { description: { contains: taskQuery, mode: "insensitive" } },
+          ],
+        },
+        select: { id: true, title: true, status: true, due_date: true },
+        orderBy: { updated_at: "desc" },
+      })
+    : null;
+  if (taskQuery && !task) {
+    return { output: { prepared: false, error: `Non trovo una task “${taskQuery}” assegnata a ${recipient.name}. Chiedi di specificare meglio la task.` } };
+  }
+
+  const audit = await prisma.assistantActionLog.create({
+    data: {
+      user_id: actorId,
+      action: "SEND_COMMUNICATION",
+      target_type: "USER",
+      target_id: recipient.id,
+      summary: `Comunicazione a ${recipient.name}: ${title}`,
+      payload: { recipientId: recipient.id, recipientName: recipient.name, title, message, taskId: task?.id || null, taskTitle: task?.title || null },
+    },
+  });
+  const action: CommunicationAction = {
+    type: "SEND_COMMUNICATION",
+    auditId: audit.id,
+    recipientId: recipient.id,
+    recipientName: recipient.name,
+    title,
+    message,
+    taskId: task?.id || null,
+    taskTitle: task?.title || null,
+  };
+  const expiresAt = Date.now() + 10 * 60_000;
+  const pendingAction: PendingAction = {
+    token: encodeAction(action, expiresAt),
+    type: action.type,
+    label: "Invia comunicazione",
+    recipient: recipient.name,
+    title,
+    message,
+    expiresAt: new Date(expiresAt).toISOString(),
+  };
+  return {
+    output: {
+      prepared: true,
+      recipient: recipient.name,
+      task: task ? { title: task.title, status: task.status, dueDate: task.due_date?.toISOString() || null } : null,
+      title,
+      message,
+      confirmationRequired: true,
+    },
+    pendingAction,
+    link: APP_PAGES.communications,
+  };
+}
+
+async function confirmCommunication(token: string, actorId: string) {
+  const action = decodeAction(token);
+  if (action.type !== "SEND_COMMUNICATION") throw new Error("Azione non supportata.");
+  const audit = await prisma.assistantActionLog.findUnique({ where: { id: action.auditId } });
+  if (!audit || audit.user_id !== actorId || audit.status !== "PENDING") {
+    throw new Error("Questa operazione non è più disponibile.");
+  }
+  const recipient = await prisma.user.findFirst({ where: { id: action.recipientId, active: true }, select: { id: true, name: true } });
+  if (!recipient) throw new Error("Il destinatario non è più disponibile.");
+
+  try {
+    const notificationId = randomUUID();
+    await createNotifications([{
+      id: notificationId,
+      user_id: recipient.id,
+      title: action.title,
+      message: action.message,
+      type: "COMUNICAZIONE",
+      page: 1,
+      action_url: action.taskId ? "/tasks" : "/notifications",
+      read: false,
+      created_at: new Date(),
+    }], {
+      deliveryActionUrl: () => `/notifications?communication=${encodeURIComponent(notificationId)}`,
+    });
+    await prisma.assistantActionLog.update({ where: { id: audit.id }, data: { status: "COMPLETED", confirmed_at: new Date() } });
+    return { answer: `Comunicazione inviata a ${recipient.name}.`, links: [APP_PAGES.communications] };
+  } catch (error) {
+    await prisma.assistantActionLog.update({ where: { id: audit.id }, data: { status: "FAILED", confirmed_at: new Date() } }).catch(() => null);
+    throw error;
+  }
+}
+
+async function cancelCommunication(token: string, actorId: string) {
+  const action = decodeAction(token);
+  await prisma.assistantActionLog.updateMany({
+    where: { id: action.auditId, user_id: actorId, status: "PENDING" },
+    data: { status: "CANCELLED", confirmed_at: new Date() },
+  });
+  return { answer: "Operazione annullata. Nessuna comunicazione è stata inviata." };
+}
 
 function romeDayBounds() {
   const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
@@ -244,8 +443,9 @@ function safeJson(value: string) {
   }
 }
 
-async function executeTool(call: ToolCall) {
+async function executeTool(call: ToolCall, actorId: string) {
   const args = safeJson(call.arguments);
+  if (call.name === "prepare_communication") return prepareCommunication(args, actorId);
   if (call.name === "get_team_status") return { output: await getTeamStatus() };
   if (call.name === "get_task_overview") {
     return { output: await getTaskOverview(typeof args.status === "string" ? args.status : null), link: APP_PAGES.tasks };
@@ -299,12 +499,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json({ error: "OPENAI_API_KEY non configurata sul server." }, { status: 503 });
+  const payload = await request.json().catch(() => null) as { messages?: ChatMessage[]; confirmActionToken?: string; cancelActionToken?: string } | null;
+  try {
+    if (payload?.confirmActionToken) return NextResponse.json(await confirmCommunication(payload.confirmActionToken, session.user.id));
+    if (payload?.cancelActionToken) return NextResponse.json(await cancelCommunication(payload.cancelActionToken, session.user.id));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Operazione non disponibile." }, { status: 400 });
   }
 
-  const payload = await request.json().catch(() => null) as { messages?: ChatMessage[] } | null;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return NextResponse.json({ error: "OPENAI_API_KEY non configurata sul server." }, { status: 503 });
   const messages = Array.isArray(payload?.messages)
     ? payload.messages
         .filter((message): message is ChatMessage => Boolean(message) && ["user", "assistant"].includes(message.role) && typeof message.content === "string")
@@ -317,7 +521,8 @@ export async function POST(request: NextRequest) {
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
-Puoi consultare dati ma non modificarli. Non inviare comunicazioni e non approvare richieste. Se l'utente chiede una comunicazione, prepara soltanto una bozza chiaramente indicata come bozza.
+Quando l'amministratore chiede di scrivere, mandare o inviare una comunicazione, usa prepare_communication. Lo strumento prepara un'anteprima: non dire che è stata inviata finché l'utente non preme Conferma e invia.
+Le altre operazioni di scrittura non ancora esposte devono essere indicate come non disponibili, senza simulare risultati.
 Usa navigate_app soltanto quando l'utente chiede esplicitamente "apri", "vai" o "portami" a una pagina.
 Non mostrare identificativi tecnici, segreti, email, telefoni, dati fiscali o medici. Per una malattia indica solo se risulta giustificata o non giustificata.
 Quando elenchi persone o task, usa righe brevi e leggibili.`;
@@ -325,6 +530,7 @@ Quando elenchi persone o task, usa righe brevi e leggibili.`;
   const input: Array<Record<string, unknown>> = messages.map((message) => ({ role: message.role, content: message.content }));
   const links = new Map<string, { path: string; label: string }>();
   let navigation: { path: string; label: string } | null = null;
+  let pendingAction: PendingAction | null = null;
 
   try {
     for (let round = 0; round < 4; round += 1) {
@@ -342,18 +548,24 @@ Quando elenchi persone o task, usa righe brevi e leggibili.`;
       const calls = (response.output || []).filter((item): item is ToolCall => item.type === "function_call") as ToolCall[];
       if (calls.length === 0) {
         const answer = extractOutputText(response) || "Non ho trovato una risposta utile. Prova a riformulare la richiesta.";
-        return NextResponse.json({ answer, links: Array.from(links.values()), navigation });
+        return NextResponse.json({ answer, links: Array.from(links.values()), navigation, pendingAction });
       }
 
       input.push(...(response.output || []));
       for (const call of calls) {
-        const result = await executeTool(call);
+        const result = await executeTool(call, session.user.id) as {
+          output: unknown;
+          link?: { path: string; label: string };
+          navigation?: { path: string; label: string };
+          pendingAction?: PendingAction;
+        };
         if (result.link) links.set(result.link.path, result.link);
         if (result.navigation) navigation = result.navigation;
+        if (result.pendingAction) pendingAction = result.pendingAction;
         input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result.output) });
       }
     }
-    return NextResponse.json({ answer: "La richiesta richiede troppi passaggi. Prova a farne una più specifica.", links: Array.from(links.values()), navigation });
+    return NextResponse.json({ answer: "La richiesta richiede troppi passaggi. Prova a farne una più specifica.", links: Array.from(links.values()), navigation, pendingAction });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Il servizio AI non è disponibile in questo momento.";
     return NextResponse.json({ error: message }, { status: 502 });

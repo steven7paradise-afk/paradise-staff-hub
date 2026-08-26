@@ -105,6 +105,7 @@ model User {
   cash_month_closings CashMonthClose[]
   social_posts      SocialPost[]     @relation("CreatedSocialPosts")
   social_post_comments SocialPostComment[]
+  assistant_action_logs AssistantActionLog[]
 
   @@map("users")
 }
@@ -491,6 +492,24 @@ model Setting {
   value Json
 
   @@map("settings")
+}
+
+model AssistantActionLog {
+  id           String   @id @default(cuid())
+  user_id      String
+  action       String
+  target_type  String?
+  target_id    String?
+  summary      String
+  payload      Json
+  status       String   @default("PENDING")
+  created_at   DateTime @default(now())
+  confirmed_at DateTime?
+  user         User     @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, created_at])
+  @@index([status, created_at])
+  @@map("assistant_action_logs")
 }
 
 model BrandingSetting {

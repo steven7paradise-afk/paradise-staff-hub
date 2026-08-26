@@ -2,9 +2,10 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, ExternalLink, LoaderCircle, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
+import { Bot, Check, ExternalLink, LoaderCircle, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
 
-type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }> };
+type PendingAction = { token: string; type: "SEND_COMMUNICATION"; label: string; recipient: string; title: string; message: string; expiresAt: string };
+type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null };
 
 const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Quali richieste sono da approvare?"];
 
@@ -13,6 +14,7 @@ export function AdminAssistant() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." },
   ]);
@@ -41,12 +43,14 @@ export function AdminAssistant() {
         error?: string;
         links?: Array<{ path: string; label: string }>;
         navigation?: { path: string; label: string } | null;
+        pendingAction?: PendingAction | null;
       };
       if (!response.ok) throw new Error(payload.error || "Assistente non disponibile.");
       setMessages((current) => [...current, {
         role: "assistant",
         content: payload.answer || "Operazione completata.",
         links: payload.links,
+        pendingAction: payload.pendingAction,
       }]);
       if (payload.navigation?.path) router.push(payload.navigation.path);
     } catch (error) {
@@ -56,6 +60,28 @@ export function AdminAssistant() {
       }]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function resolveAction(messageIndex: number, action: PendingAction, mode: "confirm" | "cancel") {
+    if (actionLoading) return;
+    setActionLoading(action.token);
+    try {
+      const response = await fetch("/api/admin-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(mode === "confirm" ? { confirmActionToken: action.token } : { cancelActionToken: action.token }),
+      });
+      const payload = await response.json() as { answer?: string; error?: string; links?: Array<{ path: string; label: string }> };
+      if (!response.ok) throw new Error(payload.error || "Operazione non completata.");
+      setMessages((current) => [
+        ...current.map((message, index) => index === messageIndex ? { ...message, pendingAction: null } : message),
+        { role: "assistant", content: payload.answer || "Operazione completata.", links: payload.links },
+      ]);
+    } catch (error) {
+      setMessages((current) => [...current, { role: "assistant", content: error instanceof Error ? error.message : "Operazione non completata." }]);
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -92,6 +118,22 @@ export function AdminAssistant() {
                       {link.label}<ExternalLink className="size-3" />
                     </button>
                   ))}</div> : null}
+                  {message.pendingAction ? <div className="mt-3 overflow-hidden rounded-2xl border border-[#ef93ca]/25 bg-white text-black shadow-sm dark:bg-black/20 dark:text-white">
+                    <div className="border-b border-black/5 bg-[#fff4fa] px-3 py-2 dark:border-white/10 dark:bg-[#ef93ca]/10">
+                      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#a84a83]">Conferma richiesta</p>
+                      <p className="mt-0.5 text-xs font-black">A: {message.pendingAction.recipient}</p>
+                    </div>
+                    <div className="space-y-1.5 px-3 py-3">
+                      <p className="text-xs font-black">{message.pendingAction.title}</p>
+                      <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-black/60 dark:text-white/60">{message.pendingAction.message}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 border-t border-black/5 p-2 dark:border-white/10">
+                      <button type="button" disabled={Boolean(actionLoading)} onClick={() => void resolveAction(index, message.pendingAction!, "cancel")} className="rounded-xl border border-black/10 px-3 py-2 text-[10px] font-black text-black/55 transition hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-white/55">Annulla</button>
+                      <button type="button" disabled={Boolean(actionLoading)} onClick={() => void resolveAction(index, message.pendingAction!, "confirm")} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#ef93ca] px-3 py-2 text-[10px] font-black text-white transition hover:bg-[#dd7eb7] disabled:opacity-50">
+                        {actionLoading === message.pendingAction.token ? <LoaderCircle className="size-3 animate-spin" /> : <Check className="size-3" />} Conferma e invia
+                      </button>
+                    </div>
+                  </div> : null}
                 </div>
               </div>
             ))}
@@ -110,7 +152,7 @@ export function AdminAssistant() {
               }} rows={1} maxLength={2000} placeholder="Chiedi qualcosa sull'attività…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-sm font-medium text-black/80 outline-none placeholder:text-black/35 dark:text-white dark:placeholder:text-white/30" />
               <button type="submit" disabled={!input.trim() || loading} className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#ef93ca] text-white shadow-sm transition hover:bg-[#dd7eb7] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Invia"><Send className="size-4" /></button>
             </div>
-            <p className="mt-2 text-center text-[9px] font-semibold text-black/30 dark:text-white/25">Consulta i dati senza modificarli. Verifica sempre le decisioni importanti.</p>
+            <p className="mt-2 text-center text-[9px] font-semibold text-black/30 dark:text-white/25">Le azioni reali richiedono sempre la tua conferma.</p>
           </form>
         </section>
       ) : (
