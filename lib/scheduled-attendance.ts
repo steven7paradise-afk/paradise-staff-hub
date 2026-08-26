@@ -35,6 +35,15 @@ export function isRestSchedule(categoryName: string | null | undefined, category
   return name.includes("riposo") || ["R", "RI", "R3", "RIPOSO"].includes(code);
 }
 
+export function isClosedSchedule(categoryName: string | null | undefined, categoryCode: string | null | undefined) {
+  const name = String(categoryName || "").trim().toLowerCase();
+  const code = String(categoryCode || "").trim().toUpperCase();
+  return code === "CHIUSO"
+    || code.startsWith("CHIUSO0")
+    || name.includes("chiuso")
+    || name.includes("chiusura salone");
+}
+
 export function scheduledEntryPolicy({
   plannedStart,
   plannedEnd,
@@ -98,13 +107,15 @@ export function compareScheduledClock({
   now?: Date;
 }) {
   const rest = isRestSchedule(categoryName, categoryCode);
+  const closed = isClosedSchedule(categoryName, categoryCode);
   const { plannedMinutes, deadlineMinutes, officeFlexible } = scheduledEntryPolicy({ plannedStart, plannedEnd, locationName });
   const elapsedMinutes = deadlineMinutes === null ? 0 : Math.max(0, currentRomeMinutes(now) - deadlineMinutes);
   const absent = !rest
+    && !closed
     && !hasApprovedLeave
     && !hasClockEntry
     && deadlineMinutes !== null
     && currentRomeMinutes(now) > deadlineMinutes;
 
-  return { absent, rest, elapsedMinutes, plannedMinutes, deadlineMinutes, officeFlexible };
+  return { absent, rest, closed, elapsedMinutes, plannedMinutes, deadlineMinutes, officeFlexible };
 }

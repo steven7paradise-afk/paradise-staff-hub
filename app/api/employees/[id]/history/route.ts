@@ -6,6 +6,7 @@ import {
   ABSENCE_GRACE_MINUTES,
   currentRomeMinutes,
   expectedShiftEndTime,
+  isClosedSchedule,
   isRestSchedule,
   romeMinutesForInstant,
   scheduledEntryPolicy,
@@ -172,6 +173,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(now);
   for (const schedule of schedules) {
     if (isRestSchedule(schedule.category.name, schedule.category.code)) continue;
+    if (isClosedSchedule(schedule.category.name, schedule.category.code)) continue;
     const plannedStart = schedule.start_time || schedule.category.start_time || null;
     const plannedEnd = schedule.end_time || schedule.category.end_time || null;
     const entryPolicy = scheduledEntryPolicy({

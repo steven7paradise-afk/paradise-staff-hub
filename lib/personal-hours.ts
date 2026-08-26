@@ -1,5 +1,6 @@
 import type { AttendanceType } from "@prisma/client";
 import { calculateClockHours } from "@/lib/work-hours";
+import { isClosedSchedule } from "@/lib/scheduled-attendance";
 
 type Category = {
   name: string;
@@ -82,12 +83,15 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
     const record = recordByDate.get(key);
     const clock = calculateClockHours(logGroups.get(key) ?? []);
     const automaticHours = record?.paid_break ? clock.grossHours : clock.netHours;
+    const paidClosedHours = isClosedSchedule(schedule?.category.name, schedule?.category.code)
+      ? plannedHours(schedule)
+      : 0;
     return {
       date,
       schedule,
       plannedGrossHours: plannedGrossHours(schedule),
       plannedHours: plannedHours(schedule),
-      workedHours: roundedHours(record?.manual_override ? record.hours : automaticHours),
+      workedHours: roundedHours(record?.manual_override ? record.hours : Math.max(automaticHours, paidClosedHours)),
       grossHours: clock.grossHours,
       breakHours: clock.breakHours,
       paidBreak: Boolean(record?.paid_break),
@@ -95,7 +99,7 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
       firstPause: clock.firstPause,
       lastReturn: clock.lastReturn,
       lastExit: clock.lastExit,
-      note: record?.note ?? "",
+      note: record?.note ?? (paidClosedHours > 0 ? "Chiusura salone · ore pagate secondo il planning." : ""),
     };
   });
 }

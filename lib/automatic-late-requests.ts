@@ -4,6 +4,7 @@ import { createNotifications } from "@/lib/notifications";
 import {
   ABSENCE_GRACE_MINUTES,
   currentRomeMinutes,
+  isClosedSchedule,
   isRestSchedule,
   romeMinutesForInstant,
   scheduledEntryPolicy,
@@ -65,6 +66,7 @@ export async function ensureAutomaticLateRequests(day: Date, now = new Date()) {
       plannedMinutes === null
       || deadlineMinutes === null
       || isRestSchedule(schedule.category.name, schedule.category.code)
+      || isClosedSchedule(schedule.category.name, schedule.category.code)
       || approvedLeaveUserIds.has(schedule.user_id)
     ) return [];
 

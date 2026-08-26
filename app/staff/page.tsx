@@ -164,6 +164,8 @@ export default async function StaffPage({
             ? "NESSUN_TURNO"
             : comparison.rest
               ? "RIPOSO"
+              : comparison.closed
+                ? "GIUSTIFICATO"
               : approvedLeaveUserIds.has(user.id)
                 ? "GIUSTIFICATO"
                 : attendanceState.status === "IN"

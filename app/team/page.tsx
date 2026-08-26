@@ -14,6 +14,7 @@ import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { calculateClockHours } from "@/lib/work-hours";
+import { isClosedSchedule } from "@/lib/scheduled-attendance";
 
 export const dynamic = "force-dynamic";
 
@@ -384,10 +385,12 @@ export default async function TeamPage({ searchParams }: { searchParams?: Promis
       const key = dayKey(entry.date);
       const record = recordsByDay.get(key);
       const clock = calculateClockHours(logsByDay.get(key) ?? []);
-      const workedHours = record?.manual_override ? record.hours : record?.paid_break ? clock.grossHours : clock.netHours;
       const plannedStart = entry.start_time ?? entry.category?.start_time;
       const plannedEnd = entry.end_time ?? entry.category?.end_time;
       const scheduledHours = entry.category?.paid_hours ?? categoryDuration(plannedStart, plannedEnd);
+      const automaticHours = record?.paid_break ? clock.grossHours : clock.netHours;
+      const paidClosedHours = isClosedSchedule(entry.category?.name, entry.category?.code) ? scheduledHours : 0;
+      const workedHours = record?.manual_override ? record.hours : Math.max(automaticHours, paidClosedHours);
       const delta = workedHours - scheduledHours;
       if (delta > 0) summary.overtime += delta;
       if (delta < 0) summary.missing += Math.abs(delta);

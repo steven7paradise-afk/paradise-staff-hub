@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { coerceEmployeeScheduleMonth, isEmployeeScheduleMonthVisible, visibleScheduleMonthsForEmployee } from "@/lib/schedule-visibility";
 import { cn } from "@/lib/utils";
 import { calculateClockHours } from "@/lib/work-hours";
+import { isClosedSchedule } from "@/lib/scheduled-attendance";
 import { cookies } from "next/headers";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { MonthSelector, CurrentlyAtWork, TodayShiftCountdown, MonthlyWorkCalendar } from "./client-components";
@@ -191,8 +192,9 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
     
     const clock = calculateClockHours(dayLogs);
     const automaticHours = dayRecord?.paid_break ? clock.grossHours : clock.netHours;
-    const workedHours = dayRecord?.manual_override ? dayRecord.hours : automaticHours;
     const plannedHoursVal = plannedHours(daySchedule);
+    const paidClosedHours = isClosedSchedule(daySchedule?.category.name, daySchedule?.category.code) ? plannedHoursVal : 0;
+    const workedHours = dayRecord?.manual_override ? dayRecord.hours : Math.max(automaticHours, paidClosedHours);
 
     return {
       date,
