@@ -78,6 +78,15 @@ type ContractRow = {
   historyIndex?: number;
 };
 
+type EmploymentHistoryEvent = {
+  id: string;
+  occurredAt: string;
+  type: string;
+  status: string;
+  note: string;
+  timeKnown?: boolean;
+};
+
 type Location = { id: string; name: string };
 type Manager = { id: string; name: string; role: string };
 
@@ -247,6 +256,8 @@ export function StaffDirectory({
     shifts: { count: number; growth: number };
   } | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistoryEvent[]>([]);
+  const [loadingEmploymentHistory, setLoadingEmploymentHistory] = useState(false);
   const [copiedPhotoUrl, setCopiedPhotoUrl] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
 
@@ -271,6 +282,29 @@ export function StaffDirectory({
         .catch(err => console.error("Error loading stats:", err))
         .finally(() => setLoadingStats(false));
     }
+  }, [isEditing, selectedEmployee?.id]);
+
+  useEffect(() => {
+    if (!isEditing || !selectedEmployee?.id) return;
+    let active = true;
+    setLoadingEmploymentHistory(true);
+    fetch(`/api/employees/${selectedEmployee.id}/history`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Storico non disponibile.");
+        return Array.isArray(data.events) ? data.events as EmploymentHistoryEvent[] : [];
+      })
+      .then((events) => {
+        if (active) setEmploymentHistory(events);
+      })
+      .catch((error) => {
+        console.error("Error loading employee history:", error);
+        if (active) setEmploymentHistory([]);
+      })
+      .finally(() => {
+        if (active) setLoadingEmploymentHistory(false);
+      });
+    return () => { active = false; };
   }, [isEditing, selectedEmployee?.id]);
   
   // Modals creation state
@@ -1610,6 +1644,60 @@ export function StaffDirectory({
                         </td>
                       </tr>
                     )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-[#F4E3EA] bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+                    <ListCheck className="size-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico lavorativo</h2>
+                    <p className="mt-1 text-[10px] font-semibold text-neutral-400">Contratti, richieste, giustificazioni e confronto turni/timbrature</p>
+                  </div>
+                </div>
+                <Badge tone="pink">{employmentHistory.length} eventi</Badge>
+              </div>
+
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-[820px] w-full divide-y divide-black/5 text-left text-xs">
+                  <thead>
+                    <tr className="text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                      <th className="py-2.5 pr-4">Data</th>
+                      <th className="py-2.5 pr-4">Ora</th>
+                      <th className="py-2.5 pr-4">Tipo</th>
+                      <th className="py-2.5 pr-4">Stato</th>
+                      <th className="py-2.5">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
+                    {loadingEmploymentHistory ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Caricamento storico...</td></tr>
+                    ) : employmentHistory.length === 0 ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Nessun evento lavorativo registrato.</td></tr>
+                    ) : employmentHistory.map((event) => {
+                      const occurredAt = new Date(event.occurredAt);
+                      const status = event.status.toUpperCase();
+                      const danger = status.includes("ASSENTE") || status.includes("RITARDO") || status.includes("RIFIUTATA");
+                      const success = status.includes("APPROVATA") || status.includes("GIUSTIFICATA") || status.includes("ATTIVO");
+                      return (
+                        <tr key={event.id} className="align-top transition hover:bg-neutral-50/60">
+                          <td className="whitespace-nowrap py-3 pr-4 font-extrabold text-neutral-900">{new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
+                          <td className="whitespace-nowrap py-3 pr-4">{event.timeKnown === false ? "—" : new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(occurredAt)}</td>
+                          <td className="py-3 pr-4 font-extrabold text-neutral-900">{event.type}</td>
+                          <td className="py-3 pr-4">
+                            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wide", danger ? "bg-rose-50 text-rose-700" : success ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+                              {event.status}
+                            </span>
+                          </td>
+                          <td className="max-w-xl py-3 font-normal leading-5 text-neutral-500">{event.note || "—"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
