@@ -23,6 +23,9 @@ const ORDER_LABEL_WIDTH_MM = 90;
 const ORDER_LABEL_HEIGHT_MM = 102;
 const ORDER_LABEL_CANVAS_WIDTH = 1800;
 const ORDER_LABEL_CANVAS_HEIGHT = 2040;
+const ORDER_LABEL_BARCODE_WIDTH = 546; // 30% più stretto rispetto ai precedenti 780 px.
+const ORDER_LABEL_BARCODE_HEIGHT = 164.5; // 30% più basso rispetto ai precedenti 235 px.
+const ORDER_LABEL_BARCODE_X = (900 - ORDER_LABEL_BARCODE_WIDTH) / 2;
 
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
@@ -305,8 +308,8 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <text x="450" y="360" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="57" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 25))}</text>
 
       <text x="450" y="445" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
-      ${code128Svg(barcodeValue, 60, 485, 780, 235)}
-      <text x="450" y="775" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="900" letter-spacing="2" fill="#111">${escapeSvgText(barcodeValue)}</text>
+      ${code128Svg(barcodeValue, ORDER_LABEL_BARCODE_X, 485, ORDER_LABEL_BARCODE_WIDTH, ORDER_LABEL_BARCODE_HEIGHT)}
+      <text x="450" y="705" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="900" letter-spacing="2" fill="#111">${escapeSvgText(barcodeValue)}</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
