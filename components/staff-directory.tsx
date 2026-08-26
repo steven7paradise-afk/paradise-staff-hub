@@ -87,6 +87,24 @@ type EmploymentHistoryEvent = {
   timeKnown?: boolean;
 };
 
+type EmploymentHistoryFilter = "ALL" | "CONTRACTS" | "REQUESTS" | "SICKNESS" | "ATTENDANCE" | "OTHER";
+
+function matchesEmploymentHistoryFilter(event: EmploymentHistoryEvent, filter: EmploymentHistoryFilter) {
+  if (filter === "ALL") return true;
+  const type = event.type.toLowerCase();
+  const status = event.status.toLowerCase();
+  const isContract = type.includes("contratto") || type.includes("rinnovo");
+  const isRequest = type.includes("richiesta") || type.includes("permesso") || type.includes("ferie") || type.includes("riposo");
+  const isSickness = type.includes("malattia") || status.includes("giustificata");
+  const isAttendance = type.includes("ritardo") || type.includes("timbratura") || status.includes("assente") || status.includes("ritardo");
+
+  if (filter === "CONTRACTS") return isContract;
+  if (filter === "REQUESTS") return isRequest;
+  if (filter === "SICKNESS") return isSickness;
+  if (filter === "ATTENDANCE") return isAttendance;
+  return !isContract && !isRequest && !isSickness && !isAttendance;
+}
+
 function employmentHistoryBadgeClass(event: EmploymentHistoryEvent) {
   const status = event.status.toUpperCase();
   const type = event.type.toLowerCase();
@@ -289,6 +307,8 @@ export function StaffDirectory({
   const [loadingStats, setLoadingStats] = useState(false);
   const [employmentHistory, setEmploymentHistory] = useState<EmploymentHistoryEvent[]>([]);
   const [loadingEmploymentHistory, setLoadingEmploymentHistory] = useState(false);
+  const [employmentHistoryExpanded, setEmploymentHistoryExpanded] = useState(false);
+  const [employmentHistoryFilter, setEmploymentHistoryFilter] = useState<EmploymentHistoryFilter>("ALL");
   const [copiedPhotoUrl, setCopiedPhotoUrl] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
 
@@ -314,6 +334,11 @@ export function StaffDirectory({
         .finally(() => setLoadingStats(false));
     }
   }, [isEditing, selectedEmployee?.id]);
+
+  useEffect(() => {
+    setEmploymentHistoryExpanded(false);
+    setEmploymentHistoryFilter("ALL");
+  }, [selectedEmployee?.id]);
 
   useEffect(() => {
     if (!isEditing || !selectedEmployee?.id) return;
@@ -995,6 +1020,13 @@ export function StaffDirectory({
     if (!editForm) return null;
 
     const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm));
+    const initialContractEvent = employmentHistory.find((event) => event.type.toLowerCase() === "inizio contratto") ?? null;
+    const compactEmploymentHistory = [
+      ...(initialContractEvent ? [initialContractEvent] : []),
+      ...employmentHistory.filter((event) => event.id !== initialContractEvent?.id).slice(0, 3),
+    ];
+    const filteredEmploymentHistory = employmentHistory.filter((event) => matchesEmploymentHistoryFilter(event, employmentHistoryFilter));
+    const visibleEmploymentHistory = employmentHistoryExpanded ? filteredEmploymentHistory : compactEmploymentHistory;
 
     const PLATFORMS = [
       { key: "dashboard", label: "Dashboard", val: "/dashboard" },
@@ -1687,7 +1719,7 @@ export function StaffDirectory({
             </div>
 
             <div className="rounded-[28px] border border-[#F4E3EA] bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-3 border-b border-black/5 pb-4">
+              <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
                     <ListCheck className="size-4" />
@@ -1697,7 +1729,37 @@ export function StaffDirectory({
                     <p className="mt-1 text-[10px] font-semibold text-neutral-400">Contratti, richieste, giustificazioni e confronto turni/timbrature</p>
                   </div>
                 </div>
-                <Badge tone="pink">{employmentHistory.length} eventi</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  {employmentHistoryExpanded ? (
+                    <Select
+                      value={employmentHistoryFilter}
+                      onChange={(event) => setEmploymentHistoryFilter(event.target.value as EmploymentHistoryFilter)}
+                      className="min-h-9 w-auto min-w-44 text-xs"
+                      aria-label="Filtra storico lavorativo"
+                    >
+                      <option value="ALL">Tutti gli eventi</option>
+                      <option value="CONTRACTS">Contratti e rinnovi</option>
+                      <option value="REQUESTS">Richieste</option>
+                      <option value="SICKNESS">Malattie</option>
+                      <option value="ATTENDANCE">Ritardi e assenze</option>
+                      <option value="OTHER">Altri eventi</option>
+                    </Select>
+                  ) : null}
+                  <Badge tone="pink">
+                    {employmentHistoryExpanded ? `${filteredEmploymentHistory.length} eventi` : `${compactEmploymentHistory.length} di ${employmentHistory.length}`}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="soft"
+                    onClick={() => {
+                      setEmploymentHistoryExpanded((current) => !current);
+                      setEmploymentHistoryFilter("ALL");
+                    }}
+                    className="min-h-9 rounded-xl bg-[#FFF0F7] px-3 text-xs font-extrabold text-[#B83D7F]"
+                  >
+                    {employmentHistoryExpanded ? "Mostra meno" : "Vedi tutto"}
+                  </Button>
+                </div>
               </div>
 
               <div className="mt-4 overflow-x-auto">
@@ -1714,9 +1776,9 @@ export function StaffDirectory({
                   <tbody className="divide-y divide-black/5 font-semibold text-neutral-700">
                     {loadingEmploymentHistory ? (
                       <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Caricamento storico...</td></tr>
-                    ) : employmentHistory.length === 0 ? (
+                    ) : visibleEmploymentHistory.length === 0 ? (
                       <tr><td colSpan={5} className="py-8 text-center text-neutral-400">Nessun evento lavorativo registrato.</td></tr>
-                    ) : employmentHistory.map((event) => {
+                    ) : visibleEmploymentHistory.map((event) => {
                       const occurredAt = new Date(event.occurredAt);
                       return (
                         <tr key={event.id} className="align-top transition hover:bg-neutral-50/60">
