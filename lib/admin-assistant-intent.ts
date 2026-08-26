@@ -28,3 +28,22 @@ export function requestedTeamStatus(messages: ConversationMessage[]): TeamStatus
   }
   return null;
 }
+
+export function requestedTaskStatus(text: string) {
+  const normalized = text.toLocaleLowerCase("it");
+  if (/complet|conclus|finit/.test(normalized)) return "COMPLETED";
+  if (/scadut|in ritardo/.test(normalized)) return "OVERDUE";
+  if (/in corso|attiv/.test(normalized)) return "ACTIVE";
+  if (/in attesa|aspett/.test(normalized)) return "WAITING";
+  if (/nuov/.test(normalized)) return "NEW";
+  return null;
+}
+
+export function requiredAssistantTool(text: string) {
+  const normalized = text.toLocaleLowerCase("it");
+  if (/\btask\b|compito|attività assegnata/.test(normalized)) return "get_task_overview";
+  if (/controllo cliente|scheda cliente|cliente.+(chi ha|cosa (è stato|ha)|servizio|pagamento|ordine)/.test(normalized)) return "search_client_controls";
+  if (/fattur/.test(normalized)) return "get_invoice_status";
+  if (/contratt|prorog|rinnov|cedolin|bust[ae] pag|\bcud\b|certificazione unica/.test(normalized)) return "get_document_status";
+  return null;
+}

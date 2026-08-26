@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requestedTeamStatus } from "../lib/admin-assistant-intent";
+import { requiredAssistantTool, requestedTaskStatus, requestedTeamStatus } from "../lib/admin-assistant-intent";
 
 test("recognizes a direct question about people currently on break", () => {
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi è in pausa?" }]), "IN_PAUSA");
@@ -20,4 +20,16 @@ test("does not turn a generic staff question into a status filter", () => {
 
 test("recognizes current absences without mixing them with breaks", () => {
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi non è entrato oggi?" }]), "NON_ENTRATO");
+});
+
+test("recognizes a completed-task question without relying on the model", () => {
+  assert.equal(requestedTaskStatus("Steven ha completato task oggi?"), "COMPLETED");
+});
+
+test("forces a database search for task questions", () => {
+  assert.equal(requiredAssistantTool("Steven ha completato task oggi?"), "get_task_overview");
+});
+
+test("forces Controllo Cliente search for a named client", () => {
+  assert.equal(requiredAssistantTool("Nel controllo cliente chi ha lavorato su Maria Rossi?"), "search_client_controls");
 });

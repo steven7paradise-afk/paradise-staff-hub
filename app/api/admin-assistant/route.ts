@@ -2,7 +2,8 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { requestedTeamStatus, type TeamStatusScope } from "@/lib/admin-assistant-intent";
+import { buildAssistantDateContext, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
+import { requiredAssistantTool, requestedTaskStatus, requestedTeamStatus, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
@@ -28,6 +29,7 @@ const APP_PAGES = {
   documents: { path: "/documents", label: "Documenti" },
   payslips: { path: "/cedolini", label: "Cedolini" },
   invoices: { path: "/invoices", label: "Fatture" },
+  client_control: { path: "/client-control", label: "Controllo Cliente" },
   cash: { path: "/cash", label: "Cassa" },
 } as const;
 
@@ -156,7 +158,7 @@ const tools = [
   {
     type: "function",
     name: "get_task_overview",
-    description: "Legge riepilogo e task recenti, inclusi assegnatari, scadenze e stato.",
+    description: "Legge task con filtri precisi per stato, assegnatario e intervallo. Per 'Steven ha completato task oggi?' usa status COMPLETED, employee_name Steven e l'intervallo di oggi.",
     strict: true,
     parameters: {
       type: "object",
@@ -166,8 +168,11 @@ const tools = [
           enum: ["NEW", "ACTIVE", "WAITING", "COMPLETED", "OVERDUE", null],
           description: "Filtro opzionale per stato; OVERDUE indica task scadute non completate.",
         },
+        employee_name: { type: ["string", "null"], description: "Nome dell'assegnatario; null soltanto per domande collettive." },
+        date_from: { type: ["string", "null"], description: "Inizio intervallo ISO incluso; null se non richiesto." },
+        date_to: { type: ["string", "null"], description: "Fine intervallo ISO esclusa; null se non richiesto." },
       },
-      required: ["status"],
+      required: ["status", "employee_name", "date_from", "date_to"],
       additionalProperties: false,
     },
   },
@@ -269,6 +274,22 @@ const tools = [
         status: { type: ["string", "null"], enum: ["NEW", "EMESSA", "ANNULLATA", null] },
       },
       required: ["month", "year", "status"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "search_client_controls",
+    description: "Cerca le schede Controllo Cliente per nome cliente e periodo. Restituisce chi ha lavorato sulla cliente, responsabile, servizi/prodotti, importi, metodo di pagamento, ordine, note, sede e data. Usalo per domande come 'chi ha fatto Maria Rossi?' o 'cosa è stato fatto alla cliente X?'.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        client_name: { type: "string", description: "Nome completo o parte del nome della cliente." },
+        month: { type: ["integer", "null"], minimum: 1, maximum: 12 },
+        year: { type: ["integer", "null"], minimum: 2024, maximum: 2100 },
+      },
+      required: ["client_name", "month", "year"],
       additionalProperties: false,
     },
   },
@@ -613,15 +634,31 @@ async function getTeamStatus(scope: TeamStatusScope | null) {
   };
 }
 
-async function getTaskOverview(status: string | null) {
+async function getTaskOverview(status: string | null, employeeName: string | null, dateFrom: string | null, dateTo: string | null) {
   const now = new Date();
-  const where = status === "OVERDUE"
+  const resolved = employeeName ? await resolveEmployee(employeeName) : null;
+  if (resolved && !resolved.employee) {
+    return { count: 0, tasks: [], error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
+  }
+  const start = dateFrom ? new Date(dateFrom) : null;
+  const end = dateTo ? new Date(dateTo) : null;
+  const validPeriod = start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start < end
+    ? { start, end }
+    : null;
+  const baseWhere: Prisma.StaffTaskWhereInput = resolved?.employee ? { assignees: { some: { id: resolved.employee.id } } } : {};
+  const statusWhere: Prisma.StaffTaskWhereInput = status === "OVERDUE"
     ? { status: { not: "COMPLETED" }, due_date: { lt: now } }
     : status
       ? { status }
       : {};
+  const periodWhere: Prisma.StaffTaskWhereInput = validPeriod
+    ? status === "COMPLETED"
+      ? { completed_at: { gte: validPeriod.start, lt: validPeriod.end } }
+      : { updated_at: { gte: validPeriod.start, lt: validPeriod.end } }
+    : {};
+  const where: Prisma.StaffTaskWhereInput = { ...baseWhere, ...statusWhere, ...periodWhere };
   const [groups, recent] = await Promise.all([
-    prisma.staffTask.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.staffTask.groupBy({ by: ["status"], where: baseWhere, _count: { _all: true } }),
     prisma.staffTask.findMany({
       where,
       select: {
@@ -630,6 +667,7 @@ async function getTaskOverview(status: string | null) {
         status: true,
         priority: true,
         due_date: true,
+        completed_at: true,
         updated_at: true,
         location: { select: { name: true } },
         assignees: { select: { name: true } },
@@ -640,14 +678,18 @@ async function getTaskOverview(status: string | null) {
   ]);
 
   return {
+    count: recent.length,
+    requestedEmployee: resolved?.employee?.name || null,
+    period: validPeriod ? { from: validPeriod.start.toISOString(), to: validPeriod.end.toISOString() } : null,
     totals: Object.fromEntries(groups.map((group) => [group.status, group._count._all])),
-    overdue: await prisma.staffTask.count({ where: { status: { not: "COMPLETED" }, due_date: { lt: now } } }),
+    overdue: await prisma.staffTask.count({ where: { ...baseWhere, status: { not: "COMPLETED" }, due_date: { lt: now } } }),
     tasks: recent.map((task) => ({
       id: task.id,
       title: task.title,
       status: task.status,
       priority: task.priority,
       dueDate: task.due_date?.toISOString() || null,
+      completedAt: task.completed_at?.toISOString() || null,
       location: task.location.name,
       assignees: task.assignees.map((person) => person.name),
     })),
@@ -676,6 +718,22 @@ async function resolveEmployee(employeeName: string) {
     error: candidates.length ? "Nome ambiguo: specifica il nome completo." : `Nessun lavoratore attivo trovato per “${query}”.`,
     candidates: candidates.map((candidate) => candidate.name),
   };
+}
+
+async function mentionedEmployeeName(text: string) {
+  const normalizedText = text.toLocaleLowerCase("it");
+  const workers = await prisma.user.findMany({
+    where: activeStaffWhere(),
+    select: { name: true },
+    orderBy: { name: "asc" },
+  });
+  const fullMatches = workers.filter((worker) => normalizedText.includes(worker.name.toLocaleLowerCase("it")));
+  if (fullMatches.length === 1) return fullMatches[0].name;
+  const firstNameMatches = workers.filter((worker) => {
+    const firstName = worker.name.trim().split(/\s+/)[0]?.toLocaleLowerCase("it");
+    return firstName && new RegExp(`(^|[^a-zà-öø-ÿ])${firstName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-zà-öø-ÿ]|$)`, "i").test(normalizedText);
+  });
+  return firstNameMatches.length === 1 ? firstNameMatches[0].name : null;
 }
 
 function monthBounds(month: number, year: number) {
@@ -1024,6 +1082,70 @@ async function getInvoiceStatus(month: number, year: number, status: string | nu
   };
 }
 
+function answerNames(value: unknown) {
+  const values = Array.isArray(value) ? value : value === null || value === undefined || value === "" ? [] : [value];
+  return values.map((item) => {
+    if (typeof item === "string" || typeof item === "number") return String(item).trim();
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const record = item as Record<string, unknown>;
+      return String(record.name || record.label || record.value || "").trim();
+    }
+    return "";
+  }).filter(Boolean);
+}
+
+function answerMoney(value: unknown) {
+  const raw = String(value ?? "0").trim();
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function searchClientControls(clientName: string, month: number | null, year: number | null) {
+  const query = clientName.trim().toLocaleLowerCase("it").slice(0, 120);
+  if (query.length < 2) return { count: 0, controls: [], error: "Indica almeno due lettere del nome cliente." };
+  const period = month && year ? monthBounds(month, year) : null;
+  const responses = await prisma.serviceFormResponse.findMany({
+    where: {
+      ...(period ? { created_at: { gte: period.start, lt: period.end } } : {}),
+      form: { name: { contains: "controllo cliente", mode: "insensitive" } },
+    },
+    select: { id: true, status: true, created_at: true, updated_at: true, answers: true, user_location_name: true, user: { select: { name: true } } },
+    orderBy: { created_at: "desc" },
+    take: 1000,
+  });
+  const matches = responses.filter((response) => {
+    const answers = response.answers && typeof response.answers === "object" && !Array.isArray(response.answers) ? response.answers as Record<string, unknown> : {};
+    return String(answers.client_control_client_name || "").trim().toLocaleLowerCase("it").includes(query);
+  });
+  return {
+    requestedClient: clientName.trim(),
+    period: period ? { month, monthName: monthName(month!), year } : null,
+    count: matches.length,
+    controls: matches.slice(0, 30).map((response) => {
+      const answers = response.answers as Record<string, unknown>;
+      return {
+        id: response.id,
+        client: String(answers.client_control_client_name || "Cliente non indicato"),
+        date: response.created_at.toISOString(),
+        updatedAt: response.updated_at.toISOString(),
+        status: response.status,
+        location: String(answers.client_control_location || response.user_location_name || "Nessuna sede"),
+        serviceOwner: answerNames(answers.client_control_service_owner),
+        serviceStaff: answerNames(answers.client_control_service_staff),
+        productsOrServices: answerNames(answers.client_control_products_list || answers.client_control_service_title || answers.service_title),
+        paid: answerMoney(answers.client_control_paid || answers.client_control_declared_paid),
+        depositPaid: answerMoney(answers.client_control_deposit_paid),
+        paymentMethod: String(answers.client_control_payment_method || answers.client_control_declared_payment_method || "Non indicato"),
+        paymentVerified: Boolean(answers.client_control_payment_verified),
+        shopifyOrder: String(answers.client_control_shopify_order || ""),
+        notes: String(answers.client_control_notes_text || answers.client_control_shopify_order_note || ""),
+        submittedBy: response.user.name,
+      };
+    }),
+  };
+}
+
 function cashDateKey(date: Date) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Rome",
@@ -1229,6 +1351,40 @@ function assistantCards(toolName: string, output: unknown, question: string): As
     });
   }
 
+  if (toolName === "get_task_overview" && Array.isArray(data.tasks)) {
+    return (data.tasks as Array<Record<string, unknown>>).slice(0, 20).map((task, index) => ({
+      id: String(task.id || `task-${index}`),
+      person: String(data.requestedEmployee || (Array.isArray(task.assignees) ? task.assignees.join(", ") : "Team")),
+      photoUrl: null,
+      status: String(task.status || "Task"),
+      type: "Task",
+      location: String(task.location || "Nessuna sede"),
+      date: typeof task.completedAt === "string" ? task.completedAt : typeof task.dueDate === "string" ? task.dueDate : null,
+      time: null,
+      detail: String(task.title || "Task senza titolo"),
+      tone: task.status === "COMPLETED" ? "green" : task.status === "ACTIVE" ? "blue" : "amber",
+    }));
+  }
+
+  if (toolName === "search_client_controls" && Array.isArray(data.controls)) {
+    return (data.controls as Array<Record<string, unknown>>).slice(0, 20).map((control, index) => {
+      const staff = Array.isArray(control.serviceStaff) ? control.serviceStaff.join(", ") : "Personale non indicato";
+      const services = Array.isArray(control.productsOrServices) ? control.productsOrServices.join(", ") : "Servizio non specificato";
+      return {
+        id: String(control.id || `client-control-${index}`),
+        person: String(control.client || "Cliente"),
+        photoUrl: null,
+        status: "Controllo registrato",
+        type: services,
+        location: String(control.location || "Nessuna sede"),
+        date: typeof control.date === "string" ? control.date : null,
+        time: null,
+        detail: `Personale: ${staff} · Pagato: ${euroMetric(control.paid)}`,
+        tone: "violet",
+      };
+    });
+  }
+
   return [];
 }
 
@@ -1295,7 +1451,15 @@ function safeJson(value: string) {
   }
 }
 
-async function executeTool(call: ToolCall, actorId: string, impliedTeamScope: TeamStatusScope | null) {
+async function executeTool(
+  call: ToolCall,
+  actorId: string,
+  impliedTeamScope: TeamStatusScope | null,
+  impliedMonthPeriod: { month: number; year: number } | null,
+  impliedDayPeriod: { day: string; start: string; end: string } | null,
+  impliedTaskStatus: string | null,
+  impliedEmployeeName: string | null,
+) {
   const args = safeJson(call.arguments);
   if (call.name === "remember_instruction") return rememberInstruction(args, actorId);
   if (call.name === "list_memories") return listMemories(args);
@@ -1308,48 +1472,58 @@ async function executeTool(call: ToolCall, actorId: string, impliedTeamScope: Te
     return { output: await getTeamStatus(impliedTeamScope || requestedScope) };
   }
   if (call.name === "get_task_overview") {
-    return { output: await getTaskOverview(typeof args.status === "string" ? args.status : null), link: APP_PAGES.tasks };
+    const status = impliedTaskStatus || (typeof args.status === "string" ? args.status : null);
+    const employeeName = impliedEmployeeName || (typeof args.employee_name === "string" ? args.employee_name : null);
+    const dateFrom = impliedDayPeriod?.start || (typeof args.date_from === "string" ? args.date_from : null);
+    const dateTo = impliedDayPeriod?.end || (typeof args.date_to === "string" ? args.date_to : null);
+    return { output: await getTaskOverview(status, employeeName, dateFrom, dateTo), link: APP_PAGES.tasks };
   }
   if (call.name === "get_requests_overview") {
     const type = typeof args.type === "string" ? args.type : null;
     const link = type === "MALATTIA" ? APP_PAGES.sickness : APP_PAGES.requests;
-    const employeeName = typeof args.employee_name === "string" ? args.employee_name : null;
-    const month = Number.isInteger(args.month) ? Number(args.month) : null;
-    const year = Number.isInteger(args.year) ? Number(args.year) : null;
+    const employeeName = impliedEmployeeName || (typeof args.employee_name === "string" ? args.employee_name : null);
+    const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Number(args.month) : null);
+    const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Number(args.year) : null);
     return { output: await getRequestsOverview(type, args.pending_only === true, employeeName, month, year), link };
   }
   if (call.name === "get_employee_month_overview") {
-    const employeeName = String(args.employee_name || "").trim();
-    const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
-    const year = Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
+    const employeeName = impliedEmployeeName || String(args.employee_name || "").trim();
+    const month = impliedMonthPeriod?.month ?? Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
+    const year = impliedMonthPeriod?.year ?? Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
     return { output: await getEmployeeMonthOverview(employeeName, month, year), link: APP_PAGES.staff };
   }
   if (call.name === "get_schedule_month_status") {
-    const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
-    const year = Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
+    const month = impliedMonthPeriod?.month ?? Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
+    const year = impliedMonthPeriod?.year ?? Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
     return { output: await getScheduleMonthStatus(month, year), link: APP_PAGES.schedules };
   }
   if (call.name === "get_payslip_month_status") {
-    const month = Number.isInteger(args.month) ? Number(args.month) : null;
-    const year = Number.isInteger(args.year) ? Number(args.year) : null;
+    const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Number(args.month) : null);
+    const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Number(args.year) : null);
     return { output: await getPayslipMonthStatus(month, year), link: APP_PAGES.payslips };
   }
   if (call.name === "get_document_status") {
     const documentType = typeof args.document_type === "string" ? args.document_type : "ALL";
-    const employeeName = typeof args.employee_name === "string" ? args.employee_name : null;
-    const month = Number.isInteger(args.month) ? Number(args.month) : null;
-    const year = Number.isInteger(args.year) ? Number(args.year) : null;
+    const employeeName = impliedEmployeeName || (typeof args.employee_name === "string" ? args.employee_name : null);
+    const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Number(args.month) : null);
+    const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Number(args.year) : null);
     return { output: await getDocumentStatus(documentType, employeeName, month, year), link: APP_PAGES.documents };
   }
   if (call.name === "get_invoice_status") {
-    const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
-    const year = Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
+    const month = impliedMonthPeriod?.month ?? Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
+    const year = impliedMonthPeriod?.year ?? Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
     const status = typeof args.status === "string" ? args.status : null;
     return { output: await getInvoiceStatus(month, year, status), link: APP_PAGES.invoices };
   }
+  if (call.name === "search_client_controls") {
+    const clientName = String(args.client_name || "").trim();
+    const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Number(args.month) : null);
+    const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Number(args.year) : null);
+    return { output: await searchClientControls(clientName, month, year), link: APP_PAGES.client_control };
+  }
   if (call.name === "get_cash_overview") {
-    const month = Number.isInteger(args.month) ? Math.min(12, Math.max(1, Number(args.month))) : null;
-    const year = Number.isInteger(args.year) ? Math.min(2100, Math.max(2024, Number(args.year))) : null;
+    const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Math.min(12, Math.max(1, Number(args.month))) : null);
+    const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Math.min(2100, Math.max(2024, Number(args.year))) : null);
     return { output: await getCashOverview(month, year), link: APP_PAGES.cash };
   }
   if (call.name === "navigate_app") {
@@ -1425,16 +1599,24 @@ export async function POST(request: NextRequest) {
     ? persistentMemories.map((memory, index) => `${index + 1}. [${memory.category}] ${memory.content}`).join("\n")
     : "Nessuna memoria amministrativa salvata.";
 
-  const todayRome = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", dateStyle: "full" }).format(new Date());
-  const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty. Oggi è ${todayRome}.
+  const dateContext = buildAssistantDateContext();
+  const impliedMonthPeriod = requestedMonthPeriod(lastUserMessage, dateContext);
+  const impliedDayPeriod = requestedDayPeriod(lastUserMessage, dateContext);
+  const impliedTaskStatus = requestedTaskStatus(lastUserMessage);
+  const impliedEmployeeName = await mentionedEmployeeName(lastUserMessage);
+  const requiredTool = requiredAssistantTool(lastUserMessage);
+  const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
+DATA AUTORITATIVA DEL SERVER (non usare la data interna del modello): oggi ${dateContext.todayLabel}, ISO ${dateContext.today}, fuso ${dateContext.timeZone}; ieri ${dateContext.yesterday}; domani ${dateContext.tomorrow}; settimana corrente ${dateContext.weekStart} - ${dateContext.weekEnd}; mese corrente ${dateContext.currentMonthName} ${dateContext.currentYear}; mese precedente ${dateContext.previousMonthName} ${dateContext.previousMonthYear}.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
 PRECISIONE OBBLIGATORIA: se la domanda contiene il nome di una persona, usa uno strumento con employee_name e non presentare mai risultati di altre persone come risposta. Se lo strumento restituisce nome ambiguo, candidati o persona non trovata, fermati e chiedi di scegliere/specificare: non concludere che non esistono dati.
 Per domande come “come va [persona] questo mese?”, “ha fatto ritardi?”, “quanti turni ha fatto?” o riepiloghi mensili individuali usa get_employee_month_overview. Per una singola categoria puoi usare get_requests_overview, sempre con employee_name e mese/anno quando citati.
+Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto.
 “In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
 Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
 Usa get_document_status per contratti, proroghe/rinnovi, cedolini/buste paga, CUD e documenti HR. “Cedolino” e “busta paga” corrispondono a BUSTA_PAGA; proroga e rinnovo corrispondono a PROROGA. Usa get_invoice_status per fatture emesse/da fare/annullate e non confondere le fatture con i documenti del personale.
+Usa search_client_controls quando viene nominata una cliente o viene chiesto chi ha lavorato su una cliente, cosa è stato fatto, prodotti/servizi, pagamento, ordine o note. Non mostrare email o telefono della cliente.
 Usa get_cash_overview per qualsiasi domanda su cassa, cash disponibile, chiusure, fondo, prelievi, versamenti o scostamenti. Distingui sempre disponibilità del periodo aperto, dichiarato del mese e contanti attesi da Shopify. Se Shopify non è disponibile, dichiaralo senza stimare valori.
 Se l'amministratore chiede “cosa posso chiederti?”, “che domande posso farti?” o chiede esempi, presenta un elenco ordinato e realistico con queste categorie ed esempi:
 - Presenze ora: chi è in pausa, in turno, uscito o non entrato.
@@ -1443,6 +1625,7 @@ Se l'amministratore chiede “cosa posso chiederti?”, “che domande posso far
 - Task: come stanno andando; quali sono scadute, attive o completate.
 - Documenti HR: è caricato il contratto di una persona; ci sono proroghe/rinnovi; sono caricati cedolini/buste paga del mese; chi manca; è presente il CUD.
 - Fatture: quante richieste ci sono questo mese; quante fatture sono state emesse o sono ancora da fare; importo totale.
+- Controllo Cliente: chi ha lavorato sulla cliente X; cosa è stato fatto; quali prodotti/servizi, pagamento, ordine e note risultano nella scheda.
 - Cassa: cash disponibile; chiusure, prelievi, scostamenti e giorni da verificare.
 - Comunicazioni: prepara una comunicazione professionale collegata a una persona o task, sempre con conferma prima dell'invio.
 Non dichiarare capacità fuori da questo elenco senza uno strumento reale.
@@ -1471,7 +1654,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
         instructions,
         input,
         tools,
-        tool_choice: "auto",
+        tool_choice: round === 0 && requiredTool ? { type: "function", name: requiredTool } : "auto",
         parallel_tool_calls: false,
         store: false,
         max_output_tokens: 900,
@@ -1485,7 +1668,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
 
       input.push(...(response.output || []));
       for (const call of calls) {
-        const result = await executeTool(call, session.user.id, impliedTeamScope) as {
+        const result = await executeTool(call, session.user.id, impliedTeamScope, impliedMonthPeriod, impliedDayPeriod, impliedTaskStatus, impliedEmployeeName) as {
           output: unknown;
           link?: { path: string; label: string };
           navigation?: { path: string; label: string };
