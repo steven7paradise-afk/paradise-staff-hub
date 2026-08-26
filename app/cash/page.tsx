@@ -214,13 +214,14 @@ function vaultWithdrawalRecordToResponse(record: any) {
   };
 }
 
-export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string }> }) {
+export default async function CashDashboardPage(props: { searchParams: Promise<{ month?: string; day?: string; vault?: string }> }) {
   const searchParams = await props.searchParams;
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
   const role = session.user.role as Role;
   const canEditClosingAmount = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
+  const showAllVaultWithdrawals = searchParams.vault === "all";
 
   const accessUser = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -341,6 +342,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
     const accountingDate = vaultAccountingDate(response);
     return accountingDate >= start && accountingDate < end;
   });
+  const visibleVaultWithdrawals = showAllVaultWithdrawals ? vaultWithdrawals : vaultWithdrawals.slice(0, 3);
+  const vaultToggleHref = `/cash?month=${selectedMonth}${searchParams.day ? `&day=${encodeURIComponent(searchParams.day)}` : ""}${showAllVaultWithdrawals ? "" : "&vault=all"}#prelievi-autorizzati`;
 
   const responses = latestClosingsByLocationDay(closingRecords.filter((response) => {
     const accountingDate = cashAccountingDate(response);
@@ -1159,12 +1162,12 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </Card>
         </section>
 
-        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
+        <Card id="prelievi-autorizzati" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Cassaforte</p>
               <h2 className="mt-1 text-2xl font-black">Prelievi autorizzati</h2>
-              <p className="mt-1 text-sm text-black/45">Registro mensile di chi ha prelevato soldi dalla cassaforte e per quale motivo.</p>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-black/45">Gli ultimi prelievi del mese, ordinati dal più recente. Ogni registrazione mostra importo, motivo, sede, operatore e ricevuta.</p>
             </div>
             <div className="rounded-2xl bg-[#111017] px-4 py-3 text-right text-white">
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Totale uscito</p>
@@ -1172,21 +1175,21 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             </div>
           </div>
           <div className="divide-y divide-black/5">
-            {vaultWithdrawals.map((response) => {
+            {visibleVaultWithdrawals.map((response, index) => {
               const dateLabel = new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(vaultAccountingDate(response));
               const receipt = answer(response, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null;
               return (
-                <div key={response.id} className="grid gap-4 p-5 lg:grid-cols-[160px_170px_1fr_220px] lg:items-center">
+                <article key={response.id} className="grid gap-4 p-5 transition hover:bg-[#FFFBFD] lg:grid-cols-[150px_170px_1fr_230px] lg:items-center">
                   <div>
-                    <p className="text-[10px] font-black uppercase text-black/35">Giorno</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-black/35">Prelievo {index + 1}</p>
                     <p className="mt-1 font-black">{dateLabel}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-black/35">Somma</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-black/35">Importo</p>
                     <p className="mt-1 text-lg font-black text-[#A74758]">{formatMoney(moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)))}</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase text-black/35">Motivo</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-black/35">Motivo del prelievo</p>
                     <p className="mt-1 break-words text-sm font-semibold leading-6 text-black/65">
                       {String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "Motivo non indicato")}
                     </p>
@@ -1211,7 +1214,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       Registrato {new Date(response.created_at).toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
-                </div>
+                </article>
               );
             })}
             {vaultWithdrawals.length === 0 ? (
@@ -1220,6 +1223,17 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               </div>
             ) : null}
           </div>
+          {vaultWithdrawals.length > 3 ? (
+            <div className="flex flex-col items-center gap-2 border-t border-black/5 bg-[#FAF7F9] px-5 py-4 sm:flex-row sm:justify-between">
+              <p className="text-xs font-semibold text-black/45">
+                {showAllVaultWithdrawals ? `Stai vedendo tutti i ${vaultWithdrawals.length} prelievi del mese.` : `Mostrati i 3 prelievi più recenti su ${vaultWithdrawals.length}.`}
+              </p>
+              <Link href={vaultToggleHref} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[#111017] px-5 text-xs font-black text-white transition hover:bg-black">
+                {showAllVaultWithdrawals ? "Mostra solo gli ultimi 3" : `Vedi gli altri ${vaultWithdrawals.length - 3}`}
+                {showAllVaultWithdrawals ? <ChevronLeft className="size-4 rotate-90" /> : <ChevronRight className="size-4 rotate-90" />}
+              </Link>
+            </div>
+          ) : null}
         </Card>
 
         <Card id="movimenti-cassa" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
@@ -1257,7 +1271,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1180px] text-left text-sm">
-              <thead className="bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40">
+              <thead className="sticky top-0 z-10 bg-[#FAF7F9] text-[10px] font-black uppercase tracking-[0.14em] text-black/40 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
                 <tr>
                   <th className="px-5 py-3">Data</th>
                   <th className="px-5 py-3">Tipo</th>
@@ -1275,7 +1289,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     ? answer(movement.vault, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null
                     : null;
                   return (
-                    <tr key={movement.id} className="align-top">
+                    <tr key={movement.id} className="align-top transition hover:bg-[#FFFBFD]">
                       <td className="px-5 py-4 font-bold">
                         {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(movement.date)}
                       </td>
@@ -1301,7 +1315,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       <td className="max-w-[420px] px-5 py-4 text-xs leading-5 text-black/55">
                         <p className="font-semibold text-black/65">{movement.detail}</p>
                         {movement.note && movement.note !== "-" ? (
-                          <p className="mt-2 whitespace-pre-wrap rounded-xl border border-black/5 bg-[#FAF7F9] p-3 text-[11px] leading-5 text-black/55">{movement.note}</p>
+                          <div className="mt-2 rounded-xl border border-black/5 bg-[#FAF7F9] p-3">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-black/35">Note registrazione</p>
+                            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-5 text-black/55">{movement.note}</p>
+                          </div>
                         ) : null}
                         {movement.closing && shopifyRevenue.available ? (
                           <div className="mt-2 rounded-xl border border-black/5 bg-[#FAF7F9] p-3">
@@ -1315,27 +1332,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                             </div>
                           </div>
                         ) : null}
-                        {review ? (
-                          <div className="mt-2 space-y-1">
-                            <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${cashReviewClass(review.status)}`}>
-                              {cashReviewLabel(review.status)}
-                            </span>
-                            {review.reviewed_by_name ? (
-                              <p className="font-black text-black/55">
-                                Ultimo controllo: {review.reviewed_by_name}
-                                {review.reviewed_at ? ` - ${new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(review.reviewed_at))}` : ""}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {review?.note ? <p className="mt-2 font-bold text-[#A74758]">Resp: {review.note}</p> : null}
                         {receipt?.url ? (
                           <a href={receipt.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex font-black text-[#A74758] underline-offset-4 hover:underline">
                             Vedi foto scontrino
                           </a>
                         ) : null}
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="min-w-[320px] px-5 py-4">
                         {movement.closing ? <CashReviewActions closingId={movement.closing.id} initialReview={review!} compact /> : <span className="text-xs font-semibold text-black/35">Registrato</span>}
                       </td>
                     </tr>
