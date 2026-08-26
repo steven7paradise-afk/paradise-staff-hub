@@ -7,7 +7,7 @@ import {
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
-  Archive, Plus, Trash2, UserPlus, Printer, ExternalLink,
+  Archive, Plus, Trash2, UserPlus, Printer, ExternalLink, Pencil,
   ChevronLeft, Copy, Check, HeartPulse, Users, UserX, AlarmClock
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
@@ -303,6 +303,7 @@ export function StaffDirectory({
   const [pinConfirmInput, setPinConfirmInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [showRenewalForm, setShowRenewalForm] = useState(false);
+  const [editingRenewalIndex, setEditingRenewalIndex] = useState<number | null>(null);
   const [renewalDraft, setRenewalDraft] = useState({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
   const [stats, setStats] = useState<{
     jobs: { count: number; growth: number };
@@ -382,14 +383,14 @@ export function StaffDirectory({
     setEmploymentHistory((current) => {
       const withoutDocument = current.filter((event) => event.id !== `document-renewal-${document.id}`);
       const normalizedType = document.type.toUpperCase();
-      if (normalizedType !== "PROROGA" && normalizedType !== "RINNOVO") return withoutDocument;
+      if (!["CONTRATTO", "PROROGA", "RINNOVO"].includes(normalizedType)) return withoutDocument;
       const occurredAt = document.documentDate
         ? new Date(`${document.documentDate}T12:00:00.000Z`).toISOString()
         : document.createdAt;
       const event: EmploymentHistoryEvent = {
         id: `document-renewal-${document.id}`,
         occurredAt,
-        type: normalizedType === "PROROGA" ? "Proroga contratto" : "Rinnovo contratto",
+        type: normalizedType === "PROROGA" ? "Proroga contratto" : normalizedType === "CONTRATTO" ? "Contratto caricato" : "Rinnovo contratto",
         status: "REGISTRATA",
         note: `${document.title} · documento presente nell'archivio del dipendente.`,
         timeKnown: !document.documentDate,
@@ -723,6 +724,7 @@ export function StaffDirectory({
 
   const resetRenewalForm = () => {
     setShowRenewalForm(false);
+    setEditingRenewalIndex(null);
     setRenewalDraft({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
   };
 
@@ -989,7 +991,25 @@ export function StaffDirectory({
       documentId: "",
     });
     setShowRenewalForm(true);
+    setEditingRenewalIndex(null);
     setErrorMsg("");
+  };
+
+  const openRenewalEditForm = (historyIndex: number) => {
+    if (!editForm) return;
+    const item = getContractHistory(editForm)[historyIndex];
+    if (!item) return;
+    setRenewalDraft({
+      tipo: item.tipo || "Proroga",
+      startDate: item.startDate || "",
+      endDate: item.endDate || "",
+      note: item.note || "",
+      documentId: item.documentId || "",
+    });
+    setEditingRenewalIndex(historyIndex);
+    setShowRenewalForm(true);
+    setErrorMsg("");
+    setSuccessMsg("");
   };
 
   const planContractRenewal = async () => {
@@ -1016,20 +1036,24 @@ export function StaffDirectory({
       return;
     }
 
-    const nextHistory: ContractHistoryItem[] = [
-      ...getContractHistory(editForm),
-      {
-        tipo: renewalDraft.tipo,
-        startDate: renewalDraft.startDate,
-        endDate: renewalDraft.endDate,
-        status: "Registrata",
-        renewedAt: new Date().toISOString(),
-        note: renewalDraft.note.trim() || "Documento collegato",
-        documentId: linkedDocument.id,
-        documentTitle: linkedDocument.title,
-        documentUrl: linkedDocument.fileUrl,
-      },
-    ];
+    const historyItem: ContractHistoryItem = {
+      tipo: renewalDraft.tipo,
+      startDate: renewalDraft.startDate,
+      endDate: renewalDraft.endDate,
+      status: "Registrata",
+      renewedAt: editingRenewalIndex === null
+        ? new Date().toISOString()
+        : getContractHistory(editForm)[editingRenewalIndex]?.renewedAt || new Date().toISOString(),
+      note: renewalDraft.note.trim() || "Documento collegato",
+      documentId: linkedDocument.id,
+      documentTitle: linkedDocument.title,
+      documentUrl: linkedDocument.fileUrl,
+    };
+    const currentHistory = getContractHistory(editForm);
+    const historyIndex = editingRenewalIndex ?? currentHistory.length;
+    const nextHistory: ContractHistoryItem[] = editingRenewalIndex === null
+      ? [...currentHistory, historyItem]
+      : currentHistory.map((item, index) => index === editingRenewalIndex ? historyItem : item);
     const nextEmployee = { ...editForm, contractHistory: nextHistory };
     setSubmitting(true);
     setErrorMsg("");
@@ -1067,12 +1091,12 @@ export function StaffDirectory({
       setSelectedEmployee(nextEmployee);
       setStaff((current) => current.map((employee) => employee.id === nextEmployee.id ? nextEmployee : employee));
       setEmploymentHistory((current) => {
-        const eventId = `contract-renewal-${nextHistory.length - 1}`;
+        const eventId = `contract-renewal-${historyIndex}`;
         const withoutPrevious = current.filter((event) => event.id !== eventId && event.id !== `document-renewal-${linkedDocument.id}`);
         const event: EmploymentHistoryEvent = {
           id: eventId,
           occurredAt: new Date(`${renewalDraft.startDate}T12:00:00.000Z`).toISOString(),
-          type: renewalDraft.tipo === "Proroga" ? "Proroga contratto" : "Rinnovo contratto",
+          type: renewalDraft.tipo === "Proroga" ? "Proroga contratto" : renewalDraft.tipo === "Contratto" ? "Nuovo contratto" : "Rinnovo contratto",
           status: "REGISTRATA",
           note: renewalDraft.note.trim() || `Documento collegato: ${linkedDocument.title}.`,
           timeKnown: false,
@@ -1080,8 +1104,9 @@ export function StaffDirectory({
         return [...withoutPrevious, event].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime());
       });
       setShowRenewalForm(false);
+      setEditingRenewalIndex(null);
       setRenewalDraft({ tipo: "Proroga", startDate: "", endDate: "", note: "", documentId: "" });
-      setSuccessMsg(`${renewalDraft.tipo} salvata e collegata al documento ${linkedDocument.title}.`);
+      setSuccessMsg(`${renewalDraft.tipo} ${editingRenewalIndex === null ? "salvata" : "modificata"} e collegata al documento ${linkedDocument.title}.`);
       setTimeout(() => setSuccessMsg(""), 4000);
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : "Proroga non salvata.");
@@ -1107,10 +1132,13 @@ export function StaffDirectory({
     if (!editForm) return null;
 
     const contracts = buildContractsList(editForm.contractStart, editForm.contractEnd, getContractHistory(editForm), editForm.documents ?? []);
-    const initialContractEvent = employmentHistory.find((event) => event.type.toLowerCase() === "inizio contratto") ?? null;
+    const currentContractEvent = employmentHistory.find((event) => {
+      const type = event.type.toLowerCase();
+      return type.includes("contratto") || type.includes("proroga") || type.includes("rinnovo");
+    }) ?? null;
     const compactEmploymentHistory = [
-      ...(initialContractEvent ? [initialContractEvent] : []),
-      ...employmentHistory.filter((event) => event.id !== initialContractEvent?.id).slice(0, 3),
+      ...(currentContractEvent ? [currentContractEvent] : []),
+      ...employmentHistory.filter((event) => event.id !== currentContractEvent?.id).slice(0, 3),
     ];
     const filteredEmploymentHistory = employmentHistory.filter((event) => matchesEmploymentHistoryFilter(event, employmentHistoryFilter));
     const visibleEmploymentHistory = employmentHistoryExpanded ? filteredEmploymentHistory : compactEmploymentHistory;
@@ -1695,6 +1723,9 @@ export function StaffDirectory({
 
               {showRenewalForm && (
                 <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
+                  <p className="mb-3 text-xs font-extrabold text-[#B83D7F]">
+                    {editingRenewalIndex === null ? "Nuova proroga o rinnovo" : "Modifica proroga o rinnovo"}
+                  </p>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <label className="space-y-1">
                       <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Tipo</span>
@@ -1704,6 +1735,7 @@ export function StaffDirectory({
                       >
                         <option value="Proroga">Proroga</option>
                         <option value="Rinnovo">Rinnovo</option>
+                        <option value="Contratto">Nuovo contratto</option>
                       </Select>
                     </label>
                     <label className="space-y-1">
@@ -1768,7 +1800,7 @@ export function StaffDirectory({
                       disabled={submitting || (editForm.documents ?? []).length === 0}
                       className="inline-flex min-h-9 items-center justify-center rounded-2xl bg-[#D96B94] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-[0.98]"
                     >
-                      {submitting ? "Salvataggio..." : `Aggiungi ${renewalDraft.tipo.toLowerCase()}`}
+                      {submitting ? "Salvataggio..." : editingRenewalIndex === null ? `Aggiungi ${renewalDraft.tipo.toLowerCase()}` : "Salva modifiche"}
                     </button>
                   </div>
                 </div>
@@ -1825,14 +1857,24 @@ export function StaffDirectory({
                           </td>
                           <td className="py-3 text-right">
                             {c.historyIndex !== undefined ? (
-                              <button
-                                type="button"
-                                onClick={() => deleteContractRenewal(c.historyIndex!)}
-                                className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
-                                title="Elimina rinnovo"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
+                              <div className="flex justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openRenewalEditForm(c.historyIndex!)}
+                                  className="inline-flex size-8 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-700 transition hover:bg-blue-100 active:scale-95"
+                                  title="Modifica proroga o rinnovo"
+                                >
+                                  <Pencil className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteContractRenewal(c.historyIndex!)}
+                                  className="inline-flex size-8 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-600 transition hover:bg-rose-100 active:scale-95"
+                                  title="Elimina rinnovo"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
                             ) : (
                               <span className="text-neutral-300">—</span>
                             )}

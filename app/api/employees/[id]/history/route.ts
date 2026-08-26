@@ -84,7 +84,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       contract_history: true,
       location: { select: { name: true } },
       documents: {
-        where: { type: { in: ["PROROGA", "RINNOVO"] } },
+        where: { type: { in: ["CONTRATTO", "PROROGA", "RINNOVO"] } },
         select: { id: true, title: true, type: true, document_date: true, created_at: true },
         orderBy: [{ document_date: "desc" }, { created_at: "desc" }],
       },
@@ -136,7 +136,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (!start) return;
     const linkedDocumentId = String(item.documentId || "").trim();
     if (linkedDocumentId) linkedContractDocumentIds.add(linkedDocumentId);
-    const contractEventType = String(item.tipo || "Rinnovo").toLowerCase().includes("proroga") ? "Proroga contratto" : "Rinnovo contratto";
+    const contractKind = String(item.tipo || "Rinnovo").toLowerCase();
+    const contractEventType = contractKind.includes("proroga")
+      ? "Proroga contratto"
+      : contractKind.includes("contratto")
+        ? "Nuovo contratto"
+        : "Rinnovo contratto";
     events.push({
       id: `contract-renewal-${index}`,
       occurredAt: start.toISOString(),
@@ -152,7 +157,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     events.push({
       id: `document-renewal-${document.id}`,
       occurredAt: (document.document_date ?? document.created_at).toISOString(),
-      type: document.type === "PROROGA" ? "Proroga contratto" : "Rinnovo contratto",
+      type: document.type === "PROROGA" ? "Proroga contratto" : document.type === "CONTRATTO" ? "Contratto caricato" : "Rinnovo contratto",
       status: "REGISTRATA",
       note: `${document.title} · documento presente nell'archivio del dipendente.`,
       timeKnown: !document.document_date,
