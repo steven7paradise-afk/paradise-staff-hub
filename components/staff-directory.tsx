@@ -8,7 +8,7 @@ import {
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
   Archive, Plus, Trash2, UserPlus, Printer, ExternalLink, Pencil,
-  ChevronLeft, Copy, Check, HeartPulse, Users, UserX, AlarmClock
+  ChevronLeft, Copy, Check, HeartPulse, AlarmClock, Clock3
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -451,8 +451,8 @@ export function StaffDirectory({
   const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
   const archivedCount = staff.filter(isArchivedEmployee).length;
-  const activeStaffCount = staff.filter((employee) => !isArchivedEmployee(employee)).length;
-  const formerEmployeeCount = staff.filter((employee) => employee.employeeStatus === "Ex dipendente").length;
+  const sicknessEmployeeCount = staff.filter((employee) => !isArchivedEmployee(employee) && (employee.sicknessStats?.totalDays ?? 0) > 0).length;
+  const absentTodayCount = staff.filter((employee) => !isArchivedEmployee(employee) && employee.attendanceToday?.absent).length;
   const isUpcomingContractExpiry = (employee: Employee) => {
     if (isArchivedEmployee(employee) || !employee.contractEnd || employee.contractRenewalStatus === "RINNOVATO") return false;
     const end = new Date(`${employee.contractEnd}T23:59:59`);
@@ -462,8 +462,6 @@ export function StaffDirectory({
     limit.setDate(limit.getDate() + 30);
     return end.getTime() >= now.getTime() && end.getTime() <= limit.getTime();
   };
-  const upcomingExpiryCount = staff.filter(isUpcomingContractExpiry).length;
-  const absentTodayCount = staff.filter((employee) => !isArchivedEmployee(employee) && employee.attendanceToday?.absent).length;
 
   const selectOverview = (mode: "active" | "former" | "expiring" | "absent") => {
     setSearchQuery("");
@@ -1177,7 +1175,7 @@ export function StaffDirectory({
     };
 
     return (
-      <div className="staff-profile-editor w-full bg-transparent min-h-screen text-[#171717] pb-12 animate-in fade-in duration-200">
+      <div className="staff-profile-editor w-full min-h-screen bg-[linear-gradient(135deg,#fff8fc_0%,#f8f3f6_48%,#fff_100%)] text-[#171717] pb-12 animate-in fade-in duration-200">
         <style dangerouslySetInnerHTML={{__html: `
           .staff-directory-editor-open main > header {
             display: none !important;
@@ -1192,7 +1190,7 @@ export function StaffDirectory({
             background: transparent !important;
           }
         `}} />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-1">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-1">
           <button
             type="button"
             onClick={() => {
@@ -1207,8 +1205,8 @@ export function StaffDirectory({
           </button>
         </div>
 
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-3 w-full min-w-0 overflow-hidden">
-          <div className="bg-white rounded-[24px] sm:rounded-[32px] border border-[#F4E3EA] p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 min-w-0 w-full">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-3 w-full min-w-0 overflow-hidden">
+          <div className="bg-white rounded-[24px] border border-[#F4E3EA] p-4 sm:p-5 shadow-[0_14px_40px_rgba(104,62,79,0.07)] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 min-w-0 w-full">
             <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5 min-w-0 w-full">
               <div className="relative size-20 sm:size-24 rounded-[22px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-2xl font-black text-neutral-800 shadow-md group shrink-0">
                 {editForm.photoUrl ? (
@@ -1287,7 +1285,7 @@ export function StaffDirectory({
         </div>
 
         {/* STATS KEY INDICATORS BANNER */}
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
             {[
               { title: "Lavori completati", count: stats?.jobs.count ?? 0, growth: stats?.jobs.growth ?? 0, unit: "" },
@@ -1317,8 +1315,8 @@ export function StaffDirectory({
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
-          <form onSubmit={handleSaveEmployee} className="space-y-6">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
+          <form onSubmit={handleSaveEmployee} className="space-y-4">
             {successMsg && (
               <div className="p-4 text-sm font-semibold text-emerald-800 bg-emerald-50 rounded-2xl border border-emerald-200 animate-in fade-in" role="status">
                 {successMsg}
@@ -1700,7 +1698,7 @@ export function StaffDirectory({
             )}
 
             {/* STORICO CONTRATTI E RINNOVI (SEMPRE VISIBILE) */}
-            <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
+            <div className="bg-white rounded-[22px] border border-[#F4E3EA] p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
               <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
@@ -1721,8 +1719,10 @@ export function StaffDirectory({
                 </button>
               </div>
 
+              <div className="grid gap-4">
+
               {showRenewalForm && (
-                <div className="mt-4 rounded-[22px] border border-[#F3B5D4] bg-[#FFF8FC] p-4">
+                <div className="mt-4 rounded-[20px] border border-[#F3B5D4] bg-[#FFF8FC] p-4 shadow-sm">
                   <p className="mb-3 text-xs font-extrabold text-[#B83D7F]">
                     {editingRenewalIndex === null ? "Nuova proroga o rinnovo" : "Modifica proroga o rinnovo"}
                   </p>
@@ -1891,9 +1891,10 @@ export function StaffDirectory({
                   </tbody>
                 </table>
               </div>
+              </div>
             </div>
 
-            <div className="rounded-[28px] border border-[#F4E3EA] bg-white p-6 shadow-sm">
+            <div className="rounded-[22px] border border-[#F4E3EA] bg-white p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
               <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
@@ -2009,71 +2010,49 @@ export function StaffDirectory({
   return (
     <div className="w-full space-y-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          {
-            key: "active" as const,
-            label: "Personale attivo",
-            value: activeStaffCount,
-            detail: "Visualizza lo staff operativo",
-            icon: Users,
-            selected: !archiveMode && !expiryMode && !absenceMode,
-            tone: "emerald",
-          },
-          {
-            key: "absent" as const,
-            label: "Assenti oggi",
-            value: absentTodayCount,
-            detail: "Turno iniziato senza timbratura",
-            icon: AlarmClock,
-            selected: absenceMode,
-            tone: "rose",
-          },
-          {
-            key: "former" as const,
-            label: "Ex dipendenti",
-            value: formerEmployeeCount,
-            detail: "Visualizza archivio e documenti",
-            icon: UserX,
-            selected: archiveMode && filterStatus === "Ex dipendente",
-            tone: "violet",
-          },
-          {
-            key: "expiring" as const,
-            label: "Prossimi in scadenza",
-            value: upcomingExpiryCount,
-            detail: "Contratti entro 30 giorni",
-            icon: AlarmClock,
-            selected: expiryMode,
-            tone: "rose",
-          },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => selectOverview(item.key)}
-              className={cn(
-                "group flex min-h-28 items-center justify-between rounded-[26px] border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
-                item.selected ? "border-[#D96B94] ring-2 ring-[#FCE5F3]" : "border-black/5",
-              )}
-            >
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{item.label}</p>
-                <p className="mt-1 text-3xl font-black text-neutral-900">{item.value}</p>
-                <p className="mt-1 text-xs font-semibold text-neutral-500">{item.detail}</p>
-              </div>
-              <span className={cn(
-                "grid size-12 shrink-0 place-items-center rounded-2xl",
-                item.tone === "emerald" && "bg-emerald-50 text-emerald-700",
-                item.tone === "violet" && "bg-violet-50 text-violet-700",
-                item.tone === "rose" && "bg-rose-50 text-rose-700",
-              )}>
-                <Icon className="size-6" />
-              </span>
-            </button>
-          );
-        })}
+        <Link href="/malattie" className="group flex min-h-24 items-center justify-between rounded-[22px] border border-violet-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-500">Malattie</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{sicknessEmployeeCount}</p>
+            <p className="text-xs font-semibold text-neutral-500">Giustificate e non giustificate</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-violet-50 text-violet-700"><HeartPulse className="size-5" /></span>
+        </Link>
+
+        <button
+          type="button"
+          onClick={() => selectOverview(absenceMode ? "active" : "absent")}
+          className={cn(
+            "group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+            absenceMode ? "border-orange-300 ring-2 ring-orange-100" : "border-orange-100",
+          )}
+        >
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-500">Assenze</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{absentTodayCount}</p>
+            <p className="text-xs font-semibold text-neutral-500">Assenti oggi e mancate entrate</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-orange-50 text-orange-700"><AlarmClock className="size-5" /></span>
+        </button>
+
+        <Link href="/requests" className="group flex min-h-24 items-center justify-between rounded-[22px] border border-blue-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-500">Permessi</p>
+            <p className="mt-1 text-base font-black text-neutral-900">Apri richieste</p>
+            <p className="text-xs font-semibold text-neutral-500">Da approvare e storico</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-blue-50 text-blue-700"><ClipboardList className="size-5" /></span>
+        </Link>
+
+        <Link href="/team" className="group flex min-h-24 items-center justify-between rounded-[22px] border border-rose-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">Ritardi</p>
+            <p className="mt-1 text-base font-black text-neutral-900">Apri controllo</p>
+            <p className="text-xs font-semibold text-neutral-500">Entrate e rientri pausa</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-rose-50 text-rose-700"><Clock3 className="size-5" /></span>
+        </Link>
+
       </div>
 
       {/* Top Filter Bar */}

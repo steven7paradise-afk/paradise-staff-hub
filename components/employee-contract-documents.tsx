@@ -129,7 +129,7 @@ export function EmployeeContractDocuments({
   }
 
   return (
-    <div className="bg-white rounded-[28px] border border-[#F4E3EA] p-6 shadow-sm">
+    <div className="bg-white rounded-[22px] border border-[#F4E3EA] p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
       <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
