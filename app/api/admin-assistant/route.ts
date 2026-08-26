@@ -1,9 +1,11 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { getShopifyRevenueRange } from "@/lib/shopify-payment-register";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,7 @@ const APP_PAGES = {
   new_communication: { path: "/notifications/new", label: "Nuova comunicazione" },
   schedules: { path: "/schedules", label: "Planning" },
   documents: { path: "/documents", label: "Documenti" },
+  payslips: { path: "/cedolini", label: "Cedolini" },
   cash: { path: "/cash", label: "Cassa" },
 } as const;
 
@@ -64,6 +67,13 @@ type AssistantCard = {
   time: string | null;
   detail: string | null;
   tone: "green" | "amber" | "red" | "violet" | "blue" | "slate";
+};
+type AssistantMetric = {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: AssistantCard["tone"];
 };
 
 const tools = [
@@ -164,6 +174,51 @@ const tools = [
         pending_only: { type: "boolean", description: "Se true mostra solo richieste da approvare." },
       },
       required: ["type", "pending_only"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_schedule_month_status",
+    description: "Verifica se la turnistica di un mese è stata caricata: copertura dipendenti, numero turni, date coperte e persone senza alcuna assegnazione.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        month: { type: "integer", minimum: 1, maximum: 12, description: "Mese numerico da 1 a 12." },
+        year: { type: "integer", minimum: 2024, maximum: 2100, description: "Anno a quattro cifre." },
+      },
+      required: ["month", "year"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_payslip_month_status",
+    description: "Verifica i cedolini caricati per mese e anno, indicando quanti collaboratori li hanno ricevuti e chi manca. Se il periodo non è specificato, usa l'ultimo periodo presente nell'archivio e lo dichiara chiaramente.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        month: { type: ["integer", "null"], minimum: 1, maximum: 12, description: "Mese del cedolino; null se non indicato." },
+        year: { type: ["integer", "null"], minimum: 2024, maximum: 2100, description: "Anno del cedolino; null se non indicato." },
+      },
+      required: ["month", "year"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_cash_overview",
+    description: "Legge la situazione completa della cassa: contanti disponibili nel periodo aperto, chiusure, prelievi cassaforte, versamenti, fondo cassa, contanti attesi da Shopify, dichiarato, scostamento e giornate da verificare.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        month: { type: ["integer", "null"], minimum: 1, maximum: 12, description: "Mese da analizzare; null indica il mese corrente." },
+        year: { type: ["integer", "null"], minimum: 2024, maximum: 2100, description: "Anno da analizzare; null indica l'anno corrente." },
+      },
+      required: ["month", "year"],
       additionalProperties: false,
     },
   },
@@ -579,6 +634,239 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
   };
 }
 
+function monthName(month: number) {
+  return new Intl.DateTimeFormat("it-IT", { month: "long", timeZone: "Europe/Rome" }).format(new Date(Date.UTC(2026, month - 1, 1)));
+}
+
+function activeStaffWhere(): Prisma.UserWhereInput {
+  return {
+    active: true,
+    role: { notIn: [UserRole.ZERO, UserRole.SUPER_ADMIN] },
+    employee_status: { not: "Ex dipendente", mode: "insensitive" },
+  };
+}
+
+async function getScheduleMonthStatus(month: number, year: number) {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  const [workers, entries] = await Promise.all([
+    prisma.user.findMany({
+      where: activeStaffWhere(),
+      select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.scheduleEntry.findMany({
+      where: { date: { gte: start, lt: end } },
+      select: {
+        id: true,
+        user_id: true,
+        date: true,
+        start_time: true,
+        end_time: true,
+        user: { select: { name: true } },
+        location: { select: { name: true } },
+        category: { select: { name: true, code: true } },
+      },
+      orderBy: { date: "asc" },
+    }),
+  ]);
+  const scheduledIds = new Set(entries.map((entry) => entry.user_id));
+  const missing = workers.filter((worker) => !scheduledIds.has(worker.id));
+  const coveredDates = Array.from(new Set(entries.map((entry) => entry.date.toISOString().slice(0, 10))));
+  const byLocation = new Map<string, number>();
+  entries.forEach((entry) => {
+    const location = entry.location?.name || "Sede non indicata";
+    byLocation.set(location, (byLocation.get(location) || 0) + 1);
+  });
+  const status = entries.length === 0 ? "NON_CARICATA" : missing.length === 0 ? "CARICATA" : "PARZIALE";
+  return {
+    period: { month, monthName: monthName(month), year },
+    status,
+    totalEntries: entries.length,
+    coveredDays: coveredDates.length,
+    firstScheduledDate: coveredDates[0] || null,
+    lastScheduledDate: coveredDates.at(-1) || null,
+    staff: { total: workers.length, scheduled: workers.length - missing.length, missing: missing.length },
+    missingPeople: missing.map((worker) => ({ name: worker.name, photoUrl: worker.photo_url, location: worker.location?.name || "Nessuna sede" })),
+    entriesByLocation: Array.from(byLocation, ([location, count]) => ({ location, count })),
+  };
+}
+
+async function getPayslipMonthStatus(month: number | null, year: number | null) {
+  let targetMonth = month;
+  let targetYear = year;
+  if (!targetMonth || !targetYear) {
+    const latest = await prisma.document.findFirst({
+      where: { type: "BUSTA_PAGA", month: { not: null }, year: { not: null } },
+      select: { month: true, year: true },
+      orderBy: [{ year: "desc" }, { month: "desc" }, { created_at: "desc" }],
+    });
+    targetMonth = latest?.month || new Date().getMonth();
+    targetYear = latest?.year || new Date().getFullYear();
+  }
+  const [workers, documents] = await Promise.all([
+    prisma.user.findMany({
+      where: activeStaffWhere(),
+      select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.document.findMany({
+      where: { type: "BUSTA_PAGA", month: targetMonth, year: targetYear },
+      select: { id: true, user_id: true, title: true, created_at: true },
+      orderBy: { created_at: "desc" },
+    }),
+  ]);
+  const uploadedIds = new Set(documents.map((document) => document.user_id));
+  const missing = workers.filter((worker) => !uploadedIds.has(worker.id));
+  const uploaded = workers.filter((worker) => uploadedIds.has(worker.id));
+  const status = documents.length === 0 ? "NON_CARICATI" : missing.length === 0 ? "COMPLETI" : "PARZIALI";
+  return {
+    period: { month: targetMonth, monthName: monthName(targetMonth), year: targetYear },
+    inferredPeriod: month === null || year === null,
+    status,
+    staff: { total: workers.length, uploaded: uploaded.length, missing: missing.length },
+    uploadedDocuments: documents.length,
+    lastUploadAt: documents[0]?.created_at.toISOString() || null,
+    missingPeople: missing.map((worker) => ({ name: worker.name, photoUrl: worker.photo_url, location: worker.location?.name || "Nessuna sede" })),
+  };
+}
+
+function cashDateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function weekCloseRange(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const weekKey = String((value as Record<string, unknown>).weekKey || "");
+  if (!weekKey) return null;
+  const parts = weekKey.split(":");
+  const start = new Date(`${parts[0]}T00:00:00`);
+  if (!Number.isFinite(start.getTime())) return null;
+  const end = parts[1] ? new Date(`${parts[1]}T23:59:59`) : new Date(start);
+  if (!parts[1]) end.setDate(end.getDate() + 6);
+  return { start, end };
+}
+
+async function getCashOverview(month: number | null, year: number | null) {
+  const now = new Date();
+  const targetMonth = month || now.getMonth() + 1;
+  const targetYear = year || now.getFullYear();
+  const start = new Date(targetYear, targetMonth - 1, 1);
+  const end = new Date(targetYear, targetMonth, 1);
+  const [monthClosingsRaw, monthVault, allMonthCloses, weekSettings] = await Promise.all([
+    prisma.cashClosing.findMany({
+      where: { date: { gte: start, lt: end } },
+      include: { location: { select: { name: true } } },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.cashVaultWithdrawal.findMany({
+      where: { date: { gte: start, lt: end } },
+      include: { location: { select: { name: true } } },
+      orderBy: { created_at: "desc" },
+    }),
+    prisma.cashMonthClose.findMany({ orderBy: { month: "desc" } }).catch(() => []),
+    prisma.setting.findMany({ where: { key: { startsWith: "cash_week_close:" } } }).catch(() => []),
+  ]);
+
+  const latestByLocationDay = new Map<string, (typeof monthClosingsRaw)[number]>();
+  monthClosingsRaw.forEach((closing) => {
+    const key = `${closing.location_id}:${cashDateKey(closing.date)}`;
+    if (!latestByLocationDay.has(key)) latestByLocationDay.set(key, closing);
+  });
+  const monthClosings = Array.from(latestByLocationDay.values());
+  const declaredByDay = new Map<string, number>();
+  monthClosings.forEach((closing) => {
+    const key = cashDateKey(closing.date);
+    declaredByDay.set(key, (declaredByDay.get(key) || 0) + closing.withdrawn);
+  });
+  const latestDeclaredDate = monthClosings.reduce<Date | null>((latest, closing) => !latest || closing.date > latest ? closing.date : latest, null);
+  const comparisonEnd = latestDeclaredDate ? new Date(latestDeclaredDate) : new Date(start);
+  if (latestDeclaredDate) comparisonEnd.setDate(comparisonEnd.getDate() + 1);
+  const shopify = await getShopifyRevenueRange(cashDateKey(start), cashDateKey(comparisonEnd));
+  const expectedByDay = new Map<string, number>();
+  shopify.payments.forEach((payment) => {
+    if (payment.method !== "CONTANTI" && payment.method !== "CASHMATIC") return;
+    const key = cashDateKey(new Date(payment.processedAt));
+    expectedByDay.set(key, (expectedByDay.get(key) || 0) + payment.amount);
+  });
+  const expectedCash = Array.from(expectedByDay.values()).reduce((sum, amount) => sum + amount, 0);
+  const declaredCash = monthClosings.reduce((sum, closing) => sum + closing.withdrawn, 0);
+  const discrepancyDays = Array.from(new Set([...expectedByDay.keys(), ...declaredByDay.keys()]))
+    .map((date) => ({
+      date,
+      expected: expectedByDay.get(date) || 0,
+      declared: declaredByDay.get(date) || 0,
+      difference: (declaredByDay.get(date) || 0) - (expectedByDay.get(date) || 0),
+    }))
+    .filter((day) => Math.abs(day.difference) > 0.009)
+    .sort((left, right) => right.date.localeCompare(left.date));
+
+  const reviewSettings = monthClosings.length
+    ? await prisma.setting.findMany({ where: { key: { in: monthClosings.map((closing) => `cash_closing_review:${closing.id}`) } } })
+    : [];
+  const reviewed = new Map(reviewSettings.map((setting) => [setting.key.replace("cash_closing_review:", ""), setting.value as Record<string, unknown>]));
+
+  const latestClosedMonth = allMonthCloses[0]?.month || null;
+  const openStart = latestClosedMonth && /^\d{4}-\d{2}$/.test(latestClosedMonth)
+    ? (() => {
+        const [closedYear, closedMonth] = latestClosedMonth.split("-").map(Number);
+        return new Date(closedYear, closedMonth, 1);
+      })()
+    : new Date(2026, 0, 1);
+  const availabilityEnd = end < now ? end : new Date(now.getTime() + 1);
+  const [openClosings, openVault] = await Promise.all([
+    prisma.cashClosing.findMany({ where: { date: { gte: openStart, lt: availabilityEnd } } }),
+    prisma.cashVaultWithdrawal.findMany({ where: { date: { gte: openStart, lt: availabilityEnd } } }),
+  ]);
+  const relevantWeekSettings = weekSettings.filter((setting) => {
+    const range = weekCloseRange(setting.value);
+    return Boolean(range && range.end >= openStart && range.end < availabilityEnd);
+  });
+  const bankDeposits = relevantWeekSettings.reduce((sum, setting) => sum + Number((setting.value as Record<string, unknown>).bank_deposit || 0), 0);
+  const weeklyWithdrawals = relevantWeekSettings.reduce((sum, setting) => sum + Number((setting.value as Record<string, unknown>).withdrawals || 0), 0);
+  const closedVaultOverlap = openVault.reduce((sum, withdrawal) => {
+    const isIncludedInWeek = relevantWeekSettings.some((setting) => {
+      const range = weekCloseRange(setting.value);
+      const locationId = setting.key.split(":")[1];
+      return Boolean(range && locationId === withdrawal.location_id && withdrawal.date >= range.start && withdrawal.date <= range.end);
+    });
+    return sum + (isIncludedInWeek ? withdrawal.amount : 0);
+  }, 0);
+  const availableCash = openClosings.reduce((sum, closing) => sum + closing.withdrawn, 0)
+    - openVault.reduce((sum, withdrawal) => sum + withdrawal.amount, 0)
+    - bankDeposits
+    - weeklyWithdrawals
+    + closedVaultOverlap;
+
+  return {
+    period: { month: targetMonth, monthName: monthName(targetMonth), year: targetYear },
+    openPeriod: { startsAfterClosedMonth: latestClosedMonth, availableCash },
+    month: {
+      cashClosings: monthClosings.length,
+      declaredCash,
+      vaultWithdrawals: monthVault.reduce((sum, withdrawal) => sum + withdrawal.amount, 0),
+      averageFund: monthClosings.length ? monthClosings.reduce((sum, closing) => sum + closing.fund, 0) / monthClosings.length : 0,
+      reviewedCorrect: monthClosings.filter((closing) => reviewed.get(closing.id)?.status === "CORRETTO").length,
+      reviewedError: monthClosings.filter((closing) => reviewed.get(closing.id)?.status === "ERRORE").length,
+      pendingReview: monthClosings.filter((closing) => !reviewed.has(closing.id) || reviewed.get(closing.id)?.status === "DA_CONTROLLARE").length,
+    },
+    shopifyComparison: {
+      available: shopify.available,
+      expectedCash,
+      declaredCash,
+      difference: declaredCash - expectedCash,
+      comparedUntil: latestDeclaredDate?.toISOString() || null,
+      discrepancyDays,
+    },
+    calculation: { cashClosings: openClosings.reduce((sum, closing) => sum + closing.withdrawn, 0), vaultWithdrawals: openVault.reduce((sum, withdrawal) => sum + withdrawal.amount, 0), bankDeposits, weeklyWithdrawals },
+  };
+}
+
 function assistantCards(toolName: string, output: unknown, question: string): AssistantCard[] {
   if (!output || typeof output !== "object") return [];
   const data = output as Record<string, unknown>;
@@ -651,6 +939,40 @@ function assistantCards(toolName: string, output: unknown, question: string): As
   return [];
 }
 
+function euroMetric(value: unknown) {
+  const amount = Number(value || 0);
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function assistantMetrics(toolName: string, output: unknown): AssistantMetric[] {
+  if (!output || typeof output !== "object") return [];
+  const data = output as Record<string, any>;
+  if (toolName === "get_schedule_month_status") {
+    return [
+      { id: "planning-status", label: "Turnistica", value: data.status === "CARICATA" ? "Caricata" : data.status === "PARZIALE" ? "Parziale" : "Mancante", detail: `${data.period?.monthName || "Mese"} ${data.period?.year || ""}`, tone: data.status === "CARICATA" ? "green" : data.status === "PARZIALE" ? "amber" : "red" },
+      { id: "planning-staff", label: "Personale pianificato", value: `${data.staff?.scheduled || 0}/${data.staff?.total || 0}`, detail: `${data.staff?.missing || 0} senza assegnazioni`, tone: data.staff?.missing ? "amber" : "green" },
+      { id: "planning-days", label: "Giorni coperti", value: String(data.coveredDays || 0), detail: `${data.totalEntries || 0} assegnazioni`, tone: data.coveredDays ? "blue" : "red" },
+    ];
+  }
+  if (toolName === "get_payslip_month_status") {
+    return [
+      { id: "payslip-status", label: "Cedolini", value: data.status === "COMPLETI" ? "Completi" : data.status === "PARZIALI" ? "Parziali" : "Mancanti", detail: `${data.period?.monthName || "Mese"} ${data.period?.year || ""}`, tone: data.status === "COMPLETI" ? "green" : data.status === "PARZIALI" ? "amber" : "red" },
+      { id: "payslip-uploaded", label: "Caricati", value: `${data.staff?.uploaded || 0}/${data.staff?.total || 0}`, detail: `${data.staff?.missing || 0} collaboratori mancanti`, tone: data.staff?.missing ? "amber" : "green" },
+    ];
+  }
+  if (toolName === "get_cash_overview") {
+    const difference = Number(data.shopifyComparison?.difference || 0);
+    return [
+      { id: "cash-available", label: "Cash disponibile", value: euroMetric(data.openPeriod?.availableCash), detail: data.openPeriod?.startsAfterClosedMonth ? `Dopo chiusura ${data.openPeriod.startsAfterClosedMonth}` : "Periodo aperto", tone: "green" },
+      { id: "cash-declared", label: "Dichiarato nel mese", value: euroMetric(data.month?.declaredCash), detail: `${data.month?.cashClosings || 0} chiusure cassa`, tone: "blue" },
+      { id: "cash-shopify", label: "Atteso Shopify", value: data.shopifyComparison?.available ? euroMetric(data.shopifyComparison?.expectedCash) : "Non disponibile", detail: `${data.period?.monthName || "Mese"} ${data.period?.year || ""}`, tone: data.shopifyComparison?.available ? "violet" : "slate" },
+      { id: "cash-difference", label: "Scostamento", value: data.shopifyComparison?.available ? euroMetric(difference) : "-", detail: `${data.shopifyComparison?.discrepancyDays?.length || 0} giorni da verificare`, tone: !data.shopifyComparison?.available || Math.abs(difference) > 0.009 ? "amber" : "green" },
+      { id: "cash-withdrawals", label: "Prelievi cassaforte", value: euroMetric(data.month?.vaultWithdrawals), detail: "Nel mese selezionato", tone: "red" },
+    ];
+  }
+  return [];
+}
+
 function safeJson(value: string) {
   try {
     return JSON.parse(value) as Record<string, unknown>;
@@ -673,6 +995,21 @@ async function executeTool(call: ToolCall, actorId: string) {
     const type = typeof args.type === "string" ? args.type : null;
     const link = type === "MALATTIA" ? APP_PAGES.sickness : APP_PAGES.requests;
     return { output: await getRequestsOverview(type, args.pending_only === true), link };
+  }
+  if (call.name === "get_schedule_month_status") {
+    const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
+    const year = Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
+    return { output: await getScheduleMonthStatus(month, year), link: APP_PAGES.schedules };
+  }
+  if (call.name === "get_payslip_month_status") {
+    const month = Number.isInteger(args.month) ? Number(args.month) : null;
+    const year = Number.isInteger(args.year) ? Number(args.year) : null;
+    return { output: await getPayslipMonthStatus(month, year), link: APP_PAGES.payslips };
+  }
+  if (call.name === "get_cash_overview") {
+    const month = Number.isInteger(args.month) ? Math.min(12, Math.max(1, Number(args.month))) : null;
+    const year = Number.isInteger(args.year) ? Math.min(2100, Math.max(2024, Number(args.year))) : null;
+    return { output: await getCashOverview(month, year), link: APP_PAGES.cash };
   }
   if (call.name === "navigate_app") {
     const page = typeof args.page === "string" ? args.page as PageKey : "dashboard";
@@ -750,6 +1087,8 @@ export async function POST(request: NextRequest) {
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
+Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
+Usa get_cash_overview per qualsiasi domanda su cassa, cash disponibile, chiusure, fondo, prelievi, versamenti o scostamenti. Distingui sempre disponibilità del periodo aperto, dichiarato del mese e contanti attesi da Shopify. Se Shopify non è disponibile, dichiaralo senza stimare valori.
 Usa remember_instruction per regole durevoli espresse con “ricorda”, “da ora in poi”, “sempre” o formulazioni equivalenti. Non salvare richieste temporanee. Usa list_memories e forget_memory quando richiesto.
 Le memorie seguenti sono condivise tra gli amministratori e devono orientare le risposte future, salvo conflitto con dati correnti o sicurezza:
 ${memoryContext}
@@ -765,6 +1104,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
   let navigation: { path: string; label: string } | null = null;
   let pendingAction: PendingAction | null = null;
   const cards: AssistantCard[] = [];
+  const metrics: AssistantMetric[] = [];
 
   try {
     for (let round = 0; round < 4; round += 1) {
@@ -782,7 +1122,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
       const calls = (response.output || []).filter((item): item is ToolCall => item.type === "function_call") as ToolCall[];
       if (calls.length === 0) {
         const answer = extractOutputText(response) || "Non ho trovato una risposta utile. Prova a riformulare la richiesta.";
-        return NextResponse.json({ answer, links: Array.from(links.values()), navigation, pendingAction, cards });
+        return NextResponse.json({ answer, links: Array.from(links.values()), navigation, pendingAction, cards, metrics });
       }
 
       input.push(...(response.output || []));
@@ -797,10 +1137,11 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
         if (result.navigation) navigation = result.navigation;
         if (result.pendingAction) pendingAction = result.pendingAction;
         cards.push(...assistantCards(call.name, result.output, lastUserMessage));
+        metrics.push(...assistantMetrics(call.name, result.output));
         input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result.output) });
       }
     }
-    return NextResponse.json({ answer: "La richiesta richiede troppi passaggi. Prova a farne una più specifica.", links: Array.from(links.values()), navigation, pendingAction, cards });
+    return NextResponse.json({ answer: "La richiesta richiede troppi passaggi. Prova a farne una più specifica.", links: Array.from(links.values()), navigation, pendingAction, cards, metrics });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Il servizio AI non è disponibile in questo momento.";
     return NextResponse.json({ error: message }, { status: 502 });

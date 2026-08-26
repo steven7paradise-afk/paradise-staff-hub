@@ -17,7 +17,8 @@ type AssistantCard = {
   detail: string | null;
   tone: "green" | "amber" | "red" | "violet" | "blue" | "slate";
 };
-type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null; cards?: AssistantCard[] };
+type AssistantMetric = { id: string; label: string; value: string; detail: string; tone: AssistantCard["tone"] };
+type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null; cards?: AssistantCard[]; metrics?: AssistantMetric[] };
 
 const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Cosa ricordi?"];
 
@@ -57,6 +58,7 @@ export function AdminAssistant() {
         navigation?: { path: string; label: string } | null;
         pendingAction?: PendingAction | null;
         cards?: AssistantCard[];
+        metrics?: AssistantMetric[];
       };
       if (!response.ok) throw new Error(payload.error || "Assistente non disponibile.");
       setMessages((current) => [...current, {
@@ -65,6 +67,7 @@ export function AdminAssistant() {
         links: payload.links,
         pendingAction: payload.pendingAction,
         cards: payload.cards,
+        metrics: payload.metrics,
       }]);
       if (payload.navigation?.path) router.push(payload.navigation.path);
     } catch (error) {
@@ -127,6 +130,21 @@ export function AdminAssistant() {
                   ? "max-w-[84%] rounded-[20px] rounded-br-md bg-[#ef93ca] px-4 py-3 text-sm font-medium leading-relaxed text-white"
                   : "max-w-[86%] rounded-[20px] rounded-tl-md bg-black/[0.045] px-4 py-3 text-sm font-medium leading-relaxed text-black/75 dark:bg-white/[0.07] dark:text-white/80"}>
                   <p className="whitespace-pre-wrap">{message.content}</p>
+                  {message.metrics?.length ? <div className="mt-3 grid grid-cols-2 gap-2">{message.metrics.map((metric) => {
+                    const toneClass = {
+                      green: "border-emerald-200 bg-emerald-50 text-emerald-800",
+                      amber: "border-amber-200 bg-amber-50 text-amber-900",
+                      red: "border-red-200 bg-red-50 text-red-800",
+                      violet: "border-violet-200 bg-violet-50 text-violet-800",
+                      blue: "border-blue-200 bg-blue-50 text-blue-800",
+                      slate: "border-slate-200 bg-slate-50 text-slate-700",
+                    }[metric.tone];
+                    return <div key={metric.id} className={`rounded-2xl border p-3 ${toneClass}`}>
+                      <p className="text-[9px] font-black uppercase tracking-[0.12em] opacity-65">{metric.label}</p>
+                      <p className="mt-1 break-words text-base font-black leading-tight">{metric.value}</p>
+                      <p className="mt-1 text-[9px] font-bold leading-tight opacity-60">{metric.detail}</p>
+                    </div>;
+                  })}</div> : null}
                   {message.cards?.length ? <div className="mt-3 grid gap-2">{message.cards.map((card) => {
                     const toneClass = {
                       green: "border-emerald-200 bg-emerald-50 text-emerald-800",
