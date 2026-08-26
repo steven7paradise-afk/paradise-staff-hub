@@ -102,6 +102,9 @@ export function CommunicationComposer({
     setSending(true);
     setStatus("Pubblicazione in corso...");
     try {
+      const publishedMessage = attachedFileUrl && attachedFileName
+        ? `${message.trim()}\n\n📄 ALLEGATO DRIVE: [${attachedFileName}](${attachedFileUrl})`
+        : message.trim();
       const response = await fetch("/api/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -109,7 +112,7 @@ export function CommunicationComposer({
           target,
           targetId,
           title: title.trim(),
-          message: message.trim(),
+          message: publishedMessage,
           actionUrl: customLinkUrl.trim() || attachedFileUrl || "/notifications",
         }),
       });
