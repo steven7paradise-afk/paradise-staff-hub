@@ -17,18 +17,16 @@ export type EmployeeContractDocument = {
 };
 
 const GROUPS = [
-  { key: "CONTRATTO", label: "Contratti" },
-  { key: "RINNOVO", label: "Rinnovi" },
+  { key: "CONTRATTI_RINNOVI", label: "Contratti e rinnovi" },
   { key: "BUSTA_PAGA", label: "Cedolini / buste paga" },
   { key: "CUD", label: "CUD / CU" },
 ] as const;
 
 function documentGroup(document: EmployeeContractDocument) {
   const text = `${document.type} ${document.title}`.toLowerCase();
-  if (/rinnovo|proroga/.test(text)) return "RINNOVO";
+  if (/contratto|rinnovo|proroga/.test(text)) return "CONTRATTI_RINNOVI";
   if (/busta.?paga|cedolino/.test(text)) return "BUSTA_PAGA";
   if (/\bcud\b|certificazione unica|\bcu\b/.test(text)) return "CUD";
-  if (/contratto/.test(text)) return "CONTRATTO";
   return "ALTRO";
 }
 
@@ -221,7 +219,7 @@ export function EmployeeContractDocuments({
         </form>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
         {GROUPS.map((group) => {
           const items = grouped.get(group.key) ?? [];
           return (
