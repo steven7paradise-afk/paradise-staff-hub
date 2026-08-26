@@ -1206,8 +1206,8 @@ export function StaffDirectory({
         </div>
 
         <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 mt-3 w-full min-w-0 overflow-hidden">
-          <div className="bg-white rounded-[24px] border border-[#F4E3EA] p-4 sm:p-5 shadow-[0_14px_40px_rgba(104,62,79,0.07)] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 min-w-0 w-full">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5 min-w-0 w-full">
+          <div className="grid min-w-0 w-full gap-5 rounded-[24px] border border-[#F4E3EA] bg-white p-4 shadow-[0_14px_40px_rgba(104,62,79,0.07)] sm:p-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.75fr)_auto] lg:items-center">
+            <div className="flex min-w-0 flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:text-left">
               <div className="relative size-20 sm:size-24 rounded-[22px] overflow-hidden border-2 border-[#e6dcd4] bg-neutral-100 flex items-center justify-center text-2xl font-black text-neutral-800 shadow-md group shrink-0">
                 {editForm.photoUrl ? (
                   <img src={resolveDrivePhotoUrl(editForm.photoUrl)} alt={editForm.name} className="size-full object-cover" />
@@ -1229,7 +1229,7 @@ export function StaffDirectory({
                 </label>
               </div>
 
-              <div className="min-w-0 w-full">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                   <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-neutral-900 break-words">{editForm.name}</h1>
                   <span className={cn(
@@ -1241,41 +1241,54 @@ export function StaffDirectory({
                   </span>
                 </div>
 
-                <p className="text-xs font-semibold text-neutral-400 mt-0.5 capitalize">{editForm.mansione || "Nessuna mansione specificata"}</p>
+                <p className="mt-0.5 text-sm font-semibold capitalize text-neutral-500">{editForm.mansione || "Nessuna mansione specificata"}</p>
 
-                <div className="flex flex-wrap justify-center sm:justify-start gap-2 items-center mt-3">
+                <div className="mt-3 grid gap-2 text-left text-xs font-semibold text-neutral-600 sm:grid-cols-2">
                   {editForm.email && (
-                    <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold max-w-full truncate">
-                      ✉️ {editForm.email}
+                    <span className="flex min-w-0 items-center gap-2 rounded-xl bg-neutral-50 px-3 py-2">
+                      <Mail className="size-3.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">{editForm.email}</span>
                     </span>
                   )}
                   {editForm.whatsappPhone && (
-                    <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold">
-                      📱 {editForm.whatsappPhone}
+                    <span className="flex items-center gap-2 rounded-xl bg-neutral-50 px-3 py-2">
+                      <Phone className="size-3.5 shrink-0 text-neutral-400" />
+                      {editForm.whatsappPhone}
                     </span>
                   )}
-                  {editForm.contractStart && (
-                    <span className="bg-[#FAF7F6] text-[#B83D7F] border border-[#F4E3EA] px-2.5 py-1 rounded-full text-[11px] font-bold">
-                      📅 Inizio Contratto: {formatContractDate(editForm.contractStart)}
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F3B5D4] bg-[#FFF0F7] px-3 py-1 text-[11px] font-extrabold text-[#B83D7F]">
-                    <Briefcase className="size-3 shrink-0" />
-                    Tipologia contratto: {editForm.contractType || "Non specificata"}
-                  </span>
-                  <span className="bg-neutral-50 text-neutral-600 border border-neutral-200 px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1">
-                    <MapPin className="size-3 text-red-500 shrink-0" />
-                    <span>{editForm.location}</span>
-                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0 justify-center">
+            <div className="grid gap-2 rounded-[18px] border border-[#F4E3EA] bg-[#FCFAFB] p-3 text-xs">
+              <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-2.5">
+                <Calendar className="mt-0.5 size-4 shrink-0 text-[#D96B94]" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Data di assunzione</p>
+                  <p className="mt-0.5 font-extrabold text-neutral-800">{editForm.contractStart ? formatContractDate(editForm.contractStart) : "Non impostata"}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-2.5">
+                <MapPin className="mt-0.5 size-4 shrink-0 text-[#D96B94]" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Sede / salone</p>
+                  <p className="mt-0.5 font-extrabold text-neutral-800">{editForm.location}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-2.5">
+                <Briefcase className="mt-0.5 size-4 shrink-0 text-[#D96B94]" />
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-wider text-neutral-400">Tipologia contratto</p>
+                  <p className="mt-0.5 font-extrabold text-neutral-800">{editForm.contractType || "Non specificata"}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 justify-center lg:justify-end">
               <button
                 type="button"
                 onClick={() => setShowFullForm(!showFullForm)}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#D96B94] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-95 whitespace-nowrap"
+                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[#D96B94] px-5 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-95"
               >
                 <SlidersHorizontal className="size-3.5" />
                 {showFullForm ? "▲ Nascondi Modifica" : "✏️ Modifica dipendente"}
