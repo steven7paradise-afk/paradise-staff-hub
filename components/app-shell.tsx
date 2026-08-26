@@ -19,6 +19,7 @@ import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
 import { DesktopSidebarNav } from "@/components/desktop-sidebar-nav";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { NotificationsPopover } from "@/components/notifications-popover";
+import { AdminAssistant } from "@/components/admin-assistant";
 import pkg from "@/package.json";
 import { redirect } from "next/navigation";
 import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
@@ -493,7 +494,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<>{main}{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}</>}
+      main={<>{main}{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),

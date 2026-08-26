@@ -1,0 +1,124 @@
+"use client";
+
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Bot, ExternalLink, LoaderCircle, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
+
+type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }> };
+
+const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Quali richieste sono da approvare?"];
+
+export function AdminAssistant() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([
+    { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." },
+  ]);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading, open]);
+
+  async function ask(text: string) {
+    const question = text.trim();
+    if (!question || loading) return;
+    const userMessage: Message = { role: "user", content: question };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setInput("");
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages.map(({ role, content }) => ({ role, content })) }),
+      });
+      const payload = await response.json() as {
+        answer?: string;
+        error?: string;
+        links?: Array<{ path: string; label: string }>;
+        navigation?: { path: string; label: string } | null;
+      };
+      if (!response.ok) throw new Error(payload.error || "Assistente non disponibile.");
+      setMessages((current) => [...current, {
+        role: "assistant",
+        content: payload.answer || "Operazione completata.",
+        links: payload.links,
+      }]);
+      if (payload.navigation?.path) router.push(payload.navigation.path);
+    } catch (error) {
+      setMessages((current) => [...current, {
+        role: "assistant",
+        content: error instanceof Error ? error.message : "Assistente non disponibile. Riprova tra poco.",
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void ask(input);
+  }
+
+  return (
+    <div className="fixed bottom-5 right-5 z-[70] sm:bottom-7 sm:right-7">
+      {open ? (
+        <section className="flex h-[min(680px,calc(100dvh-40px))] w-[min(420px,calc(100vw-32px))] flex-col overflow-hidden rounded-[28px] border border-black/10 bg-white/95 shadow-[0_24px_90px_rgba(34,16,28,0.28)] backdrop-blur-xl dark:border-white/10 dark:bg-[#18171b]/95">
+          <header className="flex items-center justify-between border-b border-black/5 bg-gradient-to-r from-[#f69bd1]/18 to-[#edd9a4]/20 px-5 py-4 dark:border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="grid size-10 place-items-center rounded-2xl bg-[#ef93ca] text-white shadow-sm"><Sparkles className="size-5" /></div>
+              <div>
+                <h2 className="text-sm font-black text-black/90 dark:text-white">Paradise Assistant</h2>
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400"><span className="size-1.5 rounded-full bg-emerald-500" /> Solo amministrazione</p>
+              </div>
+            </div>
+            <button type="button" onClick={() => setOpen(false)} className="grid size-9 place-items-center rounded-full bg-black/5 text-black/55 transition hover:bg-black/10 dark:bg-white/10 dark:text-white/60" aria-label="Chiudi assistente"><X className="size-4" /></button>
+          </header>
+
+          <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
+            {messages.map((message, index) => (
+              <div key={`${message.role}-${index}`} className={message.role === "user" ? "flex justify-end" : "flex items-start gap-2.5"}>
+                {message.role === "assistant" ? <div className="mt-1 grid size-7 shrink-0 place-items-center rounded-xl bg-[#f6d7e9] text-[#a84a83] dark:bg-[#ef93ca]/15 dark:text-[#f3a9d4]"><Bot className="size-4" /></div> : null}
+                <div className={message.role === "user"
+                  ? "max-w-[84%] rounded-[20px] rounded-br-md bg-[#ef93ca] px-4 py-3 text-sm font-medium leading-relaxed text-white"
+                  : "max-w-[86%] rounded-[20px] rounded-tl-md bg-black/[0.045] px-4 py-3 text-sm font-medium leading-relaxed text-black/75 dark:bg-white/[0.07] dark:text-white/80"}>
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  {message.links?.length ? <div className="mt-3 flex flex-wrap gap-2">{message.links.map((link) => (
+                    <button key={link.path} type="button" onClick={() => router.push(link.path)} className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-black text-[#a84a83] shadow-sm transition hover:border-[#ef93ca]/50 dark:border-white/10 dark:bg-white/10 dark:text-[#f3a9d4]">
+                      {link.label}<ExternalLink className="size-3" />
+                    </button>
+                  ))}</div> : null}
+                </div>
+              </div>
+            ))}
+            {loading ? <div className="flex items-center gap-2.5 text-xs font-semibold text-black/45 dark:text-white/45"><div className="grid size-7 place-items-center rounded-xl bg-[#f6d7e9] text-[#a84a83]"><LoaderCircle className="size-4 animate-spin" /></div>Sto controllando i dati…</div> : null}
+            <div ref={endRef} />
+          </div>
+
+          {messages.length <= 1 ? <div className="flex flex-wrap gap-2 px-4 pb-3">{starters.map((starter) => (
+            <button key={starter} type="button" onClick={() => void ask(starter)} className="rounded-full border border-[#ef93ca]/25 bg-[#ef93ca]/8 px-3 py-2 text-[11px] font-bold text-[#a84a83] transition hover:bg-[#ef93ca]/15 dark:text-[#f3a9d4]">{starter}</button>
+          ))}</div> : null}
+
+          <form onSubmit={submit} className="border-t border-black/5 p-3 dark:border-white/10">
+            <div className="flex items-end gap-2 rounded-[22px] border border-black/10 bg-white p-2 shadow-inner focus-within:border-[#ef93ca]/60 dark:border-white/10 dark:bg-white/[0.04]">
+              <textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(input); }
+              }} rows={1} maxLength={2000} placeholder="Chiedi qualcosa sull'attività…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-3 py-2 text-sm font-medium text-black/80 outline-none placeholder:text-black/35 dark:text-white dark:placeholder:text-white/30" />
+              <button type="submit" disabled={!input.trim() || loading} className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#ef93ca] text-white shadow-sm transition hover:bg-[#dd7eb7] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Invia"><Send className="size-4" /></button>
+            </div>
+            <p className="mt-2 text-center text-[9px] font-semibold text-black/30 dark:text-white/25">Consulta i dati senza modificarli. Verifica sempre le decisioni importanti.</p>
+          </form>
+        </section>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} className="group flex items-center gap-3 rounded-full bg-[#17151a] p-2.5 pr-5 text-white shadow-[0_16px_45px_rgba(28,20,26,0.32)] transition hover:-translate-y-0.5 hover:bg-black dark:border dark:border-white/10" aria-label="Apri Paradise Assistant">
+          <span className="grid size-11 place-items-center rounded-full bg-gradient-to-br from-[#f3a4d2] to-[#db70ad] shadow-inner"><MessageCircleMore className="size-5" /></span>
+          <span className="text-xs font-black tracking-wide">Chiedi all’assistente</span>
+        </button>
+      )}
+    </div>
+  );
+}
