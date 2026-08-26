@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { identifyWorkerByPin } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
+import { expectedShiftEndTime, romeMinutesForInstant } from "@/lib/scheduled-attendance";
 
 const statusByLastClock: Record<AttendanceType, "OUT" | "IN" | "BREAK"> = {
   ENTRATA: "IN",
@@ -66,6 +67,13 @@ export async function POST(request: NextRequest) {
   });
   const startTime = todayShift?.start_time ?? todayShift?.category.start_time ?? null;
   const endTime = todayShift?.end_time ?? todayShift?.category.end_time ?? null;
+  const firstEntry = todayLogs.find((log) => log.type === "ENTRATA");
+  const effectiveEndTime = expectedShiftEndTime({
+    plannedStart: startTime,
+    plannedEnd: endTime,
+    locationName: todayShift?.location?.name ?? device.location.name,
+    actualEntryMinutes: firstEntry ? romeMinutesForInstant(firstEntry.timestamp) : null,
+  });
 
   return NextResponse.json({
     employeeId: worker.id,
@@ -76,7 +84,8 @@ export async function POST(request: NextRequest) {
     status: latestLog ? statusByLastClock[latestLog.type] : "OUT",
     todayShift: todayShift ? {
       startTime,
-      endTime,
+      endTime: effectiveEndTime ?? endTime,
+      plannedEndTime: endTime,
       plannedHours: plannedHours(startTime, endTime, todayShift.category.paid_hours),
       locationName: todayShift.location?.name ?? null,
     } : null,

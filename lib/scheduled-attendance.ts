@@ -35,8 +35,53 @@ export function isRestSchedule(categoryName: string | null | undefined, category
   return name.includes("riposo") || ["R", "RI", "R3", "RIPOSO"].includes(code);
 }
 
+export function scheduledEntryPolicy({
+  plannedStart,
+  plannedEnd,
+  locationName,
+}: {
+  plannedStart: string | null | undefined;
+  plannedEnd?: string | null | undefined;
+  locationName?: string | null | undefined;
+}) {
+  const plannedMinutes = scheduleTimeToMinutes(plannedStart);
+  const officeFlexible = String(locationName || "").toLowerCase().includes("ufficio paradise")
+    && ["09:00", "10:00"].includes(String(plannedStart || "").slice(0, 5))
+    && String(plannedEnd || "").slice(0, 5) === "18:00";
+  const deadlineMinutes = plannedMinutes === null
+    ? null
+    : officeFlexible
+      ? 10 * 60
+      : plannedMinutes + ABSENCE_GRACE_MINUTES;
+  return { plannedMinutes, deadlineMinutes, officeFlexible };
+}
+
+export function expectedShiftEndTime({
+  plannedStart,
+  plannedEnd,
+  locationName,
+  actualEntryMinutes,
+}: {
+  plannedStart: string | null | undefined;
+  plannedEnd: string | null | undefined;
+  locationName?: string | null | undefined;
+  actualEntryMinutes?: number | null;
+}) {
+  const endMinutes = scheduleTimeToMinutes(plannedEnd);
+  if (endMinutes === null) return null;
+
+  const { plannedMinutes, officeFlexible } = scheduledEntryPolicy({ plannedStart, plannedEnd, locationName });
+  const entryDelay = officeFlexible && plannedMinutes !== null && actualEntryMinutes !== null && actualEntryMinutes !== undefined
+    ? Math.max(0, actualEntryMinutes - plannedMinutes)
+    : 0;
+  const expectedMinutes = endMinutes + entryDelay;
+  return `${String(Math.floor(expectedMinutes / 60) % 24).padStart(2, "0")}:${String(expectedMinutes % 60).padStart(2, "0")}`;
+}
+
 export function compareScheduledClock({
   plannedStart,
+  plannedEnd,
+  locationName,
   categoryName,
   categoryCode,
   hasClockEntry,
@@ -44,6 +89,8 @@ export function compareScheduledClock({
   now = new Date(),
 }: {
   plannedStart: string | null | undefined;
+  plannedEnd?: string | null | undefined;
+  locationName?: string | null | undefined;
   categoryName: string | null | undefined;
   categoryCode: string | null | undefined;
   hasClockEntry: boolean;
@@ -51,13 +98,13 @@ export function compareScheduledClock({
   now?: Date;
 }) {
   const rest = isRestSchedule(categoryName, categoryCode);
-  const plannedMinutes = scheduleTimeToMinutes(plannedStart);
-  const elapsedMinutes = plannedMinutes === null ? 0 : Math.max(0, currentRomeMinutes(now) - plannedMinutes);
+  const { plannedMinutes, deadlineMinutes, officeFlexible } = scheduledEntryPolicy({ plannedStart, plannedEnd, locationName });
+  const elapsedMinutes = deadlineMinutes === null ? 0 : Math.max(0, currentRomeMinutes(now) - deadlineMinutes);
   const absent = !rest
     && !hasApprovedLeave
     && !hasClockEntry
-    && plannedMinutes !== null
-    && elapsedMinutes > ABSENCE_GRACE_MINUTES;
+    && deadlineMinutes !== null
+    && currentRomeMinutes(now) > deadlineMinutes;
 
-  return { absent, rest, elapsedMinutes, plannedMinutes };
+  return { absent, rest, elapsedMinutes, plannedMinutes, deadlineMinutes, officeFlexible };
 }

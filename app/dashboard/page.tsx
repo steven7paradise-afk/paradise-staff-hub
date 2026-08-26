@@ -10,7 +10,7 @@ import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { ensureTomorrowRestNotifications } from "@/lib/rest-notifications";
-import { compareScheduledClock } from "@/lib/scheduled-attendance";
+import { compareScheduledClock, expectedShiftEndTime, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
 import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
@@ -241,10 +241,15 @@ export default async function DashboardPage() {
       const firstEntry = state.firstEntry?.timestamp ? new Date(state.firstEntry.timestamp) : null;
       const schedule = scheduleByUser.get(userId);
       const shiftStart = schedule?.start_time || schedule?.category?.start_time || null;
+      const shiftEnd = schedule?.end_time || schedule?.category?.end_time || null;
       const actualMinutes = firstEntry ? romeDateTimeParts(firstEntry).totalMinutes : null;
-      const plannedMinutes = timeToMinutes(shiftStart);
-      const lateMinutes = actualMinutes !== null && plannedMinutes !== null ? Math.max(0, actualMinutes - plannedMinutes) : 0;
       const user = logs[0].user;
+      const entryPolicy = scheduledEntryPolicy({
+        plannedStart: shiftStart,
+        plannedEnd: shiftEnd,
+        locationName: schedule?.location?.name || user.location?.name,
+      });
+      const lateMinutes = actualMinutes !== null && entryPolicy.deadlineMinutes !== null ? Math.max(0, actualMinutes - entryPolicy.deadlineMinutes) : 0;
       return {
         id: userId,
         name: user.name,
@@ -260,8 +265,11 @@ export default async function DashboardPage() {
     const approvedLeaveUserIds = new Set(leaveRequests.map((request) => request.user_id));
     const absentToday: ManagementDashboardData["absentToday"] = schedules.flatMap((schedule) => {
       const plannedStart = schedule.start_time || schedule.category.start_time || null;
+      const plannedEnd = schedule.end_time || schedule.category.end_time || null;
       const comparison = compareScheduledClock({
         plannedStart,
+        plannedEnd,
+        locationName: schedule.location?.name || schedule.user.location?.name,
         categoryName: schedule.category.name,
         categoryCode: schedule.category.code,
         hasClockEntry: Boolean(logsByUser.get(schedule.user_id)?.some((log) => log.type === "ENTRATA" || log.type === "RIENTRO")),
@@ -424,7 +432,7 @@ export default async function DashboardPage() {
       presentNow: clockedToday.filter((staff) => staff.status === "IN" || staff.status === "BREAK").length,
       clockedToday,
       absentToday,
-      lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 10),
+      lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 0),
       leaves: leaveRows,
       clientsToday: countedResponses.length,
       hourlyClients,
@@ -638,7 +646,16 @@ export default async function DashboardPage() {
   const myTodayShift = todayShiftEntries.find((e) => e.user_id === currentUser.id);
   const todayShiftStartTime = myTodayShift?.start_time ?? myTodayShift?.category?.start_time ?? null;
   const todayShiftEndTime = myTodayShift?.end_time ?? myTodayShift?.category?.end_time ?? null;
-  const todayShiftTime = todayShiftStartTime && todayShiftEndTime ? `${todayShiftStartTime} - ${todayShiftEndTime}` : "Nessun turno oggi";
+  const firstTodayEntry = todayAttendanceLogs.find((log) => log.type === "ENTRATA");
+  const effectiveTodayShiftEndTime = expectedShiftEndTime({
+    plannedStart: todayShiftStartTime,
+    plannedEnd: todayShiftEndTime,
+    locationName: currentUser.location?.name,
+    actualEntryMinutes: firstTodayEntry ? romeDateTimeParts(firstTodayEntry.timestamp).totalMinutes : null,
+  });
+  const todayShiftTime = todayShiftStartTime && todayShiftEndTime
+    ? `${todayShiftStartTime} - ${effectiveTodayShiftEndTime ?? todayShiftEndTime}`
+    : "Nessun turno oggi";
 
   const clockRule = parseClockRule(clockRuleSetting?.value);
   const breakDurationMinutes = clockRule.breakDurationMinutes;
@@ -674,16 +691,24 @@ export default async function DashboardPage() {
   for (const shift of monthlyShiftEntries) {
     const categoryName = shift.category.name.toLowerCase();
     if (categoryName.includes("riposo")) continue;
-    const planned = timeToMinutes(shift.start_time || shift.category.start_time);
+    const entryPolicy = scheduledEntryPolicy({
+      plannedStart: shift.start_time || shift.category.start_time,
+      plannedEnd: shift.end_time || shift.category.end_time,
+      locationName: currentUser.location?.name,
+    });
     const entry = firstEntriesByDate.get(shift.date.toISOString().slice(0, 10));
-    if (planned === null || !entry) continue;
-    if (romeDateTimeParts(entry).totalMinutes - planned > 10) monthlyLateCount += 1;
+    if (entryPolicy.deadlineMinutes === null || !entry) continue;
+    if (romeDateTimeParts(entry).totalMinutes > entryPolicy.deadlineMinutes) monthlyLateCount += 1;
   }
 
-  const firstTodayEntry = todayAttendanceLogs.find((log) => log.type === "ENTRATA");
   const plannedTodayMinutes = timeToMinutes(todayShiftStartTime);
-  const todayLateMinutes = firstTodayEntry && plannedTodayMinutes !== null
-    ? Math.max(0, romeDateTimeParts(firstTodayEntry.timestamp).totalMinutes - plannedTodayMinutes)
+  const todayEntryPolicy = scheduledEntryPolicy({
+    plannedStart: todayShiftStartTime,
+    plannedEnd: todayShiftEndTime,
+    locationName: currentUser.location?.name,
+  });
+  const todayLateMinutes = firstTodayEntry && plannedTodayMinutes !== null && todayEntryPolicy.deadlineMinutes !== null
+    ? Math.max(0, romeDateTimeParts(firstTodayEntry.timestamp).totalMinutes - todayEntryPolicy.deadlineMinutes)
     : 0;
 
   const weeklyShifts = Array.from({ length: 7 }, (_, index) => {

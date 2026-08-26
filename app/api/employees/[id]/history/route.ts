@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 import {
   ABSENCE_GRACE_MINUTES,
   currentRomeMinutes,
+  expectedShiftEndTime,
   isRestSchedule,
   romeMinutesForInstant,
-  scheduleTimeToMinutes,
+  scheduledEntryPolicy,
 } from "@/lib/scheduled-attendance";
 
 const authorizedRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
@@ -77,6 +78,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       contract_start: true,
       contract_end: true,
       contract_history: true,
+      location: { select: { name: true } },
     },
   });
   if (!employee) return NextResponse.json({ error: "Lavoratore non trovato" }, { status: 404 });
@@ -91,13 +93,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       orderBy: { created_at: "desc" },
     }),
     prisma.scheduleEntry.findMany({
-      where: { user_id: id },
-      include: { category: true },
+      where: { user_id: id, date: { gte: new Date("2026-08-01T00:00:00.000Z") } },
+      include: { category: true, location: { select: { name: true } } },
       orderBy: { date: "desc" },
       take: 500,
     }),
     prisma.attendanceLog.findMany({
-      where: { user_id: id, type: "ENTRATA" },
+      where: { user_id: id, type: "ENTRATA", date: { gte: new Date("2026-08-01T00:00:00.000Z") } },
       orderBy: { timestamp: "asc" },
       take: 1000,
     }),
@@ -171,8 +173,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   for (const schedule of schedules) {
     if (isRestSchedule(schedule.category.name, schedule.category.code)) continue;
     const plannedStart = schedule.start_time || schedule.category.start_time || null;
-    const plannedMinutes = scheduleTimeToMinutes(plannedStart);
-    if (plannedMinutes === null) continue;
+    const plannedEnd = schedule.end_time || schedule.category.end_time || null;
+    const entryPolicy = scheduledEntryPolicy({
+      plannedStart,
+      plannedEnd,
+      locationName: schedule.location?.name || employee.location?.name,
+    });
+    if (entryPolicy.plannedMinutes === null || entryPolicy.deadlineMinutes === null) continue;
     const dayKey = schedule.date.toISOString().slice(0, 10);
     const approvedAbsence = requests.some((request) =>
       request.status === "APPROVED"
@@ -184,27 +191,33 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const entry = firstEntryByDay.get(dayKey);
     if (entry) {
       const actualMinutes = romeMinutesForInstant(entry.timestamp);
-      const delay = Math.max(0, actualMinutes - plannedMinutes);
-      if (delay > ABSENCE_GRACE_MINUTES) {
+      const delay = Math.max(0, actualMinutes - entryPolicy.deadlineMinutes);
+      if (delay > 0) {
+        const expectedEnd = expectedShiftEndTime({
+          plannedStart,
+          plannedEnd,
+          locationName: schedule.location?.name || employee.location?.name,
+          actualEntryMinutes: actualMinutes,
+        });
         events.push({
           id: `late-entry-${entry.id}`,
           occurredAt: entry.timestamp.toISOString(),
           type: "Entrata in ritardo",
           status: "RITARDO",
-          note: `Turno previsto ${plannedStart}; entrata ${entry.time || `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`} · +${delay} minuti.`,
+          note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? "; ingresso flessibile consentito fino alle 10:00" : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Entrata ${entry.time || `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`} · +${delay} minuti oltre il limite${entryPolicy.officeFlexible && expectedEnd ? ` · uscita prevista ${expectedEnd}` : ""}.`,
         });
       }
       continue;
     }
 
-    const overdue = dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes(now) - plannedMinutes > ABSENCE_GRACE_MINUTES);
+    const overdue = dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes(now) > entryPolicy.deadlineMinutes);
     if (overdue) {
       events.push({
         id: `missing-entry-${schedule.id}`,
-        occurredAt: romeInstantForDayMinutes(dayKey, plannedMinutes).toISOString(),
+        occurredAt: romeInstantForDayMinutes(dayKey, entryPolicy.deadlineMinutes).toISOString(),
         type: "Mancata timbratura",
         status: "ASSENTE",
-        note: `Turno previsto alle ${plannedStart}; nessuna entrata registrata.`,
+        note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? "; ingresso consentito fino alle 10:00" : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Nessuna entrata registrata.`,
       });
     }
   }

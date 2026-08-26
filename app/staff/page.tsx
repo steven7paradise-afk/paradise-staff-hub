@@ -153,6 +153,8 @@ export default async function StaffPage({
           const plannedEnd = schedule?.end_time || schedule?.category.end_time || null;
           const comparison = compareScheduledClock({
             plannedStart,
+            plannedEnd,
+            locationName: user.location?.name,
             categoryName: schedule?.category.name,
             categoryCode: schedule?.category.code,
             hasClockEntry: Boolean(attendanceState.firstEntry),

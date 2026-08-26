@@ -2022,7 +2022,7 @@ export function StaffDirectory({
                       <AlarmClock className="mt-0.5 size-3.5 shrink-0" />
                       <span>
                         Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.absent
-                          ? `nessuna timbratura (+${emp.attendanceToday.elapsedMinutes} min)`
+                          ? `nessuna timbratura (+${emp.attendanceToday.elapsedMinutes} min oltre il limite)`
                           : emp.attendanceToday.firstEntry
                             ? `entrata ${emp.attendanceToday.firstEntry}`
                             : emp.attendanceToday.status === "GIUSTIFICATO"

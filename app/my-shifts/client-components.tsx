@@ -6,6 +6,7 @@ import { Clock, ChevronDown, MoreVertical, X, Calendar, FileText, CheckCircle2, 
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { expectedShiftEndTime, romeMinutesForInstant } from "@/lib/scheduled-attendance";
 
 type TodayLog = {
   id?: string;
@@ -19,6 +20,7 @@ type TodayCountdownProps = {
   shiftTime: string;
   startTime: string | null;
   endTime: string | null;
+  locationName?: string | null;
   breakDurationMinutes: number;
   initialLogs: TodayLog[];
 };
@@ -216,6 +218,7 @@ export function TodayShiftCountdown({
   shiftTime,
   startTime,
   endTime,
+  locationName,
   breakDurationMinutes,
   initialLogs,
 }: TodayCountdownProps) {
@@ -290,8 +293,15 @@ export function TodayShiftCountdown({
   const sortedLogs = [...logs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   const latest = sortedLogs.at(-1) ?? null;
   const lastEntry = [...sortedLogs].reverse().find((log) => log.type === "ENTRATA" || log.type === "RIENTRO") ?? null;
+  const firstEntry = sortedLogs.find((log) => log.type === "ENTRATA") ?? null;
+  const effectiveEndTime = expectedShiftEndTime({
+    plannedStart: startTime,
+    plannedEnd: endTime,
+    locationName,
+    actualEntryMinutes: firstEntry ? romeMinutesForInstant(new Date(firstEntry.timestamp)) : null,
+  });
   const start = parseLocalTarget(startTime);
-  const end = parseLocalTarget(endTime);
+  const end = parseLocalTarget(effectiveEndTime ?? endTime);
   const hasShift = Boolean(start && end && shiftName !== "Non programmato");
 
   // Determine remaining break time if currently on break

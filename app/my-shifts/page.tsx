@@ -359,6 +359,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
       shiftTime={timeRange(todaySchedule)}
       startTime={todaySchedule?.start_time ?? todaySchedule?.category.start_time ?? null}
       endTime={todaySchedule?.end_time ?? todaySchedule?.category.end_time ?? null}
+      locationName={user.location?.name ?? null}
       breakDurationMinutes={breakDurationMinutes}
       initialLogs={todayLogs.map((log) => ({
         type: log.type as "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA",

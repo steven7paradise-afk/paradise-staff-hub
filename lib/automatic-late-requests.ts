@@ -6,7 +6,7 @@ import {
   currentRomeMinutes,
   isRestSchedule,
   romeMinutesForInstant,
-  scheduleTimeToMinutes,
+  scheduledEntryPolicy,
 } from "@/lib/scheduled-attendance";
 
 export const AUTOMATIC_LATE_REASON_PREFIX = "RITARDO AUTOMATICO — ";
@@ -29,7 +29,11 @@ export async function ensureAutomaticLateRequests(day: Date, now = new Date()) {
         date: { gte: day, lt: tomorrow },
         user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       },
-      include: { category: true, user: { select: { id: true, name: true } } },
+      include: {
+        category: { include: { location: { select: { name: true } } } },
+        location: { select: { name: true } },
+        user: { select: { id: true, name: true } },
+      },
     }),
     prisma.attendanceLog.findMany({
       where: { date: { gte: day, lt: tomorrow }, type: "ENTRATA" },
@@ -54,9 +58,12 @@ export async function ensureAutomaticLateRequests(day: Date, now = new Date()) {
   const dateKey = day.toISOString().slice(0, 10);
   const candidates = schedules.flatMap((schedule) => {
     const plannedStart = schedule.start_time || schedule.category.start_time || null;
-    const plannedMinutes = scheduleTimeToMinutes(plannedStart);
+    const plannedEnd = schedule.end_time || schedule.category.end_time || null;
+    const locationName = schedule.location?.name || schedule.category.location?.name || "";
+    const { plannedMinutes, deadlineMinutes, officeFlexible } = scheduledEntryPolicy({ plannedStart, plannedEnd, locationName });
     if (
       plannedMinutes === null
+      || deadlineMinutes === null
       || isRestSchedule(schedule.category.name, schedule.category.code)
       || approvedLeaveUserIds.has(schedule.user_id)
     ) return [];
@@ -64,17 +71,19 @@ export async function ensureAutomaticLateRequests(day: Date, now = new Date()) {
     const firstEntry = firstEntryByUser.get(schedule.user_id);
     const observedMinutes = firstEntry ? romeMinutesForInstant(firstEntry.timestamp) : currentRomeMinutes(now);
     const delayMinutes = Math.max(0, observedMinutes - plannedMinutes);
-    if (delayMinutes <= ABSENCE_GRACE_MINUTES) return [];
+    const minutesPastDeadline = Math.max(0, observedMinutes - deadlineMinutes);
+    if (observedMinutes <= deadlineMinutes) return [];
 
     const endTime = minutesToClock(observedMinutes);
+    const policyLabel = officeFlexible ? "ingresso flessibile consentito fino alle 10:00" : `tolleranza di ${ABSENCE_GRACE_MINUTES} minuti`;
     const reason = firstEntry
-      ? `${AUTOMATIC_LATE_REASON_PREFIX}turno previsto ${plannedStart}, ingresso registrato ${endTime} (+${delayMinutes} minuti).`
-      : `${AUTOMATIC_LATE_REASON_PREFIX}turno previsto ${plannedStart}, nessuna timbratura dopo ${delayMinutes} minuti.`;
+      ? `${AUTOMATIC_LATE_REASON_PREFIX}turno previsto ${plannedStart}–${plannedEnd || "--:--"}, ${policyLabel}; ingresso registrato ${endTime} (+${minutesPastDeadline} minuti oltre il limite, ${delayMinutes} dal turno previsto).`
+      : `${AUTOMATIC_LATE_REASON_PREFIX}turno previsto ${plannedStart}–${plannedEnd || "--:--"}, ${policyLabel}; nessuna timbratura (+${minutesPastDeadline} minuti oltre il limite).`;
     return [{
       id: `auto-late:${schedule.user_id}:${dateKey}`,
       userId: schedule.user_id,
       userName: schedule.user.name,
-      plannedStart,
+      plannedStart: minutesToClock(deadlineMinutes),
       endTime,
       reason,
     }];
