@@ -159,8 +159,7 @@ function shortDateLabel(value: string) {
 }
 
 function isAttendanceAlert(item: NotificationItem) {
-  const text = `${item.title} ${item.message} ${item.type}`.toLowerCase();
-  return item.type === "TIMBRATURA" || /superamento limite pausa|pausa|uscit|timbram|timbratura/.test(text);
+  return isAttendanceNotification(item);
 }
 
 function isImportant(item: NotificationItem) {
