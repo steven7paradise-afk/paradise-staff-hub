@@ -8,7 +8,7 @@ import {
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
   Archive, Plus, Trash2, UserPlus, Printer, ExternalLink, Pencil,
-  ChevronLeft, Copy, Check, HeartPulse, AlarmClock, Clock3
+  ChevronLeft, Copy, Check, HeartPulse, AlarmClock, Clock3, Umbrella
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -143,6 +143,14 @@ function employmentHistoryBadgeClass(event: EmploymentHistoryEvent) {
 
 type Location = { id: string; name: string };
 type Manager = { id: string; name: string; role: string };
+type MonthlyStaffOverview = {
+  monthLabel: string;
+  absences: string[];
+  holidays: string[];
+  sickness: string[];
+  late: string[];
+};
+type MonthlyOverviewMode = "ABSENCES" | "HOLIDAYS" | "SICKNESS" | "LATE";
 
 async function readJsonResponse(response: Response) {
   const text = await response.text();
@@ -276,12 +284,14 @@ export function StaffDirectory({
   managers,
   userRole,
   focusEmployeeId,
+  monthlyOverview,
 }: {
   initialStaff: Employee[];
   locations: Location[];
   managers: Manager[];
   userRole: string;
   focusEmployeeId?: string | null;
+  monthlyOverview: MonthlyStaffOverview;
 }) {
   const router = useRouter();
   const [staff, setStaff] = useState<Employee[]>(initialStaff);
@@ -292,7 +302,7 @@ export function StaffDirectory({
   const [filterManager, setFilterManager] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
   const [expiryMode, setExpiryMode] = useState(false);
-  const [absenceMode, setAbsenceMode] = useState(false);
+  const [monthlyOverviewMode, setMonthlyOverviewMode] = useState<MonthlyOverviewMode | null>(null);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   
@@ -451,8 +461,6 @@ export function StaffDirectory({
   const isAuthorizedToEdit = userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const isArchivedEmployee = (emp: Employee) => !emp.active || emp.employeeStatus === "Ex dipendente";
   const archivedCount = staff.filter(isArchivedEmployee).length;
-  const sicknessEmployeeCount = staff.filter((employee) => !isArchivedEmployee(employee) && (employee.sicknessStats?.totalDays ?? 0) > 0).length;
-  const absentTodayCount = staff.filter((employee) => !isArchivedEmployee(employee) && employee.attendanceToday?.absent).length;
   const isUpcomingContractExpiry = (employee: Employee) => {
     if (isArchivedEmployee(employee) || !employee.contractEnd || employee.contractRenewalStatus === "RINNOVATO") return false;
     const end = new Date(`${employee.contractEnd}T23:59:59`);
@@ -463,15 +471,26 @@ export function StaffDirectory({
     return end.getTime() >= now.getTime() && end.getTime() <= limit.getTime();
   };
 
-  const selectOverview = (mode: "active" | "former" | "expiring" | "absent") => {
+  const selectOverview = (mode: "active" | "former" | "expiring") => {
     setSearchQuery("");
     setFilterLocation("");
     setFilterRole("");
     setFilterManager("");
     setArchiveMode(mode === "former");
     setExpiryMode(mode === "expiring");
-    setAbsenceMode(mode === "absent");
+    setMonthlyOverviewMode(null);
     setFilterStatus(mode === "former" ? "Ex dipendente" : "");
+  };
+
+  const selectMonthlyOverview = (mode: MonthlyOverviewMode) => {
+    setSearchQuery("");
+    setFilterLocation("");
+    setFilterRole("");
+    setFilterManager("");
+    setFilterStatus("");
+    setArchiveMode(false);
+    setExpiryMode(false);
+    setMonthlyOverviewMode((current) => current === mode ? null : mode);
   };
 
   // Filters
@@ -479,7 +498,16 @@ export function StaffDirectory({
     const archived = isArchivedEmployee(emp);
     if (archiveMode ? !archived : archived) return false;
     if (expiryMode && !isUpcomingContractExpiry(emp)) return false;
-    if (absenceMode && !emp.attendanceToday?.absent) return false;
+    const monthlyIds = monthlyOverviewMode === "ABSENCES"
+      ? monthlyOverview.absences
+      : monthlyOverviewMode === "HOLIDAYS"
+        ? monthlyOverview.holidays
+        : monthlyOverviewMode === "SICKNESS"
+          ? monthlyOverview.sickness
+          : monthlyOverviewMode === "LATE"
+            ? monthlyOverview.late
+            : null;
+    if (monthlyIds && !monthlyIds.includes(emp.id)) return false;
 
     const fullName = emp.name.toLowerCase();
     const query = searchQuery.toLowerCase();
@@ -2025,53 +2053,61 @@ export function StaffDirectory({
   return (
     <div className="w-full space-y-6">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Link href="/malattie" className="group flex min-h-24 items-center justify-between rounded-[22px] border border-violet-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-500">Malattie</p>
-            <p className="mt-1 text-2xl font-black text-neutral-900">{sicknessEmployeeCount}</p>
-            <p className="text-xs font-semibold text-neutral-500">Giustificate e non giustificate</p>
-          </div>
-          <span className="grid size-11 place-items-center rounded-2xl bg-violet-50 text-violet-700"><HeartPulse className="size-5" /></span>
-        </Link>
-
-        <button
-          type="button"
-          onClick={() => selectOverview(absenceMode ? "active" : "absent")}
-          className={cn(
-            "group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
-            absenceMode ? "border-orange-300 ring-2 ring-orange-100" : "border-orange-100",
-          )}
-        >
+        <button type="button" onClick={() => selectMonthlyOverview("ABSENCES")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "ABSENCES" ? "border-orange-300 ring-2 ring-orange-100" : "border-orange-100")}>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-500">Assenze</p>
-            <p className="mt-1 text-2xl font-black text-neutral-900">{absentTodayCount}</p>
-            <p className="text-xs font-semibold text-neutral-500">Assenti oggi e mancate entrate</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.absences.length}</p>
+            <p className="text-xs font-semibold text-neutral-500">Persone assenti · {monthlyOverview.monthLabel}</p>
           </div>
           <span className="grid size-11 place-items-center rounded-2xl bg-orange-50 text-orange-700"><AlarmClock className="size-5" /></span>
         </button>
 
-        <Link href="/requests" className="group flex min-h-24 items-center justify-between rounded-[22px] border border-blue-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <button
+          type="button"
+          onClick={() => selectMonthlyOverview("HOLIDAYS")}
+          className={cn(
+            "group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+            monthlyOverviewMode === "HOLIDAYS" ? "border-amber-300 ring-2 ring-amber-100" : "border-amber-100",
+          )}
+        >
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-500">Permessi</p>
-            <p className="mt-1 text-base font-black text-neutral-900">Apri richieste</p>
-            <p className="text-xs font-semibold text-neutral-500">Da approvare e storico</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-600">Ferie</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.holidays.length}</p>
+            <p className="text-xs font-semibold text-neutral-500">Persone in ferie · {monthlyOverview.monthLabel}</p>
           </div>
-          <span className="grid size-11 place-items-center rounded-2xl bg-blue-50 text-blue-700"><ClipboardList className="size-5" /></span>
-        </Link>
+          <span className="grid size-11 place-items-center rounded-2xl bg-amber-50 text-amber-700"><Umbrella className="size-5" /></span>
+        </button>
 
-        <Link href="/team" className="group flex min-h-24 items-center justify-between rounded-[22px] border border-rose-100 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <button type="button" onClick={() => selectMonthlyOverview("SICKNESS")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "SICKNESS" ? "border-violet-300 ring-2 ring-violet-100" : "border-violet-100")}>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-500">Malattie</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.sickness.length}</p>
+            <p className="text-xs font-semibold text-neutral-500">Persone in malattia · {monthlyOverview.monthLabel}</p>
+          </div>
+          <span className="grid size-11 place-items-center rounded-2xl bg-violet-50 text-violet-700"><HeartPulse className="size-5" /></span>
+        </button>
+
+        <button type="button" onClick={() => selectMonthlyOverview("LATE")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "LATE" ? "border-rose-300 ring-2 ring-rose-100" : "border-rose-100")}>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">Ritardi</p>
-            <p className="mt-1 text-base font-black text-neutral-900">Apri controllo</p>
-            <p className="text-xs font-semibold text-neutral-500">Entrate e rientri pausa</p>
+            <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.late.length}</p>
+            <p className="text-xs font-semibold text-neutral-500">Entrate e rientri · {monthlyOverview.monthLabel}</p>
           </div>
           <span className="grid size-11 place-items-center rounded-2xl bg-rose-50 text-rose-700"><Clock3 className="size-5" /></span>
-        </Link>
+        </button>
 
       </div>
 
       {/* Top Filter Bar */}
       <div className="bg-white/70 p-5 rounded-3xl border border-black/5 dark:bg-neutral-900/40 dark:border-white/10 space-y-4">
+        {monthlyOverviewMode ? (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] px-4 py-3">
+            <p className="text-xs font-bold text-[#8F315E]">
+              Elenco mensile: {monthlyOverviewMode === "ABSENCES" ? "assenze" : monthlyOverviewMode === "HOLIDAYS" ? "ferie" : monthlyOverviewMode === "SICKNESS" ? "malattie" : "ritardi"} · {monthlyOverview.monthLabel}
+            </p>
+            <button type="button" onClick={() => setMonthlyOverviewMode(null)} className="inline-flex size-8 items-center justify-center rounded-full bg-white text-[#B83D7F] shadow-sm" aria-label="Rimuovi filtro mensile"><X className="size-4" /></button>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full lg:min-w-[360px] lg:max-w-xl lg:flex-1">
             <Search className="absolute left-4 top-3.5 size-4 text-black/40 dark:text-white/40" />
@@ -2103,7 +2139,7 @@ export function StaffDirectory({
               onClick={() => {
                 setArchiveMode((current) => !current);
                 setExpiryMode(false);
-                setAbsenceMode(false);
+                setMonthlyOverviewMode(null);
                 setFilterStatus("");
               }}
               className={cn(

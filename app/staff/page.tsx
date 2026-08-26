@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { normalizeAccessRoutes } from "@/lib/roles";
 import { deriveAttendanceState } from "@/lib/attendance-state";
-import { compareScheduledClock } from "@/lib/scheduled-attendance";
+import { compareScheduledClock, currentRomeMinutes, isClosedSchedule, isRestSchedule, romeMinutesForInstant, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
 import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,16 @@ function romeClock(date: Date | null | undefined) {
   }).format(date);
 }
 
+function currentRomeMonthRange() {
+  const key = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit" }).format(new Date());
+  const [year, month] = key.split("-").map(Number);
+  return {
+    start: new Date(Date.UTC(year, month - 1, 1)),
+    end: new Date(Date.UTC(year, month, 1)),
+    label: new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", month: "long", year: "numeric" }).format(new Date()),
+  };
+}
+
 export default async function StaffPage({
   searchParams,
 }: {
@@ -36,11 +46,12 @@ export default async function StaffPage({
   const today = romeCalendarDate();
   const tomorrow = new Date(today);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const month = currentRomeMonthRange();
   const calculateSicknessDays = (start: Date, end: Date) => {
     return Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   };
 
-  const [session, staff, locations, managers, todaySchedules, todayAttendanceLogs, approvedLeavesToday] = await Promise.all([
+  const [session, staff, locations, managers, todaySchedules, todayAttendanceLogs, approvedLeavesToday, monthlySchedules, monthlyAttendanceLogs, monthlyLeaves] = await Promise.all([
     auth(),
     prisma.user.findMany({
       where: {
@@ -107,6 +118,34 @@ export default async function StaffPage({
       },
       select: { user_id: true },
     }),
+    prisma.scheduleEntry.findMany({
+      where: {
+        date: { gte: month.start, lt: tomorrow },
+        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      },
+      include: {
+        category: true,
+        location: { select: { name: true } },
+        user: { select: { location: { select: { name: true } } } },
+      },
+    }),
+    prisma.attendanceLog.findMany({
+      where: {
+        date: { gte: month.start, lt: tomorrow },
+        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      },
+      orderBy: { timestamp: "asc" },
+    }),
+    prisma.leaveRequest.findMany({
+      where: {
+        status: "APPROVED",
+        type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] },
+        start_date: { lt: month.end },
+        end_date: { gte: month.start },
+        user: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      },
+      select: { user_id: true, type: true, start_date: true, end_date: true },
+    }),
   ]);
 
   if (session?.user?.role && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
@@ -121,6 +160,43 @@ export default async function StaffPage({
     attendanceByUser.set(log.user_id, rows);
   }
   const approvedLeaveUserIds = new Set(approvedLeavesToday.map((request) => request.user_id));
+  const monthLogsByUserDay = new Map<string, typeof monthlyAttendanceLogs>();
+  for (const log of monthlyAttendanceLogs) {
+    const key = `${log.user_id}:${log.date.toISOString().slice(0, 10)}`;
+    monthLogsByUserDay.set(key, [...(monthLogsByUserDay.get(key) ?? []), log]);
+  }
+  const monthlyAbsenceIds = new Set<string>();
+  const monthlyLateIds = new Set<string>();
+  const todayKey = today.toISOString().slice(0, 10);
+  for (const schedule of monthlySchedules) {
+    if (isRestSchedule(schedule.category.name, schedule.category.code) || isClosedSchedule(schedule.category.name, schedule.category.code)) continue;
+    const dayKey = schedule.date.toISOString().slice(0, 10);
+    const dayLogs = monthLogsByUserDay.get(`${schedule.user_id}:${dayKey}`) ?? [];
+    const firstEntry = dayLogs.find((log) => log.type === "ENTRATA");
+    const hasClockEntry = dayLogs.some((log) => log.type === "ENTRATA" || log.type === "RIENTRO");
+    const approvedLeave = monthlyLeaves.some((request) => request.user_id === schedule.user_id && request.start_date <= schedule.date && request.end_date >= schedule.date);
+    const plannedStart = schedule.start_time || schedule.category.start_time || null;
+    const plannedEnd = schedule.end_time || schedule.category.end_time || null;
+    const policy = scheduledEntryPolicy({
+      plannedStart,
+      plannedEnd,
+      locationName: schedule.location?.name || schedule.user.location?.name,
+    });
+    if (!approvedLeave && !hasClockEntry && policy.deadlineMinutes !== null && (dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes() > policy.deadlineMinutes))) {
+      monthlyAbsenceIds.add(schedule.user_id);
+    }
+    if (firstEntry && policy.deadlineMinutes !== null && romeMinutesForInstant(firstEntry.timestamp) > policy.deadlineMinutes) {
+      monthlyLateIds.add(schedule.user_id);
+    }
+    if (dayLogs.some((log) => log.type === "RIENTRO" && /Rientro pausa in ritardo:/i.test(log.note || ""))) {
+      monthlyLateIds.add(schedule.user_id);
+    }
+  }
+  for (const log of monthlyAttendanceLogs) {
+    if (log.type === "RIENTRO" && /Rientro pausa in ritardo:/i.test(log.note || "")) monthlyLateIds.add(log.user_id);
+  }
+  const monthlyHolidayIds = new Set(monthlyLeaves.filter((request) => request.type === "FERIE").map((request) => request.user_id));
+  const monthlySicknessIds = new Set(monthlyLeaves.filter((request) => request.type === "MALATTIA").map((request) => request.user_id));
 
   return (
     <AppShell
@@ -233,6 +309,13 @@ export default async function StaffPage({
         managers={managers.map((m) => ({ id: m.id, name: m.name, role: m.role }))}
         userRole={session?.user?.role ?? "DIPENDENTE"}
         focusEmployeeId={params.employee ?? null}
+        monthlyOverview={{
+          monthLabel: month.label,
+          absences: Array.from(monthlyAbsenceIds),
+          holidays: Array.from(monthlyHolidayIds),
+          sickness: Array.from(monthlySicknessIds),
+          late: Array.from(monthlyLateIds),
+        }}
       />
     </AppShell>
   );
