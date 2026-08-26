@@ -1291,7 +1291,7 @@ export function StaffDirectory({
                 className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[#D96B94] px-5 py-3 text-xs font-bold text-white shadow-sm transition hover:bg-[#C85982] active:scale-95"
               >
                 <SlidersHorizontal className="size-3.5" />
-                {showFullForm ? "▲ Nascondi Modifica" : "✏️ Modifica dipendente"}
+                {showFullForm ? "Chiudi modifica" : "Modifica dipendente"}
               </button>
             </div>
           </div>
