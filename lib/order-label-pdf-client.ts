@@ -7,6 +7,7 @@ export type OrderLabelResponse = {
   answers?: Record<string, any> | null;
   created_at?: string;
   updated_at?: string;
+  user?: { name?: string | null } | null;
   user_location_name?: string | null;
   priority?: string | null;
   form?: { fields?: LabelField[] | null } | null;
@@ -237,6 +238,8 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const pageHeight = doc.internal.pageSize.getHeight();
   const orderNo = orderNumber(order);
   const client = orderClientName(order);
+  const createdAt = formatDateTime(order.created_at) || orderDate();
+  const compiledBy = order.user?.name?.trim() || "Non indicato";
   const barcodeValue = orderLabelBarcodeValue(order.id, orderNo);
   const qrCodeDataUrl = await createQrDataUrl(barcodeValue, {
     errorCorrectionLevel: "H",
@@ -251,21 +254,31 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
 
   const cleanOrderNo = `#${orderNo.replace(/^#/, "")}`;
   const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="205" y="35" width="490" height="155" preserveAspectRatio="xMidYMid meet" />`
-    : `<text x="450" y="125" text-anchor="middle" font-size="54" font-weight="800" fill="#111">Paradise Beauty</text>`;
+    ? `<image href="${logoDataUrl}" x="245" y="70" width="410" height="130" preserveAspectRatio="xMidYMid meet" />`
+    : `<text x="450" y="150" text-anchor="middle" font-size="54" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${ORDER_LABEL_CANVAS_WIDTH}" height="${ORDER_LABEL_CANVAS_HEIGHT}" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
-      <rect x="55" y="35" width="790" height="250" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
-      <line x1="430" y1="65" x2="430" y2="255" stroke="#ec5391" stroke-width="3" opacity="0.45"/>
-      <g transform="translate(-70 40) scale(0.72)">${logoImage}</g>
+      <rect x="55" y="35" width="790" height="190" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
+      ${logoImage}
 
-      <text x="625" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
-      <text x="625" y="165" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
-      <text x="590" y="232" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" letter-spacing="1.2" fill="#111">PRONTO</text>
-      <rect x="615" y="191" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
+      <image href="${qrCodeDataUrl}" x="60" y="270" width="370" height="370" preserveAspectRatio="xMidYMid meet" image-rendering="pixelated"/>
 
-      <image href="${qrCodeDataUrl}" x="285" y="345" width="330" height="330" preserveAspectRatio="xMidYMid meet" image-rendering="pixelated"/>
+      <rect x="465" y="270" width="380" height="370" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
+      <text x="505" y="325" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">CLIENTE</text>
+      <text x="505" y="382" font-family="Arial, Helvetica, sans-serif" font-size="35" font-weight="900" fill="#111111">${escapeSvgText(shortSvgText(client, 20))}</text>
+      <line x1="505" y1="420" x2="805" y2="420" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
+      <text x="505" y="470" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="505" y="535" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
+      <text x="505" y="602" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="1.2" fill="#111111">PRONTO</text>
+      <rect x="730" y="558" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
+
+      <rect x="75" y="680" width="340" height="235" rx="24" fill="#ffffff" stroke="#e8c8d6" stroke-width="3"/>
+      <text x="105" y="730" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">DATA ORDINE</text>
+      <text x="105" y="775" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(createdAt, 24))}</text>
+      <line x1="105" y1="808" x2="385" y2="808" stroke="#e8c8d6" stroke-width="3"/>
+      <text x="105" y="850" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">COMPILATO DA</text>
+      <text x="105" y="895" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(compiledBy, 22))}</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
