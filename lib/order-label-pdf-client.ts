@@ -291,14 +291,14 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <text x="450" y="265" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#9b496c">NOME E COGNOME</text>
       <text x="450" y="335" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 26))}</text>
 
-      <rect x="120" y="385" width="660" height="150" rx="28" fill="#fff0f6" stroke="#ec5391" stroke-width="3"/>
-      <text x="450" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3" fill="#9b496c">NUMERO ORDINE</text>
-      <text x="450" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 20))}</text>
+      <rect x="90" y="385" width="720" height="150" rx="28" fill="#fff0f6" stroke="#ec5391" stroke-width="3"/>
+      <line x1="565" y1="405" x2="565" y2="515" stroke="#ec5391" stroke-width="2" opacity="0.55"/>
+      <text x="325" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="325" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 14))}</text>
+      <text x="685" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" letter-spacing="1.5" fill="#111">PRONTO</text>
+      <rect x="635" y="451" width="100" height="62" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
       <text x="450" y="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
-      <line x1="70" y1="875" x2="830" y2="875" stroke="#d4d4d8" stroke-width="3"/>
-      <text x="280" y="955" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="900" letter-spacing="2" fill="#111">PRONTO</text>
-      <rect x="520" y="895" width="110" height="78" rx="8" fill="#ffffff" stroke="#111111" stroke-width="7"/>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
@@ -309,11 +309,11 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const imageX = (pageWidth - imageWidth) / 2;
   const imageY = (pageHeight - imageHeight) / 2;
   doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
-  drawCode128(doc, barcodeValue, 8, 64, pageWidth - 16, 20);
+  drawCode128(doc, barcodeValue, 8, 62, pageWidth - 16, 19);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(15, 15, 15);
-  doc.text(barcodeValue, pageWidth / 2, 88.5, { align: "center" });
+  doc.text(barcodeValue, pageWidth / 2, 84.5, { align: "center" });
   return {
     doc,
     labelImageDataUrl,
