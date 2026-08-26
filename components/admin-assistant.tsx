@@ -21,7 +21,7 @@ type AssistantCard = {
 type AssistantMetric = { id: string; label: string; value: string; detail: string; tone: AssistantCard["tone"] };
 type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null; cards?: AssistantCard[]; metrics?: AssistantMetric[] };
 
-const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Cosa ricordi?"];
+const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Cosa posso chiederti?", "Cosa ricordi?"];
 const ASSISTANT_SESSION_KEY = "paradise-admin-assistant-session-v1";
 const initialMessage: Message = { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." };
 

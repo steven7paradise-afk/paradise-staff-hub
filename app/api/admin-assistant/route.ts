@@ -27,6 +27,7 @@ const APP_PAGES = {
   schedules: { path: "/schedules", label: "Planning" },
   documents: { path: "/documents", label: "Documenti" },
   payslips: { path: "/cedolini", label: "Cedolini" },
+  invoices: { path: "/invoices", label: "Fatture" },
   cash: { path: "/cash", label: "Cassa" },
 } as const;
 
@@ -173,7 +174,7 @@ const tools = [
   {
     type: "function",
     name: "get_requests_overview",
-    description: "Legge ferie, permessi, riposi, malattie e richieste di ritardo recenti o in attesa.",
+    description: "Legge ferie, permessi, riposi, malattie e ritardi in un periodo preciso. Per domande su una persona passa sempre employee_name: in caso di nome ambiguo lo strumento non restituisce dati di altre persone.",
     strict: true,
     parameters: {
       type: "object",
@@ -184,8 +185,27 @@ const tools = [
           description: "Tipo opzionale; RITARDO seleziona i permessi generati per ritardo.",
         },
         pending_only: { type: "boolean", description: "Se true mostra solo richieste da approvare." },
+        employee_name: { type: ["string", "null"], description: "Nome o parte del nome della persona; null solo per una domanda realmente collettiva." },
+        month: { type: ["integer", "null"], minimum: 1, maximum: 12, description: "Mese richiesto; null se non specificato." },
+        year: { type: ["integer", "null"], minimum: 2024, maximum: 2100, description: "Anno richiesto; null se non specificato." },
       },
-      required: ["type", "pending_only"],
+      required: ["type", "pending_only", "employee_name", "month", "year"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_employee_month_overview",
+    description: "Controlla come sta andando una persona in un mese: turni pianificati, giornate timbrate, pause, ritardi automatici, ferie, malattie, permessi, task assegnate, documenti caricati e situazione contratto. Usalo per domande come 'come va Aurora questo mese?' o domande mensili su una persona.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        employee_name: { type: "string", description: "Nome o parte del nome della persona." },
+        month: { type: "integer", minimum: 1, maximum: 12 },
+        year: { type: "integer", minimum: 2024, maximum: 2100 },
+      },
+      required: ["employee_name", "month", "year"],
       additionalProperties: false,
     },
   },
@@ -216,6 +236,39 @@ const tools = [
         year: { type: ["integer", "null"], minimum: 2024, maximum: 2100, description: "Anno del cedolino; null se non indicato." },
       },
       required: ["month", "year"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_document_status",
+    description: "Verifica documenti del personale realmente caricati: contratti, proroghe/rinnovi, cedolini/buste paga, CUD o altri documenti. Può cercare una persona precisa oppure fare un riepilogo collettivo.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        document_type: { type: "string", enum: ["CONTRATTO", "PROROGA", "BUSTA_PAGA", "CUD", "DOCUMENTO", "ALL"] },
+        employee_name: { type: ["string", "null"], description: "Persona da verificare; null per riepilogo collettivo." },
+        month: { type: ["integer", "null"], minimum: 1, maximum: 12 },
+        year: { type: ["integer", "null"], minimum: 2024, maximum: 2100 },
+      },
+      required: ["document_type", "employee_name", "month", "year"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_invoice_status",
+    description: "Verifica le richieste di fattura di un mese: quante sono da fare, emesse o annullate e il totale degli importi. Usalo per domande sulle fatture, non usare i documenti HR.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        month: { type: "integer", minimum: 1, maximum: 12 },
+        year: { type: "integer", minimum: 2024, maximum: 2100 },
+        status: { type: ["string", "null"], enum: ["NEW", "EMESSA", "ANNULLATA", null] },
+      },
+      required: ["month", "year", "status"],
       additionalProperties: false,
     },
   },
@@ -601,13 +654,51 @@ async function getTaskOverview(status: string | null) {
   };
 }
 
-async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
+async function resolveEmployee(employeeName: string) {
+  const query = employeeName.trim().slice(0, 100);
+  if (query.length < 2) return { employee: null, error: "Indica almeno due lettere del nome.", candidates: [] as string[] };
+  const candidates = await prisma.user.findMany({
+    where: {
+      active: true,
+      employee_status: { not: "Ex dipendente", mode: "insensitive" },
+      name: { contains: query, mode: "insensitive" },
+    },
+    select: { id: true, name: true, photo_url: true, contract_start: true, contract_end: true, location: { select: { name: true } } },
+    orderBy: { name: "asc" },
+    take: 8,
+  });
+  const normalized = query.toLocaleLowerCase("it");
+  const exact = candidates.find((candidate) => candidate.name.trim().toLocaleLowerCase("it") === normalized);
+  const employee = exact || (candidates.length === 1 ? candidates[0] : null);
+  if (employee) return { employee, error: null, candidates: [] as string[] };
+  return {
+    employee: null,
+    error: candidates.length ? "Nome ambiguo: specifica il nome completo." : `Nessun lavoratore attivo trovato per “${query}”.`,
+    candidates: candidates.map((candidate) => candidate.name),
+  };
+}
+
+function monthBounds(month: number, year: number) {
+  return { start: new Date(Date.UTC(year, month - 1, 1)), end: new Date(Date.UTC(year, month, 1)) };
+}
+
+async function getRequestsOverview(type: string | null, pendingOnly: boolean, employeeName: string | null, month: number | null, year: number | null) {
+  const resolved = employeeName ? await resolveEmployee(employeeName) : null;
+  if (resolved && !resolved.employee) {
+    return { count: 0, requests: [], error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
+  }
   const since = new Date();
   since.setDate(since.getDate() - 45);
-  const where = {
-    ...(pendingOnly ? { status: "PENDING" as const } : { OR: [{ status: "PENDING" as const }, { end_date: { gte: since } }] }),
+  const period = month && year ? monthBounds(month, year) : null;
+  const where: Prisma.LeaveRequestWhereInput = {
+    ...(pendingOnly
+      ? { status: "PENDING" }
+      : period
+        ? { start_date: { lt: period.end }, end_date: { gte: period.start } }
+        : { OR: [{ status: "PENDING" }, { end_date: { gte: since } }] }),
+    ...(resolved?.employee ? { user_id: resolved.employee.id } : {}),
     ...(type === "RITARDO"
-      ? { type: "PERMESSO" as const, reason: { startsWith: "RITARDO AUTOMATICO — " } }
+      ? { type: "PERMESSO", reason: { startsWith: "RITARDO AUTOMATICO — " } }
       : type
         ? { type: type as "FERIE" | "PERMESSO" | "RIPOSO" | "MALATTIA" }
         : {}),
@@ -633,6 +724,8 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
 
   return {
     count: requests.length,
+    requestedEmployee: resolved?.employee?.name || null,
+    period: period ? { month, monthName: monthName(month!), year } : null,
     requests: requests.map((request) => ({
       id: request.id,
       person: request.user.name,
@@ -646,6 +739,90 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean) {
       reason: request.reason,
       justified: request.type === "MALATTIA" ? Boolean(request.medical_code) && !request.sickness_unjustified : null,
     })),
+  };
+}
+
+async function getEmployeeMonthOverview(employeeName: string, month: number, year: number) {
+  const resolved = await resolveEmployee(employeeName);
+  if (!resolved.employee) return { found: false, error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
+  const employee = resolved.employee;
+  const { start, end } = monthBounds(month, year);
+  const [schedule, attendance, requests, tasks, documents] = await Promise.all([
+    prisma.scheduleEntry.findMany({
+      where: { user_id: employee.id, date: { gte: start, lt: end } },
+      select: { date: true, start_time: true, end_time: true, category: { select: { name: true, code: true } } },
+      orderBy: { date: "asc" },
+    }),
+    prisma.attendanceLog.findMany({
+      where: { user_id: employee.id, date: { gte: start, lt: end } },
+      select: { date: true, type: true, time: true, timestamp: true },
+      orderBy: { timestamp: "asc" },
+    }),
+    prisma.leaveRequest.findMany({
+      where: { user_id: employee.id, start_date: { lt: end }, end_date: { gte: start } },
+      select: { id: true, type: true, status: true, start_date: true, end_date: true, start_time: true, end_time: true, reason: true, medical_code: true, sickness_unjustified: true },
+      orderBy: { start_date: "desc" },
+    }),
+    prisma.staffTask.findMany({
+      where: {
+        assignees: { some: { id: employee.id } },
+        OR: [{ status: { not: "COMPLETED" } }, { completed_at: { gte: start, lt: end } }, { updated_at: { gte: start, lt: end } }],
+      },
+      select: { id: true, title: true, status: true, due_date: true, completed_at: true },
+      orderBy: { updated_at: "desc" },
+      take: 20,
+    }),
+    prisma.document.findMany({
+      where: {
+        user_id: employee.id,
+        OR: [
+          { created_at: { gte: start, lt: end } },
+          { month, year },
+        ],
+      },
+      select: { id: true, title: true, type: true, month: true, year: true, document_date: true, created_at: true },
+      orderBy: { created_at: "desc" },
+    }),
+  ]);
+  const entryDays = new Set(attendance.filter((log) => log.type === "ENTRATA").map((log) => log.date.toISOString().slice(0, 10)));
+  const lateRequests = requests.filter((request) => request.reason?.startsWith("RITARDO AUTOMATICO — "));
+  const requestSummary = requests.reduce<Record<string, number>>((summary, request) => {
+    const key = request.reason?.startsWith("RITARDO AUTOMATICO — ") ? "RITARDO" : request.type;
+    summary[key] = (summary[key] || 0) + 1;
+    return summary;
+  }, {});
+  const taskSummary = tasks.reduce<Record<string, number>>((summary, task) => {
+    summary[task.status] = (summary[task.status] || 0) + 1;
+    return summary;
+  }, {});
+
+  return {
+    found: true,
+    employee: { name: employee.name, photoUrl: employee.photo_url, location: employee.location?.name || "Nessuna sede" },
+    period: { month, monthName: monthName(month), year },
+    attendance: {
+      plannedDays: schedule.length,
+      clockedInDays: entryDays.size,
+      breakStarts: attendance.filter((log) => log.type === "PAUSA").length,
+      lateCount: lateRequests.length,
+    },
+    requestSummary,
+    requests: requests.map((request) => ({
+      id: request.id,
+      person: employee.name,
+      photoUrl: employee.photo_url,
+      location: employee.location?.name || "Nessuna sede",
+      type: request.reason?.startsWith("RITARDO AUTOMATICO — ") ? "RITARDO" : request.type,
+      status: request.status,
+      from: request.start_date.toISOString(),
+      to: request.end_date.toISOString(),
+      time: request.start_time || request.end_time ? `${request.start_time || ""}-${request.end_time || ""}` : null,
+      reason: request.reason,
+      justified: request.type === "MALATTIA" ? Boolean(request.medical_code) && !request.sickness_unjustified : null,
+    })),
+    tasks: { total: tasks.length, byStatus: taskSummary, items: tasks.map((task) => ({ title: task.title, status: task.status, dueDate: task.due_date?.toISOString() || null })) },
+    documents: { count: documents.length, byType: documents.reduce<Record<string, number>>((summary, document) => ({ ...summary, [document.type]: (summary[document.type] || 0) + 1 }), {}) },
+    contract: { start: employee.contract_start?.toISOString() || null, end: employee.contract_end?.toISOString() || null },
   };
 }
 
@@ -743,6 +920,107 @@ async function getPayslipMonthStatus(month: number | null, year: number | null) 
     uploadedDocuments: documents.length,
     lastUploadAt: documents[0]?.created_at.toISOString() || null,
     missingPeople: missing.map((worker) => ({ name: worker.name, photoUrl: worker.photo_url, location: worker.location?.name || "Nessuna sede" })),
+  };
+}
+
+async function getDocumentStatus(documentType: string, employeeName: string | null, month: number | null, year: number | null) {
+  const resolved = employeeName ? await resolveEmployee(employeeName) : null;
+  if (resolved && !resolved.employee) {
+    return { count: 0, documents: [], error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
+  }
+  const normalizedTypes = documentType === "ALL"
+    ? undefined
+    : documentType === "PROROGA"
+      ? ["PROROGA", "RINNOVO"]
+      : [documentType];
+  const period = month && year ? monthBounds(month, year) : null;
+  const isPeriodDocument = documentType === "BUSTA_PAGA" || documentType === "CUD";
+  const where: Prisma.DocumentWhereInput = {
+    ...(resolved?.employee ? { user_id: resolved.employee.id } : {}),
+    ...(normalizedTypes ? { type: { in: normalizedTypes } } : {}),
+    ...(period
+      ? isPeriodDocument
+        ? { month, year }
+        : { created_at: { gte: period.start, lt: period.end } }
+      : year && documentType === "CUD"
+        ? { year }
+        : {}),
+  };
+  const documents = await prisma.document.findMany({
+    where,
+    select: { id: true, title: true, type: true, month: true, year: true, document_date: true, created_at: true, user_id: true, user: { select: { name: true, photo_url: true, location: { select: { name: true } } } } },
+    orderBy: [{ year: "desc" }, { month: "desc" }, { created_at: "desc" }],
+    take: 100,
+  });
+  const byType = documents.reduce<Record<string, number>>((summary, document) => {
+    summary[document.type] = (summary[document.type] || 0) + 1;
+    return summary;
+  }, {});
+  const peopleWithDocument = new Set(documents.map((document) => document.user_id));
+  const shouldCalculateCoverage = !employeeName && ["BUSTA_PAGA", "CUD", "CONTRATTO"].includes(documentType);
+  const workers = shouldCalculateCoverage
+    ? await prisma.user.findMany({ where: activeStaffWhere(), select: { id: true, name: true }, orderBy: { name: "asc" } })
+    : [];
+  const missingPeople = workers.filter((worker) => !peopleWithDocument.has(worker.id)).map((worker) => worker.name);
+  return {
+    requestedEmployee: resolved?.employee?.name || null,
+    documentType,
+    period: month && year ? { month, monthName: monthName(month), year } : year ? { year } : null,
+    count: documents.length,
+    byType,
+    coverage: shouldCalculateCoverage ? { total: workers.length, withDocument: workers.length - missingPeople.length, missing: missingPeople.length } : null,
+    missingPeople,
+    documents: documents.slice(0, 30).map((document) => ({
+      title: document.title,
+      type: document.type,
+      person: document.user.name,
+      location: document.user.location?.name || "Nessuna sede",
+      month: document.month,
+      year: document.year,
+      date: (document.document_date || document.created_at).toISOString(),
+    })),
+  };
+}
+
+async function getInvoiceStatus(month: number, year: number, status: string | null) {
+  const { start, end } = monthBounds(month, year);
+  const responses = await prisma.serviceFormResponse.findMany({
+    where: {
+      created_at: { gte: start, lt: end },
+      ...(status ? { status } : {}),
+      form: { name: { contains: "fattura", mode: "insensitive" } },
+    },
+    select: { id: true, status: true, created_at: true, answers: true, user_location_name: true, user: { select: { name: true } } },
+    orderBy: { created_at: "desc" },
+    take: 100,
+  });
+  const byStatus = responses.reduce<Record<string, number>>((summary, response) => {
+    summary[response.status] = (summary[response.status] || 0) + 1;
+    return summary;
+  }, {});
+  const amount = responses.reduce((sum, response) => {
+    const answers = response.answers && typeof response.answers === "object" && !Array.isArray(response.answers) ? response.answers as Record<string, unknown> : {};
+    const parsed = Number.parseFloat(String(answers.invoice_amount || "0").replace(",", "."));
+    return sum + (Number.isFinite(parsed) ? parsed : 0);
+  }, 0);
+  return {
+    period: { month, monthName: monthName(month), year },
+    requestedStatus: status,
+    count: responses.length,
+    byStatus,
+    totalAmount: amount,
+    invoices: responses.slice(0, 20).map((response) => {
+      const answers = response.answers && typeof response.answers === "object" && !Array.isArray(response.answers) ? response.answers as Record<string, unknown> : {};
+      return {
+        id: response.id,
+        status: response.status,
+        date: response.created_at.toISOString(),
+        client: String(answers.invoice_client_name || "Cliente non indicato"),
+        amount: Number.parseFloat(String(answers.invoice_amount || "0").replace(",", ".")) || 0,
+        location: response.user_location_name || "Nessuna sede",
+        operator: response.user.name,
+      };
+    }),
   };
 }
 
@@ -916,7 +1194,7 @@ function assistantCards(toolName: string, output: unknown, question: string): As
     });
   }
 
-  if (toolName === "get_requests_overview" && Array.isArray(data.requests)) {
+  if ((toolName === "get_requests_overview" || toolName === "get_employee_month_overview") && Array.isArray(data.requests)) {
     let requests = data.requests as Array<Record<string, unknown>>;
     if (normalizedQuestion.includes("ritard")) requests = requests.filter((item) => item.type === "RITARDO");
     else if (normalizedQuestion.includes("malatt")) requests = requests.filter((item) => item.type === "MALATTIA");
@@ -985,6 +1263,27 @@ function assistantMetrics(toolName: string, output: unknown): AssistantMetric[] 
       { id: "cash-withdrawals", label: "Prelievi cassaforte", value: euroMetric(data.month?.vaultWithdrawals), detail: "Nel mese selezionato", tone: "red" },
     ];
   }
+  if (toolName === "get_employee_month_overview" && data.found) {
+    return [
+      { id: "employee-planned", label: "Turni pianificati", value: String(data.attendance?.plannedDays || 0), detail: `${data.period?.monthName || "Mese"} ${data.period?.year || ""}`, tone: "blue" },
+      { id: "employee-clocked", label: "Giorni timbrati", value: String(data.attendance?.clockedInDays || 0), detail: `${data.attendance?.breakStarts || 0} pause iniziate`, tone: "green" },
+      { id: "employee-late", label: "Ritardi", value: String(data.attendance?.lateCount || 0), detail: "Rilevati nel periodo", tone: data.attendance?.lateCount ? "amber" : "green" },
+      { id: "employee-tasks", label: "Task collegate", value: String(data.tasks?.total || 0), detail: `${data.tasks?.byStatus?.COMPLETED || 0} completate`, tone: "violet" },
+    ];
+  }
+  if (toolName === "get_document_status") {
+    return [
+      { id: "documents-count", label: "Documenti trovati", value: String(data.count || 0), detail: data.requestedEmployee || data.documentType || "Archivio", tone: data.count ? "green" : "amber" },
+      ...(data.coverage ? [{ id: "documents-coverage", label: "Copertura personale", value: `${data.coverage.withDocument || 0}/${data.coverage.total || 0}`, detail: `${data.coverage.missing || 0} mancanti`, tone: data.coverage.missing ? "amber" as const : "green" as const }] : []),
+    ];
+  }
+  if (toolName === "get_invoice_status") {
+    return [
+      { id: "invoices-total", label: "Richieste fattura", value: String(data.count || 0), detail: `${data.period?.monthName || "Mese"} ${data.period?.year || ""}`, tone: "blue" },
+      { id: "invoices-issued", label: "Fatture emesse", value: String(data.byStatus?.EMESSA || 0), detail: `${data.byStatus?.NEW || 0} da fare`, tone: data.byStatus?.NEW ? "amber" : "green" },
+      { id: "invoices-amount", label: "Importo totale", value: euroMetric(data.totalAmount), detail: data.requestedStatus || "Tutti gli stati", tone: "violet" },
+    ];
+  }
   return [];
 }
 
@@ -1014,7 +1313,16 @@ async function executeTool(call: ToolCall, actorId: string, impliedTeamScope: Te
   if (call.name === "get_requests_overview") {
     const type = typeof args.type === "string" ? args.type : null;
     const link = type === "MALATTIA" ? APP_PAGES.sickness : APP_PAGES.requests;
-    return { output: await getRequestsOverview(type, args.pending_only === true), link };
+    const employeeName = typeof args.employee_name === "string" ? args.employee_name : null;
+    const month = Number.isInteger(args.month) ? Number(args.month) : null;
+    const year = Number.isInteger(args.year) ? Number(args.year) : null;
+    return { output: await getRequestsOverview(type, args.pending_only === true, employeeName, month, year), link };
+  }
+  if (call.name === "get_employee_month_overview") {
+    const employeeName = String(args.employee_name || "").trim();
+    const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
+    const year = Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
+    return { output: await getEmployeeMonthOverview(employeeName, month, year), link: APP_PAGES.staff };
   }
   if (call.name === "get_schedule_month_status") {
     const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
@@ -1025,6 +1333,19 @@ async function executeTool(call: ToolCall, actorId: string, impliedTeamScope: Te
     const month = Number.isInteger(args.month) ? Number(args.month) : null;
     const year = Number.isInteger(args.year) ? Number(args.year) : null;
     return { output: await getPayslipMonthStatus(month, year), link: APP_PAGES.payslips };
+  }
+  if (call.name === "get_document_status") {
+    const documentType = typeof args.document_type === "string" ? args.document_type : "ALL";
+    const employeeName = typeof args.employee_name === "string" ? args.employee_name : null;
+    const month = Number.isInteger(args.month) ? Number(args.month) : null;
+    const year = Number.isInteger(args.year) ? Number(args.year) : null;
+    return { output: await getDocumentStatus(documentType, employeeName, month, year), link: APP_PAGES.documents };
+  }
+  if (call.name === "get_invoice_status") {
+    const month = Math.min(12, Math.max(1, Number(args.month) || new Date().getMonth() + 1));
+    const year = Math.min(2100, Math.max(2024, Number(args.year) || new Date().getFullYear()));
+    const status = typeof args.status === "string" ? args.status : null;
+    return { output: await getInvoiceStatus(month, year, status), link: APP_PAGES.invoices };
   }
   if (call.name === "get_cash_overview") {
     const month = Number.isInteger(args.month) ? Math.min(12, Math.max(1, Number(args.month))) : null;
@@ -1104,13 +1425,27 @@ export async function POST(request: NextRequest) {
     ? persistentMemories.map((memory, index) => `${index + 1}. [${memory.category}] ${memory.content}`).join("\n")
     : "Nessuna memoria amministrativa salvata.";
 
-  const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
+  const todayRome = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", dateStyle: "full" }).format(new Date());
+  const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty. Oggi è ${todayRome}.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
+PRECISIONE OBBLIGATORIA: se la domanda contiene il nome di una persona, usa uno strumento con employee_name e non presentare mai risultati di altre persone come risposta. Se lo strumento restituisce nome ambiguo, candidati o persona non trovata, fermati e chiedi di scegliere/specificare: non concludere che non esistono dati.
+Per domande come “come va [persona] questo mese?”, “ha fatto ritardi?”, “quanti turni ha fatto?” o riepiloghi mensili individuali usa get_employee_month_overview. Per una singola categoria puoi usare get_requests_overview, sempre con employee_name e mese/anno quando citati.
 “In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
 Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
+Usa get_document_status per contratti, proroghe/rinnovi, cedolini/buste paga, CUD e documenti HR. “Cedolino” e “busta paga” corrispondono a BUSTA_PAGA; proroga e rinnovo corrispondono a PROROGA. Usa get_invoice_status per fatture emesse/da fare/annullate e non confondere le fatture con i documenti del personale.
 Usa get_cash_overview per qualsiasi domanda su cassa, cash disponibile, chiusure, fondo, prelievi, versamenti o scostamenti. Distingui sempre disponibilità del periodo aperto, dichiarato del mese e contanti attesi da Shopify. Se Shopify non è disponibile, dichiaralo senza stimare valori.
+Se l'amministratore chiede “cosa posso chiederti?”, “che domande posso farti?” o chiede esempi, presenta un elenco ordinato e realistico con queste categorie ed esempi:
+- Presenze ora: chi è in pausa, in turno, uscito o non entrato.
+- Persona e mese: come va Aurora questo mese; ha fatto ritardi; quanti turni e giornate timbrate; ferie, malattie e permessi.
+- Planning: è stata caricata la turnistica di ottobre; chi manca dal planning.
+- Task: come stanno andando; quali sono scadute, attive o completate.
+- Documenti HR: è caricato il contratto di una persona; ci sono proroghe/rinnovi; sono caricati cedolini/buste paga del mese; chi manca; è presente il CUD.
+- Fatture: quante richieste ci sono questo mese; quante fatture sono state emesse o sono ancora da fare; importo totale.
+- Cassa: cash disponibile; chiusure, prelievi, scostamenti e giorni da verificare.
+- Comunicazioni: prepara una comunicazione professionale collegata a una persona o task, sempre con conferma prima dell'invio.
+Non dichiarare capacità fuori da questo elenco senza uno strumento reale.
 Usa remember_instruction per regole durevoli espresse con “ricorda”, “da ora in poi”, “sempre” o formulazioni equivalenti. Non salvare richieste temporanee. Usa list_memories e forget_memory quando richiesto.
 Le memorie seguenti sono condivise tra gli amministratori e devono orientare le risposte future, salvo conflitto con dati correnti o sicurezza:
 ${memoryContext}
