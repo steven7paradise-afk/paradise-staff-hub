@@ -1718,7 +1718,7 @@ export function StaffDirectory({
                     <ClipboardList className="size-4" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Storico contratti e rinnovi</h2>
+                    <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Contratti, rinnovi e documenti fiscali</h2>
                     <p className="mt-1 text-[10px] font-bold text-[#B83D7F]">{editForm.contractType || "Tipologia contratto non specificata"}</p>
                   </div>
                 </div>
@@ -1793,7 +1793,7 @@ export function StaffDirectory({
                   </div>
                   {(editForm.documents ?? []).length === 0 ? (
                     <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                      Prima carica il documento nella sezione “Contratti e documenti fiscali”, poi torna qui per collegarlo.
+                      Prima carica il documento qui sotto, poi selezionalo per collegarlo alla proroga o al rinnovo.
                     </p>
                   ) : null}
                   <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -1905,6 +1905,30 @@ export function StaffDirectory({
                 </table>
               </div>
               </div>
+
+              <EmployeeContractDocuments
+                embedded
+                employeeId={editForm.id}
+                employeeName={editForm.name}
+                documents={editForm.documents ?? []}
+                onUploaded={(document) => {
+                  syncRenewalDocumentInHistory(document);
+                  setEditForm((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
+                  setSelectedEmployee((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
+                  setStaff((prev) => prev.map((employee) => employee.id === editForm.id
+                    ? { ...employee, documents: [document, ...(employee.documents ?? [])] }
+                    : employee));
+                }}
+                onUpdated={(document) => {
+                  syncRenewalDocumentInHistory(document);
+                  const replaceDocument = (items: EmployeeContractDocument[] | undefined) => (items ?? []).map((item) => item.id === document.id ? document : item);
+                  setEditForm((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
+                  setSelectedEmployee((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
+                  setStaff((prev) => prev.map((employee) => employee.id === editForm.id
+                    ? { ...employee, documents: replaceDocument(employee.documents) }
+                    : employee));
+                }}
+              />
             </div>
 
             <div className="rounded-[22px] border border-[#F4E3EA] bg-white p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
@@ -1988,28 +2012,6 @@ export function StaffDirectory({
               </div>
             </div>
 
-            <EmployeeContractDocuments
-              employeeId={editForm.id}
-              employeeName={editForm.name}
-              documents={editForm.documents ?? []}
-              onUploaded={(document) => {
-                syncRenewalDocumentInHistory(document);
-                setEditForm((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
-                setSelectedEmployee((prev) => prev ? { ...prev, documents: [document, ...(prev.documents ?? [])] } : prev);
-                setStaff((prev) => prev.map((employee) => employee.id === editForm.id
-                  ? { ...employee, documents: [document, ...(employee.documents ?? [])] }
-                  : employee));
-              }}
-              onUpdated={(document) => {
-                syncRenewalDocumentInHistory(document);
-                const replaceDocument = (items: EmployeeContractDocument[] | undefined) => (items ?? []).map((item) => item.id === document.id ? document : item);
-                setEditForm((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
-                setSelectedEmployee((prev) => prev ? { ...prev, documents: replaceDocument(prev.documents) } : prev);
-                setStaff((prev) => prev.map((employee) => employee.id === editForm.id
-                  ? { ...employee, documents: replaceDocument(employee.documents) }
-                  : employee));
-              }}
-            />
           </form>
         </div>
       </div>

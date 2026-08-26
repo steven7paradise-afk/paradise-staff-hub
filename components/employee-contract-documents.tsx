@@ -42,12 +42,14 @@ export function EmployeeContractDocuments({
   documents,
   onUploaded,
   onUpdated,
+  embedded = false,
 }: {
   employeeId: string;
   employeeName: string;
   documents: EmployeeContractDocument[];
   onUploaded: (document: EmployeeContractDocument) => void;
   onUpdated: (document: EmployeeContractDocument) => void;
+  embedded?: boolean;
 }) {
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -129,15 +131,24 @@ export function EmployeeContractDocuments({
   }
 
   return (
-    <div className="bg-white rounded-[22px] border border-[#F4E3EA] p-4 sm:p-5 shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
+    <div className={embedded
+      ? "mt-5 border-t border-black/5 pt-5"
+      : "rounded-[22px] border border-[#F4E3EA] bg-white p-4 shadow-[0_10px_30px_rgba(104,62,79,0.05)] sm:p-5"
+    }>
       <div className="flex flex-col gap-3 border-b border-black/5 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
-            <FileCheck2 className="size-4" />
-          </div>
+          {!embedded ? (
+            <div className="grid size-9 place-items-center rounded-full bg-[#FCE5F3] text-[#D96B94]">
+              <FileCheck2 className="size-4" />
+            </div>
+          ) : null}
           <div>
-            <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Contratti e documenti fiscali</h2>
-            <p className="text-[10px] font-semibold text-neutral-400">Documenti recuperati automaticamente dall'archivio Cedolini di {employeeName}</p>
+            {embedded ? (
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#1F1F1F]">Documenti collegati</h3>
+            ) : (
+              <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Contratti e documenti fiscali</h2>
+            )}
+            <p className="text-[10px] font-semibold text-neutral-400">Contratti, rinnovi, cedolini e CUD recuperati dall'archivio Cedolini di {employeeName}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
