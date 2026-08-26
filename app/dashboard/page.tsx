@@ -10,6 +10,8 @@ import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { ensureTomorrowRestNotifications } from "@/lib/rest-notifications";
+import { compareScheduledClock } from "@/lib/scheduled-attendance";
+import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -135,6 +137,9 @@ export default async function DashboardPage() {
 
   const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
   if (managementRoles.has(role)) {
+    if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)) {
+      await safe(ensureAutomaticLateRequests(statusToday), { created: 0, updated: 0 });
+    }
     const isResponsible = role === "RESPONSABILE";
     const scopedLocationId = isResponsible ? currentUser.sede_id : null;
     const userScope = isResponsible
@@ -184,7 +189,7 @@ export default async function DashboardPage() {
       safe(prisma.leaveRequest.findMany({
         where: {
           status: "APPROVED",
-          type: { in: ["FERIE", "MALATTIA", "RIPOSO"] },
+          type: { in: ["FERIE", "MALATTIA", "RIPOSO", "PERMESSO"] },
           start_date: { lt: statusTomorrow },
           end_date: { gte: statusToday },
           user: { active: true, ...userScope },
@@ -251,6 +256,29 @@ export default async function DashboardPage() {
         lateMinutes,
       };
     }).sort((a, b) => a.firstEntry.localeCompare(b.firstEntry));
+
+    const approvedLeaveUserIds = new Set(leaveRequests.map((request) => request.user_id));
+    const absentToday: ManagementDashboardData["absentToday"] = schedules.flatMap((schedule) => {
+      const plannedStart = schedule.start_time || schedule.category.start_time || null;
+      const comparison = compareScheduledClock({
+        plannedStart,
+        categoryName: schedule.category.name,
+        categoryCode: schedule.category.code,
+        hasClockEntry: Boolean(logsByUser.get(schedule.user_id)?.some((log) => log.type === "ENTRATA" || log.type === "RIENTRO")),
+        hasApprovedLeave: approvedLeaveUserIds.has(schedule.user_id),
+      });
+      if (!comparison.absent || !schedule.user.active || ["ZERO", "SUPER_ADMIN"].includes(schedule.user.role)) return [];
+      return [{
+        id: schedule.user_id,
+        name: schedule.user.name,
+        photoUrl: schedule.user.photo_url,
+        location: schedule.location?.name || schedule.user.location?.name || "Sede non indicata",
+        firstEntry: "Nessuna timbratura",
+        shiftStart: plannedStart,
+        status: "ABSENT" as const,
+        lateMinutes: comparison.elapsedMinutes,
+      }];
+    }).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
 
     const controlFormIds = new Set(controlForms.filter((form) => isClientControlFormName(form.name, form.category)).map((form) => form.id));
     const countedResponses = todayResponses.filter((response) => {
@@ -395,6 +423,7 @@ export default async function DashboardPage() {
       updatedAt: romeTime(new Date()),
       presentNow: clockedToday.filter((staff) => staff.status === "IN" || staff.status === "BREAK").length,
       clockedToday,
+      absentToday,
       lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 10),
       leaves: leaveRows,
       clientsToday: countedResponses.length,

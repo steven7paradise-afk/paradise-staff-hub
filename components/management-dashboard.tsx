@@ -30,7 +30,7 @@ type StaffRow = {
   location: string;
   firstEntry: string;
   shiftStart: string | null;
-  status: "IN" | "BREAK" | "OUT";
+  status: "IN" | "BREAK" | "OUT" | "ABSENT";
   lateMinutes: number;
 };
 
@@ -86,6 +86,7 @@ export type ManagementDashboardData = {
   updatedAt: string;
   presentNow: number;
   clockedToday: StaffRow[];
+  absentToday: StaffRow[];
   lateStaff: StaffRow[];
   leaves: LeaveRow[];
   clientsToday: number;
@@ -204,7 +205,7 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
 export function ManagementDashboard({ data }: { data: ManagementDashboardData }) {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const [personnelView, setPersonnelView] = useState<"PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
+  const [personnelView, setPersonnelView] = useState<"PRESENT" | "ABSENT" | "HOLIDAYS" | "SICKNESS" | "LATE" | null>(null);
   const [analytics, setAnalytics] = useState<DashboardAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
@@ -274,6 +275,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const sickness = data.leaves.filter((item) => item.type === "MALATTIA");
   const visibleStaff = personnelView === "LATE"
     ? data.lateStaff
+    : personnelView === "ABSENT"
+      ? data.absentToday
     : personnelView === "PRESENT"
       ? data.clockedToday.filter((item) => item.status === "IN" || item.status === "BREAK")
       : data.clockedToday;
@@ -294,7 +297,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   const depositEnd = data.monthDeposits / movementTotal * 100;
   const withdrawalEnd = depositEnd + data.monthWithdrawals / movementTotal * 100;
 
-  function showPersonnelSection(view: "PRESENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
+  function showPersonnelSection(view: "PRESENT" | "ABSENT" | "HOLIDAYS" | "SICKNESS" | "LATE") {
     const shouldOpen = personnelView !== view;
     setPersonnelView(shouldOpen ? view : null);
     if (!shouldOpen) return;
@@ -318,8 +321,9 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4">
+        <div className="grid grid-cols-2 md:grid-cols-5">
           <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
+          <Metric label="Assenti" value={String(data.absentToday.length)} note="turno iniziato, nessuna timbratura" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
           <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
           <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
           <Metric label="Ritardi" value={String(data.lateStaff.length)} note="oltre 10 minuti" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
@@ -339,12 +343,12 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       )}
 
-      {personnelView === "PRESENT" || personnelView === "LATE" ? (
+      {personnelView === "PRESENT" || personnelView === "ABSENT" || personnelView === "LATE" ? (
         <section id="personale-oggi" className="scroll-mt-6 overflow-hidden rounded-[24px] border border-white/80 bg-white/80 shadow-[0_12px_40px_rgba(69,38,52,0.08)] backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-[#eee3e8] px-5 py-4">
             <div>
               <p className="text-[10px] font-black uppercase text-[#c4467d]">Personale oggi</p>
-              <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "PRESENT" ? "Personale presente ora" : "Presenze e puntualità"}</h2>
+              <h2 className="mt-1 text-xl font-black text-[#19151a]">{personnelView === "LATE" ? "Personale in ritardo" : personnelView === "ABSENT" ? "Assenti rispetto al turno pianificato" : "Personale presente ora"}</h2>
             </div>
             <div className="flex items-center gap-1">
               <Link href="/attendance" className="hidden min-h-11 items-center rounded-full px-4 text-xs font-black uppercase text-[#9d315f] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none sm:inline-flex">Apri presenze</Link>
@@ -364,14 +368,14 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                   </div>
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-[10px] font-bold uppercase text-[#756d71]">Entrata</p>
-                  <p className="mt-1 font-black text-[#252025]">{staff.firstEntry}</p>
+                  <p className="text-[10px] font-bold uppercase text-[#756d71]">{staff.status === "ABSENT" ? "Turno previsto" : "Entrata"}</p>
+                  <p className="mt-1 font-black text-[#252025]">{staff.status === "ABSENT" ? staff.shiftStart || "--:--" : staff.firstEntry}</p>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${staff.status === "IN" ? "bg-[#dcf5e9] text-[#147553]" : staff.status === "BREAK" ? "bg-[#fff0ce] text-[#8a6310]" : "bg-[#eee9eb] text-[#655b60]"}`}>
-                    {staff.status === "IN" ? "Al lavoro" : staff.status === "BREAK" ? "In pausa" : "Uscito"}
+                  <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${staff.status === "IN" ? "bg-[#dcf5e9] text-[#147553]" : staff.status === "BREAK" ? "bg-[#fff0ce] text-[#8a6310]" : staff.status === "ABSENT" ? "bg-red-100 text-red-700" : "bg-[#eee9eb] text-[#655b60]"}`}>
+                    {staff.status === "IN" ? "Al lavoro" : staff.status === "BREAK" ? "In pausa" : staff.status === "ABSENT" ? "Assente" : "Uscito"}
                   </span>
-                  {staff.lateMinutes > 10 && <p className="mt-1 text-[11px] font-bold text-[#bd3b45]">+{staff.lateMinutes} min</p>}
+                  {staff.lateMinutes > 10 && <p className="mt-1 text-[11px] font-bold text-[#bd3b45]">{staff.status === "ABSENT" ? `Nessuna timbratura · +${staff.lateMinutes} min` : `+${staff.lateMinutes} min`}</p>}
                 </div>
               </div>
             ))}

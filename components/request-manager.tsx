@@ -30,6 +30,14 @@ type ActiveRequestFilter = "JUSTIFY" | RequestRecord["type"];
 const typeLabels = { FERIE: "Ferie", PERMESSO: "Permesso", RIPOSO: "Riposo", MALATTIA: "Malattia", ALTRO: "Altro" };
 const statusLabels = { PENDING: "In attesa", APPROVED: "Approvata", REJECTED: "Rifiutata", FLAGGED: "Segnalata" };
 
+function isAutomaticLateRequest(request: RequestRecord) {
+  return request.reason?.startsWith("RITARDO AUTOMATICO — ") ?? false;
+}
+
+function requestTypeLabel(request: RequestRecord) {
+  return isAutomaticLateRequest(request) ? "Ritardo" : typeLabels[request.type];
+}
+
 function needsSicknessJustification(request: RequestRecord) {
   return request.type === "MALATTIA" && !request.medicalCode && !request.sicknessUnjustified;
 }
@@ -195,7 +203,7 @@ function RequestDetailPanel({
           <h2 className="mt-1 text-xl font-black text-paradise-noir">{request.employee}</h2>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge tone={statusTone(request.status)}>{statusLabels[request.status]}</Badge>
-            <Badge tone="pink">{typeLabels[request.type]}</Badge>
+            <Badge tone="pink">{requestTypeLabel(request)}</Badge>
           </div>
         </div>
         {onClose ? (
@@ -740,15 +748,15 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                             {getRequestIcon(request.type)}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? typeLabels[request.type] : request.employee}</p>
+                            <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? requestTypeLabel(request) : request.employee}</p>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">
-                              {employeeView ? request.employee : typeLabels[request.type]}
+                              {employeeView ? request.employee : requestTypeLabel(request)}
                             </p>
                           </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone={request.type === "FERIE" ? "gold" : request.type === "RIPOSO" ? "green" : request.type === "ALTRO" ? "dark" : "pink"}>{typeLabels[request.type]}</Badge>
+                          <Badge tone={request.type === "FERIE" ? "gold" : request.type === "RIPOSO" ? "green" : request.type === "ALTRO" ? "dark" : "pink"}>{requestTypeLabel(request)}</Badge>
                           {hasSicknessProblem ? <Badge tone="pink">Manca protocollo</Badge> : null}
                         </div>
 

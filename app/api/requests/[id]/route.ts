@@ -6,6 +6,7 @@ import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule } from "@/lib/schedule-sync";
+import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
 
 const approverRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
@@ -83,9 +84,10 @@ export async function PATCH(
       });
 
       let syncResult = null;
-      if (status === "APPROVED") {
+      const automaticLate = isAutomaticLateReason(existing.reason);
+      if (status === "APPROVED" && !automaticLate) {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
-      } else if (status !== undefined && existing.status === "APPROVED") {
+      } else if (status !== undefined && existing.status === "APPROVED" && !automaticLate) {
         await revertApprovedLeaveFromSchedule(tx, updated.id);
       }
 

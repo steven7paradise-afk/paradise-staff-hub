@@ -5,6 +5,7 @@ import { RequestManager } from "@/components/request-manager";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
+import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,10 @@ export default async function RequestsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
   const role = session.user.role;
+  if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)) {
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    await ensureAutomaticLateRequests(new Date(`${day}T00:00:00.000Z`)).catch((error) => console.error("Automatic late requests unavailable:", error));
+  }
   const employeeView = role === "DIPENDENTE";
   let where: Prisma.LeaveRequestWhereInput | undefined;
   if (employeeView) where = { user_id: session.user.id };

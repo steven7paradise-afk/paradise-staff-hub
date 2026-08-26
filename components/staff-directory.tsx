@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Search, X, User, Phone, Mail, Calendar, Briefcase, 
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
@@ -47,6 +48,14 @@ type Employee = {
   };
   lastEditedByName?: string | null;
   lastEditedAt?: string | null;
+  attendanceToday?: {
+    status: "PRESENTE" | "IN_PAUSA" | "USCITO" | "ASSENTE" | "ATTESO" | "RIPOSO" | "GIUSTIFICATO" | "NESSUN_TURNO";
+    absent: boolean;
+    plannedStart: string | null;
+    plannedEnd: string | null;
+    firstEntry: string | null;
+    elapsedMinutes: number;
+  };
 };
 
 type ContractHistoryItem = {
@@ -211,6 +220,7 @@ export function StaffDirectory({
   userRole: string;
   focusEmployeeId?: string | null;
 }) {
+  const router = useRouter();
   const [staff, setStaff] = useState<Employee[]>(initialStaff);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
@@ -219,6 +229,7 @@ export function StaffDirectory({
   const [filterManager, setFilterManager] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
   const [expiryMode, setExpiryMode] = useState(false);
+  const [absenceMode, setAbsenceMode] = useState(false);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   
@@ -238,6 +249,16 @@ export function StaffDirectory({
   const [loadingStats, setLoadingStats] = useState(false);
   const [copiedPhotoUrl, setCopiedPhotoUrl] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isEditing) setStaff(initialStaff);
+  }, [initialStaff, isEditing]);
+
+  useEffect(() => {
+    if (isEditing) return;
+    const timer = window.setInterval(() => router.refresh(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [isEditing, router]);
 
   useEffect(() => {
     if (isEditing && selectedEmployee?.id) {
@@ -326,14 +347,16 @@ export function StaffDirectory({
     return end.getTime() >= now.getTime() && end.getTime() <= limit.getTime();
   };
   const upcomingExpiryCount = staff.filter(isUpcomingContractExpiry).length;
+  const absentTodayCount = staff.filter((employee) => !isArchivedEmployee(employee) && employee.attendanceToday?.absent).length;
 
-  const selectOverview = (mode: "active" | "former" | "expiring") => {
+  const selectOverview = (mode: "active" | "former" | "expiring" | "absent") => {
     setSearchQuery("");
     setFilterLocation("");
     setFilterRole("");
     setFilterManager("");
     setArchiveMode(mode === "former");
     setExpiryMode(mode === "expiring");
+    setAbsenceMode(mode === "absent");
     setFilterStatus(mode === "former" ? "Ex dipendente" : "");
   };
 
@@ -342,6 +365,7 @@ export function StaffDirectory({
     const archived = isArchivedEmployee(emp);
     if (archiveMode ? !archived : archived) return false;
     if (expiryMode && !isUpcomingContractExpiry(emp)) return false;
+    if (absenceMode && !emp.attendanceToday?.absent) return false;
 
     const fullName = emp.name.toLowerCase();
     const query = searchQuery.toLowerCase();
@@ -1615,7 +1639,7 @@ export function StaffDirectory({
 
   return (
     <div className="w-full space-y-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             key: "active" as const,
@@ -1623,8 +1647,17 @@ export function StaffDirectory({
             value: activeStaffCount,
             detail: "Visualizza lo staff operativo",
             icon: Users,
-            selected: !archiveMode && !expiryMode,
+            selected: !archiveMode && !expiryMode && !absenceMode,
             tone: "emerald",
+          },
+          {
+            key: "absent" as const,
+            label: "Assenti oggi",
+            value: absentTodayCount,
+            detail: "Turno iniziato senza timbratura",
+            icon: AlarmClock,
+            selected: absenceMode,
+            tone: "rose",
           },
           {
             key: "former" as const,
@@ -1707,6 +1740,7 @@ export function StaffDirectory({
               onClick={() => {
                 setArchiveMode((current) => !current);
                 setExpiryMode(false);
+                setAbsenceMode(false);
                 setFilterStatus("");
               }}
               className={cn(
@@ -1888,12 +1922,29 @@ export function StaffDirectory({
                       <span className="text-[10px] font-semibold text-neutral-500">{emp.mansione || "Collaboratore"}</span>
                       <span className="text-[10px] text-neutral-300">•</span>
                       <Badge tone={getStatusTone(emp.employeeStatus)}>{emp.employeeStatus}</Badge>
+                      {emp.attendanceToday?.absent ? <Badge tone="pink">Assente oggi</Badge> : null}
                     </div>
                   </div>
                 </div>
 
                 {/* Info List */}
                 <div className="space-y-2 pt-2 border-t border-black/5 dark:border-white/5 text-xs text-neutral-500 dark:text-neutral-400">
+                  {emp.attendanceToday?.plannedStart ? (
+                    <div className={cn("flex items-start gap-2 rounded-xl px-2.5 py-2", emp.attendanceToday.absent ? "bg-rose-50 text-rose-700" : "bg-emerald-50/70 text-emerald-700")}>
+                      <AlarmClock className="mt-0.5 size-3.5 shrink-0" />
+                      <span>
+                        Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.absent
+                          ? `nessuna timbratura (+${emp.attendanceToday.elapsedMinutes} min)`
+                          : emp.attendanceToday.firstEntry
+                            ? `entrata ${emp.attendanceToday.firstEntry}`
+                            : emp.attendanceToday.status === "GIUSTIFICATO"
+                              ? "assenza giustificata"
+                              : emp.attendanceToday.status === "RIPOSO"
+                                ? "riposo"
+                                : "in attesa dell’orario"}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-2">
                     <MapPin className="size-3.5 text-neutral-400" />
                     <span>Salone: <strong className="text-neutral-700 dark:text-neutral-200">{emp.location}</strong></span>
