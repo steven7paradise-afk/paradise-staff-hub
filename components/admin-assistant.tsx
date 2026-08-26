@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bot, Check, ExternalLink, LoaderCircle, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
+import { readAssistantSession, writeAssistantSession } from "@/lib/admin-assistant-session";
 
 type PendingAction = { token: string; type: "SEND_COMMUNICATION"; label: string; recipient: string; title: string; message: string; expiresAt: string };
 type AssistantCard = {
@@ -21,6 +22,14 @@ type AssistantMetric = { id: string; label: string; value: string; detail: strin
 type Message = { role: "user" | "assistant"; content: string; links?: Array<{ path: string; label: string }>; pendingAction?: PendingAction | null; cards?: AssistantCard[]; metrics?: AssistantMetric[] };
 
 const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Cosa ricordi?"];
+const ASSISTANT_SESSION_KEY = "paradise-admin-assistant-session-v1";
+const initialMessage: Message = { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." };
+
+function isStoredMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const message = value as Record<string, unknown>;
+  return (message.role === "user" || message.role === "assistant") && typeof message.content === "string";
+}
 
 export function AdminAssistant() {
   const router = useRouter();
@@ -28,10 +37,34 @@ export function AdminAssistant() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([initialMessage]);
+  const [sessionReady, setSessionReady] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const stored = readAssistantSession(window.sessionStorage.getItem(ASSISTANT_SESSION_KEY));
+    const restored = stored?.filter(isStoredMessage).slice(-40) ?? [];
+    if (restored.length) {
+      setMessages(restored.map((message) => {
+        const pendingAction = message.pendingAction && new Date(message.pendingAction.expiresAt).getTime() > Date.now()
+          ? message.pendingAction
+          : null;
+        return { ...message, pendingAction };
+      }));
+    } else {
+      window.sessionStorage.removeItem(ASSISTANT_SESSION_KEY);
+    }
+    setSessionReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sessionReady) return;
+    try {
+      window.sessionStorage.setItem(ASSISTANT_SESSION_KEY, writeAssistantSession(messages.slice(-40)));
+    } catch {
+      // The assistant still works if private browsing blocks session storage.
+    }
+  }, [messages, sessionReady]);
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { requestedTeamStatus, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
@@ -136,9 +137,20 @@ const tools = [
   {
     type: "function",
     name: "get_team_status",
-    description: "Legge lo stato odierno del personale: in turno, in pausa, fuori turno o non entrato.",
+    description: "Legge lo stato attuale odierno del personale. Se viene chiesto chi è in pausa, assente, in turno o uscito, imposta il filtro corrispondente e non richiedere l'elenco completo.",
     strict: true,
-    parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+    parameters: {
+      type: "object",
+      properties: {
+        status: {
+          type: ["string", "null"],
+          enum: ["IN_TURNO", "IN_PAUSA", "USCITO", "NON_ENTRATO", null],
+          description: "Stato preciso richiesto; null soltanto quando serve davvero il riepilogo completo del personale.",
+        },
+      },
+      required: ["status"],
+      additionalProperties: false,
+    },
   },
   {
     type: "function",
@@ -498,7 +510,7 @@ function romeDayBounds() {
   return { key, start, end };
 }
 
-async function getTeamStatus() {
+async function getTeamStatus(scope: TeamStatusScope | null) {
   const { key, start, end } = romeDayBounds();
   const workers = await prisma.user.findMany({
     where: {
@@ -533,15 +545,18 @@ async function getTeamStatus() {
     };
   });
 
+  const filteredPeople = scope ? people.filter((person) => person.status === scope) : people;
   return {
     date: key,
+    scope: scope || "ALL",
+    count: filteredPeople.length,
     totals: {
       inShift: people.filter((person) => person.status === "IN_TURNO").length,
       onBreak: people.filter((person) => person.status === "IN_PAUSA").length,
       exited: people.filter((person) => person.status === "USCITO").length,
       notEntered: people.filter((person) => person.status === "NON_ENTRATO").length,
     },
-    people,
+    people: filteredPeople,
   };
 }
 
@@ -981,13 +996,18 @@ function safeJson(value: string) {
   }
 }
 
-async function executeTool(call: ToolCall, actorId: string) {
+async function executeTool(call: ToolCall, actorId: string, impliedTeamScope: TeamStatusScope | null) {
   const args = safeJson(call.arguments);
   if (call.name === "remember_instruction") return rememberInstruction(args, actorId);
   if (call.name === "list_memories") return listMemories(args);
   if (call.name === "forget_memory") return forgetMemory(args, actorId);
   if (call.name === "prepare_communication") return prepareCommunication(args, actorId);
-  if (call.name === "get_team_status") return { output: await getTeamStatus() };
+  if (call.name === "get_team_status") {
+    const requestedScope = typeof args.status === "string" && ["IN_TURNO", "IN_PAUSA", "USCITO", "NON_ENTRATO"].includes(args.status)
+      ? args.status as TeamStatusScope
+      : null;
+    return { output: await getTeamStatus(impliedTeamScope || requestedScope) };
+  }
   if (call.name === "get_task_overview") {
     return { output: await getTaskOverview(typeof args.status === "string" ? args.status : null), link: APP_PAGES.tasks };
   }
@@ -1087,6 +1107,8 @@ export async function POST(request: NextRequest) {
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
+“In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
+Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
 Usa get_cash_overview per qualsiasi domanda su cassa, cash disponibile, chiusure, fondo, prelievi, versamenti o scostamenti. Distingui sempre disponibilità del periodo aperto, dichiarato del mese e contanti attesi da Shopify. Se Shopify non è disponibile, dichiaralo senza stimare valori.
 Usa remember_instruction per regole durevoli espresse con “ricorda”, “da ora in poi”, “sempre” o formulazioni equivalenti. Non salvare richieste temporanee. Usa list_memories e forget_memory quando richiesto.
@@ -1105,6 +1127,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
   let pendingAction: PendingAction | null = null;
   const cards: AssistantCard[] = [];
   const metrics: AssistantMetric[] = [];
+  const impliedTeamScope = requestedTeamStatus(messages);
 
   try {
     for (let round = 0; round < 4; round += 1) {
@@ -1127,7 +1150,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
 
       input.push(...(response.output || []));
       for (const call of calls) {
-        const result = await executeTool(call, session.user.id) as {
+        const result = await executeTool(call, session.user.id, impliedTeamScope) as {
           output: unknown;
           link?: { path: string; label: string };
           navigation?: { path: string; label: string };
