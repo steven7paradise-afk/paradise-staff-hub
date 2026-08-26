@@ -194,7 +194,8 @@ export default async function StaffPage({
       plannedEnd,
       locationName: schedule.location?.name || schedule.user.location?.name,
     });
-    if (!hasClockEntry && policy.deadlineMinutes !== null && (dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes() > policy.deadlineMinutes))) {
+    const classifiedElsewhere = approvedLeave && ["FERIE", "MALATTIA", "RIPOSO"].includes(approvedLeave.type);
+    if (!classifiedElsewhere && !hasClockEntry && policy.deadlineMinutes !== null && (dayKey < todayKey || (dayKey === todayKey && currentRomeMinutes() > policy.deadlineMinutes))) {
       monthlyAbsenceIds.add(schedule.user_id);
       monthlyRecords.push({
         id: `absence-${schedule.id}`,
