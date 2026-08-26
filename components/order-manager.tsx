@@ -424,6 +424,7 @@ export function OrderManager({
       const scanner = new Html5Qrcode(scannerRegionId, {
         verbose: false,
         formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.CODE_128,
           Html5QrcodeSupportedFormats.CODE_39,
           Html5QrcodeSupportedFormats.EAN_13,
@@ -433,7 +434,7 @@ export function OrderManager({
       scannerInstanceRef.current = scanner;
       await scanner.start(
         { facingMode: "environment" },
-        { fps: 12, qrbox: { width: 270, height: 130 }, aspectRatio: 16 / 9 },
+        { fps: 12, qrbox: { width: 240, height: 240 }, aspectRatio: 16 / 9 },
         (decodedText) => { openOrderFromBarcode(decodedText); },
         () => { /* Frames without a barcode are expected while focusing. */ },
       );

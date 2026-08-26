@@ -23,23 +23,6 @@ const ORDER_LABEL_WIDTH_MM = 90;
 const ORDER_LABEL_HEIGHT_MM = 102;
 const ORDER_LABEL_CANVAS_WIDTH = 1800;
 const ORDER_LABEL_CANVAS_HEIGHT = 2040;
-const ORDER_LABEL_BARCODE_WIDTH = 546; // 30% più stretto rispetto ai precedenti 780 px.
-const ORDER_LABEL_BARCODE_HEIGHT = 164.5; // 30% più basso rispetto ai precedenti 235 px.
-const ORDER_LABEL_BARCODE_X = (900 - ORDER_LABEL_BARCODE_WIDTH) / 2;
-
-const CODE128_PATTERNS = [
-  "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
-  "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
-  "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
-  "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
-  "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
-  "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
-  "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
-  "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
-  "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
-  "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
-  "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
-];
 
 function answerById(order: OrderLabelResponse, id: string) {
   const value = order.answers?.[id];
@@ -235,35 +218,6 @@ export function orderLabelBarcodeValue(orderId: string, visibleOrderNumber?: str
   return compactOrderNumber || orderId;
 }
 
-function code128Values(value: string) {
-  const safe = value
-    .split("")
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      return code >= 32 && code <= 127 ? char : "-";
-    })
-    .join("");
-  const values = [104, ...safe.split("").map((char) => char.charCodeAt(0) - 32)];
-  const checksum = values.reduce((sum, code, index) => sum + code * (index === 0 ? 1 : index), 0) % 103;
-  return [...values, checksum, 106];
-}
-
-function code128Svg(value: string, x: number, y: number, width: number, height: number) {
-  const patterns = code128Values(value).map((code) => CODE128_PATTERNS[code]).join("");
-  const totalModules = patterns.split("").reduce((sum, item) => sum + Number(item), 0);
-  const moduleWidth = width / totalModules;
-  let cursor = x;
-  const rectangles: string[] = [];
-  patterns.split("").forEach((item, index) => {
-    const segmentWidth = Number(item) * moduleWidth;
-    if (index % 2 === 0) {
-      rectangles.push(`<rect x="${cursor.toFixed(2)}" y="${y}" width="${segmentWidth.toFixed(2)}" height="${height}" fill="#000000"/>`);
-    }
-    cursor += segmentWidth;
-  });
-  return rectangles.join("");
-}
-
 export function isOrderLabelForm(form?: { name?: string | null; category?: string | null } | null) {
   const name = String(form?.name || "").toLowerCase();
   const category = String(form?.category || "").toLowerCase();
@@ -272,6 +226,7 @@ export function isOrderLabelForm(form?: { name?: string | null; category?: strin
 
 async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const { jsPDF } = await import("jspdf");
+  const { toDataURL: createQrDataUrl } = await import("qrcode");
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -283,6 +238,12 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const orderNo = orderNumber(order);
   const client = orderClientName(order);
   const barcodeValue = orderLabelBarcodeValue(order.id, orderNo);
+  const qrCodeDataUrl = await createQrDataUrl(barcodeValue, {
+    errorCorrectionLevel: "H",
+    margin: 4,
+    width: 800,
+    color: { dark: "#000000", light: "#ffffff" },
+  });
   const logoDataUrl = await fetch("/logo-label-paradise.png")
     .then((response) => (response.ok ? response.blob() : null))
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
@@ -304,7 +265,7 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <text x="590" y="232" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" letter-spacing="1.2" fill="#111">PRONTO</text>
       <rect x="615" y="191" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
-      ${code128Svg(barcodeValue, ORDER_LABEL_BARCODE_X, 390, ORDER_LABEL_BARCODE_WIDTH, ORDER_LABEL_BARCODE_HEIGHT)}
+      <image href="${qrCodeDataUrl}" x="285" y="345" width="330" height="330" preserveAspectRatio="xMidYMid meet" image-rendering="pixelated"/>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
