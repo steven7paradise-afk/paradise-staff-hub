@@ -98,7 +98,7 @@ function employmentHistoryBadgeClass(event: EmploymentHistoryEvent) {
     return "border-yellow-300 bg-yellow-100 text-yellow-800";
   }
   if (status.includes("GIUSTIFICATA")) {
-    return "border-teal-300 bg-teal-100 text-teal-800";
+    return "border-violet-300 bg-violet-100 text-violet-800";
   }
   if (type.includes("rientro pausa in ritardo")) {
     return "border-orange-300 bg-orange-100 text-orange-800";
@@ -614,6 +614,7 @@ export function StaffDirectory({
       const mgrName = managers.find((m) => m.id === data.manager_id)?.name ?? "";
 
       const updated: Employee = {
+        ...editForm,
         id: data.id,
         name: data.name,
         email: data.email,
@@ -644,7 +645,7 @@ export function StaffDirectory({
 
       setStaff((prev) => prev.map((emp) => emp.id === updated.id ? updated : emp));
       setSelectedEmployee(updated);
-      setIsEditing(false);
+      setEditForm(updated);
       resetRenewalForm();
       setPinInput("");
       setPinConfirmInput("");
@@ -1171,8 +1172,13 @@ export function StaffDirectory({
 
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-4 w-full min-w-0 overflow-hidden">
           <form onSubmit={handleSaveEmployee} className="space-y-6">
+            {successMsg && (
+              <div className="p-4 text-sm font-semibold text-emerald-800 bg-emerald-50 rounded-2xl border border-emerald-200 animate-in fade-in" role="status">
+                {successMsg}
+              </div>
+            )}
             {errorMsg && (
-              <div className="p-4 text-sm font-semibold text-rose-800 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in">
+              <div className="p-4 text-sm font-semibold text-rose-800 bg-rose-50 rounded-2xl border border-rose-200 animate-in fade-in" role="alert">
                 {errorMsg}
               </div>
             )}
