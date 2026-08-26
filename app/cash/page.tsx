@@ -223,7 +223,11 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   const role = session.user.role as Role;
   const canEditClosingAmount = ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
   const showAllVaultWithdrawals = searchParams.vault === "all";
-  const movementFilter = searchParams.movements === "closings" ? "closings" : "all";
+  const movementFilter = searchParams.movements === "closings"
+    ? "closings"
+    : searchParams.movements === "discrepancies"
+      ? "discrepancies"
+      : "all";
 
   const accessUser = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -404,6 +408,9 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       (declaredCashByDay.get(key) ?? 0) + moneyValue(answer(response, CASH_CLOSING_FIELD_IDS.withdrawn)),
     );
   }
+  const discrepancyDayKeys = Array.from(new Set([...shopifyCashByDay.keys(), ...declaredCashByDay.keys()]))
+    .filter((key) => Math.abs((declaredCashByDay.get(key) ?? 0) - (shopifyCashByDay.get(key) ?? 0)) > 0.009)
+    .sort((left, right) => right.localeCompare(left));
 
   const weekClosesList = Array.isArray(allWeekCloses) ? allWeekCloses : [];
 
@@ -706,6 +713,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       note: String(answer(response, CASH_CLOSING_FIELD_IDS.notes) || "-"),
       closing: response,
       vault: null as any,
+      discrepancyMissingClosing: false,
     })),
     ...vaultWithdrawals.map((response) => ({
       id: `vault-${response.id}`,
@@ -721,17 +729,43 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
       note: String(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.reason) || "-"),
       closing: null as any,
       vault: response,
+      discrepancyMissingClosing: false,
     })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const missingClosingDiscrepancies = discrepancyDayKeys
+    .filter((key) => !declaredCashByDay.has(key))
+    .map((key) => ({
+      id: `missing-closing-${key}`,
+      kind: "Chiusura mancante",
+      date: dateFromDayKey(key)!,
+      locationName: "Nessuna chiusura registrata",
+      operator: "—",
+      amount: 0,
+      amountClass: "text-amber-700",
+      detail: "Shopify registra contanti, ma non risulta una chiusura cassa per questa giornata.",
+      expectedShopifyCash: shopifyCashByDay.get(key) ?? 0,
+      declaredCashForDay: 0,
+      note: "Apri le transazioni Shopify e verifica la chiusura mancante.",
+      closing: null as any,
+      vault: null as any,
+      discrepancyMissingClosing: true,
+    }));
+  const discrepancyMovements = [
+    ...monthlyMovements.filter((movement) => movement.closing && Math.abs((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0)) > 0.009),
+    ...missingClosingDiscrepancies,
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
   const visibleMonthlyMovements = movementFilter === "closings"
     ? monthlyMovements.filter((movement) => Boolean(movement.closing))
-    : monthlyMovements;
+    : movementFilter === "discrepancies"
+      ? discrepancyMovements
+      : monthlyMovements;
 
   const cashQueryBase = `month=${selectedMonth}`;
   const availabilityHref = `/cash?${cashQueryBase}#chiusure-sedi`;
   const selectedDayHref = `/cash?${cashQueryBase}&day=${selectedDayKey}#dettaglio-giorno`;
   const vaultOutHref = `/cash?${cashQueryBase}&vault=all#prelievi-autorizzati`;
   const monthlyClosingsHref = `/cash?${cashQueryBase}&movements=closings#movimenti-cassa`;
+  const discrepancyHref = `/cash?${cashQueryBase}&movements=discrepancies#movimenti-cassa`;
 
   return (
     <AppShell
@@ -1281,10 +1315,10 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Registro mensile</p>
-                <h2 className="mt-1 text-2xl font-black">{movementFilter === "closings" ? "Chiusure cassa del mese" : "Tutti i movimenti"}</h2>
-                <p className="mt-1 text-sm text-black/45">{movementFilter === "closings" ? "Sono mostrate soltanto le somme prelevate nelle chiusure cassa." : "Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato."}</p>
+                <h2 className="mt-1 text-2xl font-black">{movementFilter === "closings" ? "Chiusure cassa del mese" : movementFilter === "discrepancies" ? "Transazioni con scostamento" : "Tutti i movimenti"}</h2>
+                <p className="mt-1 text-sm text-black/45">{movementFilter === "closings" ? "Sono mostrate soltanto le somme prelevate nelle chiusure cassa." : movementFilter === "discrepancies" ? "Sono mostrate soltanto le giornate in cui il dichiarato non coincide con i contanti attesi da Shopify." : "Unisce chiusure cassa, prelievi cassaforte e transazioni del mese selezionato."}</p>
               </div>
-              {movementFilter === "closings" ? (
+              {movementFilter !== "all" ? (
                 <Link href={`/cash?month=${selectedMonth}#movimenti-cassa`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 text-xs font-black text-black/65">
                   <X className="size-4" /> Mostra tutti i movimenti
                 </Link>
@@ -1307,7 +1341,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                 <p className="mt-2 text-2xl font-black tabular-nums text-emerald-950">{formatMoney(totalWithdrawn)}</p>
                 <p className="mt-1 text-xs font-semibold text-emerald-800/60">Totale prelevato nelle chiusure, fondo escluso.</p>
               </div>
-              <div className={`rounded-2xl border p-4 ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+              <Link href={discrepancyHref} className={`group rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-sm ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
                 <div className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] ${!shopifyRevenue.available || Math.abs(shopifyCashDifference) > 0.009 ? "text-amber-700" : "text-emerald-700"}`}>
                   {shopifyRevenue.available && Math.abs(shopifyCashDifference) <= 0.009 ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />} Scostamento da verificare
                 </div>
@@ -1315,7 +1349,8 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                   {shopifyRevenue.available ? formatMoney(shopifyCashDifference) : "—"}
                 </p>
                 <p className="mt-1 text-xs font-semibold text-black/45">Dichiarato meno atteso. Positivo = contanti in più.</p>
-              </div>
+                <p className="mt-3 flex items-center gap-1 text-[11px] font-black text-amber-800">Vedi le transazioni che creano lo scostamento <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" /></p>
+              </Link>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -1338,13 +1373,13 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     ? answer(movement.vault, VAULT_WITHDRAWAL_FIELD_IDS.receipt) as { url?: string; name?: string } | null
                     : null;
                   return (
-                    <tr key={movement.id} className="align-top transition hover:bg-[#FFFBFD]">
+                    <tr key={movement.id} className={`align-top transition hover:bg-[#FFFBFD] ${movementFilter === "discrepancies" ? "bg-amber-50/45" : ""}`}>
                       <td className="px-5 py-4 font-bold">
                         {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric" }).format(movement.date)}
                       </td>
                       <td className="px-5 py-4">
                         <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${
-                          movement.closing ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-[#A74758]"
+                          movement.discrepancyMissingClosing ? "bg-amber-100 text-amber-800" : movement.closing ? "bg-emerald-50 text-emerald-700" : "bg-pink-50 text-[#A74758]"
                         }`}>
                           {movement.kind}
                         </span>
@@ -1379,6 +1414,11 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                                 Differenza: <strong>{formatMoney((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0))}</strong>
                               </span>
                             </div>
+                            {movementFilter === "discrepancies" ? (
+                              <Link href={`/cash?month=${selectedMonth}&day=${dayKey(movement.date)}#dettaglio-giorno`} className="mt-3 inline-flex items-center gap-1 text-[10px] font-black text-amber-800 underline underline-offset-2">
+                                Apri il dettaglio di questa giornata <ArrowRight className="size-3" />
+                              </Link>
+                            ) : null}
                           </div>
                         ) : null}
                         {receipt?.url ? (
@@ -1388,7 +1428,20 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                         ) : null}
                       </td>
                       <td className="min-w-[320px] px-5 py-4">
-                        {movement.closing ? <CashReviewActions closingId={movement.closing.id} initialReview={review!} compact /> : <span className="text-xs font-semibold text-black/35">Registrato</span>}
+                        {movement.closing ? (
+                          <div className="space-y-2">
+                            <CashReviewActions closingId={movement.closing.id} initialReview={review!} compact />
+                            {movementFilter === "discrepancies" ? (
+                              <Link href={`/cash/shopify-payments?month=${selectedMonth}`} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 text-[11px] font-black text-amber-900">
+                                Apri transazioni Shopify <ArrowRight className="size-3.5" />
+                              </Link>
+                            ) : null}
+                          </div>
+                        ) : movement.discrepancyMissingClosing ? (
+                          <Link href={`/cash/shopify-payments?month=${selectedMonth}`} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-amber-100 px-4 text-xs font-black text-amber-900">
+                            Vedi transazioni Shopify <ArrowRight className="size-4" />
+                          </Link>
+                        ) : <span className="text-xs font-semibold text-black/35">Registrato</span>}
                       </td>
                     </tr>
                   );
