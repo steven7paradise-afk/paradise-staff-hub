@@ -295,21 +295,16 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${ORDER_LABEL_CANVAS_WIDTH}" height="${ORDER_LABEL_CANVAS_HEIGHT}" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
-      <g transform="translate(-145 -10) scale(0.78)">${logoImage}</g>
-      <rect x="390" y="35" width="440" height="165" rx="24" fill="#fff0f6" stroke="#ec5391" stroke-width="3"/>
-      <line x1="685" y1="55" x2="685" y2="180" stroke="#ec5391" stroke-width="2" opacity="0.55"/>
-      <text x="535" y="82" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
-      <text x="535" y="155" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="61" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
-      <text x="755" y="80" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="900" letter-spacing="1" fill="#111">PRONTO</text>
-      <rect x="715" y="101" width="80" height="64" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
+      <rect x="55" y="35" width="790" height="250" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
+      <line x1="430" y1="65" x2="430" y2="255" stroke="#ec5391" stroke-width="3" opacity="0.45"/>
+      <g transform="translate(-70 40) scale(0.72)">${logoImage}</g>
 
-      <line x1="65" y1="225" x2="835" y2="225" stroke="#ec5391" stroke-width="5"/>
-      <text x="450" y="285" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="800" letter-spacing="3" fill="#9b496c">NOME E COGNOME</text>
-      <text x="450" y="360" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="57" font-weight="900" fill="#09090b">${escapeSvgText(shortSvgText(client, 25))}</text>
+      <text x="625" y="91" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="625" y="165" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
+      <text x="590" y="232" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" letter-spacing="1.2" fill="#111">PRONTO</text>
+      <rect x="615" y="191" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
-      <text x="450" y="445" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" letter-spacing="3" fill="#3f3f46">CODICE A BARRE</text>
-      ${code128Svg(barcodeValue, ORDER_LABEL_BARCODE_X, 485, ORDER_LABEL_BARCODE_WIDTH, ORDER_LABEL_BARCODE_HEIGHT)}
-      <text x="450" y="705" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="900" letter-spacing="2" fill="#111">${escapeSvgText(barcodeValue)}</text>
+      ${code128Svg(barcodeValue, ORDER_LABEL_BARCODE_X, 390, ORDER_LABEL_BARCODE_WIDTH, ORDER_LABEL_BARCODE_HEIGHT)}
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
