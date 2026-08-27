@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { normalizeAccessRoutes } from "@/lib/roles";
 import { deriveAttendanceState } from "@/lib/attendance-state";
-import { compareScheduledClock, currentRomeMinutes, isClosedSchedule, isRestSchedule, romeMinutesForInstant, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
-import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
+import { attendanceActualMinutes, compareScheduledClock, currentRomeMinutes, isClosedSchedule, isRestSchedule, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
+import { ensureAutomaticLateRequests, isAutomaticLateReason } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +116,7 @@ export default async function StaffPage({
         start_date: { lt: tomorrow },
         end_date: { gte: today },
       },
-      select: { user_id: true },
+      select: { user_id: true, reason: true },
     }),
     prisma.scheduleEntry.findMany({
       where: {
@@ -151,6 +151,15 @@ export default async function StaffPage({
     await ensureAutomaticLateRequests(today).catch((error) => console.error("Automatic late requests unavailable:", error));
   }
 
+  const todayAutomaticLateRequests = await prisma.leaveRequest.findMany({
+    where: {
+      start_date: { gte: today, lt: tomorrow },
+      reason: { startsWith: "RITARDO AUTOMATICO — " },
+    },
+    select: { user_id: true, status: true },
+    orderBy: { created_at: "desc" },
+  });
+
   const scheduleByUser = new Map(todaySchedules.map((entry) => [entry.user_id, entry]));
   const attendanceByUser = new Map<string, typeof todayAttendanceLogs>();
   for (const log of todayAttendanceLogs) {
@@ -158,7 +167,8 @@ export default async function StaffPage({
     rows.push(log);
     attendanceByUser.set(log.user_id, rows);
   }
-  const approvedLeaveUserIds = new Set(approvedLeavesToday.map((request) => request.user_id));
+  const approvedLeaveUserIds = new Set(approvedLeavesToday.filter((request) => !isAutomaticLateReason(request.reason)).map((request) => request.user_id));
+  const automaticLateStatusByUser = new Map(todayAutomaticLateRequests.map((request) => [request.user_id, request.status]));
   const monthLogsByUserDay = new Map<string, typeof monthlyAttendanceLogs>();
   for (const log of monthlyAttendanceLogs) {
     const key = `${log.user_id}:${log.date.toISOString().slice(0, 10)}`;
@@ -209,17 +219,18 @@ export default async function StaffPage({
         note: approvedLeave ? `${approvedLeave.type} approvata.` : "Nessuna entrata registrata e nessun giustificativo approvato.",
       });
     }
-    if (firstEntry && policy.deadlineMinutes !== null && romeMinutesForInstant(firstEntry.timestamp) > policy.deadlineMinutes) {
+    if (firstEntry && policy.deadlineMinutes !== null && attendanceActualMinutes(firstEntry) > policy.deadlineMinutes) {
       monthlyLateIds.add(schedule.user_id);
       const lateRequest = monthlyLeaves.find((request) => request.id === `auto-late:${schedule.user_id}:${dayKey}` || (request.user_id === schedule.user_id && request.reason?.startsWith("RITARDO AUTOMATICO — ") && request.start_date.toISOString().slice(0, 10) === dayKey));
-      const delay = romeMinutesForInstant(firstEntry.timestamp) - policy.deadlineMinutes;
+      const actualEntryMinutes = attendanceActualMinutes(firstEntry);
+      const delay = actualEntryMinutes - policy.deadlineMinutes;
       monthlyRecords.push({
         id: `late-entry-${firstEntry.id}`,
         userId: schedule.user_id,
         personName: staff.find((user) => user.id === schedule.user_id)?.name || "Dipendente",
         category: "LATE",
         dateLabel: formatMonthlyDate(schedule.date),
-        timeLabel: firstEntry.time || romeClock(firstEntry.timestamp) || "--:--",
+        timeLabel: `${String(Math.floor(actualEntryMinutes / 60)).padStart(2, "0")}:${String(actualEntryMinutes % 60).padStart(2, "0")}`,
         eventLabel: "Entrata in ritardo",
         status: lateRequest?.status === "APPROVED" ? "GIUSTIFICATA" : lateRequest?.status === "REJECTED" ? "NON GIUSTIFICATA" : "IN ATTESA",
         note: `Turno ${plannedStart || "--:--"}–${plannedEnd || "--:--"} · +${delay} minuti oltre il limite.`,
@@ -311,6 +322,11 @@ export default async function StaffPage({
             hasClockEntry: Boolean(attendanceState.firstEntry),
             hasApprovedLeave: approvedLeaveUserIds.has(user.id),
           });
+          const automaticLateStatus = automaticLateStatusByUser.get(user.id);
+          const unresolvedLate = Boolean(attendanceState.firstEntry) && automaticLateStatus && automaticLateStatus !== "APPROVED";
+          const lateApprovalStatus = unresolvedLate
+            ? automaticLateStatus === "REJECTED" ? "REJECTED" as const : "PENDING" as const
+            : null;
           const attendanceStatus = !schedule
             ? "NESSUN_TURNO"
             : comparison.rest
@@ -319,6 +335,8 @@ export default async function StaffPage({
                 ? "GIUSTIFICATO"
               : approvedLeaveUserIds.has(user.id)
                 ? "GIUSTIFICATO"
+                : unresolvedLate
+                  ? lateApprovalStatus === "REJECTED" ? "RITARDO_RIFIUTATO" : "RITARDO_DA_APPROVARE"
                 : attendanceState.status === "IN"
                   ? "PRESENTE"
                   : attendanceState.status === "BREAK"
@@ -372,10 +390,19 @@ export default async function StaffPage({
             lastEditedAt: user.last_edited_at?.toISOString() ?? null,
             attendanceToday: {
               status: attendanceStatus,
-              absent: comparison.absent,
+              absent: comparison.absent || Boolean(unresolvedLate),
+              lateApprovalStatus,
               plannedStart,
               plannedEnd,
-              firstEntry: romeClock(attendanceState.firstEntry?.timestamp ? new Date(attendanceState.firstEntry.timestamp) : null),
+              firstEntry: attendanceState.firstEntry
+                ? (() => {
+                  const minutes = attendanceActualMinutes({
+                    timestamp: new Date(attendanceState.firstEntry.timestamp),
+                    note: attendanceState.firstEntry.note,
+                  });
+                  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+                })()
+                : null,
               elapsedMinutes: comparison.elapsedMinutes,
             },
           };

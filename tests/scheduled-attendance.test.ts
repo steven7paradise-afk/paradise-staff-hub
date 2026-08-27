@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ABSENCE_GRACE_MINUTES, compareScheduledClock, scheduledEntryPolicy } from "../lib/scheduled-attendance";
+import { ABSENCE_GRACE_MINUTES, attendanceActualMinutes, compareScheduledClock, scheduledEntryPolicy } from "../lib/scheduled-attendance";
 
 test("applica tre minuti di tolleranza ai turni ordinari", () => {
   const policy = scheduledEntryPolicy({ plannedStart: "09:00", plannedEnd: "18:00", locationName: "Salone Buenos Aires" });
@@ -32,4 +32,13 @@ test("non segna assente al terzo minuto ma solo dopo il limite", () => {
 
   assert.equal(withinTolerance.absent, false);
   assert.equal(late.absent, true);
+});
+
+test("usa l'ora realmente rilevata invece dell'arrotondamento della timbratura", () => {
+  const minutes = attendanceActualMinutes({
+    timestamp: new Date("2026-08-27T08:30:00.000Z"),
+    note: "Ora rilevata 10:07:41; arrotondamento entrata Paradise a 10:30:00.",
+  });
+
+  assert.equal(minutes, 10 * 60 + 7);
 });

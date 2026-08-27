@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createNotifications } from "@/lib/notifications";
 import {
   ABSENCE_GRACE_MINUTES,
+  attendanceActualMinutes,
   currentRomeMinutes,
   isClosedSchedule,
   isRestSchedule,
@@ -73,6 +74,7 @@ export async function ensureAutomaticLateRequests(
   }
   const approvedLeaveUserIds = new Set(approvedLeaves.map((request) => request.user_id));
   const dateKey = day.toISOString().slice(0, 10);
+  const onTimeAutomaticRequestIds: string[] = [];
   const candidates = schedules.flatMap((schedule) => {
     const plannedStart = schedule.start_time || schedule.category.start_time || null;
     const plannedEnd = schedule.end_time || schedule.category.end_time || null;
@@ -87,13 +89,17 @@ export async function ensureAutomaticLateRequests(
     ) return [];
 
     const firstEntry = firstEntryByUser.get(schedule.user_id);
-    const observedInstant = firstEntry && options.userId === schedule.user_id && options.actualEntryTimestamp
-      ? options.actualEntryTimestamp
-      : firstEntry?.timestamp;
-    const observedMinutes = observedInstant ? romeMinutesForInstant(observedInstant) : currentRomeMinutes(now);
+    const observedMinutes = options.actualEntryTimestamp && options.userId === schedule.user_id
+      ? romeMinutesForInstant(options.actualEntryTimestamp)
+      : firstEntry
+        ? attendanceActualMinutes(firstEntry)
+        : currentRomeMinutes(now);
     const delayMinutes = Math.max(0, observedMinutes - plannedMinutes);
     const minutesPastDeadline = Math.max(0, observedMinutes - deadlineMinutes);
-    if (observedMinutes <= deadlineMinutes) return [];
+    if (observedMinutes <= deadlineMinutes) {
+      if (firstEntry) onTimeAutomaticRequestIds.push(`auto-late:${schedule.user_id}:${dateKey}`);
+      return [];
+    }
 
     const endTime = minutesToClock(observedMinutes);
     const policyLabel = officeFlexible
@@ -114,7 +120,17 @@ export async function ensureAutomaticLateRequests(
     }];
   });
 
-  if (candidates.length === 0) return { created: 0, updated: 0, lateRequests: [] };
+  const removed = onTimeAutomaticRequestIds.length > 0
+    ? await prisma.leaveRequest.deleteMany({
+      where: {
+        id: { in: onTimeAutomaticRequestIds },
+        status: "PENDING",
+        reason: { startsWith: AUTOMATIC_LATE_REASON_PREFIX },
+      },
+    })
+    : { count: 0 };
+
+  if (candidates.length === 0) return { created: 0, updated: 0, removed: removed.count, lateRequests: [] };
   const existing = await prisma.leaveRequest.findMany({
     where: { id: { in: candidates.map((candidate) => candidate.id) } },
     select: { id: true },
@@ -187,6 +203,7 @@ export async function ensureAutomaticLateRequests(
   return {
     created: created.count,
     updated: candidates.length,
+    removed: removed.count,
     lateRequests: candidates.map((candidate) => ({
       id: candidate.id,
       userId: candidate.userId,

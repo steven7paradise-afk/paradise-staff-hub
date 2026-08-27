@@ -138,7 +138,7 @@ export default async function DashboardPage() {
   const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
   if (managementRoles.has(role)) {
     if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)) {
-      await safe(ensureAutomaticLateRequests(statusToday), { created: 0, updated: 0, lateRequests: [] });
+      await safe(ensureAutomaticLateRequests(statusToday), { created: 0, updated: 0, removed: 0, lateRequests: [] });
     }
     const isResponsible = role === "RESPONSABILE";
     const scopedLocationId = isResponsible ? currentUser.sede_id : null;

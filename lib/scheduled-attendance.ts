@@ -30,6 +30,12 @@ export function romeMinutesForInstant(value: Date) {
   return hour * 60 + minute;
 }
 
+export function attendanceActualMinutes(log: { timestamp: Date; note?: string | null }) {
+  const detected = String(log.note || "").match(/Ora rilevata\s+(\d{1,2}):(\d{2})(?::\d{2})?/i);
+  if (detected) return Number(detected[1]) * 60 + Number(detected[2]);
+  return romeMinutesForInstant(log.timestamp);
+}
+
 export function isRestSchedule(categoryName: string | null | undefined, categoryCode: string | null | undefined) {
   const name = String(categoryName || "").trim().toLowerCase();
   const code = String(categoryCode || "").trim().toUpperCase();

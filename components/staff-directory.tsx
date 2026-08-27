@@ -49,8 +49,9 @@ type Employee = {
   lastEditedByName?: string | null;
   lastEditedAt?: string | null;
   attendanceToday?: {
-    status: "PRESENTE" | "IN_PAUSA" | "USCITO" | "ASSENTE" | "ATTESO" | "RIPOSO" | "GIUSTIFICATO" | "NESSUN_TURNO";
+    status: "PRESENTE" | "IN_PAUSA" | "USCITO" | "ASSENTE" | "ATTESO" | "RIPOSO" | "GIUSTIFICATO" | "NESSUN_TURNO" | "RITARDO_DA_APPROVARE" | "RITARDO_RIFIUTATO";
     absent: boolean;
+    lateApprovalStatus?: "PENDING" | "REJECTED" | null;
     plannedStart: string | null;
     plannedEnd: string | null;
     firstEntry: string | null;
@@ -2388,6 +2389,8 @@ export function StaffDirectory({
                       <span className="text-[10px] text-neutral-300">•</span>
                       <Badge tone={getStatusTone(emp.employeeStatus)}>{emp.employeeStatus}</Badge>
                       {emp.attendanceToday?.absent ? <Badge tone="pink">Assente oggi</Badge> : null}
+                      {emp.attendanceToday?.lateApprovalStatus === "PENDING" ? <Badge tone="gold">Ritardo da approvare</Badge> : null}
+                      {emp.attendanceToday?.lateApprovalStatus === "REJECTED" ? <Badge tone="pink">Ritardo rifiutato</Badge> : null}
                     </div>
                   </div>
                 </div>
@@ -2398,7 +2401,9 @@ export function StaffDirectory({
                     <div className={cn("flex items-start gap-2 rounded-xl px-2.5 py-2", emp.attendanceToday.absent ? "bg-rose-50 text-rose-700" : "bg-emerald-50/70 text-emerald-700")}>
                       <AlarmClock className="mt-0.5 size-3.5 shrink-0" />
                       <span>
-                        Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.absent
+                        Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.lateApprovalStatus
+                          ? `entrata ${emp.attendanceToday.firstEntry ?? "registrata"} · ${emp.attendanceToday.lateApprovalStatus === "PENDING" ? "ritardo da approvare" : "ritardo rifiutato"}`
+                          : emp.attendanceToday.absent
                           ? `nessuna timbratura (+${emp.attendanceToday.elapsedMinutes} min oltre il limite)`
                           : emp.attendanceToday.firstEntry
                             ? `entrata ${emp.attendanceToday.firstEntry}`
