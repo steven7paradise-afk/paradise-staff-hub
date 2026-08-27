@@ -10,6 +10,25 @@ export function verifiedClientAppointmentStatus(localStatus: unknown, rawAttenda
   return String(confirmationStatus || "").trim() || "PRENOTATO";
 }
 
+export function taskChecklistProgress(value: unknown) {
+  const items = Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const completed = items.filter((item) => item.done === true).length;
+  return {
+    total: items.length,
+    completed,
+    pending: Math.max(0, items.length - completed),
+    percentage: items.length ? Math.round((completed / items.length) * 100) : null,
+    items: items.map((item) => ({
+      text: String(item.text || "").trim(),
+      done: item.done === true,
+      completedBy: typeof item.completedBy === "string" ? item.completedBy : null,
+      completedAt: typeof item.completedAt === "string" ? item.completedAt : null,
+    })).filter((item) => item.text),
+  };
+}
+
 function statusMention(value: string): TeamStatusScope | null {
   const text = value.toLocaleLowerCase("it");
   if (/paus/.test(text)) return "IN_PAUSA";

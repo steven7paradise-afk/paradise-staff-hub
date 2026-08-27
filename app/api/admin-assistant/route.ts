@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { buildAssistantDateContext, formatRomeDateTime, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
-import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, verifiedClientAppointmentStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
+import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, taskChecklistProgress, verifiedClientAppointmentStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { createNotifications } from "@/lib/notifications";
@@ -161,7 +161,7 @@ const tools = [
   {
     type: "function",
     name: "get_task_overview",
-    description: "Legge task con filtri precisi per stato, persona, titolo e intervallo. Restituisce descrizione, assegnatari, autore, nota di completamento, commenti e cosa è stato riportato. Per 'Steven ha completato task oggi?' usa status COMPLETED, employee_name Steven e l'intervallo di oggi.",
+    description: "Legge task e avanzamento con filtri precisi per stato, persona, titolo e intervallo. Restituisce descrizione, checklist e percentuale, tempo registrato, scadenza, assegnatari, ultimo aggiornamento della persona, commenti e nota finale. Per 'come stanno andando le task di X?' leggi tutto e riformula gli aggiornamenti in un riepilogo professionale.",
     strict: true,
     parameters: {
       type: "object",
@@ -720,7 +720,9 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
         status: true,
         priority: true,
         category: true,
+        checklist: true,
         notes: true,
+        timer_seconds: true,
         completion_note: true,
         completion_files: true,
         completion_links: true,
@@ -729,6 +731,7 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
         completed_at: true,
         created_at: true,
         updated_at: true,
+        evaluation: true,
         location: { select: { name: true } },
         assignees: { select: { name: true } },
         created_by: { select: { name: true } },
@@ -750,30 +753,45 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
     period: validPeriod ? { from: validPeriod.start.toISOString(), to: validPeriod.end.toISOString() } : null,
     totals: Object.fromEntries(groups.map((group) => [group.status, group._count._all])),
     overdue: await prisma.staffTask.count({ where: { ...baseWhere, status: { not: "COMPLETED" }, due_date: { lt: now } } }),
-    tasks: recent.map((task) => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      category: task.category,
-      notes: task.notes,
-      completionNote: task.completion_note,
-      completionFilesCount: Array.isArray(task.completion_files) ? task.completion_files.length : 0,
-      completionLinksCount: Array.isArray(task.completion_links) ? task.completion_links.length : 0,
-      createdAt: task.created_at.toISOString(),
-      startedAt: task.started_at?.toISOString() || null,
-      dueDate: task.due_date?.toISOString() || null,
-      completedAt: task.completed_at?.toISOString() || null,
-      location: task.location.name,
-      createdBy: task.created_by.name,
-      assignees: task.assignees.map((person) => person.name),
-      reports: task.comments.map((comment) => ({
+    tasks: recent.map((task) => {
+      const reports = task.comments.map((comment) => ({
         by: comment.user.name,
         message: comment.message,
         at: comment.created_at.toISOString(),
-      })),
-    })),
+      }));
+      const requestedEmployee = resolved?.employee?.name.trim().toLocaleLowerCase("it") || "";
+      const requestedEmployeeUpdates = requestedEmployee
+        ? reports.filter((report) => report.by.trim().toLocaleLowerCase("it") === requestedEmployee)
+        : reports;
+      return {
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        category: task.category,
+        notes: task.notes,
+        checklist: taskChecklistProgress(task.checklist),
+        timerSeconds: task.timer_seconds,
+        completionNote: task.completion_note,
+        completionFilesCount: Array.isArray(task.completion_files) ? task.completion_files.length : 0,
+        completionLinksCount: Array.isArray(task.completion_links) ? task.completion_links.length : 0,
+        evaluation: task.evaluation,
+        createdAt: task.created_at.toISOString(),
+        updatedAt: task.updated_at.toISOString(),
+        startedAt: task.started_at?.toISOString() || null,
+        dueDate: task.due_date?.toISOString() || null,
+        completedAt: task.completed_at?.toISOString() || null,
+        overdue: task.status !== "COMPLETED" && Boolean(task.due_date && task.due_date < now),
+        location: task.location.name,
+        createdBy: task.created_by.name,
+        assignees: task.assignees.map((person) => person.name),
+        latestUpdate: requestedEmployeeUpdates.at(-1) || reports.at(-1) || null,
+        requestedEmployeeUpdates,
+        reports,
+        source: "Task Paradise",
+      };
+    }),
   };
 }
 
@@ -2039,18 +2057,28 @@ function assistantCards(toolName: string, output: unknown, question: string): As
   }
 
   if (toolName === "get_task_overview" && Array.isArray(data.tasks)) {
-    return (data.tasks as Array<Record<string, unknown>>).slice(0, 20).map((task, index) => ({
-      id: String(task.id || `task-${index}`),
-      person: String(data.requestedEmployee || (Array.isArray(task.assignees) ? task.assignees.join(", ") : "Team")),
-      photoUrl: null,
-      status: String(task.status || "Task"),
-      type: "Task",
-      location: String(task.location || "Nessuna sede"),
-      date: typeof task.completedAt === "string" ? task.completedAt : typeof task.dueDate === "string" ? task.dueDate : null,
-      time: null,
-      detail: task.completionNote ? `${String(task.title || "Task")}: ${String(task.completionNote)}` : String(task.title || "Task senza titolo"),
-      tone: task.status === "COMPLETED" ? "green" : task.status === "ACTIVE" ? "blue" : "amber",
-    }));
+    return (data.tasks as Array<Record<string, unknown>>).slice(0, 20).map((task, index) => {
+      const checklist = task.checklist && typeof task.checklist === "object" ? task.checklist as Record<string, unknown> : {};
+      const latestUpdate = task.latestUpdate && typeof task.latestUpdate === "object" ? task.latestUpdate as Record<string, unknown> : {};
+      const progress = typeof checklist.percentage === "number" ? `Checklist ${checklist.percentage}%` : "Checklist non presente";
+      const updateText = typeof latestUpdate.message === "string" && latestUpdate.message.trim()
+        ? latestUpdate.message.trim().slice(0, 180)
+        : typeof task.completionNote === "string" && task.completionNote.trim()
+          ? task.completionNote.trim().slice(0, 180)
+          : "Nessun aggiornamento inserito";
+      return {
+        id: String(task.id || `task-${index}`),
+        person: String(data.requestedEmployee || (Array.isArray(task.assignees) ? task.assignees.join(", ") : "Team")),
+        photoUrl: null,
+        status: String(task.status || "Task"),
+        type: String(task.title || "Task"),
+        location: String(task.location || "Nessuna sede"),
+        date: typeof task.completedAt === "string" ? task.completedAt : typeof task.dueDate === "string" ? task.dueDate : null,
+        time: null,
+        detail: `${progress} · ${updateText}`,
+        tone: task.status === "COMPLETED" ? "green" : task.overdue ? "red" : task.status === "ACTIVE" ? "blue" : "amber",
+      };
+    });
   }
 
   if (toolName === "get_orders_overview" && Array.isArray(data.orders)) {
@@ -2151,6 +2179,14 @@ function assistantMetrics(toolName: string, output: unknown, question: string): 
       { id: "employee-clocked", label: "Giorni timbrati", value: String(data.attendance?.clockedInDays || 0), detail: `${data.attendance?.breakStarts || 0} pause iniziate`, tone: "green" },
       { id: "employee-late", label: "Ritardi", value: String(data.attendance?.lateCount || 0), detail: "Rilevati nel periodo", tone: data.attendance?.lateCount ? "amber" : "green" },
       { id: "employee-tasks", label: "Task collegate", value: String(data.tasks?.total || 0), detail: `${data.tasks?.byStatus?.COMPLETED || 0} completate`, tone: "violet" },
+    ];
+  }
+  if (toolName === "get_task_overview") {
+    return [
+      { id: "tasks-total", label: "Task trovate", value: String(data.count || 0), detail: data.requestedEmployee || data.requestedTask || "Tutte le task", tone: "blue" },
+      { id: "tasks-active", label: "In corso", value: String(data.totals?.ACTIVE || 0), detail: `${data.totals?.WAITING || 0} in attesa`, tone: "violet" },
+      { id: "tasks-completed", label: "Completate", value: String(data.totals?.COMPLETED || 0), detail: "Totale assegnato", tone: "green" },
+      { id: "tasks-overdue", label: "Scadute", value: String(data.overdue || 0), detail: "Non completate", tone: data.overdue ? "red" : "green" },
     ];
   }
   if (toolName === "get_document_status") {
@@ -2377,7 +2413,8 @@ PRECISIONE TEMPORALE OBBLIGATORIA: “oggi”, “ieri” e “domani” indican
 UNITÀ DELLA RISPOSTA: rispondi soltanto alla categoria richiesta. Non aggiungere risultati di giorni diversi, riepiloghi mensili o altre categorie. Per una domanda semplice come “ritardi di oggi” esegui una sola ricerca e restituisci un unico riepilogo con le sole schede di oggi.
 Per domande come “come va [persona] questo mese?”, “ha fatto ritardi?”, “quanti turni ha fatto?” o riepiloghi mensili individuali usa get_employee_month_overview. Per una singola categoria puoi usare get_requests_overview, sempre con employee_name e mese/anno quando citati.
 Per domande su identità lavorativa, mansione, reparto, sede, responsabile, stato o contratto di una persona usa get_employee_profile e considera Staff Paradise la fonte autoritativa. Non dedurre mansione o sede da task, messaggi o presenze.
-Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto. Se viene citato il nome o parte del titolo della task, passalo in task_query. Per dire cosa il lavoratore ha riportato usa completionNote e reports; distingui sempre autore, assegnatari e autori dei commenti.
+Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto. Se viene citato il nome o parte del titolo della task, passalo in task_query.
+AVANZAMENTO TASK: per “come stanno andando le task di [persona]?” non applicare un filtro di stato o data se non richiesto. Per ogni task leggi obiettivo (description), stato, checklist, timerSeconds, scadenza, requestedEmployeeUpdates, reports e completionNote. Restituisci un riepilogo professionale breve per task con: titolo; avanzamento reale (stato e checklist); ultimo aggiornamento significativo riformulato; attività ancora da fare o blocco se esplicitamente registrato; scadenza. Usa prima requestedEmployeeUpdates per dire cosa ha comunicato la persona richiesta. Distingui sempre descrizione iniziale da aggiornamenti e nota finale. Non copiare lunghi messaggi parola per parola, non attribuire a un dipendente commenti di altri e non dedurre percentuali diverse da checklist.percentage. Se non esistono commenti o nota finale, scrivi “nessun aggiornamento inserito”, senza inventare progressi.
 “In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
 Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.

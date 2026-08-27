@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, verifiedClientAppointmentStatus } from "../lib/admin-assistant-intent";
+import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, taskChecklistProgress, verifiedClientAppointmentStatus } from "../lib/admin-assistant-intent";
 
 test("recognizes a direct question about people currently on break", () => {
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi è in pausa?" }]), "IN_PAUSA");
@@ -28,6 +28,7 @@ test("recognizes a completed-task question without relying on the model", () => 
 
 test("forces a database search for task questions", () => {
   assert.equal(requiredAssistantTool("Steven ha completato task oggi?"), "get_task_overview");
+  assert.equal(requiredAssistantTool("Come stanno andando le task di Steven?"), "get_task_overview");
 });
 
 test("forces Controllo Cliente search for a named client", () => {
@@ -104,4 +105,20 @@ test("does not treat the generic Cowlendar arrived flag as a verified arrival", 
   assert.equal(verifiedClientAppointmentStatus(null, "arrived", "confirmed"), "confirmed");
   assert.equal(verifiedClientAppointmentStatus(null, "no_show", "confirmed"), "NON_PRESENTATO");
   assert.equal(verifiedClientAppointmentStatus("IN_ATTESA", "arrived", "confirmed"), "IN_ATTESA");
+});
+
+test("calculates task progress from the real checklist", () => {
+  assert.deepEqual(taskChecklistProgress([
+    { text: "Prima attività", done: true, completedBy: "Steven", completedAt: "2026-08-27T09:00:00Z" },
+    { text: "Seconda attività", done: false },
+  ]), {
+    total: 2,
+    completed: 1,
+    pending: 1,
+    percentage: 50,
+    items: [
+      { text: "Prima attività", done: true, completedBy: "Steven", completedAt: "2026-08-27T09:00:00Z" },
+      { text: "Seconda attività", done: false, completedBy: null, completedAt: null },
+    ],
+  });
 });
