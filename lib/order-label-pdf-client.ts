@@ -262,23 +262,26 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
       <rect x="55" y="35" width="790" height="190" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
       ${logoImage}
 
-      <image href="${qrCodeDataUrl}" x="60" y="270" width="370" height="370" preserveAspectRatio="xMidYMid meet" image-rendering="pixelated"/>
+      <rect x="55" y="260" width="790" height="395" rx="30" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
+      <line x1="455" y1="290" x2="455" y2="625" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
+      <image href="${qrCodeDataUrl}" x="75" y="280" width="355" height="355" preserveAspectRatio="xMidYMid meet" image-rendering="pixelated"/>
 
-      <rect x="465" y="270" width="380" height="370" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
-      <text x="505" y="325" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">CLIENTE</text>
-      <text x="505" y="382" font-family="Arial, Helvetica, sans-serif" font-size="35" font-weight="900" fill="#111111">${escapeSvgText(shortSvgText(client, 20))}</text>
-      <line x1="505" y1="420" x2="805" y2="420" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
-      <text x="505" y="470" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
-      <text x="505" y="535" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
-      <text x="505" y="602" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="1.2" fill="#111111">PRONTO</text>
-      <rect x="730" y="558" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
+      <text x="495" y="320" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">CLIENTE</text>
+      <text x="495" y="378" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#111111">${escapeSvgText(shortSvgText(client, 19))}</text>
+      <line x1="495" y1="418" x2="805" y2="418" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
+      <text x="495" y="468" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">NUMERO ORDINE</text>
+      <text x="495" y="535" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="900" fill="#050505">${escapeSvgText(shortSvgText(cleanOrderNo, 11))}</text>
+      <text x="495" y="604" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="900" letter-spacing="1.2" fill="#111111">PRONTO</text>
+      <rect x="735" y="558" width="62" height="58" rx="7" fill="#ffffff" stroke="#111111" stroke-width="6"/>
 
-      <rect x="75" y="680" width="340" height="235" rx="24" fill="#ffffff" stroke="#e8c8d6" stroke-width="3"/>
-      <text x="105" y="730" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">DATA ORDINE</text>
-      <text x="105" y="775" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(createdAt, 24))}</text>
-      <line x1="105" y1="808" x2="385" y2="808" stroke="#e8c8d6" stroke-width="3"/>
-      <text x="105" y="850" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">COMPILATO DA</text>
-      <text x="105" y="895" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(compiledBy, 22))}</text>
+      <rect x="55" y="695" width="790" height="155" rx="24" fill="#ffffff" stroke="#e8c8d6" stroke-width="3"/>
+      <line x1="450" y1="720" x2="450" y2="825" stroke="#e8c8d6" stroke-width="3"/>
+      <text x="90" y="750" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">DATA ORDINE</text>
+      <text x="90" y="802" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(createdAt, 24))}</text>
+      <text x="490" y="750" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="800" letter-spacing="1.8" fill="#9b496c">COMPILATO DA</text>
+      <text x="490" y="802" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" fill="#111111">${escapeSvgText(shortSvgText(compiledBy, 22))}</text>
+
+      <text x="450" y="925" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" letter-spacing="1.2" fill="#111111">www.paradisebeauty.it</text>
     </svg>
   `;
   const labelImageDataUrl = await svgToDataUrl(svg);
