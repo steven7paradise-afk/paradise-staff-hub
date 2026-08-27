@@ -1,6 +1,16 @@
 #!/bin/sh
 set -eu
 
+# Auth.js must use the public origin exposed by Coolify. A stale internal
+# NEXTAUTH_URL (for example https://localhost:80) makes PIN login fail in the
+# browser even though the application itself is healthy.
+if [ -n "${NEXT_PUBLIC_APP_URL:-}" ]; then
+  public_app_url="${NEXT_PUBLIC_APP_URL%/}"
+  export AUTH_URL="$public_app_url"
+  export NEXTAUTH_URL="$public_app_url"
+  export AUTH_TRUST_HOST=true
+fi
+
 # A rolling deployment briefly runs the old and the new container together.
 # Do not ask PostgreSQL for Prisma's migration advisory lock when all local
 # migrations are already applied: that was making otherwise healthy deploys

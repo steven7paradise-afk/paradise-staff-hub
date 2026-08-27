@@ -29,6 +29,9 @@ function isPublicOperationalRequest(pathname: string, method: string) {
 }
 
 export const authConfig = {
+  // Coolify terminates HTTPS before forwarding requests to the container.
+  // Trust its forwarded host/protocol so Auth.js builds public callback URLs.
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: 60 * 60 * 24 * 180,
