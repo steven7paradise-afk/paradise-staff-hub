@@ -1,4 +1,5 @@
-export const ABSENCE_GRACE_MINUTES = 30;
+// A timbratura diventa un ritardo soltanto dopo tre minuti completi dal limite.
+export const ABSENCE_GRACE_MINUTES = 3;
 
 export function scheduleTimeToMinutes(value: string | null | undefined) {
   const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
@@ -60,7 +61,7 @@ export function scheduledEntryPolicy({
   const deadlineMinutes = plannedMinutes === null
     ? null
     : officeFlexible
-      ? 10 * 60
+      ? 10 * 60 + ABSENCE_GRACE_MINUTES
       : plannedMinutes + ABSENCE_GRACE_MINUTES;
   return { plannedMinutes, deadlineMinutes, officeFlexible };
 }

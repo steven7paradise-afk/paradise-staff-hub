@@ -275,7 +275,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
           occurredAt: entry.timestamp.toISOString(),
           type: "Entrata in ritardo",
           status: "RITARDO",
-          note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? "; ingresso flessibile consentito fino alle 10:00" : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Entrata ${entry.time || `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`} · +${delay} minuti oltre il limite${entryPolicy.officeFlexible && expectedEnd ? ` · uscita prevista ${expectedEnd}` : ""}.`,
+          note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? `; ingresso flessibile fino alle 10:00 con ${ABSENCE_GRACE_MINUTES} minuti di tolleranza` : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Entrata ${entry.time || `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`} · +${delay} minuti oltre il limite${entryPolicy.officeFlexible && expectedEnd ? ` · uscita prevista ${expectedEnd}` : ""}.`,
         });
       }
       continue;
@@ -288,7 +288,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         occurredAt: romeInstantForDayMinutes(dayKey, entryPolicy.deadlineMinutes).toISOString(),
         type: "Mancata timbratura",
         status: "ASSENTE",
-        note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? "; ingresso consentito fino alle 10:00" : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Nessuna entrata registrata.`,
+        note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? `; ingresso flessibile fino alle 10:00 con ${ABSENCE_GRACE_MINUTES} minuti di tolleranza` : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Nessuna entrata registrata.`,
       });
     }
   }

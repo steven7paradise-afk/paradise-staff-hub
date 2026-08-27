@@ -7,6 +7,7 @@ import { applyExitRounding, applyParadiseEntranceRounding, clockRuleKey, localWe
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
 import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
+import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 
 const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
@@ -187,6 +188,25 @@ export async function POST(request: NextRequest) {
     data: { last_used_at: actualTimestamp },
   });
 
+  let lateRequest: {
+    id: string;
+    minutesPastDeadline: number;
+    delayMinutes: number;
+    plannedStart: string;
+    entryTime: string;
+  } | null = null;
+  if (type === "ENTRATA") {
+    const lateResult = await ensureAutomaticLateRequests(dateOnly, actualTimestamp, {
+      userId: user.id,
+      actualEntryTimestamp: actualTimestamp,
+      notifyOnDetectedEntry: true,
+    }).catch((error) => {
+      console.error("Failed to create the late-entry approval request:", error);
+      return null;
+    });
+    lateRequest = lateResult?.lateRequests.find((request) => request.userId === user.id) || null;
+  }
+
   if (type === "ENTRATA" && usedEntranceGrace) {
     const { start, end } = localWeekRange(actualTimestamp);
     const weeklyGraceCount = await prisma.attendanceLog.count({
@@ -253,5 +273,21 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ id: log.id, type, time, timestamp: log.timestamp.toISOString(), adjusted: Boolean(roundedNote), actualTime });
+  return NextResponse.json({
+    id: log.id,
+    type,
+    time,
+    timestamp: log.timestamp.toISOString(),
+    adjusted: Boolean(roundedNote),
+    actualTime,
+    lateRequest: lateRequest
+      ? {
+          id: lateRequest.id,
+          minutes: lateRequest.minutesPastDeadline,
+          totalDelayMinutes: lateRequest.delayMinutes,
+          approvalRequired: true,
+          actionUrl: "/requests",
+        }
+      : null,
+  });
 }

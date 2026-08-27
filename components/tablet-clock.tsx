@@ -1295,9 +1295,12 @@ export function TabletClock({
           time: data.time,
         },
       ]);
-      const feedbackText = `${type} registrata alle ${data.time}${data.adjusted ? ` (ora rilevata ${data.actualTime})` : ""}.`;
+      const regularFeedback = `${type} registrata alle ${data.time}${data.adjusted ? ` (ora rilevata ${data.actualTime})` : ""}.`;
+      const feedbackText = data.lateRequest?.approvalRequired
+        ? `Entrata registrata alle ${data.actualTime}. Ritardo di ${data.lateRequest.minutes} minuti inviato all'amministrazione per l'approvazione.`
+        : regularFeedback;
       sound("success");
-      showFeedback("success", feedbackText);
+      showFeedback(data.lateRequest?.approvalRequired ? "info" : "success", feedbackText);
       setMessage(feedbackText);
       setWorker(null);
       setPin("");
@@ -2026,10 +2029,14 @@ export function TabletClock({
               {feedback && (
                 <div className={cn(
                   "mt-3 flex min-h-10 items-center justify-center gap-3 rounded-2xl border px-3 text-xs font-bold shadow-sm",
-                  feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"
+                  feedback.type === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : feedback.type === "info"
+                      ? "border-amber-200 bg-amber-50 text-amber-900"
+                      : "border-red-200 bg-red-50 text-red-800"
                 )}>
                   {feedback.type === "success" ? <CheckCircle2 className="size-5" /> : <TriangleAlert className="size-5" />}
-                  <span>{feedback.text}</span>
+                  <span className="text-center leading-5">{feedback.text}</span>
                 </div>
               )}
 
@@ -2122,11 +2129,11 @@ export function TabletClock({
                     <div
                       className={cn(
                         "kiosk-feedback-enter flex max-w-full items-center justify-center gap-2 text-sm font-semibold",
-                        feedback.type === "error" ? "text-red-700" : "text-emerald-700"
+                        feedback.type === "error" ? "text-red-700" : feedback.type === "info" ? "text-amber-800" : "text-emerald-700"
                       )}
                     >
                       {feedback.type === "error" ? <TriangleAlert className="size-4 shrink-0" /> : <CheckCircle2 className="size-4 shrink-0" />}
-                      <span className="truncate">{feedback.text}</span>
+                      <span className="text-center leading-5">{feedback.text}</span>
                     </div>
                   ) : (
                     <p className="text-sm font-medium text-black/42">

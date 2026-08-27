@@ -25,7 +25,7 @@ type RequestRecord = {
 };
 
 type WorkerOption = { id: string; name: string; location: string | null };
-type ActiveRequestFilter = "JUSTIFY" | RequestRecord["type"];
+type ActiveRequestFilter = "JUSTIFY" | "LATE" | RequestRecord["type"];
 
 const typeLabels = { FERIE: "Ferie", PERMESSO: "Permesso", RIPOSO: "Riposo", MALATTIA: "Malattia", ALTRO: "Altro" };
 const statusLabels = { PENDING: "In attesa", APPROVED: "Approvata", REJECTED: "Rifiutata", FLAGGED: "Segnalata" };
@@ -400,19 +400,22 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
   const pendingRequests = requests.filter((request) => request.status === "PENDING").length;
   const requestSections = ([
-    { type: "PERMESSO", title: "Permessi", description: "Entrate posticipate, uscite anticipate e permessi orari.", tone: "pink", items: [] },
-    { type: "FERIE", title: "Ferie", description: "Giorni di ferie richiesti o già approvati.", tone: "gold", items: [] },
-    { type: "RIPOSO", title: "Riposo", description: "Riposi programmati e richieste di assenza ordinaria.", tone: "green", items: [] },
-    { type: "MALATTIA", title: "Malattia", description: "Malattie già giustificate o segnate come non giustificate.", tone: "pink", items: [] },
-    { type: "ALTRO", title: "Altro", description: "Richieste fuori categoria standard.", tone: "dark", items: [] },
-  ] as Array<{ type: RequestRecord["type"]; title: string; description: string; tone: "pink" | "gold" | "green" | "dark"; items: RequestRecord[] }>).map((section) => ({
+    { key: "LATE", title: "Ritardi", description: "Timbrature oltre la tolleranza da approvare o rifiutare.", tone: "gold", items: [] },
+    { key: "PERMESSO", title: "Permessi", description: "Entrate posticipate, uscite anticipate e permessi orari.", tone: "pink", items: [] },
+    { key: "FERIE", title: "Ferie", description: "Giorni di ferie richiesti o già approvati.", tone: "gold", items: [] },
+    { key: "RIPOSO", title: "Riposo", description: "Riposi programmati e richieste di assenza ordinaria.", tone: "green", items: [] },
+    { key: "MALATTIA", title: "Malattia", description: "Malattie già giustificate o segnate come non giustificate.", tone: "pink", items: [] },
+    { key: "ALTRO", title: "Altro", description: "Richieste fuori categoria standard.", tone: "dark", items: [] },
+  ] as Array<{ key: Exclude<ActiveRequestFilter, "JUSTIFY">; title: string; description: string; tone: "pink" | "gold" | "green" | "dark"; items: RequestRecord[] }>).map((section) => ({
     ...section,
-    items: archiveRequests.filter((request) => request.type === section.type),
+    items: archiveRequests.filter((request) => section.key === "LATE"
+      ? isAutomaticLateRequest(request)
+      : request.type === section.key && !isAutomaticLateRequest(request)),
   }));
-  const activeSection = requestSections.find((section) => section.type === activeFilter);
+  const activeSection = requestSections.find((section) => section.key === activeFilter);
   const filterButtons: Array<{ key: ActiveRequestFilter; label: string; count: number; tone: "pink" | "gold" | "green" | "dark" }> = [
     { key: "JUSTIFY", label: "Da giustificare", count: urgentSicknessRequests.length, tone: "pink" },
-    ...requestSections.map((section) => ({ key: section.type, label: section.title, count: section.items.length, tone: section.tone })),
+    ...requestSections.map((section) => ({ key: section.key, label: section.title, count: section.items.length, tone: section.tone })),
   ];
   const visibleRequests = activeFilter === "JUSTIFY" ? urgentSicknessRequests : activeSection?.items ?? [];
   const selectedRequest = requests.find((request) => request.id === selectedRequestId && visibleRequests.some((item) => item.id === request.id)) ?? visibleRequests[0] ?? null;
