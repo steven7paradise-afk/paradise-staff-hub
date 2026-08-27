@@ -32,6 +32,7 @@ type StaffRow = {
   shiftStart: string | null;
   status: "IN" | "BREAK" | "OUT" | "ABSENT";
   lateMinutes: number;
+  absenceReason?: "NO_ENTRY" | "LATE_PENDING" | "LATE_REJECTED" | null;
 };
 
 type LeaveRow = {
@@ -323,7 +324,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
         <div className="grid grid-cols-2 md:grid-cols-5">
           <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="green" active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
-          <Metric label="Assenti" value={String(data.absentToday.length)} note="turno iniziato, nessuna timbratura" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
+          <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da approvare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
           <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
           <Metric label="In malattia" value={String(sickness.length)} note="assenze registrate" icon={HeartPulse} tone="red" active={personnelView === "SICKNESS"} controls="assenze-attive" onClick={() => showPersonnelSection("SICKNESS")} />
           <Metric label="Ritardi" value={String(data.lateStaff.length)} note="oltre il limite consentito" icon={Clock3} active={personnelView === "LATE"} controls="personale-oggi" onClick={() => showPersonnelSection("LATE")} />
@@ -368,14 +369,14 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                   </div>
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-[10px] font-bold uppercase text-[#756d71]">{staff.status === "ABSENT" ? "Turno previsto" : "Entrata"}</p>
-                  <p className="mt-1 font-black text-[#252025]">{staff.status === "ABSENT" ? staff.shiftStart || "--:--" : staff.firstEntry}</p>
+                  <p className="text-[10px] font-bold uppercase text-[#756d71]">{staff.status === "ABSENT" && staff.absenceReason === "NO_ENTRY" ? "Turno previsto" : "Entrata"}</p>
+                  <p className="mt-1 font-black text-[#252025]">{staff.status === "ABSENT" && staff.absenceReason === "NO_ENTRY" ? staff.shiftStart || "--:--" : staff.firstEntry}</p>
                 </div>
                 <div className="text-right">
                   <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase ${staff.status === "IN" ? "bg-[#dcf5e9] text-[#147553]" : staff.status === "BREAK" ? "bg-[#fff0ce] text-[#8a6310]" : staff.status === "ABSENT" ? "bg-red-100 text-red-700" : "bg-[#eee9eb] text-[#655b60]"}`}>
                     {staff.status === "IN" ? "Al lavoro" : staff.status === "BREAK" ? "In pausa" : staff.status === "ABSENT" ? "Assente" : "Uscito"}
                   </span>
-                  {staff.lateMinutes > 0 && <p className="mt-1 text-[11px] font-bold text-[#bd3b45]">{staff.status === "ABSENT" ? `Nessuna timbratura · +${staff.lateMinutes} min oltre il limite` : `+${staff.lateMinutes} min`}</p>}
+                  {staff.lateMinutes > 0 && <p className="mt-1 text-[11px] font-bold text-[#bd3b45]">{staff.absenceReason === "LATE_PENDING" ? `Ritardo da approvare · +${staff.lateMinutes} min` : staff.absenceReason === "LATE_REJECTED" ? `Ritardo rifiutato · +${staff.lateMinutes} min` : staff.status === "ABSENT" ? `Nessuna timbratura · +${staff.lateMinutes} min oltre il limite` : `+${staff.lateMinutes} min`}</p>}
                 </div>
               </div>
             ))}

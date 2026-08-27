@@ -10,8 +10,8 @@ import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { clockRuleKey, parseClockRule } from "@/lib/clock-rules";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { ensureTomorrowRestNotifications } from "@/lib/rest-notifications";
-import { compareScheduledClock, expectedShiftEndTime, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
-import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
+import { attendanceActualMinutes, compareScheduledClock, expectedShiftEndTime, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
+import { ensureAutomaticLateRequests, isAutomaticLateReason } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -160,6 +160,7 @@ export default async function DashboardPage() {
       attendanceLogs,
       schedules,
       leaveRequests,
+      automaticLateRequests,
       controlForms,
       todayResponses,
       payrollDocuments,
@@ -196,6 +197,15 @@ export default async function DashboardPage() {
         },
         include: { user: { include: { location: true } } },
         orderBy: { end_date: "asc" },
+      }), []),
+      safe(prisma.leaveRequest.findMany({
+        where: {
+          start_date: { gte: statusToday, lt: statusTomorrow },
+          reason: { startsWith: "RITARDO AUTOMATICO — " },
+          user: { active: true, ...userScope },
+        },
+        select: { user_id: true, status: true },
+        orderBy: { created_at: "desc" },
       }), []),
       safe(prisma.serviceForm.findMany({
         where: { active: true },
@@ -236,13 +246,14 @@ export default async function DashboardPage() {
       logsByUser.set(log.user_id, rows);
     }
     const scheduleByUser = new Map(schedules.map((entry) => [entry.user_id, entry]));
+    const automaticLateStatusByUser = new Map(automaticLateRequests.map((request) => [request.user_id, request.status]));
     const clockedToday = Array.from(logsByUser.entries()).map(([userId, logs]) => {
       const state = deriveAttendanceState(logs);
-      const firstEntry = state.firstEntry?.timestamp ? new Date(state.firstEntry.timestamp) : null;
+      const firstEntryLog = logs.find((log) => log.type === "ENTRATA") || null;
       const schedule = scheduleByUser.get(userId);
       const shiftStart = schedule?.start_time || schedule?.category?.start_time || null;
       const shiftEnd = schedule?.end_time || schedule?.category?.end_time || null;
-      const actualMinutes = firstEntry ? romeDateTimeParts(firstEntry).totalMinutes : null;
+      const actualMinutes = firstEntryLog ? attendanceActualMinutes(firstEntryLog) : null;
       const user = logs[0].user;
       const entryPolicy = scheduledEntryPolicy({
         plannedStart: shiftStart,
@@ -250,20 +261,24 @@ export default async function DashboardPage() {
         locationName: schedule?.location?.name || user.location?.name,
       });
       const lateMinutes = actualMinutes !== null && entryPolicy.deadlineMinutes !== null ? Math.max(0, actualMinutes - entryPolicy.deadlineMinutes) : 0;
+      const automaticLateStatus = lateMinutes > 0 ? automaticLateStatusByUser.get(userId) : null;
+      const unresolvedLate = automaticLateStatus && automaticLateStatus !== "APPROVED";
       return {
         id: userId,
         name: user.name,
         photoUrl: user.photo_url,
         location: logs[0].location?.name || user.location?.name || "Sede non indicata",
-        firstEntry: firstEntry ? romeTime(firstEntry) : "--:--",
+        firstEntry: actualMinutes === null ? "--:--" : `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`,
         shiftStart,
-        status: state.status,
+        status: unresolvedLate ? "ABSENT" as const : state.status,
         lateMinutes,
+        absenceReason: unresolvedLate ? automaticLateStatus === "REJECTED" ? "LATE_REJECTED" as const : "LATE_PENDING" as const : null,
       };
     }).sort((a, b) => a.firstEntry.localeCompare(b.firstEntry));
 
-    const approvedLeaveUserIds = new Set(leaveRequests.map((request) => request.user_id));
-    const absentToday: ManagementDashboardData["absentToday"] = schedules.flatMap((schedule) => {
+    const approvedNonLateLeaveRequests = leaveRequests.filter((request) => !isAutomaticLateReason(request.reason));
+    const approvedLeaveUserIds = new Set(approvedNonLateLeaveRequests.map((request) => request.user_id));
+    const missingEntryStaff: ManagementDashboardData["absentToday"] = schedules.flatMap((schedule) => {
       const plannedStart = schedule.start_time || schedule.category.start_time || null;
       const plannedEnd = schedule.end_time || schedule.category.end_time || null;
       const comparison = compareScheduledClock({
@@ -285,8 +300,13 @@ export default async function DashboardPage() {
         shiftStart: plannedStart,
         status: "ABSENT" as const,
         lateMinutes: comparison.elapsedMinutes,
+        absenceReason: "NO_ENTRY" as const,
       }];
     }).sort((a, b) => (a.shiftStart || "").localeCompare(b.shiftStart || ""));
+    const absentToday: ManagementDashboardData["absentToday"] = [
+      ...clockedToday.filter((staff) => staff.status === "ABSENT"),
+      ...missingEntryStaff,
+    ];
 
     const controlFormIds = new Set(controlForms.filter((form) => isClientControlFormName(form.name, form.category)).map((form) => form.id));
     const countedResponses = todayResponses.filter((response) => {
@@ -398,7 +418,7 @@ export default async function DashboardPage() {
 
     const payrollUserIds = new Set(payrollDocuments.map((document) => document.user_id));
     const formatDate = (date: Date) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" }).format(date);
-    const leaveRows: ManagementDashboardData["leaves"] = leaveRequests.map((request) => ({
+    const leaveRows: ManagementDashboardData["leaves"] = approvedNonLateLeaveRequests.map((request) => ({
       id: request.id,
       name: request.user.name,
       photoUrl: request.user.photo_url,
@@ -406,7 +426,7 @@ export default async function DashboardPage() {
       type: request.type as "FERIE" | "MALATTIA" | "RIPOSO",
       periodLabel: `fino al ${formatDate(request.end_date)}`,
     }));
-    const leaveKeys = new Set(leaveRequests.map((request) => `${request.user_id}:${request.type}`));
+    const leaveKeys = new Set(approvedNonLateLeaveRequests.map((request) => `${request.user_id}:${request.type}`));
     for (const schedule of schedules) {
       const categoryName = schedule.category.name.toLowerCase();
       const categoryCode = schedule.category.code.toUpperCase();
@@ -432,7 +452,7 @@ export default async function DashboardPage() {
       presentNow: clockedToday.filter((staff) => staff.status === "IN" || staff.status === "BREAK").length,
       clockedToday,
       absentToday,
-      lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 0),
+      lateStaff: clockedToday.filter((staff) => staff.lateMinutes > 0 && staff.status !== "ABSENT"),
       leaves: leaveRows,
       clientsToday: countedResponses.length,
       hourlyClients,
