@@ -720,38 +720,40 @@ export function OrderManager({
   }
 
   return (
-    <div className="space-y-4 pb-8 md:space-y-6">
-      <div className="overflow-hidden rounded-[24px] border border-black/[0.06] bg-white shadow-sm md:rounded-[32px]">
+    <div className="space-y-3 pb-8 md:space-y-6">
+      <div className="overflow-hidden rounded-[22px] border border-black/[0.06] bg-white/95 shadow-[0_12px_36px_rgba(78,39,59,0.07)] md:rounded-[32px] md:bg-white md:shadow-sm">
         <div className="p-4 md:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d]">Paradise Operations</p>
-            <div className="mt-1 flex items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Ordini</h1>
-              <span className="rounded-full bg-[#f8e5ee] px-2.5 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
+            <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-[#c95f8d] md:block">Paradise Operations</p>
+            <div className="flex items-center gap-2.5 md:mt-1 md:gap-3">
+              <h1 className="text-2xl font-black tracking-[-0.03em] text-[#221b20] md:text-4xl md:font-semibold">Ordini</h1>
+              <span className="grid min-w-7 place-items-center rounded-full bg-[#f8e5ee] px-2 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
             </div>
-            <p className="mt-1 text-sm text-black/50">{canManage ? "Gestisci" : "Controlla"} preparazione, arrivo e consegna.</p>
+            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{canManage ? "Gestisci" : "Controlla"} preparazione, arrivo e consegna.</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-black/40">Mese:</span>
+          <div className="grid w-full gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:items-center lg:gap-3">
+            <div className="grid grid-cols-2 gap-2 lg:flex lg:items-center">
+              <span className="sr-only">Periodo</span>
               <select
+                aria-label="Mese degli ordini"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="bg-black/5 border border-black/10 text-black text-xs font-bold rounded-full px-3 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition"
+                className="h-11 w-full rounded-xl border border-black/[0.08] bg-[#faf7f9] px-3 text-sm font-bold capitalize text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-1.5 lg:text-xs"
               >
                 {monthsList.map((m) => (
                   <option key={m.value} value={m.value}>
-                    {m.label.toUpperCase()}
+                    {m.label}
                   </option>
                 ))}
               </select>
               
               <select
+                aria-label="Anno degli ordini"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-black/5 border border-black/10 text-black text-xs font-bold rounded-full px-3 py-1.5 outline-none cursor-pointer hover:bg-black/10 transition"
+                className="h-11 w-full rounded-xl border border-black/[0.08] bg-[#faf7f9] px-3 text-sm font-bold text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-1.5 lg:text-xs"
               >
                 {yearsList.map((y) => (
                   <option key={y} value={y}>
@@ -761,29 +763,38 @@ export function OrderManager({
               </select>
             </div>
 
-            <div className="flex min-w-0 items-center gap-2 rounded-2xl border border-black/10 px-3 py-2 w-full lg:w-72">
-              <Search className="size-4 text-black/35" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca ordine, salone, prodotto..." className="w-full bg-transparent text-sm outline-none" />
-            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_44px] gap-2 lg:flex lg:items-center lg:gap-3">
+              <div className="flex h-11 min-w-0 items-center gap-2 rounded-xl border border-black/[0.08] bg-white px-3 lg:w-72 lg:rounded-2xl">
+                <Search className="size-4 shrink-0 text-black/35" />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca cliente o ordine" className="min-w-0 w-full bg-transparent text-sm outline-none" />
+                {query ? <button type="button" onClick={() => setQuery("")} aria-label="Cancella ricerca" className="grid size-7 shrink-0 place-items-center rounded-full text-black/35"><X className="size-3.5" /></button> : null}
+              </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (scannerOpen) stopBarcodeCamera();
-                setScannerOpen((current) => !current);
-                setScannerMessage("");
-              }}
-              className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-[#e8b9ce] bg-[#fff0f6] px-4 text-xs font-black text-[#a94670] transition hover:bg-[#f9dce9]"
-            >
-              <ScanBarcode className="size-4" />
-              Leggi codice
-            </button>
+              <button
+                type="button"
+                aria-label={scannerOpen ? "Chiudi lettore codice" : "Leggi codice ordine"}
+                title="Leggi codice"
+                onClick={() => {
+                  if (scannerOpen) stopBarcodeCamera();
+                  setScannerOpen((current) => !current);
+                  setScannerMessage("");
+                }}
+                className={cn(
+                  "grid size-11 place-items-center rounded-xl border text-[#a94670] transition lg:inline-flex lg:w-auto lg:gap-2 lg:rounded-2xl lg:px-4 lg:text-xs lg:font-black",
+                  scannerOpen ? "border-[#d8739f] bg-[#f9dce9]" : "border-[#e8b9ce] bg-[#fff0f6] hover:bg-[#f9dce9]"
+                )}
+              >
+                <ScanBarcode className="size-4" />
+                <span className="hidden lg:inline">Leggi codice</span>
+              </button>
+            </div>
             
-            <div className="relative">
+            <div className="relative w-full lg:w-auto">
               <select
+                aria-label="Tipo di ordine"
                 value={selectedTaskType}
                 onChange={(e) => setSelectedTaskType(e.target.value as any)}
-                className="appearance-none bg-black/5 border border-black/10 text-black text-xs font-black rounded-full pl-4 pr-9 py-2 outline-none cursor-pointer hover:bg-black/10 transition"
+                className="h-11 w-full appearance-none rounded-xl border border-black/[0.08] bg-[#faf7f9] pl-3 pr-9 text-sm font-bold text-black outline-none transition hover:bg-black/[0.06] lg:h-auto lg:w-auto lg:rounded-full lg:py-2 lg:text-xs lg:font-black"
                 style={{
                   backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23000000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
                   backgroundPosition: "right 0.6rem center",
@@ -791,11 +802,11 @@ export function OrderManager({
                   backgroundRepeat: "no-repeat"
                 }}
               >
-                <option value="ALL">TUTTI I COMPITI</option>
-                <option value="conversione">CONVERSIONE CAPELLI</option>
-                <option value="acquisto">ACQUISTO EXTENSION</option>
-                <option value="accessori">ACCESSORI</option>
-                <option value="altro">ALTRO</option>
+                <option value="ALL">Tutti i tipi</option>
+                <option value="conversione">Conversione capelli</option>
+                <option value="acquisto">Acquisto extension</option>
+                <option value="accessori">Accessori</option>
+                <option value="altro">Altro</option>
               </select>
             </div>
           </div>
@@ -841,7 +852,7 @@ export function OrderManager({
         ) : null}
         </div>
 
-        <div className="grid grid-cols-3 border-t border-black/[0.06] bg-[#fffafd] sm:grid-cols-5">
+        <div className="hidden grid-cols-5 border-t border-black/[0.06] bg-[#fffafd] md:grid">
           {ORDER_COLUMNS.map((column) => {
             const Icon = column.icon;
             return (
@@ -866,36 +877,39 @@ export function OrderManager({
       </div>
 
       <div className="space-y-3 md:hidden">
-        <div className="sticky top-0 z-20 -mx-1 space-y-3 border-y border-black/[0.06] bg-[#fff9fc]/95 px-1 py-3 backdrop-blur-xl">
-        <div className="flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="sticky top-0 z-20 rounded-2xl border border-black/[0.06] bg-white/95 p-2 shadow-[0_8px_24px_rgba(70,34,52,0.06)] backdrop-blur-xl">
+        <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
             onClick={() => setMobileStatus("ALL")}
             className={cn(
-              "shrink-0 rounded-full border px-4 py-2.5 text-xs font-bold transition",
-              mobileStatus === "ALL" ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white text-black/50"
+              "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-black transition",
+              mobileStatus === "ALL" ? "bg-[#241d22] text-white shadow-sm" : "bg-transparent text-black/45"
             )}
           >
-            Tutti {filteredOrders.length}
+            Tutti <span className={cn("rounded-md px-1.5 py-0.5 text-[10px]", mobileStatus === "ALL" ? "bg-white/15" : "bg-black/[0.05]")}>{filteredOrders.length}</span>
           </button>
           {ORDER_COLUMNS.map((column) => {
             const count = orderCounts[column.id] || 0;
+            const Icon = column.icon;
             return (
               <button
                 key={column.id}
                 type="button"
                 onClick={() => setMobileStatus(column.id)}
                 className={cn(
-                  "shrink-0 rounded-full border px-4 py-2.5 text-xs font-bold transition",
-                  mobileStatus === column.id ? "border-paradise-pink bg-paradise-softPink text-[#C66170]" : "border-black/10 bg-white text-black/50"
+                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[11px] font-black transition",
+                  mobileStatus === column.id ? "bg-[#f7dce8] text-[#9f3e68] shadow-sm" : "bg-transparent text-black/45"
                 )}
               >
-                {column.label} {count}
+                <Icon className="size-3.5" />
+                {column.label}
+                <span className={cn("rounded-md px-1.5 py-0.5 text-[10px]", mobileStatus === column.id ? "bg-white/60" : "bg-black/[0.05]")}>{count}</span>
               </button>
             );
           })}
         </div>
-        <p className="px-2 text-[11px] font-bold text-black/40">
+        <p className="px-2 pb-0.5 pt-2 text-[10px] font-bold text-black/35">
           {mobileOrders.length} {mobileOrders.length === 1 ? "ordine trovato" : "ordini trovati"}
         </p>
         </div>
@@ -908,60 +922,50 @@ export function OrderManager({
             const currentStatus = order.status || "NEW";
             const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
             const Icon = status.icon;
-            const taskType = getOrderTaskType(order);
             const photo = orderPhoto(order);
             return (
               <button
                 key={order.id}
                 type="button"
                 onClick={() => setSelected(order)}
-                className={cn(
-                  "w-full overflow-hidden rounded-[18px] border text-left shadow-sm transition active:scale-[0.99]",
-                  taskType === "conversione"
-                    ? "border-l-4 border-l-pink-500 border-pink-200/60 bg-pink-50/10"
-                    : taskType === "acquisto"
-                    ? "border-l-4 border-l-amber-500 border-amber-200/60 bg-amber-50/10"
-                    : taskType === "accessori"
-                    ? "border-l-4 border-l-indigo-500 border-indigo-200/60 bg-indigo-50/10"
-                    : "border-l-4 border-l-slate-400 border-slate-200/60 bg-slate-50/10"
-                )}
+                className="w-full overflow-hidden rounded-[20px] border border-black/[0.06] bg-white text-left shadow-[0_8px_24px_rgba(74,38,56,0.055)] transition active:scale-[0.99]"
               >
-                <div className="flex min-h-[112px]">
+                <div className="flex gap-3 p-3">
                   {photo ? (
                     <img
                       src={orderPhotoPreviewUrl(photo)}
                       alt={`Foto di ${orderTitle(order)}`}
-                      className="w-24 shrink-0 object-cover sm:w-32"
+                      className="size-[76px] shrink-0 rounded-2xl object-cover"
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
                       }}
                     />
                   ) : (
-                    <div className="grid w-16 shrink-0 place-items-center bg-black/[0.025] sm:w-20">
-                      <Icon className="size-5 text-black/20" />
+                    <div className="grid size-[76px] shrink-0 place-items-center rounded-2xl bg-[#faf3f7]">
+                      <Icon className="size-5 text-[#bd5b85]" />
                     </div>
                   )}
-                  <div className="min-w-0 flex-1 p-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.06em]", statusPillClass(currentStatus))}>
-                            {status.label}
-                          </span>
-                          <span className="text-[10px] font-bold text-black/35">{orderNumber(order)}</span>
-                        </div>
-                        <h3 className="mt-2 line-clamp-1 text-base font-black leading-5 text-black">{orderClientName(order)}</h3>
+                  <div className="min-w-0 flex-1 py-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.05em]", statusPillClass(currentStatus))}>
+                          {status.label}
+                        </span>
+                        <span className="text-[10px] font-bold text-black/35">#{String(orderNumber(order)).replace(/^#/, "")}</span>
                       </div>
-                      <ChevronRight className="mt-1 size-5 shrink-0 text-black/25" />
+                      <span className="shrink-0 text-[10px] font-semibold text-black/35">{orderDate(order)}</span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-xs font-medium leading-4 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
-                    <div className="mt-2 flex min-w-0 items-center gap-1.5 text-[10px] font-bold text-black/35">
-                      <span className="truncate">{order.user_location_name ?? "Sede non indicata"}</span>
-                      <span>·</span>
-                      <span className="truncate">{order.user?.name ?? "Staff"}</span>
-                      <span className="ml-auto shrink-0">{orderDate(order)}</span>
-                    </div>
+                    <h3 className="mt-1.5 line-clamp-2 text-[15px] font-black leading-[1.15] tracking-[-0.01em] text-[#211b20]">{orderClientName(order)}</h3>
+                    <p className="mt-1 line-clamp-1 text-[11px] font-medium leading-4 text-black/48">{orderItems(order) || "Nessun dettaglio prodotti"}</p>
                   </div>
+                </div>
+                <div className="flex min-w-0 items-center gap-1.5 border-t border-black/[0.05] px-3 py-2.5 text-[10px] font-bold text-black/38">
+                  <span className="truncate">{order.user_location_name ?? "Sede non indicata"}</span>
+                  <span className="text-black/20">•</span>
+                  <span className="truncate">{order.user?.name ?? "Staff"}</span>
+                  <span className="ml-auto grid size-7 shrink-0 place-items-center rounded-full bg-[#faf3f7] text-[#b24f7a]">
+                    <ChevronRight className="size-4" />
+                  </span>
                 </div>
               </button>
             );
