@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { buildAssistantDateContext, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
-import { requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
+import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { createNotifications } from "@/lib/notifications";
@@ -298,7 +298,7 @@ const tools = [
   {
     type: "function",
     name: "search_client_controls",
-    description: "Cerca e conta le schede Controllo Cliente per cliente, lavoratore e periodo. Restituisce clienti uniche, schede, chi ha lavorato, servizi/prodotti, importi, pagamento, ordine, note, sede e data. Usalo anche per domande come 'quante clienti ha fatto Angelica oggi?', 'quali clienti ha seguito Angelica?' o 'cosa è stato fatto a Maria Rossi?'.",
+    description: "Cliente 360: collega Appuntamenti e Controllo Cliente. Per una cliente specifica restituisce anagrafica disponibile, visite, servizi, professioniste, extension, tempi reali, pagamenti, note, foto, annullamenti/no-show e timeline con fonte. Serve anche per conteggi collettivi per periodo o lavoratrice. I campi non registrati restano esplicitamente non disponibili.",
     strict: true,
     parameters: {
       type: "object",
@@ -1257,6 +1257,68 @@ function answerMoney(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function answerText(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") return String(value).trim();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    return String(record.value || record.label || record.name || record.url || "").trim();
+  }
+  return "";
+}
+
+function answerMedia(value: unknown) {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  return values.map(answerText).filter(Boolean);
+}
+
+function firstAnswer(answers: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = answerText(answers[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function labeledNoteValue(text: string, labels: string[]) {
+  for (const label of labels) {
+    const match = text.match(new RegExp(`(?:^|[\\n;,])\\s*${label}\\s*[:=-]\\s*([^\\n;,]+)`, "i"));
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return null;
+}
+
+function extensionDetails(answers: Record<string, unknown>) {
+  const notes = [
+    answerText(answers.client_control_notes_text),
+    answerText(answers.client_control_shopify_order_note),
+    answerText(answers.custom_extra_note),
+    ...answerNames(answers.client_control_products_list),
+  ].filter(Boolean).join("\n");
+  const grams = firstAnswer(answers, ["custom_grammi", "client_control_grammi", "grammi"])
+    || labeledNoteValue(notes, ["grammi", "grammatura"])
+    || notes.match(/\b(\d{2,4})\s*(?:g|gr|grammi)\b/i)?.[1]
+    || null;
+  const bands = firstAnswer(answers, ["custom_fasce", "client_control_fasce", "fasce"])
+    || labeledNoteValue(notes, ["fasce", "numero fasce"])
+    || notes.match(/\b(\d{1,2})\s*fasce?\b/i)?.[1]
+    || null;
+  const length = firstAnswer(answers, ["custom_lunghezza", "client_control_lunghezza", "lunghezza"])
+    || labeledNoteValue(notes, ["lunghezza"])
+    || notes.match(/\b(\d{2,3})\s*cm\b/i)?.[1]
+    || null;
+  const color = firstAnswer(answers, ["custom_colore", "client_control_colore", "colore", "numero_colore"])
+    || labeledNoteValue(notes, ["colore", "numero colore"])
+    || null;
+  const type = firstAnswer(answers, ["custom_tipologia_extension", "client_control_tipologia_extension", "tipologia_extension"])
+    || labeledNoteValue(notes, ["tipo extension", "tipologia extension"])
+    || null;
+  return { grams, bands, length, color, type };
+}
+
+function appointmentArrivalAt(comments: Array<{ message: string; at: string }>) {
+  return comments.find((comment) => /(?:impostato|cambiato).{0,80}in attesa/i.test(comment.message))?.at || null;
+}
+
 async function searchClientControls(
   clientName: string,
   employeeName: string | null,
@@ -1271,7 +1333,8 @@ async function searchClientControls(
   if (resolved && !resolved.employee) {
     return { count: 0, uniqueClientCount: 0, controls: [], error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
   }
-  if (!query && !resolved?.employee) {
+  const hasRequestedPeriod = Boolean((dateFrom && dateTo) || (month && year));
+  if (!query && !resolved?.employee && !hasRequestedPeriod) {
     return { count: 0, uniqueClientCount: 0, controls: [], error: "Indica il nome della cliente oppure della lavoratrice." };
   }
   const exactPeriod = dateFrom && dateTo ? { start: new Date(dateFrom), end: new Date(dateTo) } : null;
@@ -1281,9 +1344,10 @@ async function searchClientControls(
   const monthPeriod = month && year ? monthBounds(month, year) : null;
   const period = validExactPeriod || monthPeriod;
   const now = new Date();
-  const defaultAppointmentStart = new Date(now);
-  defaultAppointmentStart.setUTCDate(defaultAppointmentStart.getUTCDate() - 90);
+  const defaultAppointmentStart = query ? new Date("2024-01-01T00:00:00.000Z") : new Date(now);
+  if (!query) defaultAppointmentStart.setUTCDate(defaultAppointmentStart.getUTCDate() - 90);
   const defaultAppointmentEnd = new Date(now);
+  defaultAppointmentEnd.setUTCFullYear(defaultAppointmentEnd.getUTCFullYear() + (query ? 1 : 0));
   defaultAppointmentEnd.setUTCDate(defaultAppointmentEnd.getUTCDate() + 31);
   const appointmentPeriod = period || { start: defaultAppointmentStart, end: defaultAppointmentEnd };
   const [responses, appointmentSettings, rawBookings] = await Promise.all([
@@ -1297,7 +1361,7 @@ async function searchClientControls(
       take: 1000,
     }),
     prisma.setting.findMany({
-      where: { key: { in: ["appointment_status_overrides", "appointment_team_overrides"] } },
+      where: { key: { in: ["appointment_status_overrides", "appointment_team_overrides", "appointment_bot_updates"] } },
       select: { key: true, value: true },
     }),
     hasCowlendarToken()
@@ -1331,13 +1395,14 @@ async function searchClientControls(
   };
   const statusOverrides = settingValue("appointment_status_overrides");
   const teamOverrides = settingValue("appointment_team_overrides");
+  const botUpdates = settingValue("appointment_bot_updates");
   const linkedControlByBooking = new Map(matches.flatMap((response) => {
     const answers = response.answers as Record<string, unknown>;
     const bookingId = String(answers.booking_id || "").trim();
     return bookingId ? [[bookingId, response.id] as const] : [];
   }));
   const workerName = resolved?.employee?.name.trim().toLocaleLowerCase("it") || "";
-  const appointments = (rawBookings || []).flatMap((booking) => {
+  let appointments = (rawBookings || []).flatMap((booking) => {
     if (booking.is_canceled) return [];
     const bookingId = String(booking.id);
     const customerName = booking.customer?.name?.trim()
@@ -1362,6 +1427,11 @@ async function searchClientControls(
     const localStatus = String(statusOverrides[bookingId]?.status || "").toUpperCase();
     const linkedControlId = linkedControlByBooking.get(bookingId) || null;
     const completed = Boolean(linkedControlId) || ["COMPLETATO", "PAGATO"].includes(localStatus);
+    const startMs = new Date(booking.start_date).getTime();
+    const endMs = booking.end_date ? new Date(booking.end_date).getTime() : Number.NaN;
+    const scheduledDurationMinutes = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, Math.round((endMs - startMs) / 60_000)) : null;
+    const statusTiming = statusOverrides[bookingId] || {};
+    const customerUpdate = botUpdates[bookingId] || null;
     return [{
       id: bookingId,
       client: customerName,
@@ -1373,10 +1443,191 @@ async function searchClientControls(
       completed,
       linkedControlId,
       price: Number(booking.price?.amount || 0),
+      currency: booking.price?.currency || "EUR",
+      financialStatus: booking.financial_status || null,
+      bookingType: booking.booking_type || null,
+      bookingCode: booking.booking_str || null,
+      bookedAt: booking.created_at || null,
+      updatedAt: booking.updated_at || null,
+      scheduledDurationMinutes,
+      contact: query ? { email: booking.customer?.email || null, phone: booking.customer?.phone || null } : null,
+      statusUpdatedAt: typeof statusTiming.updatedAt === "string" ? statusTiming.updatedAt : null,
+      statusUpdatedBy: typeof statusTiming.updatedBy === "string" ? statusTiming.updatedBy : null,
+      serviceStartedAt: typeof statusTiming.startedAt === "string" ? statusTiming.startedAt : null,
+      serviceStoppedAt: typeof statusTiming.stoppedAt === "string" ? statusTiming.stoppedAt : null,
+      serviceElapsedSeconds: Number(statusTiming.elapsedSeconds || 0),
+      arrivalAt: null as string | null,
+      arrivalDeltaMinutes: null as number | null,
+      realDurationMinutes: null as number | null,
+      durationDifferenceMinutes: null as number | null,
+      customerUpdate: customerUpdate ? {
+        state: String(customerUpdate.state || ""),
+        delayMinutes: Number.isFinite(Number(customerUpdate.delayMinutes)) ? Number(customerUpdate.delayMinutes) : null,
+        message: typeof customerUpdate.message === "string" ? customerUpdate.message : null,
+        updatedAt: typeof customerUpdate.updatedAt === "string" ? customerUpdate.updatedAt : null,
+      } : null,
+      bookingNotes: query ? [booking.notes, booking.note, booking.internal_note, booking.customer_note].map((value) => String(value || "").trim()).filter(Boolean) : [],
     }];
   });
+  const appointmentCommentRows = appointments.length
+    ? await prisma.shopifyOrderComment.findMany({
+        where: { order_name: { in: appointments.map((appointment) => appointment.id) } },
+        select: { order_name: true, user_name: true, message: true, created_at: true },
+        orderBy: { created_at: "asc" },
+      })
+    : [];
+  const commentsByBooking = new Map<string, Array<{ by: string; message: string; at: string }>>();
+  for (const comment of appointmentCommentRows) {
+    const current = commentsByBooking.get(comment.order_name) || [];
+    current.push({ by: comment.user_name, message: comment.message, at: comment.created_at.toISOString() });
+    commentsByBooking.set(comment.order_name, current);
+  }
+  appointments = appointments.map((appointment) => {
+    const comments = commentsByBooking.get(appointment.id) || [];
+    const arrivalAt = appointmentArrivalAt(comments);
+    const scheduledAtMs = new Date(appointment.date).getTime();
+    const arrivalAtMs = arrivalAt ? new Date(arrivalAt).getTime() : Number.NaN;
+    const realDurationMinutes = appointment.serviceElapsedSeconds > 0 ? Math.round(appointment.serviceElapsedSeconds / 60) : null;
+    return {
+      ...appointment,
+      comments,
+      arrivalAt,
+      arrivalDeltaMinutes: Number.isFinite(scheduledAtMs) && Number.isFinite(arrivalAtMs) ? Math.round((arrivalAtMs - scheduledAtMs) / 60_000) : null,
+      realDurationMinutes,
+      durationDifferenceMinutes: realDurationMinutes !== null && appointment.scheduledDurationMinutes !== null ? realDurationMinutes - appointment.scheduledDurationMinutes : null,
+    };
+  });
+  const canceledAppointments = (rawBookings || []).filter((booking) => {
+    if (!booking.is_canceled) return false;
+    const customerName = booking.customer?.name?.trim()
+      || [booking.form_data?.firstname, booking.form_data?.lastname].map((value) => String(value || "").trim()).filter(Boolean).join(" ")
+      || "Cliente non indicato";
+    if (query && !customerName.toLocaleLowerCase("it").includes(query)) return false;
+    if (!workerName) return true;
+    return (booking.teammates || []).some((mate) => `${mate.firstname || ""} ${mate.lastname || ""}`.trim().toLocaleLowerCase("it").includes(workerName));
+  }).map((booking) => ({
+    id: String(booking.id),
+    client: booking.customer?.name?.trim()
+      || [booking.form_data?.firstname, booking.form_data?.lastname].map((value) => String(value || "").trim()).filter(Boolean).join(" ")
+      || "Cliente non indicato",
+    date: booking.start_date,
+    canceledAt: booking.updated_at || null,
+    service: booking.service?.title || "Servizio non specificato",
+    source: "Appuntamenti / Cowlendar",
+  }));
+  const controls = matches.map((response) => {
+    const answers = response.answers as Record<string, unknown>;
+    const notes = [answerText(answers.client_control_notes_text), answerText(answers.client_control_shopify_order_note), answerText(answers.custom_extra_note)].filter(Boolean).join("\n");
+    const beforePhotos = [...answerMedia(answers.client_control_before_media), ...answerMedia(answers.photo_prima_fronte), ...answerMedia(answers.photo_prima_dietro)];
+    const afterPhotos = [...answerMedia(answers.client_control_after_media), ...answerMedia(answers.photo_dopo_fronte), ...answerMedia(answers.photo_dopo_dietro)];
+    const correctness = answerText(answers.client_control_correctness);
+    return {
+      id: response.id,
+      bookingId: answerText(answers.booking_id) || null,
+      client: String(answers.client_control_client_name || "Cliente non indicato"),
+      date: response.created_at.toISOString(),
+      updatedAt: response.updated_at.toISOString(),
+      status: response.status,
+      location: String(answers.client_control_location || response.user_location_name || "Nessuna sede"),
+      contact: query ? { email: answerText(answers.client_control_email) || null, phone: answerText(answers.client_control_phone) || null } : null,
+      serviceOwner: answerNames(answers.client_control_service_owner),
+      serviceStaff: answerNames(answers.client_control_service_staff),
+      productsOrServices: answerNames(answers.client_control_products_list || answers.client_control_service_title || answers.service_title),
+      extension: extensionDetails(answers),
+      paid: answerMoney(answers.client_control_paid || answers.client_control_declared_paid),
+      depositPaid: answerMoney(answers.client_control_deposit_paid),
+      paymentMethod: String(answers.client_control_payment_method || answers.client_control_declared_payment_method || "Non indicato"),
+      paymentGateway: answerText(answers.client_control_payment_gateway) || null,
+      paymentStatus: answerText(answers.client_control_payment_status) || null,
+      paymentVerified: Boolean(answers.client_control_payment_verified),
+      paymentReference: answerText(answers.client_control_payment_reference) || null,
+      paymentProcessedAt: answerText(answers.client_control_payment_processed_at) || null,
+      paymentBreakdown: Array.isArray(answers.client_control_payment_breakdown) ? answers.client_control_payment_breakdown : [],
+      shopifyOrder: String(answers.client_control_shopify_order || ""),
+      notes,
+      correctness,
+      noShow: /no\s*show|non presentat/i.test(`${correctness} ${notes}`),
+      photos: { before: beforePhotos, after: afterPhotos, client: answerMedia(answers.client_control_photo) },
+      submittedBy: response.user.name,
+      source: "Scheda Controllo Cliente",
+    };
+  });
   const completedAppointmentClients = appointments.filter((appointment) => appointment.completed).map((appointment) => appointment.client);
+  const scheduledAppointmentClients = Array.from(new Set(appointments.map((appointment) => appointment.client.trim().toLocaleLowerCase("it")).filter(Boolean)));
+  const uniqueCompletedAppointmentClients = Array.from(new Set(completedAppointmentClients.map((name) => name.trim().toLocaleLowerCase("it")).filter(Boolean)));
   const workedClientNames = Array.from(new Set([...uniqueClients, ...completedAppointmentClients.map((name) => name.trim().toLocaleLowerCase("it"))].filter(Boolean)));
+  const nameMap = new Map<string, string>();
+  for (const name of [...controls.map((control) => control.client), ...appointments.map((appointment) => appointment.client), ...canceledAppointments.map((appointment) => appointment.client)]) {
+    const normalized = name.trim().toLocaleLowerCase("it");
+    if (normalized && normalized !== "cliente non indicato") nameMap.set(normalized, name.trim());
+  }
+  const matchedClientNames = Array.from(nameMap.values());
+  const appointmentNoShows = appointments.filter((appointment) => /NON_PRESENTATO|NO_SHOW/i.test(appointment.status));
+  const noShowCount = new Set([...appointmentNoShows.map((appointment) => appointment.id), ...controls.filter((control) => control.noShow).map((control) => control.bookingId || control.id)]).size;
+  const datedAppointments = [...appointments].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const pastAppointments = datedAppointments.filter((appointment) => new Date(appointment.date).getTime() <= now.getTime());
+  const pastVisits = pastAppointments.filter((appointment) => appointment.completed && !/NON_PRESENTATO|NO_SHOW/i.test(appointment.status));
+  const datedControls = [...controls].filter((control) => !control.noShow).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const visitCount = new Set([...pastVisits.map((appointment) => `booking:${appointment.id}`), ...datedControls.map((control) => control.bookingId ? `booking:${control.bookingId}` : `control:${control.id}`)]).size;
+  const futureAppointments = datedAppointments.filter((appointment) => new Date(appointment.date).getTime() > now.getTime());
+  const latestControlWithExtension = controls.find((control) => Object.values(control.extension).some(Boolean)) || null;
+  const latestContact = controls.find((control) => control.contact?.email || control.contact?.phone)?.contact
+    || appointments.find((appointment) => appointment.contact?.email || appointment.contact?.phone)?.contact
+    || null;
+  const notes = controls.filter((control) => control.notes).map((control) => ({ date: control.date, author: control.submittedBy, note: control.notes, source: control.source }));
+  const importantNotes = notes.filter((note) => /segnal|fastidio|cadut|nodo|sistemaz|garanzia|attenzione|problema/i.test(note.note));
+  const timeline = query ? [
+    ...appointments.map((appointment) => ({
+      date: appointment.date,
+      type: appointment.completed ? "SERVIZIO_APPUNTAMENTO" : /NON_PRESENTATO|NO_SHOW/i.test(appointment.status) ? "NO_SHOW" : "APPUNTAMENTO",
+      service: appointment.service,
+      status: appointment.status,
+      professional: appointment.teammates,
+      source: "Appuntamenti / Cowlendar",
+    })),
+    ...controls.map((control) => ({
+      date: control.date,
+      type: control.noShow ? "NO_SHOW" : "SCHEDA_SERVIZIO",
+      service: control.productsOrServices,
+      professional: control.serviceStaff,
+      extension: control.extension,
+      paid: control.paid,
+      note: control.notes || null,
+      source: control.source,
+    })),
+    ...canceledAppointments.map((appointment) => ({ date: appointment.canceledAt || appointment.date, type: "APPUNTAMENTO_ANNULLATO", service: appointment.service, source: appointment.source })),
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(-80) : [];
+  const client360 = query ? {
+    requestedName: clientName.trim(),
+    matchedClientNames,
+    ambiguous: matchedClientNames.length > 1,
+    client: matchedClientNames.length === 1 ? matchedClientNames[0] : null,
+    contact: latestContact,
+    firstAppointment: datedAppointments[0] || null,
+    firstVisit: pastVisits[0] || datedControls[0] || null,
+    lastVisit: pastVisits.at(-1) || datedControls.at(-1) || null,
+    nextAppointment: futureAppointments[0] || null,
+    visitCount,
+    totalAppointments: appointments.length + canceledAppointments.length,
+    activeAppointments: appointments.length,
+    completedAppointments: appointments.filter((appointment) => appointment.completed).length,
+    canceledAppointments: canceledAppointments.length,
+    noShows: noShowCount,
+    services: Array.from(new Set([...appointments.map((appointment) => appointment.service), ...controls.flatMap((control) => control.productsOrServices)].filter(Boolean))),
+    locations: Array.from(new Set(controls.map((control) => control.location).filter(Boolean))),
+    professionals: Array.from(new Set([...appointments.flatMap((appointment) => appointment.teammates), ...controls.flatMap((control) => control.serviceStaff)].filter(Boolean))),
+    totalPaid: controls.reduce((total, control) => total + control.paid, 0),
+    latestExtension: latestControlWithExtension ? { ...latestControlWithExtension.extension, date: latestControlWithExtension.date, source: latestControlWithExtension.source } : null,
+    notes,
+    importantNotes,
+    photos: { before: controls.flatMap((control) => control.photos.before), after: controls.flatMap((control) => control.photos.after) },
+    timingCoverage: {
+      arrivalsRecorded: appointments.filter((appointment) => appointment.arrivalAt).length,
+      realDurationsRecorded: appointments.filter((appointment) => appointment.serviceElapsedSeconds > 0).length,
+    },
+    unavailableStructuredData: ["garanzia", "credito residuo", "motivo annullamento", "storico modifiche appuntamento"],
+    timeline,
+  } : null;
   return {
     requestedClient: clientName.trim() || null,
     requestedEmployee: resolved?.employee?.name || null,
@@ -1388,36 +1639,20 @@ async function searchClientControls(
     count: matches.length,
     uniqueClientCount: uniqueClients.length,
     workedClientCount: workedClientNames.length,
+    scheduledClientCount: scheduledAppointmentClients.length,
     appointmentCount: appointments.length,
     completedAppointmentCount: appointments.filter((appointment) => appointment.completed).length,
+    canceledAppointmentCount: canceledAppointments.length,
+    noShowCount,
+    completedClientCount: uniqueCompletedAppointmentClients.length,
     linkedAppointmentCount: appointments.filter((appointment) => appointment.linkedControlId).length,
     appointmentsAvailable: Array.isArray(rawBookings),
-    totalPaid: matches.reduce((total, response) => {
-      const answers = response.answers as Record<string, unknown>;
-      return total + answerMoney(answers.client_control_paid || answers.client_control_declared_paid);
-    }, 0),
-    controls: matches.slice(0, 30).map((response) => {
-      const answers = response.answers as Record<string, unknown>;
-      return {
-        id: response.id,
-        client: String(answers.client_control_client_name || "Cliente non indicato"),
-        date: response.created_at.toISOString(),
-        updatedAt: response.updated_at.toISOString(),
-        status: response.status,
-        location: String(answers.client_control_location || response.user_location_name || "Nessuna sede"),
-        serviceOwner: answerNames(answers.client_control_service_owner),
-        serviceStaff: answerNames(answers.client_control_service_staff),
-        productsOrServices: answerNames(answers.client_control_products_list || answers.client_control_service_title || answers.service_title),
-        paid: answerMoney(answers.client_control_paid || answers.client_control_declared_paid),
-        depositPaid: answerMoney(answers.client_control_deposit_paid),
-        paymentMethod: String(answers.client_control_payment_method || answers.client_control_declared_payment_method || "Non indicato"),
-        paymentVerified: Boolean(answers.client_control_payment_verified),
-        shopifyOrder: String(answers.client_control_shopify_order || ""),
-        notes: String(answers.client_control_notes_text || answers.client_control_shopify_order_note || ""),
-        submittedBy: response.user.name,
-      };
-    }),
+    totalPaid: controls.reduce((total, control) => total + control.paid, 0),
+    matchedClientNames,
+    client360,
+    controls: controls.slice(0, 30),
     appointments: appointments.slice(0, 30),
+    canceledAppointments: canceledAppointments.slice(0, 30),
   };
 }
 
@@ -1827,6 +2062,7 @@ function assistantCards(toolName: string, output: unknown, question: string): As
   }
 
   if (toolName === "search_client_controls" && Array.isArray(data.controls)) {
+    const clientMode = requestedClientQuestionMode(question);
     const controlCards = (data.controls as Array<Record<string, unknown>>).slice(0, 20).map<AssistantCard>((control, index) => {
       const staff = Array.isArray(control.serviceStaff) ? control.serviceStaff.join(", ") : "Personale non indicato";
       const services = Array.isArray(control.productsOrServices) ? control.productsOrServices.join(", ") : "Servizio non specificato";
@@ -1844,8 +2080,9 @@ function assistantCards(toolName: string, output: unknown, question: string): As
       };
     });
     const appointmentCards = (Array.isArray(data.appointments) ? data.appointments as Array<Record<string, unknown>> : [])
-      .filter((appointment) => !appointment.linkedControlId)
-      .slice(0, Math.max(0, 20 - controlCards.length))
+      .filter((appointment) => clientMode === "SCHEDULED" || !appointment.linkedControlId)
+      .filter((appointment) => clientMode !== "COMPLETED" || appointment.completed === true)
+      .slice(0, clientMode === "SCHEDULED" || clientMode === "COMPLETED" ? 20 : Math.max(0, 20 - controlCards.length))
       .map((appointment, index) => ({
         id: String(appointment.id || `appointment-${index}`),
         person: String(appointment.client || "Cliente"),
@@ -1858,6 +2095,7 @@ function assistantCards(toolName: string, output: unknown, question: string): As
         detail: `Personale: ${Array.isArray(appointment.teammates) ? appointment.teammates.join(", ") : "Non assegnato"}`,
         tone: appointment.completed ? "green" as const : "blue" as const,
       }));
+    if (clientMode === "SCHEDULED" || clientMode === "COMPLETED") return appointmentCards;
     return [...controlCards, ...appointmentCards];
   }
 
@@ -1869,7 +2107,7 @@ function euroMetric(value: unknown) {
   return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number.isFinite(amount) ? amount : 0);
 }
 
-function assistantMetrics(toolName: string, output: unknown): AssistantMetric[] {
+function assistantMetrics(toolName: string, output: unknown, question: string): AssistantMetric[] {
   if (!output || typeof output !== "object") return [];
   const data = output as Record<string, any>;
   if (toolName === "get_schedule_month_status") {
@@ -1917,8 +2155,16 @@ function assistantMetrics(toolName: string, output: unknown): AssistantMetric[] 
     ];
   }
   if (toolName === "search_client_controls") {
+    const clientMode = requestedClientQuestionMode(question);
+    const primary = data.client360
+      ? { label: "Cliente", value: String(data.client360.client || data.client360.requestedName || "Ricerca"), detail: `${data.client360.completedAppointments || 0} servizi completati` }
+      : clientMode === "SCHEDULED"
+      ? { label: "Clienti prenotate", value: String(data.scheduledClientCount || 0), detail: `${data.appointmentCount || 0} appuntamenti nel periodo` }
+      : clientMode === "COMPLETED"
+        ? { label: "Clienti completate", value: String(data.completedClientCount || 0), detail: `${data.completedAppointmentCount || 0} appuntamenti completati` }
+        : { label: "Clienti lavorate", value: String(data.workedClientCount || 0), detail: data.requestedEmployee || data.requestedClient || "Controllo Cliente + Appuntamenti" };
     return [
-      { id: "client-controls-unique", label: "Clienti lavorate", value: String(data.workedClientCount || 0), detail: data.requestedEmployee || data.requestedClient || "Controllo Cliente + Appuntamenti", tone: "violet" },
+      { id: "client-controls-unique", ...primary, tone: "violet" },
       { id: "client-controls-records", label: "Schede registrate", value: String(data.count || 0), detail: "Nel periodo richiesto", tone: "blue" },
       { id: "client-controls-appointments", label: "Appuntamenti", value: data.appointmentsAvailable ? String(data.appointmentCount || 0) : "Non disponibili", detail: `${data.completedAppointmentCount || 0} completati`, tone: data.appointmentsAvailable ? "blue" : "amber" },
       { id: "client-controls-paid", label: "Totale registrato", value: euroMetric(data.totalPaid), detail: "Somma dei pagamenti nelle schede", tone: "green" },
@@ -2109,6 +2355,7 @@ export async function POST(request: NextRequest) {
   const impliedRequestType = requestedRequestType(lastUserMessage);
   const impliedEmployeeName = await mentionedEmployeeName(lastUserMessage);
   const requiredTool = requiredAssistantTool(lastUserMessage);
+  const clientResponseType = requestedClientResponseType(lastUserMessage);
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
 DATA AUTORITATIVA DEL SERVER (non usare la data interna del modello): oggi ${dateContext.todayLabel}, ISO ${dateContext.today}, fuso ${dateContext.timeZone}; ieri ${dateContext.yesterday}; domani ${dateContext.tomorrow}; settimana corrente ${dateContext.weekStart} - ${dateContext.weekEnd}; mese corrente ${dateContext.currentMonthName} ${dateContext.currentYear}; mese precedente ${dateContext.previousMonthName} ${dateContext.previousMonthYear}.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
@@ -2123,7 +2370,11 @@ Per le task cerca sempre nel database. Domande come “Steven ha completato task
 Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
 Usa get_document_status per contratti, proroghe/rinnovi, cedolini/buste paga, CUD e documenti HR. “Cedolino” e “busta paga” corrispondono a BUSTA_PAGA; proroga e rinnovo corrispondono a PROROGA. Usa get_invoice_status per fatture emesse/da fare/annullate e non confondere le fatture con i documenti del personale.
-Usa search_client_controls quando viene nominata una cliente o viene chiesto chi ha lavorato su una cliente, cosa è stato fatto, prodotti/servizi, pagamento, ordine o note. Lo strumento collega Controllo Cliente e Appuntamenti tramite booking_id e stato completato. Usalo anche per conteggi e riepiloghi del lavoro clienti di una dipendente, per esempio “quante clienti ha fatto Angelica oggi?”, “quali clienti ha seguito Angelica?” o “quanto ha incassato Angelica con le sue clienti?”. In questi casi employee_name è la lavoratrice e client_name deve essere null. Per “quante clienti ha fatto” usa workedClientCount; uniqueClientCount conta le clienti con scheda Controllo Cliente, appointmentCount conta tutti gli appuntamenti compatibili e completedAppointmentCount soltanto quelli completati. Non presentare una semplice prenotazione come lavoro svolto. Se appointmentsAvailable è false, dichiaralo. Non mostrare email o telefono della cliente.
+Usa search_client_controls come Cliente 360 quando viene nominata una cliente o si chiedono visite, servizi, extension, grammi, fasce, lunghezza, colore, riapplicazioni, rimozioni, professioniste, tempi, foto, note, segnalazioni, sistemazioni, pagamenti, annullamenti o no-show. Lo strumento collega Controllo Cliente e Appuntamenti tramite booking_id. Per una cliente specifica usa client360 come riepilogo, controls per le schede servizio, appointments per l'agenda e canceledAppointments per gli annullamenti. Se matchedClientNames contiene più persone e client360.ambiguous è true, chiedi quale cliente scegliere. Non inventare mai un campo: null, lista vuota o dato incluso in unavailableStructuredData significa “non registrato”. Una nota può essere riportata come nota con autore/fonte, ma non trasformata in garanzia, pagamento o dato extension certo.
+Per i dati Cliente 360 usa una sola forma coerente con la domanda. Formato rilevato per questa richiesta: ${clientResponseType}. BRIEF: una frase precisa; DATED: dato con data dell'evento; VISIT_RECAP: un solo recap dell'ultima visita; CLIENT_RECAP: panoramica generale; TIMELINE: eventi cronologici; NOTES: data/autore/nota; DELAYS: soltanto arrivi realmente registrati; DURATION: previsto/reale/differenza; PAYMENTS: totale/acconto/metodo/stato; REPORTS: segnalazione con fonte e gestione soltanto se registrata; COMPARE: confronta le visite richieste; ALERT: solo informazioni importanti registrate; NEXT_APPOINTMENT: prossimo appuntamento e preparazione. Non produrre più varianti della stessa risposta. Cita sempre la fonte (“Appuntamenti / Cowlendar” oppure “Scheda Controllo Cliente”) quando il dato potrebbe essere contestato.
+ARRIVI E TEMPI CLIENTE: arrivalAt è un arrivo registrato; customerUpdate indica soltanto un messaggio “in arrivo/in ritardo” e non prova l'arrivo. serviceElapsedSeconds è la durata reale registrata; scheduledDurationMinutes è la durata prevista. Se uno dei due manca, dichiaralo. Per contatti, mostra email o telefono solo quando l'amministratore li chiede esplicitamente per una cliente identificata; mai in elenchi collettivi.
+Usa search_client_controls anche per conteggi e riepiloghi del lavoro clienti di una dipendente, per esempio “quante clienti ha fatto Angelica oggi?”, “quali clienti ha seguito Angelica?” o “quanto ha incassato Angelica con le sue clienti?”. In questi casi employee_name è la lavoratrice e client_name deve essere null. Per “quante clienti ha fatto” usa workedClientCount; uniqueClientCount conta le clienti con scheda Controllo Cliente, appointmentCount conta tutti gli appuntamenti compatibili e completedAppointmentCount soltanto quelli completati. Non presentare una semplice prenotazione come lavoro svolto. Se appointmentsAvailable è false, dichiaralo.
+Per domande collettive come “quante clienti ci sono oggi?”, “chi viene oggi?” o “quali appuntamenti ci sono domani?”, usa search_client_controls senza client_name ed employee_name ma con l'intervallo esatto del giorno. “Quante clienti” usa scheduledClientCount (persone uniche); “quanti appuntamenti” usa appointmentCount. Parla di clienti prenotate/in agenda, non di clienti lavorate. “Quante clienti sono state completate?” usa completedClientCount, mentre completedAppointmentCount conta i servizi/appuntamenti completati. Solo “quante clienti ha fatto/seguito/servito [lavoratrice]?” usa workedClientCount. Se viene nominata una cliente, cerca sia nella scheda Controllo Cliente sia negli Appuntamenti e riporta soltanto dati effettivamente trovati.
 Usa get_orders_overview per domande sulla pagina Ordini: cliente, numero o contenuto dell'ordine, chi lo ha compilato, assegnatario, stato, chi lo ha completato, cronologia, note e commenti. “Compilato da”, “assegnato a” e “completato da” sono ruoli diversi: non confonderli. Per ordini completati oggi/ieri/domani usa completedAt; per nuovi ordini usa createdAt. Non mostrare contatti o altri dati sensibili della cliente.
 Usa get_cash_overview per qualsiasi domanda su cassa, cash disponibile, chiusure, fondo, prelievi, versamenti o scostamenti. Distingui sempre disponibilità del periodo aperto, dichiarato del mese e contanti attesi da Shopify. Se Shopify non è disponibile, dichiaralo senza stimare valori.
 Se l'amministratore chiede “cosa posso chiederti?”, “che domande posso farti?” o chiede esempi, presenta un elenco ordinato e realistico con queste categorie ed esempi:
@@ -2135,7 +2386,7 @@ Se l'amministratore chiede “cosa posso chiederti?”, “che domande posso far
 - Dettaglio task: chi l'ha creata e assegnata; chi l'ha completata; cosa è stato riportato nella nota finale e nei commenti.
 - Documenti HR: è caricato il contratto di una persona; ci sono proroghe/rinnovi; sono caricati cedolini/buste paga del mese; chi manca; è presente il CUD.
 - Fatture: quante richieste ci sono questo mese; quante fatture sono state emesse o sono ancora da fare; importo totale.
-- Controllo Cliente: chi ha lavorato sulla cliente X; cosa è stato fatto; quali prodotti/servizi, pagamento, ordine e note risultano nella scheda.
+- Cliente 360: prima/ultima visita e prossimo appuntamento; servizi, professioniste, grammi/fasce/lunghezza/colore; tempi previsti e reali; pagamenti; note, foto, segnalazioni, annullamenti/no-show; recap, confronto e timeline con fonte.
 - Ordini: chi ha compilato o completato l'ordine X; a chi è assegnato; stato, contenuto, cronologia, note e commenti.
 - Cassa: cash disponibile; chiusure, prelievi, scostamenti e giorni da verificare.
 - Comunicazioni: prepara una comunicazione professionale collegata a una persona o task, sempre con conferma prima dell'invio.
@@ -2146,7 +2397,7 @@ ${memoryContext}
 Quando l'amministratore chiede di scrivere, mandare o inviare una comunicazione, usa prepare_communication. Lo strumento prepara un'anteprima: non dire che è stata inviata finché l'utente non preme Conferma e invia.
 Le altre operazioni di scrittura non ancora esposte devono essere indicate come non disponibili, senza simulare risultati.
 Usa navigate_app soltanto quando l'utente chiede esplicitamente "apri", "vai" o "portami" a una pagina.
-Non mostrare identificativi tecnici, segreti, email, telefoni, dati fiscali o medici. Per una malattia indica solo se risulta giustificata o non giustificata.
+Non mostrare identificativi tecnici, segreti, dati fiscali o medici. Email e telefono della cliente sono ammessi soltanto nella ricerca nominativa e su richiesta esplicita dell'amministratore; non mostrarli mai in liste o conteggi. Per una malattia indica solo se risulta giustificata o non giustificata.
 Quando elenchi persone o task, usa righe brevi e leggibili.
 Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo, scrivi soltanto un riepilogo molto breve: l'interfaccia mostrerà automaticamente le schede grafiche, quindi non ripetere in testo l'intero elenco dei nomi.`;
 
@@ -2189,7 +2440,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
         if (result.navigation) navigation = result.navigation;
         if (result.pendingAction) pendingAction = result.pendingAction;
         cards.push(...assistantCards(call.name, result.output, lastUserMessage));
-        metrics.push(...assistantMetrics(call.name, result.output));
+        metrics.push(...assistantMetrics(call.name, result.output, lastUserMessage));
         input.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(result.output) });
       }
     }

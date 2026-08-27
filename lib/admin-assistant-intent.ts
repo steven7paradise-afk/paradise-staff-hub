@@ -40,6 +40,33 @@ export function requestedTaskStatus(text: string) {
 }
 
 export type RequestOverviewType = "FERIE" | "PERMESSO" | "RIPOSO" | "MALATTIA" | "RITARDO";
+export type ClientQuestionMode = "SCHEDULED" | "WORKED" | "COMPLETED" | "DETAILS";
+export type ClientResponseType = "BRIEF" | "DATED" | "VISIT_RECAP" | "CLIENT_RECAP" | "TIMELINE" | "NOTES" | "DELAYS" | "DURATION" | "PAYMENTS" | "REPORTS" | "COMPARE" | "ALERT" | "NEXT_APPOINTMENT";
+
+export function requestedClientQuestionMode(text: string): ClientQuestionMode {
+  const normalized = text.toLocaleLowerCase("it");
+  if (/completat|conclus|terminat/.test(normalized)) return "COMPLETED";
+  if (/(?:ha|hanno|hai).{0,30}(?:fatto|lavorat|servit|seguit)|incass|client[ei] lavorat/.test(normalized)) return "WORKED";
+  if (/ci sono|prenot|appuntament|in agenda|previs|in programma|devono venire|arrivano/.test(normalized)) return "SCHEDULED";
+  return "DETAILS";
+}
+
+export function requestedClientResponseType(text: string): ClientResponseType {
+  const normalized = text.toLocaleLowerCase("it");
+  if (/confront|differenz.{0,30}(?:appuntament|visite|applicazion)/.test(normalized)) return "COMPARE";
+  if (/timeline|tutta la storia|storico completo|in ordine cronologico/.test(normalized)) return "TIMELINE";
+  if (/recap.{0,30}(?:ultima|visita|volta)|cosa (?:è|e) successo durante/.test(normalized)) return "VISIT_RECAP";
+  if (/riepilogo completo|panoramica generale|cliente 360/.test(normalized)) return "CLIENT_RECAP";
+  if (/cosa (?:devo|dobbiamo) sapere|prima che arriv|alert/.test(normalized)) return "ALERT";
+  if (/prossim[oa].{0,30}appuntament|altri appuntamenti futuri/.test(normalized)) return "NEXT_APPOINTMENT";
+  if (/note|indicazion/.test(normalized)) return "NOTES";
+  if (/segnalazion|reclam|problema|sistemazion|fastidio|cadut[ao].{0,20}fascia/.test(normalized)) return "REPORTS";
+  if (/pagat|pagamento|acconto|saldo|rate|credito|sconto|promozion/.test(normalized)) return "PAYMENTS";
+  if (/durat|inizio.{0,20}servizio|fine.{0,20}servizio|tempo.{0,20}salone/.test(normalized)) return "DURATION";
+  if (/ritard|puntual|anticipo|ora.{0,20}arriv/.test(normalized)) return "DELAYS";
+  if (/ultima|precedente|quando/.test(normalized)) return "DATED";
+  return "BRIEF";
+}
 
 export function requestedRequestType(text: string): RequestOverviewType | null {
   const normalized = text.toLocaleLowerCase("it");
@@ -62,9 +89,14 @@ export function requiredAssistantTool(text: string) {
   ) return "get_employee_profile";
   if (
     /(?:quant[ei]|qual[ei]|chi|cosa|quanto).{0,60}client[ei]/.test(normalized)
+    || /chi (?:viene|verrà|verra|arriva).{0,30}(?:oggi|domani|in salone)|appuntament[oi].{0,30}(?:oggi|domani|ieri)/.test(normalized)
     || /quant[ei].{0,30}persone.{0,60}(?:servit|seguit)/.test(normalized)
     || /client[ei].{0,60}(?:ha fatto|servit|seguit|lavorat|incass|pagat|serviz|ordine)/.test(normalized)
     || /(?:ha fatto|servit|seguit).{0,40}client[ei]/.test(normalized)
+    || /grammatura|\bgrammi\b|\bfasce\b|lunghezza.{0,20}(?:extension|capelli)|colore.{0,20}extension|riapplicazion|rimozion.{0,20}extension/.test(normalized)
+    || /prima visita|ultima visita|prossimo appuntamento|timeline.{0,30}(?:cliente|visite)|recap.{0,30}(?:visita|ultima volta)/.test(normalized)
+    || /foto.{0,30}(?:cliente|applicazione|servizio)|(?:cliente|applicazione).{0,30}foto/.test(normalized)
+    || /segnalazion|sistemazion.{0,30}(?:fasce|cliente|applicazione)|garanzia.{0,30}(?:cliente|extension|applicazione)/.test(normalized)
   ) return "search_client_controls";
   if (requestedRequestType(text)) return "get_requests_overview";
   if (/fattur/.test(normalized)) return "get_invoice_status";

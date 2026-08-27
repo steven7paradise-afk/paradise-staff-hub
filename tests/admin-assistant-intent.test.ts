@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus } from "../lib/admin-assistant-intent";
+import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus } from "../lib/admin-assistant-intent";
 
 test("recognizes a direct question about people currently on break", () => {
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi è in pausa?" }]), "IN_PAUSA");
@@ -35,6 +35,8 @@ test("forces Controllo Cliente search for a named client", () => {
 });
 
 test("forces Controllo Cliente search for a worker client count", () => {
+  assert.equal(requiredAssistantTool("Quante clienti ci sono oggi?"), "search_client_controls");
+  assert.equal(requiredAssistantTool("Chi viene in salone domani?"), "search_client_controls");
   assert.equal(requiredAssistantTool("Quante cliente ha fatto Angelica oggi?"), "search_client_controls");
   assert.equal(requiredAssistantTool("Quante persone ha servito Angelica oggi?"), "search_client_controls");
 });
@@ -67,4 +69,33 @@ test("routes staff profile questions to verified Staff data", () => {
 test("routes order assignment and completion questions to Orders", () => {
   assert.equal(requiredAssistantTool("Chi ha completato l'ordine 25989?"), "get_orders_overview");
   assert.equal(requiredAssistantTool("Quali ordini ha compilato Steven oggi?"), "get_orders_overview");
+});
+
+test("distinguishes scheduled, worked and completed client questions", () => {
+  assert.equal(requestedClientQuestionMode("Quante clienti ci sono oggi?"), "SCHEDULED");
+  assert.equal(requestedClientQuestionMode("Quante clienti ha fatto Angelica oggi?"), "WORKED");
+  assert.equal(requestedClientQuestionMode("Quali appuntamenti sono stati completati oggi?"), "COMPLETED");
+  assert.equal(requestedClientQuestionMode("Cosa è stato fatto alla cliente Maria?"), "DETAILS");
+});
+
+test("routes Cliente 360 questions even when the word cliente is omitted", () => {
+  for (const question of [
+    "Quanti grammi ha messo Martina Rossi?",
+    "Quante fasce aveva nell'ultima applicazione?",
+    "Quando ha fatto l'ultima riapplicazione?",
+    "Fammi il recap dell'ultima visita",
+    "Ci sono foto dell'ultima applicazione?",
+    "Ha avuto segnalazioni dopo l'applicazione?",
+  ]) {
+    assert.equal(requiredAssistantTool(question), "search_client_controls");
+  }
+});
+
+test("selects one Cliente 360 response shape from the question", () => {
+  assert.equal(requestedClientResponseType("Quanti grammi ha messo Martina?"), "BRIEF");
+  assert.equal(requestedClientResponseType("Fammi il recap dell'ultima visita"), "VISIT_RECAP");
+  assert.equal(requestedClientResponseType("Fammi vedere tutta la timeline della cliente"), "TIMELINE");
+  assert.equal(requestedClientResponseType("Confronta le ultime due applicazioni"), "COMPARE");
+  assert.equal(requestedClientResponseType("Quanto ha pagato l'ultima volta?"), "PAYMENTS");
+  assert.equal(requestedClientResponseType("Cosa dobbiamo sapere prima che arrivi?"), "ALERT");
 });
