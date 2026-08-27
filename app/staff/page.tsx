@@ -324,9 +324,7 @@ export default async function StaffPage({
           });
           const automaticLateStatus = automaticLateStatusByUser.get(user.id);
           const unresolvedLate = Boolean(attendanceState.firstEntry) && automaticLateStatus && automaticLateStatus !== "APPROVED";
-          const lateApprovalStatus = unresolvedLate
-            ? automaticLateStatus === "REJECTED" ? "REJECTED" as const : "PENDING" as const
-            : null;
+          const lateApprovalStatus = unresolvedLate ? "PENDING" as const : null;
           const attendanceStatus = !schedule
             ? "NESSUN_TURNO"
             : comparison.rest
@@ -336,7 +334,7 @@ export default async function StaffPage({
               : approvedLeaveUserIds.has(user.id)
                 ? "GIUSTIFICATO"
                 : unresolvedLate
-                  ? lateApprovalStatus === "REJECTED" ? "RITARDO_RIFIUTATO" : "RITARDO_DA_APPROVARE"
+                  ? "RITARDO_DA_APPROVARE"
                 : attendanceState.status === "IN"
                   ? "PRESENTE"
                   : attendanceState.status === "BREAK"

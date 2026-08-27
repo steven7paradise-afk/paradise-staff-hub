@@ -2389,8 +2389,7 @@ export function StaffDirectory({
                       <span className="text-[10px] text-neutral-300">•</span>
                       <Badge tone={getStatusTone(emp.employeeStatus)}>{emp.employeeStatus}</Badge>
                       {emp.attendanceToday?.absent ? <Badge tone="pink">Assente oggi</Badge> : null}
-                      {emp.attendanceToday?.lateApprovalStatus === "PENDING" ? <Badge tone="gold">Ritardo da approvare</Badge> : null}
-                      {emp.attendanceToday?.lateApprovalStatus === "REJECTED" ? <Badge tone="pink">Ritardo rifiutato</Badge> : null}
+                      {emp.attendanceToday?.lateApprovalStatus === "PENDING" ? <Badge tone="gold">Ritardo da confermare</Badge> : null}
                     </div>
                   </div>
                 </div>
@@ -2402,7 +2401,7 @@ export function StaffDirectory({
                       <AlarmClock className="mt-0.5 size-3.5 shrink-0" />
                       <span>
                         Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.lateApprovalStatus
-                          ? `entrata ${emp.attendanceToday.firstEntry ?? "registrata"} · ${emp.attendanceToday.lateApprovalStatus === "PENDING" ? "ritardo da approvare" : "ritardo rifiutato"}`
+                          ? `entrata ${emp.attendanceToday.firstEntry ?? "registrata"} · ritardo da confermare`
                           : emp.attendanceToday.absent
                           ? `nessuna timbratura (+${emp.attendanceToday.elapsedMinutes} min oltre il limite)`
                           : emp.attendanceToday.firstEntry

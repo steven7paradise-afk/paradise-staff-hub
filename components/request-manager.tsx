@@ -38,6 +38,12 @@ function requestTypeLabel(request: RequestRecord) {
   return isAutomaticLateRequest(request) ? "Ritardo" : typeLabels[request.type];
 }
 
+function requestStatusLabel(request: RequestRecord) {
+  if (!isAutomaticLateRequest(request)) return statusLabels[request.status];
+  if (request.status === "APPROVED") return "Presa visione";
+  return "Da confermare";
+}
+
 function needsSicknessJustification(request: RequestRecord) {
   return request.type === "MALATTIA" && !request.medicalCode;
 }
@@ -145,19 +151,21 @@ function RequestMetaPanel({ request }: { request: RequestRecord }) {
 function DecisionNoteField({
   value,
   onChange,
+  automaticLate = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  automaticLate?: boolean;
 }) {
   return (
     <label className="block space-y-1.5">
       <span className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-        Motivo / nota admin
+        {automaticLate ? "Comunicazione al dipendente" : "Motivo / nota admin"}
       </span>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Scrivi il motivo dell'approvazione o del rifiuto..."
+        placeholder={automaticLate ? "Esempio: Recati in amministrazione, oppure scrivi un messaggio libero..." : "Scrivi il motivo dell'approvazione o del rifiuto..."}
         rows={2}
         className="w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-paradise-noir outline-none transition focus:border-paradise-pink focus:ring-2 focus:ring-paradise-pink/20"
       />
@@ -191,6 +199,7 @@ function RequestDetailPanel({
   onClose?: () => void;
 }) {
   const isPending = request.status === "PENDING";
+  const automaticLate = isAutomaticLateRequest(request);
   const workerNote = request.reason?.trim() || "Nessuna nota lavoratore";
   const adminNote = request.adminNote?.trim() || "Nessuna nota admin";
   const canEditDecision = (canApprove || canFlag) && isPending;
@@ -202,7 +211,7 @@ function RequestDetailPanel({
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Dettaglio richiesta</p>
           <h2 className="mt-1 text-xl font-black text-paradise-noir">{request.employee}</h2>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Badge tone={statusTone(request.status)}>{statusLabels[request.status]}</Badge>
+            <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
             <Badge tone="pink">{requestTypeLabel(request)}</Badge>
           </div>
         </div>
@@ -235,7 +244,7 @@ function RequestDetailPanel({
           </div>
           <div className="rounded-2xl border border-black/5 p-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Stato richiesta</p>
-            <p className="mt-1 text-sm font-black text-paradise-noir">{statusLabels[request.status]}</p>
+            <p className="mt-1 text-sm font-black text-paradise-noir">{requestStatusLabel(request)}</p>
           </div>
         </div>
 
@@ -291,20 +300,20 @@ function RequestDetailPanel({
             "rounded-2xl border p-3",
             request.adminNote ? "border-paradise-pink/30 bg-paradise-pink/10" : "border-black/5 bg-neutral-50"
           )}>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Motivo approvazione / nota admin</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">{automaticLate ? "Comunicazione amministrazione" : "Motivo approvazione / nota admin"}</p>
             <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65">{adminNote}</p>
           </div>
         </div>
 
         <div className="rounded-2xl border border-black/5 p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Approvazione</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">{automaticLate ? "Presa visione" : "Approvazione"}</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">Approvata da</p>
-              <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? request.approvedBy ?? "Non registrato" : "Non ancora approvata"}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Vista da" : "Approvata da"}</p>
+              <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? request.approvedBy ?? "Non registrato" : automaticLate ? "Da confermare" : "Non ancora approvata"}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">Approvata il</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Vista il" : "Approvata il"}</p>
               <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? formatDateTime(request.approvedAt) : "—"}</p>
             </div>
           </div>
@@ -312,23 +321,23 @@ function RequestDetailPanel({
 
         {canEditDecision ? (
           <div className="rounded-2xl border border-paradise-pink/20 bg-paradise-softPink/20 p-3">
-            <DecisionNoteField value={decisionDraft} onChange={onDecisionDraftChange} />
+            <DecisionNoteField value={decisionDraft} onChange={onDecisionDraftChange} automaticLate={automaticLate} />
             {canApprove ? (
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className={cn("mt-3 grid gap-2", !automaticLate && "sm:grid-cols-2")}>
                 <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "APPROVED")}
                   className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
                 >
-                  <Check className="size-3.5" /> Approva
+                  <Check className="size-3.5" /> {automaticLate ? "Conferma presa visione" : "Approva"}
                 </button>
-                <button
+                {!automaticLate ? <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "REJECTED")}
                   className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
                 >
                   <X className="size-3.5" /> Rifiuta
-                </button>
+                </button> : null}
               </div>
             ) : null}
             {canFlag ? (
@@ -474,6 +483,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   }
 
   async function changeStatus(id: string, status: "APPROVED" | "REJECTED" | "FLAGGED") {
+    const selectedRequest = requests.find((request) => request.id === id);
+    const automaticLate = selectedRequest ? isAutomaticLateRequest(selectedRequest) : false;
     const adminNote = decisionDrafts[id]?.trim() ?? "";
     if (status === "REJECTED" && !adminNote) {
       setMessage("Scrivi il motivo del rifiuto prima di salvare.");
@@ -503,6 +514,10 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       delete next[id];
       return next;
     });
+    if (automaticLate && status === "APPROVED") {
+      setMessage(adminNote ? "Presa visione confermata e comunicazione inviata al dipendente." : "Presa visione confermata.");
+      return;
+    }
     if (status === "APPROVED" && data.calendarSync?.skipped) {
       setMessage(`Richiesta approvata e inserita nel planning. Calendar non sincronizzato: ${data.calendarSync.reason}`);
       return;
@@ -628,7 +643,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
           <p className="mt-1 text-2xl font-black text-amber-900">{pendingRequests}</p>
         </div>
         <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Approvate</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Approvate / confermate</p>
           <p className="mt-1 text-2xl font-black text-emerald-900">{approvedRequests}</p>
         </div>
         <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
@@ -704,7 +719,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   <span>Tipo</span>
                   <span>Periodo</span>
                   <span>Stato</span>
-                  <span>Approvazione</span>
+                  <span>Gestione</span>
                   <span className="text-right">Azioni</span>
                 </div>
                 <div className="divide-y divide-black/5">
@@ -770,12 +785,12 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                         </div>
 
                         <div>
-                          <Badge tone={statusTone(request.status)}>{statusLabels[request.status]}</Badge>
+                          <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
                         </div>
 
                         <div className="min-w-0">
                           <p className="truncate text-xs font-black text-paradise-noir">
-                            {isApproved ? request.approvedBy ?? "Non registrato" : isPending ? "Da approvare" : statusLabels[request.status]}
+                            {isApproved ? request.approvedBy ?? "Non registrato" : isPending ? isAutomaticLateRequest(request) ? "Da confermare" : "Da approvare" : requestStatusLabel(request)}
                           </p>
                           <p className="mt-0.5 truncate text-[11px] font-semibold text-black/40">
                             {isApproved ? formatDateTime(request.approvedAt) : request.adminNote?.trim() || request.reason?.trim() || "Nessuna nota"}

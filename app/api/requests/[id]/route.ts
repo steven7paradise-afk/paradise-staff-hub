@@ -30,6 +30,7 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "Richiesta non trovata" }, { status: 404 });
   }
+  const automaticLate = isAutomaticLateReason(existing.reason);
 
   const isOwnRequest = existing.user_id === session.user.id;
   const isAdmin = approverRoles.has(session.user.role);
@@ -45,6 +46,9 @@ export async function PATCH(
     }
     if (status === "REJECTED" && !adminNote) {
       return NextResponse.json({ error: "Scrivi il motivo del rifiuto." }, { status: 400 });
+    }
+    if (automaticLate && status === "REJECTED") {
+      return NextResponse.json({ error: "I ritardi automatici non vengono rifiutati: conferma soltanto la presa visione." }, { status: 400 });
     }
     if (isResponsabile && existing.user.sede_id !== session.user.sedeId) {
       return NextResponse.json({ error: "Richiesta fuori dalla propria sede" }, { status: 403 });
@@ -88,7 +92,6 @@ export async function PATCH(
       });
 
       let syncResult = null;
-      const automaticLate = isAutomaticLateReason(existing.reason);
       if (status === "APPROVED" && !automaticLate) {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
       } else if (status !== undefined && existing.status === "APPROVED" && !automaticLate) {
@@ -111,7 +114,9 @@ export async function PATCH(
   // Always update Google Calendar status sync (both to update details or delete if rejected)
   let calendarSync = null;
   try {
-    calendarSync = await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
+    calendarSync = automaticLate
+      ? { skipped: true, reason: "I ritardi presi in visione non vengono inseriti nel calendario." }
+      : await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
   } catch (error) {
     calendarSync = {
       skipped: true,
@@ -120,27 +125,29 @@ export async function PATCH(
   }
 
   if (status !== undefined) {
-    const template = emailTemplates.leaveRequestDecision(
-      leaveRequest.user.name,
-      status,
-      leaveRequest.type,
-      leaveRequest.start_date,
-      leaveRequest.end_date
-    );
-
-    // Send email (non-blocking, failure won't rollback or crash HTTP response)
-    try {
-      await sendEmail({ to: leaveRequest.user.email, ...template });
-    } catch (error) {
-      console.error("Errore nell'invio dell'email per la decisione sulla richiesta:", error);
+    if (!automaticLate) {
+      const template = emailTemplates.leaveRequestDecision(
+        leaveRequest.user.name,
+        status,
+        leaveRequest.type,
+        leaveRequest.start_date,
+        leaveRequest.end_date
+      );
+      try {
+        await sendEmail({ to: leaveRequest.user.email, ...template });
+      } catch (error) {
+        console.error("Errore nell'invio dell'email per la decisione sulla richiesta:", error);
+      }
     }
 
     // Create notification in database and trigger push/WhatsApp (non-blocking)
     try {
       await createNotification({
         user_id: leaveRequest.user_id,
-        title: `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
-        message: `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}${leaveRequest.admin_note ? ` Nota admin: ${leaveRequest.admin_note}` : ""}`,
+        title: automaticLate && status === "APPROVED" ? "Ritardo preso in visione" : `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
+        message: automaticLate && status === "APPROVED"
+          ? `L’amministrazione ha preso visione del ritardo del ${leaveRequest.start_date.toLocaleDateString("it-IT")}${leaveRequest.end_time ? `, ingresso ${leaveRequest.end_time}` : ""}.${leaveRequest.admin_note ? ` Comunicazione: ${leaveRequest.admin_note}` : ""}`
+          : `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}${leaveRequest.admin_note ? ` Nota admin: ${leaveRequest.admin_note}` : ""}`,
         type: "RICHIESTA",
         action_url: "/requests",
         read: false,

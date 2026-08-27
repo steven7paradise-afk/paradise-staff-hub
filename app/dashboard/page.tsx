@@ -272,7 +272,7 @@ export default async function DashboardPage() {
         shiftStart,
         status: unresolvedLate ? "ABSENT" as const : state.status,
         lateMinutes,
-        absenceReason: unresolvedLate ? automaticLateStatus === "REJECTED" ? "LATE_REJECTED" as const : "LATE_PENDING" as const : null,
+        absenceReason: unresolvedLate ? "LATE_PENDING" as const : null,
       };
     }).sort((a, b) => a.firstEntry.localeCompare(b.firstEntry));
 

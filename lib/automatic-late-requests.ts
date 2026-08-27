@@ -162,8 +162,8 @@ export async function ensureAutomaticLateRequests(
     data: { end_time: candidate.endTime, reason: candidate.reason },
   })));
 
-  // Se l'assenza automatica era già stata rifiutata prima dell'arrivo, la
-  // timbratura reale la riapre come ritardo misurato e nuovamente approvabile.
+  // Se il controllo automatico esisteva già prima dell'arrivo, la timbratura
+  // reale lo riapre come ritardo misurato in attesa di presa visione.
   if (detectedEntryCandidate) {
     await prisma.leaveRequest.updateMany({
       where: { id: detectedEntryCandidate.id, status: { not: "APPROVED" } },
@@ -184,11 +184,11 @@ export async function ensureAutomaticLateRequests(
     });
     const names = detectedEntryCandidate?.userName || newCandidates.map((candidate) => candidate.userName).join(", ");
     const title = detectedEntryCandidate
-      ? `Ritardo di ${detectedEntryCandidate.minutesPastDeadline} min da approvare`
-      : created.count === 1 ? "Ritardo da approvare" : `${created.count} ritardi da approvare`;
+      ? `Ritardo di ${detectedEntryCandidate.minutesPastDeadline} min da confermare`
+      : created.count === 1 ? "Ritardo da confermare" : `${created.count} ritardi da confermare`;
     const message = detectedEntryCandidate
-      ? `${detectedEntryCandidate.userName} ha timbrato con ${detectedEntryCandidate.minutesPastDeadline} minuti oltre il limite. Il ritardo è stato registrato: apri Richieste per approvarlo o rifiutarlo.`
-      : `Il confronto tra planning e timbrature ha rilevato: ${names}. Apri Richieste per approvare o rifiutare.`;
+      ? `${detectedEntryCandidate.userName} ha timbrato con ${detectedEntryCandidate.minutesPastDeadline} minuti oltre il limite. Apri Richieste per confermare la presa visione.`
+      : `Il confronto tra planning e timbrature ha rilevato: ${names}. Apri Richieste per confermare la presa visione.`;
     await createNotifications(admins.map((admin) => ({
       id: randomUUID(),
       user_id: admin.id,

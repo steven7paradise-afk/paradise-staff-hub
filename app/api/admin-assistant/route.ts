@@ -1453,7 +1453,7 @@ function assistantCards(toolName: string, output: unknown, question: string): As
       const label = type === "MALATTIA"
         ? justified === true ? "Malattia giustificata" : "Malattia non giustificata"
         : type === "RITARDO"
-          ? status === "APPROVED" ? "Ritardo approvato" : "Ritardo da approvare"
+          ? status === "APPROVED" ? "Ritardo preso in visione" : "Ritardo da confermare"
           : `${type.charAt(0)}${type.slice(1).toLowerCase()} · ${status === "APPROVED" ? "approvata" : "in attesa"}`;
       const tone: AssistantCard["tone"] = type === "MALATTIA"
         ? justified === true ? "violet" : "amber"
