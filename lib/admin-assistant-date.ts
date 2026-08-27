@@ -32,6 +32,25 @@ function romeMidnightInstant(day: string) {
   return new Date(Date.UTC(year, month - 1, date) - offset);
 }
 
+export function formatRomeDateTime(value: string | Date | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || "";
+  const localDate = `${part("year")}-${part("month")}-${part("day")}`;
+  const localTime = `${part("hour")}:${part("minute")}`;
+  return { date: localDate, time: localTime, label: `${part("day")}/${part("month")}/${part("year")} ${localTime}`, timeZone: "Europe/Rome" as const };
+}
+
 export type AssistantDateContext = {
   timeZone: "Europe/Rome";
   today: string;

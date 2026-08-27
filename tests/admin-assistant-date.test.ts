@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAssistantDateContext, requestedDayPeriod, requestedMonthPeriod } from "../lib/admin-assistant-date";
+import { buildAssistantDateContext, formatRomeDateTime, requestedDayPeriod, requestedMonthPeriod } from "../lib/admin-assistant-date";
 
 const context = buildAssistantDateContext(new Date("2026-08-26T17:00:00.000Z"));
 
@@ -46,5 +46,14 @@ test("resolves tomorrow into one exact Rome calendar day", () => {
     day: "2026-08-27",
     start: "2026-08-26T22:00:00.000Z",
     end: "2026-08-27T22:00:00.000Z",
+  });
+});
+
+test("converts a summer UTC appointment to the authoritative Rome time", () => {
+  assert.deepEqual(formatRomeDateTime("2026-08-27T08:00:00.000Z"), {
+    date: "2026-08-27",
+    time: "10:00",
+    label: "27/08/2026 10:00",
+    timeZone: "Europe/Rome",
   });
 });

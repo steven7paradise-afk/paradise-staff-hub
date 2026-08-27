@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus } from "../lib/admin-assistant-intent";
+import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, verifiedClientAppointmentStatus } from "../lib/admin-assistant-intent";
 
 test("recognizes a direct question about people currently on break", () => {
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi è in pausa?" }]), "IN_PAUSA");
@@ -98,4 +98,10 @@ test("selects one Cliente 360 response shape from the question", () => {
   assert.equal(requestedClientResponseType("Confronta le ultime due applicazioni"), "COMPARE");
   assert.equal(requestedClientResponseType("Quanto ha pagato l'ultima volta?"), "PAYMENTS");
   assert.equal(requestedClientResponseType("Cosa dobbiamo sapere prima che arrivi?"), "ALERT");
+});
+
+test("does not treat the generic Cowlendar arrived flag as a verified arrival", () => {
+  assert.equal(verifiedClientAppointmentStatus(null, "arrived", "confirmed"), "confirmed");
+  assert.equal(verifiedClientAppointmentStatus(null, "no_show", "confirmed"), "NON_PRESENTATO");
+  assert.equal(verifiedClientAppointmentStatus("IN_ATTESA", "arrived", "confirmed"), "IN_ATTESA");
 });

@@ -2,6 +2,14 @@ export type TeamStatusScope = "IN_TURNO" | "IN_PAUSA" | "USCITO" | "NON_ENTRATO"
 
 type ConversationMessage = { role: "user" | "assistant"; content: string };
 
+export function verifiedClientAppointmentStatus(localStatus: unknown, rawAttendance: unknown, confirmationStatus: unknown) {
+  const local = String(localStatus || "").trim().toUpperCase();
+  if (local) return local;
+  const attendance = String(rawAttendance || "").trim();
+  if (/NO[_\s-]?SHOW|NON[_\s-]?PRESENT/i.test(attendance)) return "NON_PRESENTATO";
+  return String(confirmationStatus || "").trim() || "PRENOTATO";
+}
+
 function statusMention(value: string): TeamStatusScope | null {
   const text = value.toLocaleLowerCase("it");
   if (/paus/.test(text)) return "IN_PAUSA";

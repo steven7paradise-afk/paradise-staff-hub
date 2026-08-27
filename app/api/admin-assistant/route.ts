@@ -2,8 +2,8 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { buildAssistantDateContext, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
-import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
+import { buildAssistantDateContext, formatRomeDateTime, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
+import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, verifiedClientAppointmentStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { createNotifications } from "@/lib/notifications";
@@ -1425,6 +1425,7 @@ async function searchClientControls(
     });
     if (!matchesClient || !matchesEmployee) return [];
     const localStatus = String(statusOverrides[bookingId]?.status || "").toUpperCase();
+    const rawAttendance = String(booking.attendance || "").trim();
     const linkedControlId = linkedControlByBooking.get(bookingId) || null;
     const completed = Boolean(linkedControlId) || ["COMPLETATO", "PAGATO"].includes(localStatus);
     const startMs = new Date(booking.start_date).getTime();
@@ -1439,7 +1440,9 @@ async function searchClientControls(
       endDate: booking.end_date || null,
       service: booking.service?.title || "Servizio non specificato",
       teammates,
-      status: localStatus || booking.attendance || booking.confirmation_status || "PRENOTATO",
+      status: verifiedClientAppointmentStatus(localStatus, rawAttendance, booking.confirmation_status),
+      rawAttendance: rawAttendance || null,
+      arrivalVerified: false,
       completed,
       linkedControlId,
       price: Number(booking.price?.amount || 0),
@@ -1450,6 +1453,7 @@ async function searchClientControls(
       bookedAt: booking.created_at || null,
       updatedAt: booking.updated_at || null,
       scheduledDurationMinutes,
+      scheduledLocal: { start: formatRomeDateTime(booking.start_date), end: formatRomeDateTime(booking.end_date || null) },
       contact: query ? { email: booking.customer?.email || null, phone: booking.customer?.phone || null } : null,
       statusUpdatedAt: typeof statusTiming.updatedAt === "string" ? statusTiming.updatedAt : null,
       statusUpdatedBy: typeof statusTiming.updatedBy === "string" ? statusTiming.updatedBy : null,
@@ -1484,7 +1488,8 @@ async function searchClientControls(
   }
   appointments = appointments.map((appointment) => {
     const comments = commentsByBooking.get(appointment.id) || [];
-    const arrivalAt = appointmentArrivalAt(comments);
+    const arrivalAt = appointmentArrivalAt(comments)
+      || (["IN_ATTESA", "ARRIVATO_IN_RITARDO"].includes(appointment.status) ? appointment.statusUpdatedAt : null);
     const scheduledAtMs = new Date(appointment.date).getTime();
     const arrivalAtMs = arrivalAt ? new Date(arrivalAt).getTime() : Number.NaN;
     const realDurationMinutes = appointment.serviceElapsedSeconds > 0 ? Math.round(appointment.serviceElapsedSeconds / 60) : null;
@@ -1492,6 +1497,8 @@ async function searchClientControls(
       ...appointment,
       comments,
       arrivalAt,
+      arrivalVerified: Boolean(arrivalAt),
+      arrivalLocal: formatRomeDateTime(arrivalAt),
       arrivalDeltaMinutes: Number.isFinite(scheduledAtMs) && Number.isFinite(arrivalAtMs) ? Math.round((arrivalAtMs - scheduledAtMs) / 60_000) : null,
       realDurationMinutes,
       durationDifferenceMinutes: realDurationMinutes !== null && appointment.scheduledDurationMinutes !== null ? realDurationMinutes - appointment.scheduledDurationMinutes : null,
@@ -2083,18 +2090,23 @@ function assistantCards(toolName: string, output: unknown, question: string): As
       .filter((appointment) => clientMode === "SCHEDULED" || !appointment.linkedControlId)
       .filter((appointment) => clientMode !== "COMPLETED" || appointment.completed === true)
       .slice(0, clientMode === "SCHEDULED" || clientMode === "COMPLETED" ? 20 : Math.max(0, 20 - controlCards.length))
-      .map((appointment, index) => ({
-        id: String(appointment.id || `appointment-${index}`),
-        person: String(appointment.client || "Cliente"),
-        photoUrl: null,
-        status: appointment.completed ? "Appuntamento completato" : String(appointment.status || "Appuntamento"),
-        type: String(appointment.service || "Servizio non specificato"),
-        location: "Appuntamenti",
-        date: typeof appointment.date === "string" ? appointment.date : null,
-        time: null,
-        detail: `Personale: ${Array.isArray(appointment.teammates) ? appointment.teammates.join(", ") : "Non assegnato"}`,
-        tone: appointment.completed ? "green" as const : "blue" as const,
-      }));
+      .map((appointment, index) => {
+        const scheduledLocal = appointment.scheduledLocal && typeof appointment.scheduledLocal === "object" ? appointment.scheduledLocal as Record<string, any> : {};
+        const startTime = typeof scheduledLocal.start?.time === "string" ? scheduledLocal.start.time : null;
+        const endTime = typeof scheduledLocal.end?.time === "string" ? scheduledLocal.end.time : null;
+        return {
+          id: String(appointment.id || `appointment-${index}`),
+          person: String(appointment.client || "Cliente"),
+          photoUrl: null,
+          status: appointment.completed ? "Appuntamento completato" : String(appointment.status || "Appuntamento"),
+          type: String(appointment.service || "Servizio non specificato"),
+          location: "Appuntamenti",
+          date: typeof appointment.date === "string" ? appointment.date : null,
+          time: startTime,
+          detail: `Orario: ${startTime || "non registrato"}${endTime ? `–${endTime}` : ""} · Personale: ${Array.isArray(appointment.teammates) ? appointment.teammates.join(", ") : "Non assegnato"}`,
+          tone: appointment.completed ? "green" as const : "blue" as const,
+        };
+      });
     if (clientMode === "SCHEDULED" || clientMode === "COMPLETED") return appointmentCards;
     return [...controlCards, ...appointmentCards];
   }
@@ -2372,7 +2384,8 @@ Usa get_schedule_month_status per domande sulla turnistica o sul planning di un 
 Usa get_document_status per contratti, proroghe/rinnovi, cedolini/buste paga, CUD e documenti HR. “Cedolino” e “busta paga” corrispondono a BUSTA_PAGA; proroga e rinnovo corrispondono a PROROGA. Usa get_invoice_status per fatture emesse/da fare/annullate e non confondere le fatture con i documenti del personale.
 Usa search_client_controls come Cliente 360 quando viene nominata una cliente o si chiedono visite, servizi, extension, grammi, fasce, lunghezza, colore, riapplicazioni, rimozioni, professioniste, tempi, foto, note, segnalazioni, sistemazioni, pagamenti, annullamenti o no-show. Lo strumento collega Controllo Cliente e Appuntamenti tramite booking_id. Per una cliente specifica usa client360 come riepilogo, controls per le schede servizio, appointments per l'agenda e canceledAppointments per gli annullamenti. Se matchedClientNames contiene più persone e client360.ambiguous è true, chiedi quale cliente scegliere. Non inventare mai un campo: null, lista vuota o dato incluso in unavailableStructuredData significa “non registrato”. Una nota può essere riportata come nota con autore/fonte, ma non trasformata in garanzia, pagamento o dato extension certo.
 Per i dati Cliente 360 usa una sola forma coerente con la domanda. Formato rilevato per questa richiesta: ${clientResponseType}. BRIEF: una frase precisa; DATED: dato con data dell'evento; VISIT_RECAP: un solo recap dell'ultima visita; CLIENT_RECAP: panoramica generale; TIMELINE: eventi cronologici; NOTES: data/autore/nota; DELAYS: soltanto arrivi realmente registrati; DURATION: previsto/reale/differenza; PAYMENTS: totale/acconto/metodo/stato; REPORTS: segnalazione con fonte e gestione soltanto se registrata; COMPARE: confronta le visite richieste; ALERT: solo informazioni importanti registrate; NEXT_APPOINTMENT: prossimo appuntamento e preparazione. Non produrre più varianti della stessa risposta. Cita sempre la fonte (“Appuntamenti / Cowlendar” oppure “Scheda Controllo Cliente”) quando il dato potrebbe essere contestato.
-ARRIVI E TEMPI CLIENTE: arrivalAt è un arrivo registrato; customerUpdate indica soltanto un messaggio “in arrivo/in ritardo” e non prova l'arrivo. serviceElapsedSeconds è la durata reale registrata; scheduledDurationMinutes è la durata prevista. Se uno dei due manca, dichiaralo. Per contatti, mostra email o telefono solo quando l'amministratore li chiede esplicitamente per una cliente identificata; mai in elenchi collettivi.
+ORARI CLIENTE: tutti gli orari rivolti all'utente devono provenire esclusivamente da scheduledLocal/arrivalLocal, già convertiti in Europe/Rome. Non leggere l'ora direttamente dagli ISO UTC date/endDate (per esempio 08:00Z corrisponde a 10:00 a Roma in estate).
+ARRIVI E TEMPI CLIENTE: una cliente è arrivata soltanto se arrivalVerified è true e arrivalAt è presente. rawAttendance “arrived” proveniente da Cowlendar non è una prova sufficiente e non deve mai essere descritto come arrivo effettivo. customerUpdate indica soltanto un messaggio “in arrivo/in ritardo” e non prova l'arrivo. serviceElapsedSeconds è la durata reale registrata; scheduledDurationMinutes è la durata prevista. Se uno dei due manca, dichiaralo. Per contatti, mostra email o telefono solo quando l'amministratore li chiede esplicitamente per una cliente identificata; mai in elenchi collettivi.
 Usa search_client_controls anche per conteggi e riepiloghi del lavoro clienti di una dipendente, per esempio “quante clienti ha fatto Angelica oggi?”, “quali clienti ha seguito Angelica?” o “quanto ha incassato Angelica con le sue clienti?”. In questi casi employee_name è la lavoratrice e client_name deve essere null. Per “quante clienti ha fatto” usa workedClientCount; uniqueClientCount conta le clienti con scheda Controllo Cliente, appointmentCount conta tutti gli appuntamenti compatibili e completedAppointmentCount soltanto quelli completati. Non presentare una semplice prenotazione come lavoro svolto. Se appointmentsAvailable è false, dichiaralo.
 Per domande collettive come “quante clienti ci sono oggi?”, “chi viene oggi?” o “quali appuntamenti ci sono domani?”, usa search_client_controls senza client_name ed employee_name ma con l'intervallo esatto del giorno. “Quante clienti” usa scheduledClientCount (persone uniche); “quanti appuntamenti” usa appointmentCount. Parla di clienti prenotate/in agenda, non di clienti lavorate. “Quante clienti sono state completate?” usa completedClientCount, mentre completedAppointmentCount conta i servizi/appuntamenti completati. Solo “quante clienti ha fatto/seguito/servito [lavoratrice]?” usa workedClientCount. Se viene nominata una cliente, cerca sia nella scheda Controllo Cliente sia negli Appuntamenti e riporta soltanto dati effettivamente trovati.
 Usa get_orders_overview per domande sulla pagina Ordini: cliente, numero o contenuto dell'ordine, chi lo ha compilato, assegnatario, stato, chi lo ha completato, cronologia, note e commenti. “Compilato da”, “assegnato a” e “completato da” sono ruoli diversi: non confonderli. Per ordini completati oggi/ieri/domani usa completedAt; per nuovi ordini usa createdAt. Non mostrare contatti o altri dati sensibili della cliente.
