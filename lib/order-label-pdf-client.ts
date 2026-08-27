@@ -219,6 +219,16 @@ export function orderLabelBarcodeValue(orderId: string, visibleOrderNumber?: str
   return compactOrderNumber || orderId;
 }
 
+export function orderLabelQrValue(
+  orderId: string,
+  visibleOrderNumber?: string,
+  baseUrl = "https://www.staff-paradise.tech",
+) {
+  const target = new URL("/orders", baseUrl);
+  target.searchParams.set("ordine", orderLabelBarcodeValue(orderId, visibleOrderNumber));
+  return target.toString();
+}
+
 export function isOrderLabelForm(form?: { name?: string | null; category?: string | null } | null) {
   const name = String(form?.name || "").toLowerCase();
   const category = String(form?.category || "").toLowerCase();
@@ -240,8 +250,8 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const client = orderClientName(order);
   const createdAt = formatDateTime(order.created_at) || orderDate();
   const compiledBy = order.user?.name?.trim() || "Non indicato";
-  const barcodeValue = orderLabelBarcodeValue(order.id, orderNo);
-  const qrCodeDataUrl = await createQrDataUrl(barcodeValue, {
+  const qrValue = orderLabelQrValue(order.id, orderNo);
+  const qrCodeDataUrl = await createQrDataUrl(qrValue, {
     errorCorrectionLevel: "H",
     margin: 4,
     width: 800,

@@ -395,7 +395,17 @@ export function OrderManager({
 
   const findOrderFromBarcode = useCallback((rawValue: string) => {
     const scanned = rawValue.trim();
-    const normalized = scanned.replace(/^PB-/i, "").replace(/^#/, "").toLowerCase();
+    let scannedTarget = scanned;
+    try {
+      const scannedUrl = new URL(scanned);
+      scannedTarget = scannedUrl.searchParams.get("ordine")
+        || scannedUrl.searchParams.get("order")
+        || scannedUrl.searchParams.get("orderId")
+        || scanned;
+    } catch {
+      // I vecchi QR e i lettori USB continuano a inviare il codice semplice.
+    }
+    const normalized = scannedTarget.replace(/^PB-/i, "").replace(/^#/, "").toLowerCase();
     return orders.find((order) => {
       const number = orderNumber(order).replace(/^#/, "").trim().toLowerCase();
       return order.id.toLowerCase() === normalized || number === normalized;
