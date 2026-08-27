@@ -32,6 +32,7 @@ const APP_PAGES = {
   invoices: { path: "/invoices", label: "Fatture" },
   client_control: { path: "/client-control", label: "Controllo Cliente" },
   appointments: { path: "/appointments", label: "Appuntamenti" },
+  orders: { path: "/orders", label: "Ordini" },
   cash: { path: "/cash", label: "Cassa" },
 } as const;
 
@@ -160,7 +161,7 @@ const tools = [
   {
     type: "function",
     name: "get_task_overview",
-    description: "Legge task con filtri precisi per stato, assegnatario e intervallo. Per 'Steven ha completato task oggi?' usa status COMPLETED, employee_name Steven e l'intervallo di oggi.",
+    description: "Legge task con filtri precisi per stato, persona, titolo e intervallo. Restituisce descrizione, assegnatari, autore, nota di completamento, commenti e cosa è stato riportato. Per 'Steven ha completato task oggi?' usa status COMPLETED, employee_name Steven e l'intervallo di oggi.",
     strict: true,
     parameters: {
       type: "object",
@@ -171,10 +172,25 @@ const tools = [
           description: "Filtro opzionale per stato; OVERDUE indica task scadute non completate.",
         },
         employee_name: { type: ["string", "null"], description: "Nome dell'assegnatario; null soltanto per domande collettive." },
+        task_query: { type: ["string", "null"], description: "Titolo o parole della task da cercare; null se non è stata indicata una task precisa." },
         date_from: { type: ["string", "null"], description: "Inizio intervallo ISO incluso; null se non richiesto." },
         date_to: { type: ["string", "null"], description: "Fine intervallo ISO esclusa; null se non richiesto." },
       },
-      required: ["status", "employee_name", "date_from", "date_to"],
+      required: ["status", "employee_name", "task_query", "date_from", "date_to"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_employee_profile",
+    description: "Legge la scheda Staff verificata di un lavoratore: nome, stato, mansione/reparto, sede, ruolo, responsabile e informazioni contrattuali non sensibili. Usalo per domande come 'di cosa fa parte Arianna?', 'che mansione ha?', 'dove lavora?' o 'dammi le informazioni del lavoratore'.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        employee_name: { type: "string", description: "Nome o parte del nome del lavoratore." },
+      },
+      required: ["employee_name"],
       additionalProperties: false,
     },
   },
@@ -310,6 +326,25 @@ const tools = [
         year: { type: ["integer", "null"], minimum: 2024, maximum: 2100, description: "Anno da analizzare; null indica l'anno corrente." },
       },
       required: ["month", "year"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function",
+    name: "get_orders_overview",
+    description: "Cerca gli ordini della pagina Ordini e restituisce informazioni generali complete: cliente, numero ordine, contenuto, stato, priorità, sede, chi lo ha compilato, a chi è assegnato, chi lo ha completato, date, cronologia, note e commenti. Usalo per domande su ordini assegnati o completati.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        order_query: { type: ["string", "null"], description: "Numero ordine, titolo o parole contenute nell'ordine." },
+        client_name: { type: ["string", "null"], description: "Nome della cliente; null se non indicata." },
+        employee_name: { type: ["string", "null"], description: "Lavoratore che ha compilato, ricevuto in assegnazione, commentato o completato l'ordine." },
+        status: { type: ["string", "null"], enum: ["NEW", "PREPARING", "ORDERED", "READY", "COMPLETED", null] },
+        date_from: { type: ["string", "null"], description: "Inizio ISO incluso." },
+        date_to: { type: ["string", "null"], description: "Fine ISO esclusa." },
+      },
+      required: ["order_query", "client_name", "employee_name", "status", "date_from", "date_to"],
       additionalProperties: false,
     },
   },
@@ -639,7 +674,7 @@ async function getTeamStatus(scope: TeamStatusScope | null) {
   };
 }
 
-async function getTaskOverview(status: string | null, employeeName: string | null, dateFrom: string | null, dateTo: string | null) {
+async function getTaskOverview(status: string | null, employeeName: string | null, taskQuery: string | null, dateFrom: string | null, dateTo: string | null) {
   const now = new Date();
   const resolved = employeeName ? await resolveEmployee(employeeName) : null;
   if (resolved && !resolved.employee) {
@@ -661,7 +696,19 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
       ? { completed_at: { gte: validPeriod.start, lt: validPeriod.end } }
       : { updated_at: { gte: validPeriod.start, lt: validPeriod.end } }
     : {};
-  const where: Prisma.StaffTaskWhereInput = { ...baseWhere, ...statusWhere, ...periodWhere };
+  const cleanTaskQuery = taskQuery?.trim().slice(0, 160) || "";
+  const queryWhere: Prisma.StaffTaskWhereInput = cleanTaskQuery
+    ? {
+        OR: [
+          { title: { contains: cleanTaskQuery, mode: "insensitive" } },
+          { description: { contains: cleanTaskQuery, mode: "insensitive" } },
+          { notes: { contains: cleanTaskQuery, mode: "insensitive" } },
+          { completion_note: { contains: cleanTaskQuery, mode: "insensitive" } },
+          { comments: { some: { message: { contains: cleanTaskQuery, mode: "insensitive" } } } },
+        ],
+      }
+    : {};
+  const where: Prisma.StaffTaskWhereInput = { AND: [baseWhere, statusWhere, periodWhere, queryWhere] };
   const [groups, recent] = await Promise.all([
     prisma.staffTask.groupBy({ by: ["status"], where: baseWhere, _count: { _all: true } }),
     prisma.staffTask.findMany({
@@ -669,13 +716,27 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
       select: {
         id: true,
         title: true,
+        description: true,
         status: true,
         priority: true,
+        category: true,
+        notes: true,
+        completion_note: true,
+        completion_files: true,
+        completion_links: true,
+        started_at: true,
         due_date: true,
         completed_at: true,
+        created_at: true,
         updated_at: true,
         location: { select: { name: true } },
         assignees: { select: { name: true } },
+        created_by: { select: { name: true } },
+        comments: {
+          select: { message: true, created_at: true, user: { select: { name: true } } },
+          orderBy: { created_at: "asc" },
+          take: 20,
+        },
       },
       orderBy: [{ due_date: "asc" }, { updated_at: "desc" }],
       take: 20,
@@ -685,18 +746,33 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
   return {
     count: recent.length,
     requestedEmployee: resolved?.employee?.name || null,
+    requestedTask: cleanTaskQuery || null,
     period: validPeriod ? { from: validPeriod.start.toISOString(), to: validPeriod.end.toISOString() } : null,
     totals: Object.fromEntries(groups.map((group) => [group.status, group._count._all])),
     overdue: await prisma.staffTask.count({ where: { ...baseWhere, status: { not: "COMPLETED" }, due_date: { lt: now } } }),
     tasks: recent.map((task) => ({
       id: task.id,
       title: task.title,
+      description: task.description,
       status: task.status,
       priority: task.priority,
+      category: task.category,
+      notes: task.notes,
+      completionNote: task.completion_note,
+      completionFilesCount: Array.isArray(task.completion_files) ? task.completion_files.length : 0,
+      completionLinksCount: Array.isArray(task.completion_links) ? task.completion_links.length : 0,
+      createdAt: task.created_at.toISOString(),
+      startedAt: task.started_at?.toISOString() || null,
       dueDate: task.due_date?.toISOString() || null,
       completedAt: task.completed_at?.toISOString() || null,
       location: task.location.name,
+      createdBy: task.created_by.name,
       assignees: task.assignees.map((person) => person.name),
+      reports: task.comments.map((comment) => ({
+        by: comment.user.name,
+        message: comment.message,
+        at: comment.created_at.toISOString(),
+      })),
     })),
   };
 }
@@ -722,6 +798,59 @@ async function resolveEmployee(employeeName: string) {
     employee: null,
     error: candidates.length ? "Nome ambiguo: specifica il nome completo." : `Nessun lavoratore attivo trovato per “${query}”.`,
     candidates: candidates.map((candidate) => candidate.name),
+  };
+}
+
+async function getEmployeeProfile(employeeName: string) {
+  const resolved = await resolveEmployee(employeeName);
+  if (!resolved.employee) {
+    return { found: false, error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
+  }
+  const employee = await prisma.user.findUnique({
+    where: { id: resolved.employee.id },
+    select: {
+      name: true,
+      photo_url: true,
+      role: true,
+      mansione: true,
+      employee_status: true,
+      active: true,
+      contract_start: true,
+      contract_end: true,
+      workforce_data: true,
+      location: { select: { name: true } },
+      manager: { select: { name: true } },
+      _count: { select: { assigned_tasks: true, task_comments: true, documents: true } },
+    },
+  });
+  if (!employee) return { found: false, error: "Lavoratore non trovato.", candidates: [] };
+  const workforce = employee.workforce_data && typeof employee.workforce_data === "object" && !Array.isArray(employee.workforce_data)
+    ? employee.workforce_data as Record<string, unknown>
+    : {};
+  return {
+    found: true,
+    employee: {
+      name: employee.name,
+      photoUrl: employee.photo_url,
+      status: employee.employee_status,
+      active: employee.active,
+      job: employee.mansione || "Non specificata",
+      appRole: employee.role,
+      location: employee.location?.name || "Nessuna sede",
+      manager: employee.manager?.name || "Non assegnato",
+      contract: {
+        type: typeof workforce.contractType === "string" ? workforce.contractType : "Non specificato",
+        renewalStatus: typeof workforce.contractRenewalStatus === "string" ? workforce.contractRenewalStatus : null,
+        start: employee.contract_start?.toISOString() || null,
+        end: employee.contract_end?.toISOString() || null,
+      },
+      activity: {
+        assignedTasks: employee._count.assigned_tasks,
+        taskReports: employee._count.task_comments,
+        documents: employee._count.documents,
+      },
+    },
+    source: "Staff Paradise",
   };
 }
 
@@ -1292,6 +1421,160 @@ async function searchClientControls(
   };
 }
 
+function jsonRecords(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function displayAnswer(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(displayAnswer).filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return displayAnswer(record.name || record.fileName || record.label || record.value || "");
+  }
+  return "";
+}
+
+function orderFieldValue(fields: Record<string, unknown>[], answers: Record<string, unknown>, needles: string[]) {
+  const field = fields.find((item) => {
+    const label = String(item.label || "").toLocaleLowerCase("it");
+    return needles.some((needle) => label.includes(needle));
+  });
+  return field ? displayAnswer(answers[String(field.id || "")]) : "";
+}
+
+async function getOrdersOverview(
+  orderQuery: string | null,
+  clientName: string | null,
+  employeeName: string | null,
+  status: string | null,
+  dateFrom: string | null,
+  dateTo: string | null,
+) {
+  const start = dateFrom ? new Date(dateFrom) : null;
+  const end = dateTo ? new Date(dateTo) : null;
+  const validPeriod = start && end && Number.isFinite(start.getTime()) && Number.isFinite(end.getTime()) && start < end
+    ? { start, end }
+    : null;
+  const resolved = employeeName ? await resolveEmployee(employeeName) : null;
+  if (resolved && !resolved.employee) {
+    return { count: 0, orders: [], error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
+  }
+  const responses = await prisma.serviceFormResponse.findMany({
+    where: {
+      status: status || { not: "ARCHIVED" },
+      form: { is: { OR: [{ category: { equals: "Ordini", mode: "insensitive" } }, { name: { contains: "ordine", mode: "insensitive" } }] } },
+      ...(validPeriod && status !== "COMPLETED" ? { created_at: { gte: validPeriod.start, lt: validPeriod.end } } : {}),
+    },
+    select: {
+      id: true,
+      status: true,
+      priority: true,
+      assigned_to_id: true,
+      answers: true,
+      comments: true,
+      activity_log: true,
+      internal_notes: true,
+      created_at: true,
+      updated_at: true,
+      user_location_name: true,
+      user: { select: { name: true } },
+      form: { select: { name: true, fields: true } },
+    },
+    orderBy: { updated_at: "desc" },
+    take: 300,
+  });
+  const assignedIds = [...new Set(responses.map((response) => response.assigned_to_id).filter((id): id is string => Boolean(id)))];
+  const assignedUsers = assignedIds.length
+    ? await prisma.user.findMany({ where: { id: { in: assignedIds } }, select: { id: true, name: true } })
+    : [];
+  const assignedNames = new Map(assignedUsers.map((user) => [user.id, user.name]));
+  const orderNeedle = orderQuery?.trim().toLocaleLowerCase("it") || "";
+  const clientNeedle = clientName?.trim().toLocaleLowerCase("it") || "";
+  const employeeNeedle = resolved?.employee?.name.toLocaleLowerCase("it") || employeeName?.trim().toLocaleLowerCase("it") || "";
+
+  const orders = responses.map((response) => {
+    const answers = response.answers && typeof response.answers === "object" && !Array.isArray(response.answers)
+      ? response.answers as Record<string, unknown>
+      : {};
+    const fields = jsonRecords(response.form.fields);
+    const activity = jsonRecords(response.activity_log);
+    const comments = jsonRecords(response.comments);
+    const orderNumber = displayAnswer(answers.order_title)
+      || orderFieldValue(fields, answers, ["numero ordine", "ordine shopify", "nome ordine", "titolo", "ordine"])
+      || `#${response.id.slice(0, 5).toUpperCase()}`;
+    const client = orderFieldValue(fields, answers, ["nome cliente", "nome e cognome", "cliente"])
+      || displayAnswer(answers.client_name)
+      || "Cliente non indicata";
+    const items = displayAnswer(answers.order_items)
+      || orderFieldValue(fields, answers, ["cosa ordinare", "cosa dobbiamo fare", "prodott", "material", "articol"])
+      || "Non specificato";
+    const assignedTo = response.assigned_to_id ? assignedNames.get(response.assigned_to_id) || "Assegnatario non trovato" : null;
+    const completionEvent = [...activity].reverse().find((entry) => String(entry.to || "").toUpperCase() === "COMPLETED");
+    const completedAt = completionEvent && typeof completionEvent.at === "string" ? completionEvent.at : response.status === "COMPLETED" ? response.updated_at.toISOString() : null;
+    const completedBy = completionEvent ? String(completionEvent.by || completionEvent.user || "Staff") : null;
+    const safeFields = fields.flatMap((field) => {
+      const id = String(field.id || "");
+      const label = String(field.label || id);
+      if (!id || /email|telefono|phone|indirizzo|codice fiscale|fiscal|iban|nascita/i.test(label)) return [];
+      const value = displayAnswer(answers[id]);
+      return value ? [{ label, value }] : [];
+    }).slice(0, 30);
+    return {
+      id: response.id,
+      orderNumber,
+      client,
+      items,
+      status: response.status,
+      priority: response.priority || displayAnswer(answers.order_priority) || "Normale",
+      location: response.user_location_name || "Nessuna sede",
+      compiledBy: response.user.name,
+      assignedTo,
+      completedBy,
+      completedAt,
+      createdAt: response.created_at.toISOString(),
+      updatedAt: response.updated_at.toISOString(),
+      fields: safeFields,
+      notes: activity.map((entry) => ({
+        from: displayAnswer(entry.from),
+        to: displayAnswer(entry.to),
+        note: displayAnswer(entry.note),
+        by: displayAnswer(entry.by || entry.user) || "Staff",
+        at: displayAnswer(entry.at || entry.date),
+      })),
+      comments: comments.map((comment) => ({
+        by: displayAnswer(comment.userName || comment.user) || "Staff",
+        message: displayAnswer(comment.message),
+        at: displayAnswer(comment.createdAt || comment.at),
+      })),
+    };
+  }).filter((order) => {
+    if (orderNeedle && !`${order.orderNumber} ${order.client} ${order.items} ${order.fields.map((field) => `${field.label} ${field.value}`).join(" ")}`.toLocaleLowerCase("it").includes(orderNeedle)) return false;
+    if (clientNeedle && !order.client.toLocaleLowerCase("it").includes(clientNeedle)) return false;
+    if (employeeNeedle) {
+      const people = [order.compiledBy, order.assignedTo, order.completedBy, ...order.comments.map((comment) => comment.by)].filter(Boolean).join(" ").toLocaleLowerCase("it");
+      if (!people.includes(employeeNeedle)) return false;
+    }
+    if (validPeriod) {
+      const relevantDate = new Date(status === "COMPLETED" && order.completedAt ? order.completedAt : order.createdAt);
+      if (!(relevantDate >= validPeriod.start && relevantDate < validPeriod.end)) return false;
+    }
+    return true;
+  }).slice(0, 30);
+
+  return {
+    count: orders.length,
+    requestedOrder: orderQuery || null,
+    requestedClient: clientName || null,
+    requestedEmployee: resolved?.employee?.name || employeeName || null,
+    requestedStatus: status || null,
+    period: validPeriod ? { from: validPeriod.start.toISOString(), to: validPeriod.end.toISOString() } : null,
+    orders,
+    source: "Ordini",
+  };
+}
+
 function cashDateKey(date: Date) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Rome",
@@ -1433,6 +1716,22 @@ function assistantCards(toolName: string, output: unknown, question: string): As
   const data = output as Record<string, unknown>;
   const normalizedQuestion = question.toLocaleLowerCase("it");
 
+  if (toolName === "get_employee_profile" && data.employee && typeof data.employee === "object") {
+    const employee = data.employee as Record<string, unknown>;
+    return [{
+      id: `employee-${String(employee.name || "staff")}`,
+      person: String(employee.name || "Dipendente"),
+      photoUrl: typeof employee.photoUrl === "string" ? employee.photoUrl : null,
+      status: String(employee.status || "Stato non indicato"),
+      type: String(employee.job || "Mansione non specificata"),
+      location: String(employee.location || "Nessuna sede"),
+      date: null,
+      time: null,
+      detail: `Responsabile: ${String(employee.manager || "Non assegnato")}`,
+      tone: employee.active === false ? "slate" : "green",
+    }];
+  }
+
   if (toolName === "get_team_status" && Array.isArray(data.people)) {
     let people = data.people as Array<Record<string, unknown>>;
     if (normalizedQuestion.includes("paus")) people = people.filter((person) => person.status === "IN_PAUSA");
@@ -1507,8 +1806,23 @@ function assistantCards(toolName: string, output: unknown, question: string): As
       location: String(task.location || "Nessuna sede"),
       date: typeof task.completedAt === "string" ? task.completedAt : typeof task.dueDate === "string" ? task.dueDate : null,
       time: null,
-      detail: String(task.title || "Task senza titolo"),
+      detail: task.completionNote ? `${String(task.title || "Task")}: ${String(task.completionNote)}` : String(task.title || "Task senza titolo"),
       tone: task.status === "COMPLETED" ? "green" : task.status === "ACTIVE" ? "blue" : "amber",
+    }));
+  }
+
+  if (toolName === "get_orders_overview" && Array.isArray(data.orders)) {
+    return (data.orders as Array<Record<string, unknown>>).slice(0, 20).map((order, index) => ({
+      id: String(order.id || `order-${index}`),
+      person: String(order.client || "Cliente non indicata"),
+      photoUrl: null,
+      status: String(order.status || "Ordine"),
+      type: `Ordine ${String(order.orderNumber || "")}`.trim(),
+      location: String(order.location || "Nessuna sede"),
+      date: typeof order.completedAt === "string" ? order.completedAt : typeof order.createdAt === "string" ? order.createdAt : null,
+      time: null,
+      detail: `${String(order.items || "Nessun dettaglio")} · Compilato da: ${String(order.compiledBy || "Staff")} · Assegnato a: ${String(order.assignedTo || "Non assegnato")} · Completato da: ${String(order.completedBy || "Non completato")}`,
+      tone: order.status === "COMPLETED" ? "green" : order.status === "READY" ? "blue" : "amber",
     }));
   }
 
@@ -1645,9 +1959,14 @@ async function executeTool(
   if (call.name === "get_task_overview") {
     const status = impliedTaskStatus || (typeof args.status === "string" ? args.status : null);
     const employeeName = impliedEmployeeName || (typeof args.employee_name === "string" ? args.employee_name : null);
+    const taskQuery = typeof args.task_query === "string" ? args.task_query : null;
     const dateFrom = impliedDayPeriod?.start || (typeof args.date_from === "string" ? args.date_from : null);
     const dateTo = impliedDayPeriod?.end || (typeof args.date_to === "string" ? args.date_to : null);
-    return { output: await getTaskOverview(status, employeeName, dateFrom, dateTo), link: APP_PAGES.tasks };
+    return { output: await getTaskOverview(status, employeeName, taskQuery, dateFrom, dateTo), link: APP_PAGES.tasks };
+  }
+  if (call.name === "get_employee_profile") {
+    const employeeName = impliedEmployeeName || String(args.employee_name || "").trim();
+    return { output: await getEmployeeProfile(employeeName), link: APP_PAGES.staff };
   }
   if (call.name === "get_requests_overview") {
     const type = impliedRequestType || (typeof args.type === "string" ? args.type : null);
@@ -1700,6 +2019,15 @@ async function executeTool(
     const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Math.min(12, Math.max(1, Number(args.month))) : null);
     const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Math.min(2100, Math.max(2024, Number(args.year))) : null);
     return { output: await getCashOverview(month, year), link: APP_PAGES.cash };
+  }
+  if (call.name === "get_orders_overview") {
+    const employeeName = impliedEmployeeName || (typeof args.employee_name === "string" ? args.employee_name.trim() : null);
+    const orderQuery = typeof args.order_query === "string" ? args.order_query.trim() : null;
+    const clientName = typeof args.client_name === "string" ? args.client_name.trim() : null;
+    const status = typeof args.status === "string" ? args.status : null;
+    const dateFrom = impliedDayPeriod?.start || (typeof args.date_from === "string" ? args.date_from : null);
+    const dateTo = impliedDayPeriod?.end || (typeof args.date_to === "string" ? args.date_to : null);
+    return { output: await getOrdersOverview(orderQuery, clientName, employeeName, status, dateFrom, dateTo), link: APP_PAGES.orders };
   }
   if (call.name === "navigate_app") {
     const page = typeof args.page === "string" ? args.page as PageKey : "dashboard";
@@ -1789,21 +2117,26 @@ PRECISIONE OBBLIGATORIA: se la domanda contiene il nome di una persona, usa uno 
 PRECISIONE TEMPORALE OBBLIGATORIA: “oggi”, “ieri” e “domani” indicano esclusivamente il singolo giorno riportato nella DATA AUTORITATIVA. Non includere, contare o mostrare record di altri giorni. Se lo strumento restituisce un campo period.day, usa soltanto quel periodo e non effettuare una seconda ricerca più ampia.
 UNITÀ DELLA RISPOSTA: rispondi soltanto alla categoria richiesta. Non aggiungere risultati di giorni diversi, riepiloghi mensili o altre categorie. Per una domanda semplice come “ritardi di oggi” esegui una sola ricerca e restituisci un unico riepilogo con le sole schede di oggi.
 Per domande come “come va [persona] questo mese?”, “ha fatto ritardi?”, “quanti turni ha fatto?” o riepiloghi mensili individuali usa get_employee_month_overview. Per una singola categoria puoi usare get_requests_overview, sempre con employee_name e mese/anno quando citati.
-Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto.
+Per domande su identità lavorativa, mansione, reparto, sede, responsabile, stato o contratto di una persona usa get_employee_profile e considera Staff Paradise la fonte autoritativa. Non dedurre mansione o sede da task, messaggi o presenze.
+Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto. Se viene citato il nome o parte del titolo della task, passalo in task_query. Per dire cosa il lavoratore ha riportato usa completionNote e reports; distingui sempre autore, assegnatari e autori dei commenti.
 “In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
 Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
 Usa get_document_status per contratti, proroghe/rinnovi, cedolini/buste paga, CUD e documenti HR. “Cedolino” e “busta paga” corrispondono a BUSTA_PAGA; proroga e rinnovo corrispondono a PROROGA. Usa get_invoice_status per fatture emesse/da fare/annullate e non confondere le fatture con i documenti del personale.
 Usa search_client_controls quando viene nominata una cliente o viene chiesto chi ha lavorato su una cliente, cosa è stato fatto, prodotti/servizi, pagamento, ordine o note. Lo strumento collega Controllo Cliente e Appuntamenti tramite booking_id e stato completato. Usalo anche per conteggi e riepiloghi del lavoro clienti di una dipendente, per esempio “quante clienti ha fatto Angelica oggi?”, “quali clienti ha seguito Angelica?” o “quanto ha incassato Angelica con le sue clienti?”. In questi casi employee_name è la lavoratrice e client_name deve essere null. Per “quante clienti ha fatto” usa workedClientCount; uniqueClientCount conta le clienti con scheda Controllo Cliente, appointmentCount conta tutti gli appuntamenti compatibili e completedAppointmentCount soltanto quelli completati. Non presentare una semplice prenotazione come lavoro svolto. Se appointmentsAvailable è false, dichiaralo. Non mostrare email o telefono della cliente.
+Usa get_orders_overview per domande sulla pagina Ordini: cliente, numero o contenuto dell'ordine, chi lo ha compilato, assegnatario, stato, chi lo ha completato, cronologia, note e commenti. “Compilato da”, “assegnato a” e “completato da” sono ruoli diversi: non confonderli. Per ordini completati oggi/ieri/domani usa completedAt; per nuovi ordini usa createdAt. Non mostrare contatti o altri dati sensibili della cliente.
 Usa get_cash_overview per qualsiasi domanda su cassa, cash disponibile, chiusure, fondo, prelievi, versamenti o scostamenti. Distingui sempre disponibilità del periodo aperto, dichiarato del mese e contanti attesi da Shopify. Se Shopify non è disponibile, dichiaralo senza stimare valori.
 Se l'amministratore chiede “cosa posso chiederti?”, “che domande posso farti?” o chiede esempi, presenta un elenco ordinato e realistico con queste categorie ed esempi:
 - Presenze ora: chi è in pausa, in turno, uscito o non entrato.
 - Persona e mese: come va Aurora questo mese; ha fatto ritardi; quanti turni e giornate timbrate; ferie, malattie e permessi.
+- Scheda Staff: che mansione ha Arianna; di quale sede/reparto fa parte; chi è il suo responsabile; stato e contratto non sensibile.
 - Planning: è stata caricata la turnistica di ottobre; chi manca dal planning.
 - Task: come stanno andando; quali sono scadute, attive o completate.
+- Dettaglio task: chi l'ha creata e assegnata; chi l'ha completata; cosa è stato riportato nella nota finale e nei commenti.
 - Documenti HR: è caricato il contratto di una persona; ci sono proroghe/rinnovi; sono caricati cedolini/buste paga del mese; chi manca; è presente il CUD.
 - Fatture: quante richieste ci sono questo mese; quante fatture sono state emesse o sono ancora da fare; importo totale.
 - Controllo Cliente: chi ha lavorato sulla cliente X; cosa è stato fatto; quali prodotti/servizi, pagamento, ordine e note risultano nella scheda.
+- Ordini: chi ha compilato o completato l'ordine X; a chi è assegnato; stato, contenuto, cronologia, note e commenti.
 - Cassa: cash disponibile; chiusure, prelievi, scostamenti e giorni da verificare.
 - Comunicazioni: prepara una comunicazione professionale collegata a una persona o task, sempre con conferma prima dell'invio.
 Non dichiarare capacità fuori da questo elenco senza uno strumento reale.

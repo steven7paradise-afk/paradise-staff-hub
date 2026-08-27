@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ADMIN_ASSISTANT_SESSION_TTL_MS, readAssistantSession, writeAssistantSession } from "../lib/admin-assistant-session";
+import { ADMIN_ASSISTANT_SESSION_TTL_MS, isClearAssistantCommand, readAssistantSession, writeAssistantSession } from "../lib/admin-assistant-session";
 
 test("keeps the assistant conversation for forty minutes", () => {
   const now = Date.UTC(2026, 7, 26, 18, 0);
@@ -16,4 +16,11 @@ test("expires the conversation after forty minutes", () => {
 
 test("ignores invalid stored data", () => {
   assert.equal(readAssistantSession("not-json"), null);
+});
+
+test("recognizes commands that really clear the assistant chat", () => {
+  for (const command of ["clear", "Pulisci chat", "pulisce la chat", "cancella conversazione", "riparti da zero"]) {
+    assert.equal(isClearAssistantCommand(command), true);
+  }
+  assert.equal(isClearAssistantCommand("pulisci i ritardi di oggi"), false);
 });

@@ -1,5 +1,13 @@
 export const ADMIN_ASSISTANT_SESSION_TTL_MS = 40 * 60 * 1_000;
 
+export function isClearAssistantCommand(value: string) {
+  const normalized = value.normalize("NFKC").trim().toLocaleLowerCase("it").replace(/[.!?]+$/g, "").trim();
+  return normalized === "clear"
+    || normalized === "reset"
+    || /^(pulisci|pulisce|cancella|svuota|azzera)\s+(la\s+)?(chat|conversazione)$/.test(normalized)
+    || /^(riparti|ricomincia)\s+da\s+zero$/.test(normalized);
+}
+
 export function readAssistantSession(rawValue: string | null, now = Date.now()): unknown[] | null {
   if (!rawValue) return null;
   try {

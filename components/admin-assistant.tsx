@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bot, Check, ExternalLink, LoaderCircle, MessageCircleMore, Send, Sparkles, X } from "lucide-react";
-import { readAssistantSession, writeAssistantSession } from "@/lib/admin-assistant-session";
+import { isClearAssistantCommand, readAssistantSession, writeAssistantSession } from "@/lib/admin-assistant-session";
 
 type PendingAction = { token: string; type: "SEND_COMMUNICATION"; label: string; recipient: string; title: string; message: string; expiresAt: string };
 type AssistantCard = {
@@ -73,6 +73,13 @@ export function AdminAssistant() {
   async function ask(text: string) {
     const question = text.trim();
     if (!question || loading) return;
+    if (isClearAssistantCommand(question)) {
+      window.sessionStorage.removeItem(ASSISTANT_SESSION_KEY);
+      setMessages([initialMessage]);
+      setInput("");
+      setActionLoading(null);
+      return;
+    }
     const userMessage: Message = { role: "user", content: question };
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);

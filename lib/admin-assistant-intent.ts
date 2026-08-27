@@ -54,9 +54,14 @@ export function requestedRequestType(text: string): RequestOverviewType | null {
 export function requiredAssistantTool(text: string) {
   const normalized = text.toLocaleLowerCase("it");
   if (/\btask\b|compito|attività assegnata/.test(normalized)) return "get_task_overview";
+  if (/controll[oi] client|sched[ae] client/.test(normalized)) return "search_client_controls";
+  if (/\bordini?\b|numero ordine|ordine.{0,50}(?:assegn|complet|pront|compilat)|(?:assegn|complet|pront|compilat).{0,50}ordine/.test(normalized)) return "get_orders_overview";
   if (
-    /controll[oi] client|sched[ae] client/.test(normalized)
-    || /(?:quant[ei]|qual[ei]|chi|cosa|quanto).{0,60}client[ei]/.test(normalized)
+    /(?:che|quale).{0,20}(?:mansione|ruolo|sede|reparto)/.test(normalized)
+    || /dove lavora|fa parte(?: di)?|informazioni.{0,30}(?:lavoratore|dipendente)|scheda.{0,30}(?:lavoratore|dipendente)/.test(normalized)
+  ) return "get_employee_profile";
+  if (
+    /(?:quant[ei]|qual[ei]|chi|cosa|quanto).{0,60}client[ei]/.test(normalized)
     || /quant[ei].{0,30}persone.{0,60}(?:servit|seguit)/.test(normalized)
     || /client[ei].{0,60}(?:ha fatto|servit|seguit|lavorat|incass|pagat|serviz|ordine)/.test(normalized)
     || /(?:ha fatto|servit|seguit).{0,40}client[ei]/.test(normalized)

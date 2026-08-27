@@ -57,3 +57,14 @@ test("recognizes request categories despite common spelling variants", () => {
   assert.equal(requestedRequestType("permessi di ieri"), "PERMESSO");
   assert.equal(requestedRequestType("riposi di oggi"), "RIPOSO");
 });
+
+test("routes staff profile questions to verified Staff data", () => {
+  assert.equal(requiredAssistantTool("Di che reparto fa parte Arianna?"), "get_employee_profile");
+  assert.equal(requiredAssistantTool("Arianna fa parte?"), "get_employee_profile");
+  assert.equal(requiredAssistantTool("Dove lavora Arianna e che mansione ha?"), "get_employee_profile");
+});
+
+test("routes order assignment and completion questions to Orders", () => {
+  assert.equal(requiredAssistantTool("Chi ha completato l'ordine 25989?"), "get_orders_overview");
+  assert.equal(requiredAssistantTool("Quali ordini ha compilato Steven oggi?"), "get_orders_overview");
+});
