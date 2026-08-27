@@ -398,9 +398,11 @@ export function OrderManager({
     let scannedTarget = scanned;
     try {
       const scannedUrl = new URL(scanned);
+      const shortLinkReference = scannedUrl.pathname.match(/^\/o\/([^/]+)\/?$/i)?.[1];
       scannedTarget = scannedUrl.searchParams.get("ordine")
         || scannedUrl.searchParams.get("order")
         || scannedUrl.searchParams.get("orderId")
+        || (shortLinkReference ? decodeURIComponent(shortLinkReference) : "")
         || scanned;
     } catch {
       // I vecchi QR e i lettori USB continuano a inviare il codice semplice.
@@ -444,7 +446,14 @@ export function OrderManager({
       scannerInstanceRef.current = scanner;
       await scanner.start(
         { facingMode: "environment" },
-        { fps: 12, qrbox: { width: 240, height: 240 }, aspectRatio: 16 / 9 },
+        {
+          fps: 20,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.86);
+            return { width: edge, height: edge };
+          },
+          aspectRatio: 4 / 3,
+        },
         (decodedText) => { openOrderFromBarcode(decodedText); },
         () => { /* Frames without a barcode are expected while focusing. */ },
       );

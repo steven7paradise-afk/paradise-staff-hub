@@ -17,6 +17,6 @@ test("the response id remains a fallback when the order number is unavailable", 
 test("the QR opens the matching order from a normal phone camera", () => {
   assert.equal(
     orderLabelQrValue("response-id", "#25989"),
-    "https://www.staff-paradise.tech/orders?ordine=25989",
+    "https://staff-paradise.tech/o/25989",
   );
 });

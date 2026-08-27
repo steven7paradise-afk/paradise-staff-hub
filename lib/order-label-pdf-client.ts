@@ -222,10 +222,10 @@ export function orderLabelBarcodeValue(orderId: string, visibleOrderNumber?: str
 export function orderLabelQrValue(
   orderId: string,
   visibleOrderNumber?: string,
-  baseUrl = "https://www.staff-paradise.tech",
+  baseUrl = "https://staff-paradise.tech",
 ) {
-  const target = new URL("/orders", baseUrl);
-  target.searchParams.set("ordine", orderLabelBarcodeValue(orderId, visibleOrderNumber));
+  const reference = encodeURIComponent(orderLabelBarcodeValue(orderId, visibleOrderNumber));
+  const target = new URL(`/o/${reference}`, baseUrl);
   return target.toString();
 }
 
@@ -252,8 +252,8 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const compiledBy = order.user?.name?.trim() || "Non indicato";
   const qrValue = orderLabelQrValue(order.id, orderNo);
   const qrCodeDataUrl = await createQrDataUrl(qrValue, {
-    errorCorrectionLevel: "H",
-    margin: 4,
+    errorCorrectionLevel: "M",
+    margin: 2,
     width: 800,
     color: { dark: "#000000", light: "#ffffff" },
   });
