@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { buildAssistantDateContext, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
-import { requiredAssistantTool, requestedTaskStatus, requestedTeamStatus, type TeamStatusScope } from "@/lib/admin-assistant-intent";
+import { requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { createNotifications } from "@/lib/notifications";
@@ -181,7 +181,7 @@ const tools = [
   {
     type: "function",
     name: "get_requests_overview",
-    description: "Legge ferie, permessi, riposi, malattie e ritardi in un periodo preciso. Per domande su una persona passa sempre employee_name: in caso di nome ambiguo lo strumento non restituisce dati di altre persone.",
+    description: "Legge ferie, permessi, riposi, malattie e ritardi in un periodo preciso. Se la domanda dice oggi, ieri o domani, il server applica automaticamente quel singolo giorno. Per domande su una persona passa sempre employee_name: in caso di nome ambiguo lo strumento non restituisce dati di altre persone.",
     strict: true,
     parameters: {
       type: "object",
@@ -745,20 +745,38 @@ function monthBounds(month: number, year: number) {
   return { start: new Date(Date.UTC(year, month - 1, 1)), end: new Date(Date.UTC(year, month, 1)) };
 }
 
-async function getRequestsOverview(type: string | null, pendingOnly: boolean, employeeName: string | null, month: number | null, year: number | null) {
+async function getRequestsOverview(
+  type: string | null,
+  pendingOnly: boolean,
+  employeeName: string | null,
+  month: number | null,
+  year: number | null,
+  dayPeriod: { day: string; start: string; end: string } | null,
+) {
   const resolved = employeeName ? await resolveEmployee(employeeName) : null;
   if (resolved && !resolved.employee) {
     return { count: 0, requests: [], error: resolved.error, candidates: resolved.candidates, requestedEmployee: employeeName };
   }
   const since = new Date();
   since.setDate(since.getDate() - 45);
-  const period = month && year ? monthBounds(month, year) : null;
+  const requestedDayStart = dayPeriod ? new Date(dayPeriod.start) : null;
+  const requestedDayEnd = dayPeriod ? new Date(dayPeriod.end) : null;
+  const validDayPeriod = requestedDayStart && requestedDayEnd
+    && Number.isFinite(requestedDayStart.getTime())
+    && Number.isFinite(requestedDayEnd.getTime())
+    && requestedDayStart < requestedDayEnd
+    ? { start: requestedDayStart, end: requestedDayEnd }
+    : null;
+  const period = !validDayPeriod && month && year ? monthBounds(month, year) : null;
   const where: Prisma.LeaveRequestWhereInput = {
-    ...(pendingOnly
-      ? { status: "PENDING" }
-      : period
-        ? { start_date: { lt: period.end }, end_date: { gte: period.start } }
-        : { OR: [{ status: "PENDING" }, { end_date: { gte: since } }] }),
+    ...(validDayPeriod
+      ? { start_date: { lt: validDayPeriod.end }, end_date: { gte: validDayPeriod.start } }
+      : pendingOnly
+        ? { status: "PENDING" }
+        : period
+          ? { start_date: { lt: period.end }, end_date: { gte: period.start } }
+          : { OR: [{ status: "PENDING" }, { end_date: { gte: since } }] }),
+    ...(pendingOnly ? { status: "PENDING" } : {}),
     ...(resolved?.employee ? { user_id: resolved.employee.id } : {}),
     ...(type === "RITARDO"
       ? { type: "PERMESSO", reason: { startsWith: "RITARDO AUTOMATICO — " } }
@@ -788,7 +806,11 @@ async function getRequestsOverview(type: string | null, pendingOnly: boolean, em
   return {
     count: requests.length,
     requestedEmployee: resolved?.employee?.name || null,
-    period: period ? { month, monthName: monthName(month!), year } : null,
+    period: validDayPeriod
+      ? { day: dayPeriod!.day, from: validDayPeriod.start.toISOString(), to: validDayPeriod.end.toISOString() }
+      : period
+        ? { month, monthName: monthName(month!), year }
+        : null,
     requests: requests.map((request) => ({
       id: request.id,
       person: request.user.name,
@@ -1607,6 +1629,7 @@ async function executeTool(
   impliedDayPeriod: { day: string; start: string; end: string } | null,
   impliedTaskStatus: string | null,
   impliedEmployeeName: string | null,
+  impliedRequestType: RequestOverviewType | null,
 ) {
   const args = safeJson(call.arguments);
   if (call.name === "remember_instruction") return rememberInstruction(args, actorId);
@@ -1627,12 +1650,12 @@ async function executeTool(
     return { output: await getTaskOverview(status, employeeName, dateFrom, dateTo), link: APP_PAGES.tasks };
   }
   if (call.name === "get_requests_overview") {
-    const type = typeof args.type === "string" ? args.type : null;
+    const type = impliedRequestType || (typeof args.type === "string" ? args.type : null);
     const link = type === "MALATTIA" ? APP_PAGES.sickness : APP_PAGES.requests;
     const employeeName = impliedEmployeeName || (typeof args.employee_name === "string" ? args.employee_name : null);
     const month = impliedMonthPeriod?.month ?? (Number.isInteger(args.month) ? Number(args.month) : null);
     const year = impliedMonthPeriod?.year ?? (Number.isInteger(args.year) ? Number(args.year) : null);
-    return { output: await getRequestsOverview(type, args.pending_only === true, employeeName, month, year), link };
+    return { output: await getRequestsOverview(type, args.pending_only === true, employeeName, month, year, impliedDayPeriod), link };
   }
   if (call.name === "get_employee_month_overview") {
     const employeeName = impliedEmployeeName || String(args.employee_name || "").trim();
@@ -1755,6 +1778,7 @@ export async function POST(request: NextRequest) {
   const impliedMonthPeriod = requestedMonthPeriod(lastUserMessage, dateContext);
   const impliedDayPeriod = requestedDayPeriod(lastUserMessage, dateContext);
   const impliedTaskStatus = requestedTaskStatus(lastUserMessage);
+  const impliedRequestType = requestedRequestType(lastUserMessage);
   const impliedEmployeeName = await mentionedEmployeeName(lastUserMessage);
   const requiredTool = requiredAssistantTool(lastUserMessage);
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
@@ -1762,6 +1786,8 @@ DATA AUTORITATIVA DEL SERVER (non usare la data interna del modello): oggi ${dat
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
 PRECISIONE OBBLIGATORIA: se la domanda contiene il nome di una persona, usa uno strumento con employee_name e non presentare mai risultati di altre persone come risposta. Se lo strumento restituisce nome ambiguo, candidati o persona non trovata, fermati e chiedi di scegliere/specificare: non concludere che non esistono dati.
+PRECISIONE TEMPORALE OBBLIGATORIA: “oggi”, “ieri” e “domani” indicano esclusivamente il singolo giorno riportato nella DATA AUTORITATIVA. Non includere, contare o mostrare record di altri giorni. Se lo strumento restituisce un campo period.day, usa soltanto quel periodo e non effettuare una seconda ricerca più ampia.
+UNITÀ DELLA RISPOSTA: rispondi soltanto alla categoria richiesta. Non aggiungere risultati di giorni diversi, riepiloghi mensili o altre categorie. Per una domanda semplice come “ritardi di oggi” esegui una sola ricerca e restituisci un unico riepilogo con le sole schede di oggi.
 Per domande come “come va [persona] questo mese?”, “ha fatto ritardi?”, “quanti turni ha fatto?” o riepiloghi mensili individuali usa get_employee_month_overview. Per una singola categoria puoi usare get_requests_overview, sempre con employee_name e mese/anno quando citati.
 Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto.
 “In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
@@ -1806,7 +1832,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
         instructions,
         input,
         tools,
-        tool_choice: round === 0 && requiredTool ? { type: "function", name: requiredTool } : "auto",
+        tool_choice: round === 0 && requiredTool ? { type: "function", name: requiredTool } : requiredTool ? "none" : "auto",
         parallel_tool_calls: false,
         store: false,
         max_output_tokens: 900,
@@ -1820,7 +1846,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
 
       input.push(...(response.output || []));
       for (const call of calls) {
-        const result = await executeTool(call, session.user.id, impliedTeamScope, impliedMonthPeriod, impliedDayPeriod, impliedTaskStatus, impliedEmployeeName) as {
+        const result = await executeTool(call, session.user.id, impliedTeamScope, impliedMonthPeriod, impliedDayPeriod, impliedTaskStatus, impliedEmployeeName, impliedRequestType) as {
           output: unknown;
           link?: { path: string; label: string };
           navigation?: { path: string; label: string };

@@ -32,3 +32,19 @@ test("resolves today into an exact server-side interval", () => {
     end: "2026-08-26T22:00:00.000Z",
   });
 });
+
+test("resolves yesterday into one exact Rome calendar day", () => {
+  assert.deepEqual(requestedDayPeriod("Dimmi i ritardi di ieri", context), {
+    day: "2026-08-25",
+    start: "2026-08-24T22:00:00.000Z",
+    end: "2026-08-25T22:00:00.000Z",
+  });
+});
+
+test("resolves tomorrow into one exact Rome calendar day", () => {
+  assert.deepEqual(requestedDayPeriod("Chi sarà assente domani?", context), {
+    day: "2026-08-27",
+    start: "2026-08-26T22:00:00.000Z",
+    end: "2026-08-27T22:00:00.000Z",
+  });
+});

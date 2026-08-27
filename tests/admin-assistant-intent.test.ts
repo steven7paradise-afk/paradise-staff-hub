@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requiredAssistantTool, requestedTaskStatus, requestedTeamStatus } from "../lib/admin-assistant-intent";
+import { requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus } from "../lib/admin-assistant-intent";
 
 test("recognizes a direct question about people currently on break", () => {
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi è in pausa?" }]), "IN_PAUSA");
@@ -37,4 +37,23 @@ test("forces Controllo Cliente search for a named client", () => {
 test("forces Controllo Cliente search for a worker client count", () => {
   assert.equal(requiredAssistantTool("Quante cliente ha fatto Angelica oggi?"), "search_client_controls");
   assert.equal(requiredAssistantTool("Quante persone ha servito Angelica oggi?"), "search_client_controls");
+});
+
+test("recognizes multiple ways to ask for late arrivals", () => {
+  for (const question of [
+    "Sai dirmi i ritardi di oggi?",
+    "Chi è arrivato in ritardo ieri?",
+    "Domani ci sono persone in ritardo?",
+    "Fammi vedere entrate ritardate oggi",
+  ]) {
+    assert.equal(requestedRequestType(question), "RITARDO");
+    assert.equal(requiredAssistantTool(question), "get_requests_overview");
+  }
+});
+
+test("recognizes request categories despite common spelling variants", () => {
+  assert.equal(requestedRequestType("mallattie di oggi"), "MALATTIA");
+  assert.equal(requestedRequestType("chi è in ferie domani"), "FERIE");
+  assert.equal(requestedRequestType("permessi di ieri"), "PERMESSO");
+  assert.equal(requestedRequestType("riposi di oggi"), "RIPOSO");
 });

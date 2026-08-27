@@ -39,6 +39,18 @@ export function requestedTaskStatus(text: string) {
   return null;
 }
 
+export type RequestOverviewType = "FERIE" | "PERMESSO" | "RIPOSO" | "MALATTIA" | "RITARDO";
+
+export function requestedRequestType(text: string): RequestOverviewType | null {
+  const normalized = text.toLocaleLowerCase("it");
+  if (/ritard/.test(normalized)) return "RITARDO";
+  if (/mal+at|mal+att/.test(normalized)) return "MALATTIA";
+  if (/ferie|vacanz/.test(normalized)) return "FERIE";
+  if (/riposo|riposi/.test(normalized)) return "RIPOSO";
+  if (/permess/.test(normalized)) return "PERMESSO";
+  return null;
+}
+
 export function requiredAssistantTool(text: string) {
   const normalized = text.toLocaleLowerCase("it");
   if (/\btask\b|compito|attività assegnata/.test(normalized)) return "get_task_overview";
@@ -49,6 +61,7 @@ export function requiredAssistantTool(text: string) {
     || /client[ei].{0,60}(?:ha fatto|servit|seguit|lavorat|incass|pagat|serviz|ordine)/.test(normalized)
     || /(?:ha fatto|servit|seguit).{0,40}client[ei]/.test(normalized)
   ) return "search_client_controls";
+  if (requestedRequestType(text)) return "get_requests_overview";
   if (/fattur/.test(normalized)) return "get_invoice_status";
   if (/contratt|prorog|rinnov|cedolin|bust[ae] pag|\bcud\b|certificazione unica/.test(normalized)) return "get_document_status";
   return null;
