@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { isClientControlFormName } from "@/lib/client-control-form";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { attendanceActualMinutes, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
 import { answerText, normalizeShiftReportData, romeDayRange } from "@/lib/shift-reports";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -23,25 +25,18 @@ function namesFromAnswer(value: unknown) {
 
 async function automaticReportData(day: string, locationId: string) {
   const { date, start, end } = romeDayRange(day);
-  const [workers, schedules, logs, lateRequests, responses] = await Promise.all([
+  const [workers, schedules, logs, responses] = await Promise.all([
     prisma.user.findMany({
-      where: { active: true, sede_id: locationId, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      where: { active: true, employee_status: { not: FORMER_EMPLOYEE_STATUS }, sede_id: locationId, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
       select: { id: true, name: true, photo_url: true }, orderBy: { name: "asc" },
     }),
     prisma.scheduleEntry.findMany({
       where: { date, location_id: locationId },
-      include: { user: { select: { id: true, name: true } }, category: { select: { code: true, name: true } } },
+      include: { user: { select: { id: true, name: true, employee_status: true } }, category: { select: { code: true, name: true } }, location: { select: { name: true } } },
     }),
     prisma.attendanceLog.findMany({
       where: { location_id: locationId, timestamp: { gte: start, lt: end } },
       include: { user: { select: { id: true, name: true } } }, orderBy: { timestamp: "asc" },
-    }),
-    prisma.leaveRequest.findMany({
-      where: {
-        user: { sede_id: locationId }, start_date: { lte: date }, end_date: { gte: date },
-        OR: [{ reason: { contains: "RITARDO AUTOMATICO", mode: "insensitive" } }, { reason: { contains: "ritardo", mode: "insensitive" } }],
-      },
-      include: { user: { select: { id: true, name: true } } },
     }),
     prisma.serviceFormResponse.findMany({
       where: { user_location_id: locationId, created_at: { gte: start, lt: end } },
@@ -53,12 +48,21 @@ async function automaticReportData(day: string, locationId: string) {
   const entries = logs.filter((log) => log.type === "ENTRATA");
   const entryIds = new Set(entries.map((log) => log.user_id));
   const nonWorkingCodes = /RIPOS|FERIE|MALATT|PERMESS|ASSEN/;
-  const expected = schedules.filter((entry) => !nonWorkingCodes.test(`${entry.category.code} ${entry.category.name}`.toUpperCase()));
+  const expected = schedules.filter((entry) => entry.user.employee_status !== FORMER_EMPLOYEE_STATUS && !nonWorkingCodes.test(`${entry.category.code} ${entry.category.name}`.toUpperCase()));
   const absences = expected.filter((entry) => !entryIds.has(entry.user_id)).map((entry) => ({ id: entry.user.id, name: entry.user.name, schedule: `${entry.start_time || ""}${entry.end_time ? `–${entry.end_time}` : ""}` }));
   const present = Array.from(new Map(entries.map((entry) => [entry.user_id, {
     id: entry.user.id, name: entry.user.name, time: entry.time,
   }])).values());
-  const late = lateRequests.map((request) => ({ id: request.id, name: request.user.name, detail: request.reason || "Ritardo registrato", status: request.status }));
+  const late = expected.flatMap((schedule) => {
+    const entry = entries.find((log) => log.user_id === schedule.user_id);
+    if (!entry) return [];
+    const actualMinutes = attendanceActualMinutes(entry);
+    const policy = scheduledEntryPolicy({ plannedStart: schedule.start_time, plannedEnd: schedule.end_time, locationName: schedule.location?.name });
+    if (policy.plannedMinutes === null || policy.deadlineMinutes === null || actualMinutes <= policy.deadlineMinutes) return [];
+    const actual = `${String(Math.floor(actualMinutes / 60) % 24).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`;
+    const minutes = Math.max(0, actualMinutes - policy.plannedMinutes);
+    return [{ id: entry.id, name: schedule.user.name, planned: schedule.start_time || "—", actual, minutes, detail: `${schedule.start_time || "—"} previsto · ${actual} effettivo · +${minutes} min` }];
+  });
 
   const clientResponses = responses.filter((response) => isClientControlFormName(response.form.name, response.form.category));
   const clientTimeline = clientResponses.map((response) => {
@@ -86,11 +90,19 @@ async function automaticReportData(day: string, locationId: string) {
     const last = workerLogs.at(-1);
     return last?.type === "PAUSA" ? [{ id: worker.id, name: worker.name, since: last.time }] : [];
   });
+  const pauseTimeline = workers.flatMap((worker) => {
+    const workerLogs = logs.filter((log) => log.user_id === worker.id);
+    return workerLogs.flatMap((log, index) => {
+      if (log.type !== "PAUSA") return [];
+      const reentry = workerLogs.slice(index + 1).find((candidate) => candidate.type === "RIENTRO");
+      return [{ id: `${worker.id}-${log.id}`, userId: worker.id, name: worker.name, start: log.time, end: reentry?.time || null }];
+    });
+  });
 
   return {
     generatedAt: new Date().toISOString(), day,
     totals: { expected: expected.length, present: present.length, late: late.length, absent: absences.length, clients: clientTimeline.length },
-    present, late, absences, openPauses, clientTimeline,
+    present, late, absences, openPauses, pauseTimeline, clientTimeline,
   };
 }
 
@@ -201,6 +213,7 @@ export async function POST(request: NextRequest) {
   const { date } = romeDayRange(day);
   const reportData = normalizeShiftReportData(payload.reportData);
   if (action === "SUBMIT" && !reportData.daySummary) return NextResponse.json({ error: "Scrivi il riepilogo della giornata prima dell’invio" }, { status: 400 });
+  if (action === "SUBMIT" && Object.values(reportData.checks).some((value) => value === null)) return NextResponse.json({ error: "Completa tutte le verifiche Sì / No prima dell’invio" }, { status: 400 });
   const existing = await prisma.shiftReport.findUnique({ where: { date_location_id: { date, location_id: locationId } } });
   if (existing && existing.responsible_id !== session.user.id) return NextResponse.json({ error: "Il report di questa sede è già assegnato a un altro Responsabile" }, { status: 409 });
   if (existing && !["DRAFT", "DA_CORREGGERE"].includes(existing.status)) return NextResponse.json({ error: "Il report è già stato inviato e non può essere modificato" }, { status: 409 });
@@ -209,8 +222,8 @@ export async function POST(request: NextRequest) {
     const clients = (automaticData.clientTimeline as Array<{ id: string }>);
     const missingCheck = clients.find((client) => !reportData.clientChecks[client.id]?.status);
     if (missingCheck) return NextResponse.json({ error: "Conferma se è andato tutto bene per ogni cliente" }, { status: 400 });
-    const missingProblemNote = clients.find((client) => reportData.clientChecks[client.id]?.status === "PROBLEM" && !reportData.clientChecks[client.id]?.note);
-    if (missingProblemNote) return NextResponse.json({ error: "Aggiungi una nota per ogni cliente con problemi" }, { status: 400 });
+    const incompleteProblem = clients.find((client) => reportData.clientChecks[client.id]?.status === "PROBLEM" && (!reportData.clientChecks[client.id]?.problem || !reportData.clientChecks[client.id]?.solution));
+    if (incompleteProblem) return NextResponse.json({ error: "Per ogni cliente con problemi indica problema e soluzione adottata" }, { status: 400 });
   }
   const status = action === "SUBMIT" ? "DA_VERIFICARE" : existing?.status === "DA_CORREGGERE" ? "DA_CORREGGERE" : "DRAFT";
   const now = new Date();
@@ -235,6 +248,16 @@ export async function POST(request: NextRequest) {
       message: `${session.user.name} ha inviato il report giornaliero.`, type: "REPORT_TURNO", page: 1,
       action_url: `/shift-reports/admin?date=${day}&locationId=${locationId}`, read: false, created_at: now,
     })));
+    const escalatedClients = Object.values(reportData.clientChecks).filter((check) => check.escalated);
+    if (escalatedClients.length || reportData.notesForLeydi) {
+      const leydiRecipients = await prisma.user.findMany({ where: { active: true, name: { contains: "Leydi", mode: "insensitive" } }, select: { id: true } });
+      await createNotifications(leydiRecipients.map((recipient) => ({
+        id: randomUUID(), user_id: recipient.id, title: "Escalation dal report di turno",
+        message: reportData.notesForLeydi || `${escalatedClients.length} situazione/i cliente richiedono la tua attenzione.`,
+        type: "REPORT_ESCALATION", page: 1,
+        action_url: `/shift-reports/admin?date=${day}&locationId=${locationId}`, read: false, created_at: now,
+      })));
+    }
   }
   return NextResponse.json({ report: saved });
 }

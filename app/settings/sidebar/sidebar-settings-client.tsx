@@ -27,6 +27,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/my-shifts": "I miei turni",
   "/tasks": "Task",
   "/shift-reports": "Report di turno",
+  "/shift-reports/admin": "Registro giornate Admin",
   "/employees": "Dipendenti",
   "/attendance": "Timbrature",
   "/work-hours": "Ore staff",

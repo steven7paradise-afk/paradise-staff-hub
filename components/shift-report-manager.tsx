@@ -13,9 +13,10 @@ type AutomaticData = {
   generatedAt: string;
   totals: { expected: number; present: number; late: number; absent: number; clients: number };
   present: Array<{ id: string; name: string; time: string }>;
-  late: Array<{ id: string; name: string; detail: string; status: string }>;
+  late: Array<{ id: string; name: string; planned: string; actual: string; minutes: number; detail: string }>;
   absences: Array<{ id: string; name: string; schedule: string }>;
   openPauses: Array<{ id: string; name: string; since: string }>;
+  pauseTimeline: Array<{ id: string; userId: string; name: string; start: string; end: string | null }>;
   clientTimeline: ClientTimelineItem[];
 };
 type Report = {
@@ -112,11 +113,15 @@ export function ShiftReportManager() {
     }
   };
 
-  const updateClientCheck = (id: string, patch: Partial<{ status: "OK" | "PROBLEM" | ""; note: string }>) => {
+  const updateClientCheck = (id: string, patch: Partial<ShiftReportData["clientChecks"][string]>) => {
     setForm((current) => {
       const previous = current.clientChecks[id] ?? { status: "" as const, note: "" };
       return { ...current, clientChecks: { ...current.clientChecks, [id]: { ...previous, ...patch } } };
     });
+  };
+
+  const updateCheck = (key: keyof ShiftReportData["checks"], value: boolean) => {
+    setForm((current) => ({ ...current, checks: { ...current.checks, [key]: value } }));
   };
 
   const toggleFinishedProduct = (product: Product) => {
@@ -173,6 +178,7 @@ export function ShiftReportManager() {
         </div>
         {report ? <div className="flex flex-wrap items-center gap-3 border-t border-white/10 px-5 py-3 sm:px-7">
           <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase", statusTone(report.status))}>{shiftReportStatusLabel(report.status)}</span>
+          <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-black uppercase text-white/65">Turno {report.status === "DRAFT" || report.status === "DA_CORREGGERE" ? "attivo" : "chiuso"}</span>
           <span className="text-xs font-bold text-white/55">{report.responsible.name} · {report.location.name}</span>
           {report.approved_by ? <span className="ml-auto text-xs font-bold text-emerald-300">Approvato da {report.approved_by.name} · {dateTimeLabel(report.approved_at)}</span> : null}
         </div> : null}
@@ -191,12 +197,34 @@ export function ShiftReportManager() {
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <FactList title="Presenze" icon={<UserCheck className="size-4" />} items={automatic.present.map((item) => `${item.name} · ${item.time}`)} empty="Nessuna entrata" />
-                <FactList title="Ritardi" icon={<Clock3 className="size-4" />} items={automatic.late.map((item) => item.name)} empty="Nessun ritardo" warning />
+                <FactList title="Ritardi" icon={<Clock3 className="size-4" />} items={automatic.late.map((item) => `${item.name} · ${item.planned} → ${item.actual} · +${item.minutes} min`)} empty="Nessun ritardo" warning />
                 <FactList title="Assenze" icon={<Users className="size-4" />} items={automatic.absences.map((item) => `${item.name}${item.schedule ? ` · ${item.schedule}` : ""}`)} empty="Nessuna assenza" warning />
               </div>
             </section> : null}
 
             {!data?.manager || report ? <>
+              <section className="rounded-[28px] border border-black/5 bg-[#fbfaf7] p-4 shadow-sm sm:p-6">
+                <div className="border-b border-black/8 pb-4"><p className="font-serif text-[11px] font-bold uppercase tracking-[0.24em] text-black/45">Daily standards</p><h2 className="mt-1 font-serif text-2xl font-semibold tracking-tight">Checklist del Responsabile</h2></div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <YesNoControl label="Abbigliamento conforme" value={reportData.checks?.clothingCompliant ?? null} disabled={!editable} onChange={(value) => updateCheck("clothingCompliant", value)} />
+                  <YesNoControl label="Staff ordinato e presentabile" value={reportData.checks?.staffPresentable ?? null} disabled={!editable} onChange={(value) => updateCheck("staffPresentable", value)} />
+                  <YesNoControl label="Planning controllato" value={reportData.checks?.planningChecked ?? null} disabled={!editable} onChange={(value) => updateCheck("planningChecked", value)} />
+                  <YesNoControl label="Salone pulito" value={reportData.checks?.salonClean ?? null} disabled={!editable} onChange={(value) => updateCheck("salonClean", value)} />
+                  <YesNoControl label="Postazioni ordinate" value={reportData.checks?.stationsOrdered ?? null} disabled={!editable} onChange={(value) => updateCheck("stationsOrdered", value)} />
+                  <YesNoControl label="Aree comuni in ordine" value={reportData.checks?.commonAreasOrdered ?? null} disabled={!editable} onChange={(value) => updateCheck("commonAreasOrdered", value)} />
+                  <YesNoControl label="Materiali disponibili" value={reportData.checks?.materialsAvailable ?? null} disabled={!editable} onChange={(value) => updateCheck("materialsAvailable", value)} />
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <TextArea label="Problemi o sovraccarichi nel planning" value={reportData.planningIssues || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, planningIssues: value }))} />
+                  <TextArea label="Modifiche organizzative effettuate" value={reportData.organizationalChanges || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, organizationalChanges: value }))} />
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#d95e9f]">Pause staff</p><h2 className="mt-1 text-xl font-black">Registro della giornata</h2>
+                <div className="mt-4 space-y-2">{automatic?.pauseTimeline?.length ? automatic.pauseTimeline.map((pause) => <div key={pause.id} className="grid gap-2 rounded-2xl border border-black/6 bg-[#fffafd] p-3 sm:grid-cols-[1fr_120px_120px_1.5fr] sm:items-center"><p className="text-xs font-black">{pause.name}</p><p className="text-[10px] font-bold text-black/50">Inizio {pause.start}</p><p className="text-[10px] font-bold text-black/50">Fine {pause.end || "in corso"}</p><input disabled={!editable} value={reportData.pauseNotes?.[pause.userId] || ""} onChange={(event) => setForm((current) => ({ ...current, pauseNotes: { ...current.pauseNotes, [pause.userId]: event.target.value } }))} placeholder="Modifica o nota…" className="h-9 rounded-xl border border-black/8 bg-white px-3 text-[10px] font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" /></div>) : <p className="rounded-2xl border border-dashed border-black/10 py-6 text-center text-xs font-semibold text-black/35">Nessuna pausa registrata.</p>}</div>
+              </section>
+
               <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
                 <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Materiali</p><h2 className="mt-1 text-xl font-black">Prodotti terminati</h2><p className="mt-1 text-xs font-semibold text-black/40">{editable ? "Seleziona soltanto i prodotti finiti durante il turno." : "Prodotti dichiarati terminati nel report."}</p></div></div>
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -223,7 +251,14 @@ export function ShiftReportManager() {
                 <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#fde9f4] text-[#c64f90]"><MessageSquareText className="size-5" /></div><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Timeline clienti</p><h2 className="text-xl font-black">Com’è andata con ogni cliente?</h2></div></div>
                 <div className="mt-5 space-y-3">
                   {automatic?.clientTimeline.length ? automatic.clientTimeline.map((client) => {
-                    const check = reportData.clientChecks?.[client.id] || { status: "", note: "" };
+                    const storedCheck = reportData.clientChecks?.[client.id];
+                    const check = {
+                      status: storedCheck?.status ?? "" as const,
+                      problem: storedCheck?.problem ?? "",
+                      solution: storedCheck?.solution ?? "",
+                      escalated: storedCheck?.escalated === true,
+                      note: storedCheck?.note ?? "",
+                    };
                     return <div key={client.id} className={cn("rounded-2xl border p-3", check.status === "PROBLEM" ? "border-rose-200 bg-rose-50/40" : "border-black/6 bg-[#fffafd]")}>
                       <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-black">{client.client}</p><p className="mt-0.5 text-[10px] font-bold text-black/45">{dateTimeLabel(client.at)}{client.service ? ` · ${client.service}` : ""}{client.shopifyOrder ? ` · Shopify ${client.shopifyOrder}` : ""}</p></div>{client.staff.length ? <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-black/55">{client.staff.join(", ")}</span> : null}</div>
                       {client.notes.length ? <div className="mt-2 rounded-xl border border-[#f1d8e5] bg-white px-3 py-2"><p className="text-[9px] font-black uppercase text-[#b14d82]">Note Shopify / Controllo Cliente</p>{client.notes.map((note, index) => <p key={index} className="mt-1 text-xs font-semibold text-black/65">{note}</p>)}</div> : null}
@@ -231,9 +266,22 @@ export function ShiftReportManager() {
                         <span className="mr-1 text-[10px] font-black uppercase text-black/45">Esito:</span>
                         {(["OK", "PROBLEM"] as const).map((status) => <button key={status} type="button" disabled={!editable} onClick={() => updateClientCheck(client.id, { status })} className={cn("rounded-full border px-3 py-1.5 text-[10px] font-black transition disabled:cursor-default", check.status === status ? status === "OK" ? "border-emerald-500 bg-emerald-500 text-white" : "border-rose-500 bg-rose-500 text-white" : "border-black/10 bg-white text-black/50")}>{status === "OK" ? "Tutto OK" : "Problema"}</button>)}
                       </div>
-                      {(editable || check.note) ? <textarea disabled={!editable} value={check.note} onChange={(event) => updateClientCheck(client.id, { note: event.target.value })} rows={2} placeholder={check.status === "PROBLEM" ? "Descrivi il problema e come è stato gestito…" : "Aggiungi una nota facoltativa…"} className="mt-2 w-full resize-none rounded-xl border border-black/8 bg-white p-2.5 text-xs font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" /> : null}
+                      {check.status === "PROBLEM" || check.problem || check.solution ? <div className="mt-2 grid gap-2 sm:grid-cols-2"><textarea disabled={!editable} value={check.problem} onChange={(event) => updateClientCheck(client.id, { problem: event.target.value })} rows={2} placeholder="Qual è stata la problematica?" className="w-full resize-none rounded-xl border border-rose-200 bg-white p-2.5 text-xs font-semibold outline-none focus:border-rose-400 disabled:bg-transparent" /><textarea disabled={!editable} value={check.solution} onChange={(event) => updateClientCheck(client.id, { solution: event.target.value })} rows={2} placeholder="Soluzione adottata" className="w-full resize-none rounded-xl border border-emerald-200 bg-white p-2.5 text-xs font-semibold outline-none focus:border-emerald-400 disabled:bg-transparent" /></div> : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" disabled={!editable} onClick={() => updateClientCheck(client.id, { escalated: !check.escalated })} className={cn("rounded-full border px-3 py-1.5 text-[9px] font-black uppercase", check.escalated ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/45")}>Escalation a Leydi {check.escalated ? "attiva" : "no"}</button></div>
+                      {(editable || check.note) ? <textarea disabled={!editable} value={check.note} onChange={(event) => updateClientCheck(client.id, { note: event.target.value })} rows={2} placeholder="Nota finale facoltativa…" className="mt-2 w-full resize-none rounded-xl border border-black/8 bg-white p-2.5 text-xs font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" /> : null}
                     </div>;
                   }) : <div className="rounded-2xl border border-dashed border-black/10 py-8 text-center text-sm font-semibold text-black/35">Nessun Controllo Cliente completato in questa giornata.</div>}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-black/5 bg-[#1d1921] p-4 text-white shadow-xl sm:p-6">
+                <p className="font-serif text-[10px] font-bold uppercase tracking-[0.24em] text-[#f49acd]">Closing notes</p><h2 className="mt-1 font-serif text-2xl font-semibold">Recap fine turno</h2>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <TextArea dark label="Problematiche ancora aperte" value={reportData.openProblems || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, openProblems: value }))} />
+                  <TextArea dark label="Situazioni da monitorare" value={reportData.monitorSituations || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, monitorSituations: value }))} />
+                  <TextArea dark label="Task da creare" value={reportData.tasksToCreate || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, tasksToCreate: value }))} />
+                  <TextArea dark label="Note per Leydi" value={reportData.notesForLeydi || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, notesForLeydi: value }))} />
+                  <div className="sm:col-span-2"><TextArea dark label="Lavori complessi e supporto dato allo staff" value={reportData.complexWorkSupport || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, complexWorkSupport: value }))} /></div>
                 </div>
               </section>
             </> : <div className="rounded-[28px] border border-dashed border-black/10 bg-white py-20 text-center"><ShieldCheck className="mx-auto size-9 text-black/15" /><p className="mt-3 font-black">Nessun report inviato per questa sede e data.</p></div>}
@@ -264,4 +312,12 @@ export function ShiftReportManager() {
 
 function FactList({ title, icon, items, empty, warning = false }: { title: string; icon: React.ReactNode; items: string[]; empty: string; warning?: boolean }) {
   return <div className={cn("rounded-2xl border p-3", warning && items.length ? "border-amber-200 bg-amber-50" : "border-black/5 bg-white")}><div className="flex items-center gap-2 text-xs font-black">{icon}{title}</div><div className="mt-2 space-y-1">{items.length ? items.map((item, index) => <p key={`${item}-${index}`} className="text-[10px] font-bold text-black/60">{item}</p>) : <p className="text-[10px] font-semibold text-black/30">{empty}</p>}</div></div>;
+}
+
+function YesNoControl({ label, value, disabled, onChange }: { label: string; value: boolean | null; disabled: boolean; onChange: (value: boolean) => void }) {
+  return <div className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-black/8 bg-white px-3"><p className="text-xs font-semibold text-black/75">{label}</p><div className="flex gap-1">{[{ label: "Sì", value: true }, { label: "No", value: false }].map((choice) => <button key={choice.label} type="button" disabled={disabled} onClick={() => onChange(choice.value)} className={cn("min-h-8 rounded-lg border px-3 text-[10px] font-black uppercase transition disabled:cursor-default", value === choice.value ? choice.value ? "border-black bg-black text-white" : "border-rose-500 bg-rose-500 text-white" : "border-black/10 bg-[#fbfaf7] text-black/35")}>{choice.label}</button>)}</div></div>;
+}
+
+function TextArea({ label, value, disabled, onChange, dark = false }: { label: string; value: string; disabled: boolean; onChange: (value: string) => void; dark?: boolean }) {
+  return <label className="block"><span className={cn("text-[10px] font-black uppercase tracking-[0.12em]", dark ? "text-white/55" : "text-black/55")}>{label}</span><textarea disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} rows={3} placeholder="Nessuna segnalazione" className={cn("mt-2 w-full resize-none rounded-xl border p-3 text-xs font-semibold outline-none disabled:opacity-70", dark ? "border-white/10 bg-white/5 text-white placeholder:text-white/20 focus:border-[#f49acd]" : "border-black/8 bg-white text-black focus:border-black/30")} /></label>;
 }

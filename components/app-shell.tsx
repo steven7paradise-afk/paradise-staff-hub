@@ -39,7 +39,8 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
-  { href: "/shift-reports", label: "Report di turno", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/shift-reports", label: "Report di turno", iconName: "ClipboardCheck", roles: ["RESPONSABILE"], section: "Gestione Staff" },
+  { href: "/shift-reports/admin", label: "Registro giornate", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 
   // Section: Planning & Saloni
@@ -361,11 +362,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     iconName: item.iconName,
     section: item.section,
   }));
-  if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole)) {
-    sidebarItems = sidebarItems.map((item) => item.href === "/shift-reports"
-      ? { ...item, href: "/shift-reports/admin", label: "Registro giornate" }
-      : item);
-  }
   let effectiveSidebarConfig = sidebarConfig;
   if (isFormerEmployee) {
     sidebarItems = sidebarItems.filter((item) => item.href === "/documents");

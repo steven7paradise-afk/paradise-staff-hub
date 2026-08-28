@@ -11,8 +11,25 @@ export type ShiftReportData = {
   clientIssues: string;
   refusedServices: string;
   anomalies: string;
-  clientChecks: Record<string, { status: "OK" | "PROBLEM" | ""; note: string }>;
+  clientChecks: Record<string, { status: "OK" | "PROBLEM" | ""; problem: string; solution: string; escalated: boolean; note: string }>;
   finishedProducts: Array<{ id: string; name: string }>;
+  checks: {
+    clothingCompliant: boolean | null;
+    staffPresentable: boolean | null;
+    planningChecked: boolean | null;
+    salonClean: boolean | null;
+    stationsOrdered: boolean | null;
+    commonAreasOrdered: boolean | null;
+    materialsAvailable: boolean | null;
+  };
+  planningIssues: string;
+  organizationalChanges: string;
+  complexWorkSupport: string;
+  openProblems: string;
+  monitorSituations: string;
+  tasksToCreate: string;
+  notesForLeydi: string;
+  pauseNotes: Record<string, string>;
 };
 
 export const emptyShiftReportData: ShiftReportData = {
@@ -27,6 +44,15 @@ export const emptyShiftReportData: ShiftReportData = {
   anomalies: "",
   clientChecks: {},
   finishedProducts: [],
+  checks: { clothingCompliant: null, staffPresentable: null, planningChecked: null, salonClean: null, stationsOrdered: null, commonAreasOrdered: null, materialsAvailable: null },
+  planningIssues: "",
+  organizationalChanges: "",
+  complexWorkSupport: "",
+  openProblems: "",
+  monitorSituations: "",
+  tasksToCreate: "",
+  notesForLeydi: "",
+  pauseNotes: {},
 };
 
 export function normalizeShiftReportData(value: unknown): ShiftReportData {
@@ -41,7 +67,13 @@ export function normalizeShiftReportData(value: unknown): ShiftReportData {
   const clientChecks = Object.fromEntries(Object.entries(rawClientChecks).slice(0, 250).map(([id, value]) => {
     const check = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
     const status: "OK" | "PROBLEM" | "" = check.status === "OK" || check.status === "PROBLEM" ? check.status : "";
-    return [id.slice(0, 100), { status, note: String(check.note ?? "").trim().slice(0, 2000) }];
+    return [id.slice(0, 100), {
+      status,
+      problem: String(check.problem ?? "").trim().slice(0, 2000),
+      solution: String(check.solution ?? "").trim().slice(0, 2000),
+      escalated: check.escalated === true,
+      note: String(check.note ?? "").trim().slice(0, 2000),
+    }];
   }));
   const finishedProducts = Array.isArray(raw.finishedProducts)
     ? raw.finishedProducts.slice(0, 250).flatMap((value) => {
@@ -52,6 +84,10 @@ export function normalizeShiftReportData(value: unknown): ShiftReportData {
         return id && name ? [{ id, name }] : [];
       })
     : [];
+  const rawChecks = raw.checks && typeof raw.checks === "object" && !Array.isArray(raw.checks) ? raw.checks as Record<string, unknown> : {};
+  const triState = (key: string) => typeof rawChecks[key] === "boolean" ? rawChecks[key] as boolean : null;
+  const rawPauseNotes = raw.pauseNotes && typeof raw.pauseNotes === "object" && !Array.isArray(raw.pauseNotes) ? raw.pauseNotes as Record<string, unknown> : {};
+  const pauseNotes = Object.fromEntries(Object.entries(rawPauseNotes).slice(0, 100).map(([id, note]) => [id.slice(0, 100), String(note ?? "").trim().slice(0, 1000)]));
   return {
     daySummary: text("daySummary"),
     dayRating: rating,
@@ -64,6 +100,20 @@ export function normalizeShiftReportData(value: unknown): ShiftReportData {
     anomalies: text("anomalies"),
     clientChecks,
     finishedProducts,
+    checks: {
+      clothingCompliant: triState("clothingCompliant"), staffPresentable: triState("staffPresentable"),
+      planningChecked: triState("planningChecked"), salonClean: triState("salonClean"),
+      stationsOrdered: triState("stationsOrdered"), commonAreasOrdered: triState("commonAreasOrdered"),
+      materialsAvailable: triState("materialsAvailable"),
+    },
+    planningIssues: text("planningIssues"),
+    organizationalChanges: text("organizationalChanges"),
+    complexWorkSupport: text("complexWorkSupport"),
+    openProblems: text("openProblems"),
+    monitorSituations: text("monitorSituations"),
+    tasksToCreate: text("tasksToCreate"),
+    notesForLeydi: text("notesForLeydi"),
+    pauseNotes,
   };
 }
 

@@ -19,7 +19,8 @@ export const routePermissions: Record<string, Role[]> = {
   "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/shift-reports": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/shift-reports": ["RESPONSABILE"],
+  "/shift-reports/admin": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/work-hours": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -69,7 +70,8 @@ export const routePermissions: Record<string, Role[]> = {
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
-  if (pathname === "/shift-reports") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  if (pathname === "/shift-reports") return ["ZERO", "RESPONSABILE"];
+  if (pathname === "/shift-reports/admin") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
@@ -85,6 +87,7 @@ const legacyAccessRouteMap: Record<string, string> = {
   task: "/tasks",
   "report di turno": "/shift-reports",
   "registro giornate": "/shift-reports",
+  "registro giornate admin": "/shift-reports/admin",
   documenti: "/documents",
   planning: "/schedules",
   schedules: "/schedules",
