@@ -4,6 +4,18 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   typescript: { ignoreBuildErrors: true },
   serverExternalPackages: ["@prisma/client", "prisma", "bcryptjs", "googleapis"],
+  async headers() {
+    return [
+      {
+        source: "/api/admin-assistant",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Headers", value: "Authorization, Content-Type" },
+          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
+        ],
+      },
+    ];
+  },
   // The Docker runner already copies production node_modules in full. Avoid
   // making Next walk the very large generated Google API package again while
   // collecting deployment traces (googleapis is ~200 MB / thousands of files).
