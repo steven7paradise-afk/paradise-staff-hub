@@ -34,8 +34,8 @@ async function normalizeTaskAttachment(attachmentName: string | null, photoUrl: 
 
       try {
         const driveFile = await uploadTaskImageToGoogleDrive(buffer, fileName, mimeType);
-        cleanName = cleanName || driveFile.name;
-        attachmentUrl = driveFile.driveFileUrl || driveFile.webViewLink || driveFile.webContentLink || null;
+        cleanName = cleanName || driveFile.name || fileName;
+        attachmentUrl = driveFile.webViewLink || driveFile.webContentLink || null;
         if (mimeType.startsWith("image/")) {
           cleanPhotoUrl = driveFile.previewUrl || driveFile.webViewLink || null;
         } else {
@@ -72,7 +72,7 @@ async function normalizeCompletionFilesForDb(files: Array<{ name: string; url?: 
     try {
       const driveFile = await uploadTaskImageToGoogleDrive(buffer, fileName, mimeType);
       const isImage = mimeType.startsWith("image/");
-      const driveUrl = driveFile.driveFileUrl || driveFile.webViewLink || driveFile.webContentLink;
+      const driveUrl = driveFile.webViewLink || driveFile.webContentLink || null;
       result.push({
         name: driveFile.name || file.name,
         url: isImage ? driveFile.previewUrl : driveUrl,

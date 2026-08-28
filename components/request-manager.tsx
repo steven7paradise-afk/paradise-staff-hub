@@ -48,6 +48,12 @@ function needsSicknessJustification(request: RequestRecord) {
   return request.type === "MALATTIA" && !request.medicalCode;
 }
 
+function requestFilterForRecord(request: RequestRecord): ActiveRequestFilter {
+  if (needsSicknessJustification(request)) return "JUSTIFY";
+  if (isAutomaticLateRequest(request)) return "LATE";
+  return request.type;
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value));
 }
@@ -205,11 +211,11 @@ function RequestDetailPanel({
   const canEditDecision = (canApprove || canFlag) && isPending;
 
   return (
-    <aside className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm lg:sticky lg:top-5">
-      <div className="flex items-start justify-between gap-4 border-b border-black/5 px-5 py-4">
+    <aside className="overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-sm lg:sticky lg:top-5">
+      <div className="flex items-start justify-between gap-4 border-b border-black/5 px-5 py-5 sm:px-7">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Dettaglio richiesta</p>
-          <h2 className="mt-1 text-xl font-black text-paradise-noir">{request.employee}</h2>
+          <h2 className="mt-1 text-2xl font-black text-paradise-noir sm:text-3xl">{request.employee}</h2>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
             <Badge tone="pink">{requestTypeLabel(request)}</Badge>
@@ -222,7 +228,7 @@ function RequestDetailPanel({
         ) : null}
       </div>
 
-      <div className="space-y-4 px-5 py-4">
+      <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
         <div className="rounded-2xl bg-[#FAF7F9] p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Periodo e orario</p>
           <p className="mt-2 flex items-center gap-2 text-sm font-black text-paradise-noir">
@@ -237,7 +243,7 @@ function RequestDetailPanel({
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-black/5 p-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Inviata il</p>
             <p className="mt-1 text-sm font-black text-paradise-noir">{formatDateTime(request.createdAt)}</p>
@@ -307,7 +313,7 @@ function RequestDetailPanel({
 
         <div className="rounded-2xl border border-black/5 p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">{automaticLate ? "Presa visione" : "Approvazione"}</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Vista da" : "Approvata da"}</p>
               <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? request.approvedBy ?? "Non registrato" : automaticLate ? "Da confermare" : "Non ancora approvata"}</p>
@@ -389,6 +395,7 @@ function DatePickerStable({ label, value, onChange }: { label: string; value: st
 }
 
 export function RequestManager({ initialRequests, role, workers }: { initialRequests: RequestRecord[]; role: Role; workers: WorkerOption[] }) {
+  const newestInitialRequest = [...initialRequests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
   const [requests, setRequests] = useState(initialRequests);
   const [openForm, setOpenForm] = useState(false);
   const today = new Date();
@@ -398,13 +405,12 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [saving, setSaving] = useState<string | null>(null);
   const [medicalDrafts, setMedicalDrafts] = useState<Record<string, string>>({});
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
-  const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>("JUSTIFY");
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>(newestInitialRequest ? requestFilterForRecord(newestInitialRequest) : "JUSTIFY");
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(newestInitialRequest?.id ?? null);
   const employeeView = role === "DIPENDENTE";
   const canApprove = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canCreateForWorkers = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
-  const orderedRequests = [...requests].sort((a, b) => Number(needsSicknessJustification(b)) - Number(needsSicknessJustification(a)));
+  const orderedRequests = [...requests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
   const pendingRequests = requests.filter((request) => request.status === "PENDING").length;
@@ -452,7 +458,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       return;
     }
     const savedRequest = data.leaveRequest ?? data;
-    setRequests((current) => [{
+    const savedRecord: RequestRecord = {
       id: savedRequest.id,
       employee: savedRequest.user.name,
       type: savedRequest.type,
@@ -468,7 +474,10 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       createdAt: savedRequest.created_at,
       approvedBy: savedRequest.approver?.name ?? null,
       approvedAt: savedRequest.approved_at ?? null,
-    }, ...current]);
+    };
+    setRequests((current) => [savedRecord, ...current]);
+    setSelectedRequestId(savedRecord.id);
+    setActiveFilter(requestFilterForRecord(savedRecord));
     setForm({ userId: workers[0]?.id ?? "", type: "FERIE", startDate: todayValue, endDate: todayValue, startTime: "", endTime: "", reason: "", approveNow: false, medicalCode: "" });
     setOpenForm(false);
     if (savedRequest.status === "APPROVED") {
@@ -543,6 +552,10 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       medicalCode: data.leaveRequest.medical_code,
       sicknessUnjustified: data.leaveRequest.sickness_unjustified,
     } : request));
+    if (payload.medicalCode && activeFilter === "JUSTIFY") {
+      setActiveFilter("MALATTIA");
+      setSelectedRequestId(id);
+    }
     setMessage(data.leaveRequest.medical_code ? "Protocollo malattia salvato. Assenza giustificata." : "Malattia contrassegnata come non giustificata.");
   }
 
@@ -661,7 +674,10 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                 <button
                   key={filter.key}
                   type="button"
-                  onClick={() => setActiveFilter(filter.key)}
+                  onClick={() => {
+                    setActiveFilter(filter.key);
+                    setSelectedRequestId(null);
+                  }}
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-[20px] px-4 text-sm font-black transition active:scale-[0.98]",
                     selected ? "bg-paradise-noir text-white shadow-sm" : "bg-neutral-50 text-paradise-noir hover:bg-paradise-nude/50"
@@ -691,126 +707,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       ) : null}
 
       {requests.length > 0 ? (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
-          <section className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/35">
-                  {activeFilter === "JUSTIFY" ? "Priorità" : "Categoria"}
-                </p>
-                <h2 className="mt-1 text-lg font-black text-paradise-noir">
-                  {activeFilter === "JUSTIFY" ? "Malattie da giustificare" : activeSection?.title}
-                </h2>
-                <p className="mt-0.5 text-xs text-black/45">
-                  {activeFilter === "JUSTIFY" ? "Richieste malattia senza protocollo o conferma." : activeSection?.description}
-                </p>
-              </div>
-              <Badge tone={activeFilter === "JUSTIFY" ? "pink" : activeSection?.tone ?? "dark"}>{visibleRequests.length} richieste</Badge>
-            </div>
-
-            {visibleRequests.length === 0 ? (
-              <div className="px-5 py-10 text-center text-sm font-semibold text-black/35">
-                Nessuna richiesta in questa sezione.
-              </div>
-            ) : (
-              <>
-                <div className="hidden grid-cols-[minmax(180px,1.1fr)_140px_minmax(210px,1fr)_120px_170px_86px] gap-3 border-b border-black/5 bg-neutral-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-black/35 xl:grid">
-                  <span>Dipendente</span>
-                  <span>Tipo</span>
-                  <span>Periodo</span>
-                  <span>Stato</span>
-                  <span>Gestione</span>
-                  <span className="text-right">Azioni</span>
-                </div>
-                <div className="divide-y divide-black/5">
-                  {visibleRequests.map((request) => {
-                    const isSelected = selectedRequest?.id === request.id;
-                    const isPending = request.status === "PENDING";
-                    const isApproved = request.status === "APPROVED";
-                    const isRejected = request.status === "REJECTED";
-                    const isFlagged = request.status === "FLAGGED";
-                    const hasSicknessProblem = needsSicknessJustification(request);
-
-                    return (
-                      <button
-                        key={request.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedRequestId(request.id);
-                          setMobileDetailOpen(true);
-                        }}
-                        className={cn(
-                          "grid w-full gap-3 px-5 py-4 text-left transition hover:bg-neutral-50/70 xl:grid-cols-[minmax(180px,1.1fr)_140px_minmax(210px,1fr)_120px_170px_86px] xl:items-center",
-                          isSelected && "bg-paradise-softPink/20 ring-1 ring-inset ring-paradise-pink/40",
-                          isRejected && !isSelected && "bg-rose-50/25",
-                          isFlagged && !isSelected && "bg-amber-50/30"
-                        )}
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className={cn(
-                            "flex size-10 shrink-0 items-center justify-center rounded-2xl border",
-                            isApproved && "border-emerald-500/20 bg-emerald-500/10",
-                            isRejected && "border-rose-500/20 bg-rose-500/10",
-                            isFlagged && "border-paradise-gold/30 bg-paradise-gold/15",
-                            isPending && "border-neutral-200 bg-neutral-50"
-                          )}>
-                            {getRequestIcon(request.type)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? requestTypeLabel(request) : request.employee}</p>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">
-                              {employeeView ? request.employee : requestTypeLabel(request)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone={request.type === "FERIE" ? "gold" : request.type === "RIPOSO" ? "green" : request.type === "ALTRO" ? "dark" : "pink"}>{requestTypeLabel(request)}</Badge>
-                          {hasSicknessProblem ? <Badge tone="pink">Manca protocollo</Badge> : null}
-                        </div>
-
-                        <div className="rounded-2xl border border-black/5 bg-neutral-50 px-4 py-3 xl:border-0 xl:bg-transparent xl:p-0">
-                          <p className="flex items-center gap-2 text-sm font-bold text-paradise-noir">
-                            <Calendar className="size-3.5 text-black/35" />
-                            {formatDate(request.startDate)}
-                            <span className="text-black/25">→</span>
-                            {formatDate(request.endDate)}
-                          </p>
-                          <p className="mt-1 flex items-center gap-2 text-xs font-semibold text-black/50">
-                            <Clock className="size-3.5 text-black/30" />
-                            {request.startTime || request.endTime ? `${request.startTime ?? "--:--"} - ${request.endTime ?? "--:--"}` : "Intera giornata"}
-                            <span className="text-black/30">•</span>
-                            {daysLabel(request)}
-                          </p>
-                        </div>
-
-                        <div>
-                          <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-black text-paradise-noir">
-                            {isApproved ? request.approvedBy ?? "Non registrato" : isPending ? isAutomaticLateRequest(request) ? "Da confermare" : "Da approvare" : requestStatusLabel(request)}
-                          </p>
-                          <p className="mt-0.5 truncate text-[11px] font-semibold text-black/40">
-                            {isApproved ? formatDateTime(request.approvedAt) : request.adminNote?.trim() || request.reason?.trim() || "Nessuna nota"}
-                          </p>
-                        </div>
-
-                        <div className="flex justify-end">
-                          <span className="rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-black text-paradise-noir shadow-sm">
-                            Apri
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </section>
-
-          <div className="hidden lg:block">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.65fr)]">
+          <div className="min-w-0">
             {selectedRequest ? (
               <RequestDetailPanel
                 request={selectedRequest}
@@ -827,31 +725,77 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   setMedicalDrafts((current) => ({ ...current, [id]: "" }));
                 }}
               />
-            ) : null}
+            ) : (
+              <div className="rounded-[28px] border border-black/5 bg-white px-6 py-16 text-center shadow-sm">
+                <Calendar className="mx-auto size-9 text-black/15" />
+                <p className="mt-3 text-sm font-bold text-black/35">Nessuna richiesta in questa categoria.</p>
+              </div>
+            )}
           </div>
-        </div>
-      ) : null}
 
-      {mobileDetailOpen && selectedRequest ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/35 p-3 backdrop-blur-sm lg:hidden">
-          <div className="max-h-[88dvh] w-full overflow-y-auto rounded-[28px] bg-[#F8F3F6]">
-            <RequestDetailPanel
-              request={selectedRequest}
-              canApprove={canApprove}
-              canFlag={role === "RESPONSABILE"}
-              saving={saving}
-              medicalDraft={medicalDrafts[selectedRequest.id] ?? ""}
-              decisionDraft={decisionDrafts[selectedRequest.id] ?? ""}
-              onMedicalDraftChange={(value) => setMedicalDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
-              onDecisionDraftChange={(value) => setDecisionDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
-              onChangeStatus={(id, status) => changeStatus(id, status)}
-              onUpdateSickness={async (id, payload) => {
-                await updateSicknessJustification(id, payload);
-                setMedicalDrafts((current) => ({ ...current, [id]: "" }));
-              }}
-              onClose={() => setMobileDetailOpen(false)}
-            />
-          </div>
+          <section className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm lg:sticky lg:top-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/35">Elenco richieste</p>
+                <h2 className="mt-1 text-lg font-black text-paradise-noir">{activeFilter === "JUSTIFY" ? "Da giustificare" : activeSection?.title}</h2>
+                <p className="mt-0.5 text-xs text-black/45">
+                  Seleziona una voce per mostrarne il dettaglio.
+                </p>
+              </div>
+              <Badge tone={activeFilter === "JUSTIFY" ? "pink" : activeSection?.tone ?? "dark"}>{visibleRequests.length} richieste</Badge>
+            </div>
+
+            {visibleRequests.length === 0 ? (
+              <div className="px-5 py-10 text-center text-sm font-semibold text-black/35">
+                Nessuna richiesta in questa sezione.
+              </div>
+            ) : (
+              <div className="max-h-[72dvh] space-y-2 overflow-y-auto p-3">
+                  {visibleRequests.map((request) => {
+                    const isSelected = selectedRequest?.id === request.id;
+                    const hasSicknessProblem = needsSicknessJustification(request);
+
+                    return (
+                      <button
+                        key={request.id}
+                        type="button"
+                        onClick={() => setSelectedRequestId(request.id)}
+                        className={cn(
+                          "w-full rounded-2xl border p-4 text-left transition hover:border-paradise-pink/30 hover:bg-paradise-softPink/10",
+                          isSelected ? "border-paradise-pink/50 bg-paradise-softPink/20 shadow-sm ring-2 ring-paradise-pink/10" : "border-black/5 bg-white"
+                        )}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-black/5 bg-neutral-50">
+                            {getRequestIcon(request.type)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-black text-paradise-noir">{employeeView ? requestTypeLabel(request) : request.employee}</p>
+                                <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-black/40">{employeeView ? request.employee : requestTypeLabel(request)}</p>
+                              </div>
+                              {!isSelected ? <span className="shrink-0 text-lg text-black/20">›</span> : null}
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
+                              {hasSicknessProblem ? <Badge tone="pink">Manca protocollo</Badge> : null}
+                            </div>
+                            <p className="mt-3 flex items-center gap-2 text-xs font-bold text-black/60">
+                              <Calendar className="size-3.5 text-black/30" />
+                              {formatDate(request.startDate)} <span className="text-black/20">→</span> {formatDate(request.endDate)}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-black/45">
+                              {request.adminNote?.trim() || request.reason?.trim() || "Nessuna nota inserita"}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
+          </section>
         </div>
       ) : null}
     </div>
