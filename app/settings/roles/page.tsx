@@ -49,8 +49,8 @@ export default async function RolesSettingsPage() {
 
   return (
     <AppShell
-      title="Gestione Ruoli & Permessi"
-      subtitle="Matrice permessi di sistema e pannello di controllo dei ruoli dello staff."
+      title="Ruoli e accessi"
+      subtitle="Assegna le persone ai ruoli aziendali e configura le pagine disponibili."
       role={role}
       hideHeader
     >
@@ -66,10 +66,10 @@ export default async function RolesSettingsPage() {
                 Pannello Sicurezza
               </div>
               <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">
-                Ruoli & Accessi
+                Organizzazione & accessi
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58">
-                Visualizza la configurazione delle rotte di sistema e gestisci in tempo reale i ruoli, le mansioni e i saloni del personale Paradise.
+                I ruoli aziendali sono già definiti. Seleziona un ruolo, assegna le persone e configura in modo chiaro le pagine che possono vedere o modificare.
               </p>
             </div>
           </div>

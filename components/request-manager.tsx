@@ -254,18 +254,6 @@ function RequestDetailPanel({
       </div>
 
       <div className="space-y-4 bg-[#fffdfd] px-4 py-5 sm:space-y-5 sm:px-7 sm:py-7">
-        {automaticLate ? (
-          <div className="flex items-center gap-4 rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-50 to-white p-4 sm:p-5">
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600">
-              <UserRound className="size-6" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">Dipendente in ritardo</p>
-              <p className="mt-1 truncate text-xl font-black text-paradise-noir sm:text-2xl">{request.employee}</p>
-            </div>
-          </div>
-        ) : null}
-
         <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
           <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-paradise-noir">
             <Calendar className="size-4 text-paradise-pink" /> Periodo e orario
