@@ -26,6 +26,20 @@ const ASSISTANT_SESSION_KEY = "paradise-admin-assistant-session-v1";
 const ASSISTANT_TIMEOUT_MS = 45_000;
 const initialMessage: Message = { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." };
 
+function formatAssistantText(text: string) {
+  return text.split("\n").map((line, lineIndex, lines) => (
+    <span key={`line-${lineIndex}`}>
+      {line.split(/(\*\*[^*\n]+\*\*)/g).map((part, partIndex) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={`part-${partIndex}`} className="font-black text-current">{part.slice(2, -2)}</strong>;
+        }
+        return <span key={`part-${partIndex}`}>{part.replace(/\*/g, "")}</span>;
+      })}
+      {lineIndex < lines.length - 1 ? <br /> : null}
+    </span>
+  ));
+}
+
 function isStoredMessage(value: unknown): value is Message {
   if (!value || typeof value !== "object") return false;
   const message = value as Record<string, unknown>;
@@ -182,8 +196,8 @@ export function AdminAssistant() {
                 <div className={message.role === "user"
                   ? "max-w-[84%] rounded-[20px] rounded-br-md bg-[#ef93ca] px-4 py-3 text-sm font-medium leading-relaxed text-white"
                   : "max-w-[86%] rounded-[20px] rounded-tl-md bg-black/[0.045] px-4 py-3 text-sm font-medium leading-relaxed text-black/75 dark:bg-white/[0.07] dark:text-white/80"}>
-                  <p className="whitespace-pre-wrap">{message.content}</p>
-                  {message.metrics?.length ? <div className="mt-3 grid grid-cols-2 gap-2">{message.metrics.map((metric) => {
+                  <p className="whitespace-pre-wrap">{formatAssistantText(message.content)}</p>
+                  {message.metrics?.length ? <div className="mt-2 grid grid-cols-2 gap-1.5">{message.metrics.map((metric) => {
                     const toneClass = {
                       green: "border-emerald-200 bg-emerald-50 text-emerald-800",
                       amber: "border-amber-200 bg-amber-50 text-amber-900",
@@ -192,13 +206,13 @@ export function AdminAssistant() {
                       blue: "border-blue-200 bg-blue-50 text-blue-800",
                       slate: "border-slate-200 bg-slate-50 text-slate-700",
                     }[metric.tone];
-                    return <div key={metric.id} className={`rounded-2xl border p-3 ${toneClass}`}>
-                      <p className="text-[9px] font-black uppercase tracking-[0.12em] opacity-65">{metric.label}</p>
-                      <p className="mt-1 break-words text-base font-black leading-tight">{metric.value}</p>
-                      <p className="mt-1 text-[9px] font-bold leading-tight opacity-60">{metric.detail}</p>
+                    return <div key={metric.id} className={`rounded-xl border p-2 ${toneClass}`}>
+                      <p className="text-[8px] font-black uppercase tracking-[0.1em] opacity-65">{metric.label}</p>
+                      <p className="mt-0.5 break-words text-sm font-black leading-tight">{metric.value}</p>
+                      <p className="mt-0.5 text-[8px] font-bold leading-tight opacity-60">{metric.detail}</p>
                     </div>;
                   })}</div> : null}
-                  {message.cards?.length ? <div className="mt-3 grid gap-2">{message.cards.map((card) => {
+                  {message.cards?.length ? <div className="mt-2 grid gap-1.5">{message.cards.map((card) => {
                     const toneClass = {
                       green: "border-emerald-200 bg-emerald-50 text-emerald-800",
                       amber: "border-amber-200 bg-amber-50 text-amber-900",
@@ -208,16 +222,16 @@ export function AdminAssistant() {
                       slate: "border-slate-200 bg-slate-50 text-slate-700",
                     }[card.tone];
                     const dateLabel = card.date ? new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short" }).format(new Date(card.date)) : null;
-                    return <div key={card.id} className={`overflow-hidden rounded-2xl border ${toneClass}`}>
-                      <div className="flex items-center gap-3 p-3">
-                        {card.photoUrl ? <div className="size-12 shrink-0 rounded-2xl bg-cover bg-center shadow-sm ring-2 ring-white" style={{ backgroundImage: `url(${card.photoUrl})` }} aria-label={`Foto di ${card.person}`} /> : <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-white/80 text-base font-black shadow-sm">{card.person.split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</div>}
+                    return <div key={card.id} className={`overflow-hidden rounded-xl border ${toneClass}`}>
+                      <div className="flex items-center gap-2 p-2">
+                        {card.photoUrl ? <div className="size-8 shrink-0 rounded-xl bg-cover bg-center shadow-sm ring-1 ring-white" style={{ backgroundImage: `url(${card.photoUrl})` }} aria-label={`Foto di ${card.person}`} /> : <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-white/80 text-[11px] font-black shadow-sm">{card.person.split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</div>}
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-black">{card.person}</p>
-                          <p className="mt-0.5 truncate text-[10px] font-bold text-black/50">{card.type} · {card.location}</p>
+                          <p className="truncate text-xs font-black text-black">{card.person}</p>
+                          <p className="truncate text-[9px] font-bold text-black/50">{card.type} · {card.location}</p>
                         </div>
-                        <span className="max-w-28 rounded-full bg-white/75 px-2.5 py-1 text-right text-[9px] font-black uppercase leading-tight shadow-sm">{card.status}</span>
+                        <span className="max-w-24 rounded-full bg-white/75 px-2 py-0.5 text-right text-[8px] font-black uppercase leading-tight shadow-sm">{card.status}</span>
                       </div>
-                      {(dateLabel || card.time || card.detail) ? <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-current/10 px-3 py-2 text-[10px] font-bold">
+                      {(dateLabel || card.time || card.detail) ? <div className="flex flex-wrap gap-x-2 gap-y-0.5 border-t border-current/10 px-2 py-1.5 text-[9px] font-bold">
                         {dateLabel ? <span>{dateLabel}</span> : null}
                         {card.time ? <span>Ore {card.time}</span> : null}
                         {card.detail ? <span className="w-full text-black/55">{card.detail}</span> : null}

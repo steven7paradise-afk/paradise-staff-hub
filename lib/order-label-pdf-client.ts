@@ -314,11 +314,11 @@ export async function downloadOrderLabelPdf(order: OrderLabelResponse) {
   doc.save(fileName);
 }
 
-export async function printOrderLabelPdf(order: OrderLabelResponse) {
+export async function printOrderLabelPdf(order: OrderLabelResponse, preparedPrintWindow?: Window | null) {
   // Apriamo subito la finestra per non farla bloccare dal browser. Stampiamo
   // direttamente il PDF 102 x 90: la pagina HTML intermedia aggiungeva
   // intestazioni/piè di pagina e poteva dividere il layout in due fogli.
-  const printWindow = window.open("", "_blank");
+  const printWindow = preparedPrintWindow === undefined ? window.open("", "_blank") : preparedPrintWindow;
 
   try {
     const { doc, fileName } = await buildOrderLabelPdf(order);

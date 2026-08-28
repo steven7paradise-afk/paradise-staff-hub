@@ -967,6 +967,15 @@ export function StaffFormsViewer({
     setSubmitting(true);
     setErrorMsg("");
 
+    // The print tab must be opened during the user's click. Opening it only
+    // after the API request is completed makes Safari and Chrome block it.
+    const shouldPrintOrderLabel = isOrderLabelForm(selectedForm);
+    const orderLabelPrintWindow = shouldPrintOrderLabel ? window.open("", "_blank") : null;
+    if (orderLabelPrintWindow) {
+      orderLabelPrintWindow.document.title = "Preparazione etichetta ordine";
+      orderLabelPrintWindow.document.body.textContent = "Preparazione dell'etichetta in corso…";
+    }
+
     const formData = new FormData();
     formData.append("formId", selectedForm.id);
 
@@ -1018,12 +1027,13 @@ export function StaffFormsViewer({
       if (result.response) {
         setResponses((prev) => [result.response, ...prev]);
         if (isOrderLabelForm(result.response.form ?? selectedForm)) {
-          void import("@/lib/order-label-pdf-client")
-            .then(({ printOrderLabelPdf }) => printOrderLabelPdf(result.response))
-            .catch((labelError) => {
-              console.error("Failed to generate order label:", labelError);
-            });
+          const { printOrderLabelPdf } = await import("@/lib/order-label-pdf-client");
+          await printOrderLabelPdf(result.response, orderLabelPrintWindow);
+        } else {
+          orderLabelPrintWindow?.close();
         }
+      } else {
+        orderLabelPrintWindow?.close();
       }
 
       setSuccess(true);
@@ -1032,6 +1042,7 @@ export function StaffFormsViewer({
         setSuccess(false);
       }, 2000);
     } catch (err) {
+      orderLabelPrintWindow?.close();
       console.error("Submission failed:", err);
       setErrorMsg(err instanceof Error ? err.message : "Si è verificato un errore, riprova.");
     } finally {
