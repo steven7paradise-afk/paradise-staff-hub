@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
   if (action === "SUBMIT") {
     const clients = (automaticData.clientTimeline as Array<{ id: string }>);
     const missingCheck = clients.find((client) => !reportData.clientChecks[client.id]?.status);
-    if (missingCheck) return NextResponse.json({ error: "Conferma se è andato tutto bene per ogni cliente" }, { status: 400 });
+    if (missingCheck) return NextResponse.json({ error: `Conferma l’esito della cliente: ${String((missingCheck as { client?: string }).client || "cliente non indicata")}` }, { status: 400 });
     const incompleteProblem = clients.find((client) => reportData.clientChecks[client.id]?.status === "PROBLEM" && (!reportData.clientChecks[client.id]?.problem || !reportData.clientChecks[client.id]?.solution));
     if (incompleteProblem) return NextResponse.json({ error: "Per ogni cliente con problemi indica problema e soluzione adottata" }, { status: 400 });
   }

@@ -124,6 +124,17 @@ export function ShiftReportManager() {
     setForm((current) => ({ ...current, checks: { ...current.checks, [key]: value } }));
   };
 
+  const markAllClientsOk = () => {
+    if (!automatic?.clientTimeline) return;
+    setForm((current) => ({
+      ...current,
+      clientChecks: Object.fromEntries(automatic.clientTimeline.map((client) => {
+        const existing = current.clientChecks[client.id];
+        return [client.id, existing?.status ? existing : { status: "OK" as const, problem: "", solution: "", escalated: false, note: "" }];
+      })),
+    }));
+  };
+
   const toggleFinishedProduct = (product: Product) => {
     setForm((current) => {
       const selected = current.finishedProducts.some((item) => item.id === product.id);
@@ -222,7 +233,18 @@ export function ShiftReportManager() {
 
               <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#d95e9f]">Pause staff</p><h2 className="mt-1 text-xl font-black">Registro della giornata</h2>
-                <div className="mt-4 space-y-2">{automatic?.pauseTimeline?.length ? automatic.pauseTimeline.map((pause) => <div key={pause.id} className="grid gap-2 rounded-2xl border border-black/6 bg-[#fffafd] p-3 sm:grid-cols-[1fr_120px_120px_1.5fr] sm:items-center"><p className="text-xs font-black">{pause.name}</p><p className="text-[10px] font-bold text-black/50">Inizio {pause.start}</p><p className="text-[10px] font-bold text-black/50">Fine {pause.end || "in corso"}</p><input disabled={!editable} value={reportData.pauseNotes?.[pause.userId] || ""} onChange={(event) => setForm((current) => ({ ...current, pauseNotes: { ...current.pauseNotes, [pause.userId]: event.target.value } }))} placeholder="Modifica o nota…" className="h-9 rounded-xl border border-black/8 bg-white px-3 text-[10px] font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" /></div>) : <p className="rounded-2xl border border-dashed border-black/10 py-6 text-center text-xs font-semibold text-black/35">Nessuna pausa registrata.</p>}</div>
+                <div className="mt-4 space-y-2">{automatic?.pauseTimeline?.length ? automatic.pauseTimeline.map((pause, pauseIndex) => {
+                  const pauseNumber = automatic.pauseTimeline.slice(0, pauseIndex + 1).filter((item) => item.userId === pause.userId).length;
+                  const start = pause.start.slice(0, 5);
+                  const end = pause.end?.slice(0, 5) || null;
+                  const toMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+                  const duration = end ? Math.max(0, toMinutes(end) - toMinutes(start)) : null;
+                  return <div key={pause.id} className="grid gap-3 rounded-2xl border border-black/6 bg-[#fffafd] p-3 sm:grid-cols-[1.2fr_1fr_1.5fr] sm:items-center">
+                    <div><p className="text-xs font-black">{pause.name}</p><span className="mt-1 inline-flex rounded-full bg-[#f6e7ef] px-2 py-0.5 text-[8px] font-black uppercase text-[#a94d7e]">Pausa {pauseNumber}</span></div>
+                    <div><p className="text-xs font-black text-black/70">{start} → {end || "In corso"}</p><p className="mt-0.5 text-[9px] font-bold text-black/35">{duration === null ? "Pausa non conclusa" : `Durata ${duration} minuti`}</p></div>
+                    <input disabled={!editable} value={reportData.pauseNotes?.[pause.id] || reportData.pauseNotes?.[pause.userId] || ""} onChange={(event) => setForm((current) => ({ ...current, pauseNotes: { ...current.pauseNotes, [pause.id]: event.target.value } }))} placeholder="Aggiungi una nota a questa pausa…" className="h-10 rounded-xl border border-black/8 bg-white px-3 text-[10px] font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" />
+                  </div>;
+                }) : <p className="rounded-2xl border border-dashed border-black/10 py-6 text-center text-xs font-semibold text-black/35">Nessuna pausa registrata.</p>}</div>
               </section>
 
               <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
@@ -248,7 +270,8 @@ export function ShiftReportManager() {
               </section>
 
               <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
-                <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#fde9f4] text-[#c64f90]"><MessageSquareText className="size-5" /></div><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Timeline clienti</p><h2 className="text-xl font-black">Com’è andata con ogni cliente?</h2></div></div>
+                <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#fde9f4] text-[#c64f90]"><MessageSquareText className="size-5" /></div><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Timeline clienti</p><h2 className="text-xl font-black">Com’è andata con ogni cliente?</h2></div></div>{editable && automatic?.clientTimeline.length ? <button type="button" onClick={markAllClientsOk} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[10px] font-black text-emerald-700"><CheckCircle2 className="size-4" /> Segna tutte: Tutto OK</button> : null}</div>
+                {automatic?.clientTimeline.length ? <p className="mt-3 text-[10px] font-bold text-black/45">Verificate {automatic.clientTimeline.filter((client) => reportData.clientChecks?.[client.id]?.status).length} di {automatic.clientTimeline.length} clienti.</p> : null}
                 <div className="mt-5 space-y-3">
                   {automatic?.clientTimeline.length ? automatic.clientTimeline.map((client) => {
                     const storedCheck = reportData.clientChecks?.[client.id];
@@ -259,7 +282,7 @@ export function ShiftReportManager() {
                       escalated: storedCheck?.escalated === true,
                       note: storedCheck?.note ?? "",
                     };
-                    return <div key={client.id} className={cn("rounded-2xl border p-3", check.status === "PROBLEM" ? "border-rose-200 bg-rose-50/40" : "border-black/6 bg-[#fffafd]")}>
+                    return <div key={client.id} className={cn("rounded-2xl border p-3", check.status === "PROBLEM" ? "border-rose-200 bg-rose-50/40" : check.status === "OK" ? "border-emerald-100 bg-emerald-50/20" : "border-amber-300 bg-amber-50/50 ring-2 ring-amber-100")}>
                       <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-sm font-black">{client.client}</p><p className="mt-0.5 text-[10px] font-bold text-black/45">{dateTimeLabel(client.at)}{client.service ? ` · ${client.service}` : ""}{client.shopifyOrder ? ` · Shopify ${client.shopifyOrder}` : ""}</p></div>{client.staff.length ? <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-black/55">{client.staff.join(", ")}</span> : null}</div>
                       {client.notes.length ? <div className="mt-2 rounded-xl border border-[#f1d8e5] bg-white px-3 py-2"><p className="text-[9px] font-black uppercase text-[#b14d82]">Note Shopify / Controllo Cliente</p>{client.notes.map((note, index) => <p key={index} className="mt-1 text-xs font-semibold text-black/65">{note}</p>)}</div> : null}
                       <div className="mt-3 flex flex-wrap items-center gap-2">
