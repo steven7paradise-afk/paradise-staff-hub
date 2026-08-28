@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Send, X, Flag, Calendar, Clock, Heart, Coffee, FileText, Sparkles, Plus, AlertCircle, ShieldCheck } from "lucide-react";
+import { Check, Send, X, Flag, Calendar, Clock, Heart, Coffee, FileText, Sparkles, Plus, AlertCircle, ShieldCheck, Eye, BellRing, UserRound, Hourglass } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -211,14 +211,30 @@ function RequestDetailPanel({
   const canEditDecision = (canApprove || canFlag) && isPending;
 
   return (
-    <aside className="overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-sm lg:sticky lg:top-5">
-      <div className="flex items-start justify-between gap-4 border-b border-black/5 px-5 py-5 sm:px-7">
+    <aside className="overflow-hidden rounded-[30px] border border-paradise-pink/20 bg-white shadow-[0_24px_70px_rgba(92,44,67,0.10)] lg:sticky lg:top-5">
+      <div className="relative flex items-start justify-between gap-4 overflow-hidden border-b border-paradise-pink/15 bg-gradient-to-br from-white via-[#fffafd] to-paradise-softPink/45 px-5 py-6 sm:px-8 sm:py-8">
+        <div className="pointer-events-none absolute -right-10 -top-14 size-40 rounded-full bg-paradise-pink/10 blur-2xl" />
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Dettaglio richiesta</p>
-          <h2 className="mt-1 text-2xl font-black text-paradise-noir sm:text-3xl">{request.employee}</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
-            <Badge tone="pink">{requestTypeLabel(request)}</Badge>
+          <h2 className="mt-2 text-2xl font-black leading-tight text-paradise-noir sm:text-4xl">
+            Ciao <span className="text-paradise-pink">{request.employee}</span>,
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm font-medium text-black/60 sm:text-base">
+            {automaticLate ? "ti informiamo che questa comunicazione è stata registrata." : "qui trovi tutti i dettagli della tua richiesta."}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className={cn(
+              "inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-black sm:text-sm",
+              request.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+              request.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-700",
+              request.status === "REJECTED" && "border-rose-200 bg-rose-50 text-rose-700",
+              request.status === "FLAGGED" && "border-orange-200 bg-orange-50 text-orange-700",
+            )}>
+              <Eye className="size-4" /> {requestStatusLabel(request)}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-paradise-pink/20 bg-paradise-pink/10 px-3.5 py-2 text-xs font-black text-paradise-pink sm:text-sm">
+              <Clock className="size-4" /> {requestTypeLabel(request)}
+            </span>
           </div>
         </div>
         {onClose ? (
@@ -228,15 +244,17 @@ function RequestDetailPanel({
         ) : null}
       </div>
 
-      <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
-        <div className="rounded-2xl bg-[#FAF7F9] p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Periodo e orario</p>
-          <p className="mt-2 flex items-center gap-2 text-sm font-black text-paradise-noir">
-            <Calendar className="size-4 text-black/35" />
+      <div className="space-y-4 bg-[#fffdfd] px-4 py-5 sm:space-y-5 sm:px-7 sm:py-7">
+        <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
+          <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-paradise-noir">
+            <Calendar className="size-4 text-paradise-pink" /> Periodo e orario
+          </p>
+          <p className="mt-4 flex flex-wrap items-center gap-2 text-sm font-black text-paradise-noir sm:text-lg">
+            <Calendar className="size-5 text-paradise-pink" />
             {formatDate(request.startDate)} <span className="text-black/25">→</span> {formatDate(request.endDate)}
           </p>
-          <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-black/55">
-            <Clock className="size-4 text-black/30" />
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-black/60 sm:text-base">
+            <Clock className="size-5 text-paradise-pink" />
             {request.startTime || request.endTime ? `${request.startTime ?? "--:--"} - ${request.endTime ?? "--:--"}` : "Intera giornata"}
             <span className="text-black/30">•</span>
             {daysLabel(request)}
@@ -244,12 +262,12 @@ function RequestDetailPanel({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-black/5 p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Inviata il</p>
+          <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4">
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><Send className="size-4 text-paradise-pink" /> Inviata il</p>
             <p className="mt-1 text-sm font-black text-paradise-noir">{formatDateTime(request.createdAt)}</p>
           </div>
-          <div className="rounded-2xl border border-black/5 p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Stato richiesta</p>
+          <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4">
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><Eye className="size-4 text-paradise-pink" /> Stato richiesta</p>
             <p className="mt-1 text-sm font-black text-paradise-noir">{requestStatusLabel(request)}</p>
           </div>
         </div>
@@ -298,21 +316,21 @@ function RequestDetailPanel({
         ) : null}
 
         <div className="grid gap-3">
-          <div className="rounded-2xl border border-black/5 bg-white p-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Motivo lavoratore</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65">{workerNote}</p>
+          <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><Hourglass className="size-4 text-paradise-pink" /> Motivo lavoratore</p>
+            <p className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65 sm:text-base">{workerNote}</p>
           </div>
           <div className={cn(
-            "rounded-2xl border p-3",
-            request.adminNote ? "border-paradise-pink/30 bg-paradise-pink/10" : "border-black/5 bg-neutral-50"
+            "rounded-2xl border p-4 sm:p-5",
+            request.adminNote ? "border-paradise-pink/30 bg-gradient-to-r from-paradise-pink/10 to-paradise-softPink/30" : "border-paradise-pink/10 bg-neutral-50"
           )}>
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">{automaticLate ? "Comunicazione amministrazione" : "Motivo approvazione / nota admin"}</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65">{adminNote}</p>
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><FileText className="size-4 text-paradise-pink" /> {automaticLate ? "Comunicazione amministrazione" : "Motivo approvazione / nota admin"}</p>
+            <p className="mt-3 whitespace-pre-wrap rounded-xl border border-paradise-pink/15 bg-white/65 px-3 py-2.5 text-sm font-semibold leading-6 text-black/65 sm:text-base">{adminNote}</p>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-black/5 p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">{automaticLate ? "Presa visione" : "Approvazione"}</p>
+        <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
+          <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><UserRound className="size-4 text-paradise-pink" /> {automaticLate ? "Presa visione" : "Approvazione"}</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Vista da" : "Approvata da"}</p>
@@ -326,21 +344,32 @@ function RequestDetailPanel({
         </div>
 
         {canEditDecision ? (
-          <div className="rounded-2xl border border-paradise-pink/20 bg-paradise-softPink/20 p-3">
+          <div className="rounded-2xl border border-paradise-pink/25 bg-gradient-to-br from-white to-paradise-softPink/35 p-4 sm:p-5">
+            <div className="mb-4 flex items-start gap-3">
+              <span className="grid size-12 shrink-0 place-items-center rounded-full bg-paradise-pink/15 text-paradise-pink">
+                <BellRing className="size-6" />
+              </span>
+              <div>
+                <p className="text-base font-black uppercase tracking-wide text-paradise-noir">{automaticLate ? "Presa visione" : "Gestione richiesta"}</p>
+                <p className="mt-1 text-sm font-medium leading-5 text-black/55">
+                  {automaticLate ? "Conferma di aver letto questa comunicazione e, se serve, lascia una risposta." : "Valuta la richiesta e comunica la decisione al dipendente."}
+                </p>
+              </div>
+            </div>
             <DecisionNoteField value={decisionDraft} onChange={onDecisionDraftChange} automaticLate={automaticLate} />
             {canApprove ? (
               <div className={cn("mt-3 grid gap-2", !automaticLate && "sm:grid-cols-2")}>
                 <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "APPROVED")}
-                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 px-4 text-xs font-black text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-paradise-pink to-[#ef4f91] px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(236,72,140,0.24)] transition hover:brightness-95 disabled:opacity-50 sm:text-sm"
                 >
                   <Check className="size-3.5" /> {automaticLate ? "Conferma presa visione" : "Approva"}
                 </button>
                 {!automaticLate ? <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "REJECTED")}
-                  className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-4 text-xs font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-paradise-pink/25 bg-white px-4 text-xs font-black text-paradise-pink transition hover:bg-paradise-softPink/30 disabled:opacity-50 sm:text-sm"
                 >
                   <X className="size-3.5" /> Rifiuta
                 </button> : null}
@@ -350,13 +379,24 @@ function RequestDetailPanel({
               <button
                 disabled={saving === request.id}
                 onClick={() => onChangeStatus(request.id, "FLAGGED")}
-                className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-paradise-gold/30 bg-paradise-gold/20 text-xs font-black text-amber-800 transition hover:bg-paradise-gold/30 disabled:opacity-50"
+                className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-paradise-gold/30 bg-paradise-gold/20 text-xs font-black text-amber-800 transition hover:bg-paradise-gold/30 disabled:opacity-50 sm:text-sm"
               >
                 <Flag className="size-3.5" /> Segnala ad Admin
               </button>
             ) : null}
           </div>
         ) : null}
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-paradise-pink/10 bg-gradient-to-r from-paradise-softPink/25 to-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-center gap-3">
+            <Heart className="size-5 shrink-0 text-paradise-pink" />
+            <div>
+              <p className="text-sm font-semibold text-black/65">Grazie per la collaborazione.</p>
+              <p className="text-xs font-black text-paradise-noir">Insieme manteniamo un ambiente di lavoro organizzato e puntuale.</p>
+            </div>
+          </div>
+          <p className="shrink-0 text-sm font-black tracking-[0.28em] text-paradise-noir">PARADISE</p>
+        </div>
       </div>
     </aside>
   );
