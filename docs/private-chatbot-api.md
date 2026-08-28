@@ -10,27 +10,31 @@ Il chatbot esterno può interrogare Paradise Assistant tramite lo stesso motore 
 
 Impostare sul server:
 
-- `CHATBOT_INTERNAL_API_KEY`: segreto lungo e casuale condiviso esclusivamente con il chatbot privato.
+- `ADMIN_API_KEY`: Bearer token condiviso esclusivamente con il frontend autorizzato.
 - `CHATBOT_SERVICE_USER_ID`: ID di un account Paradise attivo con ruolo `ZERO`, `SUPER_ADMIN` o `ADMIN`, usato per applicare i permessi e identificare le richieste.
-- `OPENAI_API_KEY`: necessaria soltanto se il sistema esterno invia messaggi naturali a Paradise Assistant. Non serve quando l'assistente chiama direttamente gli strumenti dati.
+- `OPENAI_API_KEY`: necessaria per processare richieste naturali nel formato `message`/`history`. Non serve quando l'assistente chiama direttamente gli strumenti dati.
 
 La richiesta deve includere uno dei seguenti header:
 
 ```http
-Authorization: Bearer <CHATBOT_INTERNAL_API_KEY>
+Authorization: Bearer <ADMIN_API_KEY>
 ```
 
-oppure:
+## Ping e CORS
 
-```http
-X-API-Key: <CHATBOT_INTERNAL_API_KEY>
+`GET /api/admin-assistant` con Bearer valido risponde:
+
+```json
+{ "status": "ok", "service": "admin-assistant" }
 ```
+
+`OPTIONS /api/admin-assistant` risponde immediatamente `200` con gli header CORS richiesti. Il catalogo avanzato resta disponibile con `GET /api/admin-assistant?catalog=1`.
 
 ## Richiesta
 
 ### Chiamata diretta consigliata
 
-Un assistente già esistente dovrebbe leggere il catalogo con `GET /api/admin-assistant` e chiamare lo strumento necessario:
+Un assistente già esistente dovrebbe leggere il catalogo con `GET /api/admin-assistant?catalog=1` e chiamare lo strumento necessario:
 
 ```json
 {
@@ -42,12 +46,14 @@ Un assistente già esistente dovrebbe leggere il catalogo con `GET /api/admin-as
 
 La risposta contiene i dati verificati nel campo `data`. In questa modalità non viene usato un secondo modello AI.
 
-### Domanda naturale opzionale
+### Richiesta dal browser
 
 ```json
 {
-  "messages": [
-    { "role": "user", "content": "Quali task sono scadute?" }
+  "message": "Quali task sono scadute?",
+  "history": [
+    { "role": "user", "content": "Mostrami Steven" },
+    { "role": "assistant", "content": "Ho trovato la scheda di Steven." }
   ]
 }
 ```
@@ -57,15 +63,10 @@ Sono accettati al massimo gli ultimi 10 messaggi, con un massimo di 2.000 caratt
 ## Risposta
 
 ```json
-{
-  "answer": "...",
-  "links": [],
-  "navigation": null,
-  "pendingAction": null,
-  "cards": [],
-  "metrics": []
-}
+{ "response": "..." }
 ```
+
+Il formato interno storico `messages` resta disponibile per l'interfaccia amministrativa già presente nell'applicazione.
 
 ## Aree consultabili
 
@@ -120,7 +121,7 @@ Il token scade dopo 10 minuti e non può essere riutilizzato.
 
 ```bash
 curl https://staff-paradise.tech/api/admin-assistant \
-  -H "Authorization: Bearer $CHATBOT_INTERNAL_API_KEY" \
+  -H "Authorization: Bearer $ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"Chi è in pausa adesso?"}]}'
+  -d '{"message":"Chi è in pausa adesso?","history":[]}'
 ```

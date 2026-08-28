@@ -2,7 +2,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { assistantApiKeyFromHeaders, assistantToolsForAccess, safeSecretMatches } from "@/lib/admin-assistant-bridge";
+import { assistantToolsForAccess, safeSecretMatches } from "@/lib/admin-assistant-bridge";
 import { buildAssistantDateContext, formatRomeDateTime, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
 import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, taskChecklistProgress, verifiedClientAppointmentStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
@@ -104,39 +104,62 @@ type AssistantAccess = {
   privateChatbot: boolean;
 };
 
+const ASSISTANT_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+} as const;
+
+function withAssistantCors(response: NextResponse) {
+  for (const [name, value] of Object.entries(ASSISTANT_CORS_HEADERS)) response.headers.set(name, value);
+  return response;
+}
+
+function bearerToken(request: NextRequest) {
+  return request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() || "";
+}
+
+function hasValidAdminApiKey(request: NextRequest) {
+  return safeSecretMatches(bearerToken(request), process.env.ADMIN_API_KEY?.trim() || "");
+}
+
 async function authorizeAssistantRequest(request: NextRequest): Promise<AssistantAccess | NextResponse> {
+  const receivedKey = bearerToken(request);
+  if (receivedKey) {
+    const configuredKey = process.env.ADMIN_API_KEY?.trim() || "";
+    if (!configuredKey) {
+      return NextResponse.json(
+        { error: "ADMIN_API_KEY non configurata sul server." },
+        { status: 503 },
+      );
+    }
+    if (!safeSecretMatches(receivedKey, configuredKey)) {
+      return NextResponse.json({ error: "Chiave chatbot non valida." }, { status: 401 });
+    }
+
+    const configuredServiceUserId = process.env.CHATBOT_SERVICE_USER_ID?.trim() || "";
+    const serviceUser = await prisma.user.findFirst({
+      where: configuredServiceUserId
+        ? { id: configuredServiceUserId }
+        : { active: true, role: "ZERO" },
+      select: { id: true, role: true, active: true },
+      orderBy: { created_at: "asc" },
+    });
+    if (!serviceUser?.active || !ADMIN_ROLES.has(serviceUser.role)) {
+      return NextResponse.json(
+        { error: "Account di servizio chatbot non valido o non autorizzato." },
+        { status: 403 },
+      );
+    }
+
+    return { actorId: serviceUser.id, actorRole: serviceUser.role, privateChatbot: true };
+  }
+
   const session = await auth();
   if (session?.user?.id && ADMIN_ROLES.has(session.user.role)) {
     return { actorId: session.user.id, actorRole: session.user.role, privateChatbot: false };
   }
-
-  const receivedKey = assistantApiKeyFromHeaders(request.headers);
-  if (!receivedKey) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
-
-  const configuredKey = process.env.CHATBOT_INTERNAL_API_KEY?.trim() || "";
-  const serviceUserId = process.env.CHATBOT_SERVICE_USER_ID?.trim() || "";
-  if (!configuredKey || !serviceUserId) {
-    return NextResponse.json(
-      { error: "Collegamento chatbot privato non configurato sul server." },
-      { status: 503 },
-    );
-  }
-  if (!safeSecretMatches(receivedKey, configuredKey)) {
-    return NextResponse.json({ error: "Chiave chatbot non valida." }, { status: 401 });
-  }
-
-  const serviceUser = await prisma.user.findUnique({
-    where: { id: serviceUserId },
-    select: { id: true, role: true, active: true },
-  });
-  if (!serviceUser?.active || !ADMIN_ROLES.has(serviceUser.role)) {
-    return NextResponse.json(
-      { error: "Account di servizio chatbot non valido o non autorizzato." },
-      { status: 403 },
-    );
-  }
-
-  return { actorId: serviceUser.id, actorRole: serviceUser.role, privateChatbot: true };
+  return NextResponse.json({ error: "Bearer token mancante o non valido." }, { status: 401 });
 }
 
 const tools = [
@@ -2479,7 +2502,13 @@ async function createResponse(body: Record<string, unknown>, apiKey: string) {
   return payload;
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
+  if (!hasValidAdminApiKey(request)) {
+    return NextResponse.json({ error: "Bearer token mancante o non valido." }, { status: 401 });
+  }
+  if (request.nextUrl.searchParams.get("catalog") !== "1") {
+    return NextResponse.json({ status: "ok", service: "admin-assistant" });
+  }
   const access = await authorizeAssistantRequest(request);
   if (access instanceof NextResponse) return access;
   const availableTools = assistantToolsForAccess(tools, access.privateChatbot);
@@ -2501,11 +2530,13 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const access = await authorizeAssistantRequest(request);
   if (access instanceof NextResponse) return access;
 
   const payload = await request.json().catch(() => null) as {
+    message?: string;
+    history?: ChatMessage[];
     messages?: ChatMessage[];
     tool?: string;
     arguments?: Record<string, unknown>;
@@ -2576,8 +2607,13 @@ export async function POST(request: NextRequest) {
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return NextResponse.json({ error: "OPENAI_API_KEY non configurata sul server." }, { status: 503 });
-  const messages = Array.isArray(payload?.messages)
+  const browserHistory = Array.isArray(payload?.history) ? payload.history : [];
+  const browserMessage = typeof payload?.message === "string" ? payload.message.trim() : "";
+  const incomingMessages = Array.isArray(payload?.messages)
     ? payload.messages
+    : [...browserHistory, ...(browserMessage ? [{ role: "user" as const, content: browserMessage }] : [])];
+  const messages = Array.isArray(incomingMessages)
+    ? incomingMessages
         .filter((message): message is ChatMessage => Boolean(message) && ["user", "assistant"].includes(message.role) && typeof message.content === "string")
         .slice(-MAX_HISTORY)
         .map((message) => ({ role: message.role, content: message.content.slice(0, MAX_MESSAGE_LENGTH) }))
@@ -2705,4 +2741,30 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
     const message = error instanceof Error ? error.message : "Il servizio AI non è disponibile in questo momento.";
     return NextResponse.json({ error: message }, { status: 502 });
   }
+}
+
+export function OPTIONS() {
+  return withAssistantCors(new NextResponse(null, { status: 200 }));
+}
+
+export async function GET(request: NextRequest) {
+  return withAssistantCors(await handleGet(request));
+}
+
+export async function POST(request: NextRequest) {
+  const requestBody = await request.clone().json().catch(() => null) as { message?: unknown } | null;
+  const browserFormat = typeof requestBody?.message === "string";
+  const result = await handlePost(request);
+
+  if (!browserFormat) return withAssistantCors(result);
+
+  const resultBody = await result.clone().json().catch(() => null) as { answer?: unknown; error?: unknown } | null;
+  const responseText = typeof resultBody?.answer === "string"
+    ? resultBody.answer
+    : typeof resultBody?.error === "string"
+      ? resultBody.error
+      : result.ok
+        ? "Operazione completata."
+        : "Assistente non disponibile.";
+  return withAssistantCors(NextResponse.json({ response: responseText }, { status: result.status }));
 }
