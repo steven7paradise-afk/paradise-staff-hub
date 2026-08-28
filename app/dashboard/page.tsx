@@ -12,6 +12,7 @@ import { deriveAttendanceState } from "@/lib/attendance-state";
 import { ensureTomorrowRestNotifications } from "@/lib/rest-notifications";
 import { attendanceActualMinutes, compareScheduledClock, expectedShiftEndTime, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
 import { ensureAutomaticLateRequests, isAutomaticLateReason } from "@/lib/automatic-late-requests";
+import { canViewManagementDashboard } from "@/lib/dashboard-access";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -135,18 +136,14 @@ export default async function DashboardPage() {
 
   await safe(ensureTomorrowRestNotifications(), { created: 0, deferred: true });
 
-  const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
-  if (managementRoles.has(role)) {
+  if (canViewManagementDashboard(role)) {
     if (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)) {
       await safe(ensureAutomaticLateRequests(statusToday), { created: 0, updated: 0, removed: 0, lateRequests: [] });
     }
-    const isResponsible = role === "RESPONSABILE";
-    const scopedLocationId = isResponsible ? currentUser.sede_id : null;
-    const userScope = isResponsible
-      ? { sede_id: scopedLocationId || "__RESPONSABILE_WITHOUT_LOCATION__" }
-      : {};
-    const locationScope = scopedLocationId ? { location_id: scopedLocationId } : {};
-    const responseLocationScope = scopedLocationId ? { user_location_id: scopedLocationId } : {};
+    const scopedLocationId: string | null = null;
+    const userScope = {};
+    const locationScope = {};
+    const responseLocationScope = {};
     const yesterdayStart = new Date(statusToday);
     yesterdayStart.setUTCDate(yesterdayStart.getUTCDate() - 1);
     const todayInstantStart = romeInstantStart(statusToday);
