@@ -39,6 +39,7 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/dashboard": { name: "Dashboard", description: "Bacheca principale, avvisi e riepilogo operativo.", group: "Base" },
   "/my-shifts": { name: "I miei turni", description: "Turni personali e orari assegnati.", group: "Base" },
   "/tasks": { name: "Task", description: "Compiti assegnati, commenti, foto e file.", group: "Base" },
+  "/shift-reports": { name: "Report di turno", description: "Report giornalieri, timeline clienti e approvazione Store Manager.", group: "Gestione Staff" },
   "/notifications": { name: "Comunicazioni", description: "Notifiche e messaggi interni.", group: "Base" },
   "/profile": { name: "Profilo", description: "Dati personali, foto, password e impostazioni account.", group: "Base" },
   "/schedules": { name: "Planning", description: "Turnistica mensile dei saloni.", group: "Planning & Saloni" },

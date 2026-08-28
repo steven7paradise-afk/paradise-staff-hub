@@ -19,6 +19,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/shift-reports": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/work-hours": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -68,6 +69,7 @@ export const routePermissions: Record<string, Role[]> = {
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
+  if (pathname === "/shift-reports") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
@@ -81,6 +83,8 @@ const legacyAccessRouteMap: Record<string, string> = {
   "i miei turni": "/my-shifts",
   turni: "/my-shifts",
   task: "/tasks",
+  "report di turno": "/shift-reports",
+  "registro giornate": "/shift-reports",
   documenti: "/documents",
   planning: "/schedules",
   schedules: "/schedules",
