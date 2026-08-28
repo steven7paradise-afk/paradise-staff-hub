@@ -48,5 +48,7 @@ export const proxy = auth((request) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|favicon.png|logo.png|icon-192.png|icon-512.png|login-banner.jpg|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // The external assistant performs a browser CORS preflight without a session.
+  // Let its route validate the Bearer token directly, without the Auth.js proxy.
+  matcher: ["/((?!api/admin-assistant(?:/|$)|_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|favicon.png|logo.png|icon-192.png|icon-512.png|login-banner.jpg|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };
