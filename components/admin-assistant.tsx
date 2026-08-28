@@ -23,6 +23,7 @@ type Message = { role: "user" | "assistant"; content: string; links?: Array<{ pa
 
 const starters = ["Chi è in pausa?", "Come stanno andando le task?", "Cosa posso chiederti?", "Cosa ricordi?"];
 const ASSISTANT_SESSION_KEY = "paradise-admin-assistant-session-v1";
+const ASSISTANT_TIMEOUT_MS = 45_000;
 const initialMessage: Message = { role: "assistant", content: "Ciao, sono Paradise Assistant. Posso controllare presenze, pause, task e richieste oppure preparare una bozza di comunicazione." };
 
 function isStoredMessage(value: unknown): value is Message {
@@ -70,6 +71,26 @@ export function AdminAssistant() {
     if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, open]);
 
+  async function requestAssistant(body: Record<string, unknown>) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), ASSISTANT_TIMEOUT_MS);
+    try {
+      return await fetch("/api/admin-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("La risposta sta impiegando troppo tempo. Riprova con una domanda più specifica.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
   async function ask(text: string) {
     const question = text.trim();
     if (!question || loading) return;
@@ -86,11 +107,7 @@ export function AdminAssistant() {
     setInput("");
     setLoading(true);
     try {
-      const response = await fetch("/api/admin-assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages.map(({ role, content }) => ({ role, content })) }),
-      });
+      const response = await requestAssistant({ messages: nextMessages.map(({ role, content }) => ({ role, content })) });
       const payload = await response.json() as {
         answer?: string;
         error?: string;
@@ -124,11 +141,7 @@ export function AdminAssistant() {
     if (actionLoading) return;
     setActionLoading(action.token);
     try {
-      const response = await fetch("/api/admin-assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mode === "confirm" ? { confirmActionToken: action.token } : { cancelActionToken: action.token }),
-      });
+      const response = await requestAssistant(mode === "confirm" ? { confirmActionToken: action.token } : { cancelActionToken: action.token });
       const payload = await response.json() as { answer?: string; error?: string; links?: Array<{ path: string; label: string }> };
       if (!response.ok) throw new Error(payload.error || "Operazione non completata.");
       setMessages((current) => [

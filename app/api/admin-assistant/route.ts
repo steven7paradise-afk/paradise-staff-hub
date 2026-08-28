@@ -6,6 +6,7 @@ import { assistantToolsForAccess, safeSecretMatches } from "@/lib/admin-assistan
 import { buildAssistantDateContext, formatRomeDateTime, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
 import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, taskChecklistProgress, verifiedClientAppointmentStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
+import { compareScheduledClock } from "@/lib/scheduled-attendance";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
@@ -17,6 +18,7 @@ const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 const MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-5.4-mini";
 const MAX_HISTORY = 10;
 const MAX_MESSAGE_LENGTH = 2_000;
+const OPENAI_TIMEOUT_MS = 35_000;
 
 const PRIVATE_CHATBOT_AREAS = [
   "personale",
@@ -223,14 +225,14 @@ const tools = [
   {
     type: "function",
     name: "get_team_status",
-    description: "Legge lo stato attuale odierno del personale. Se viene chiesto chi è in pausa, assente, in turno o uscito, imposta il filtro corrispondente e non richiedere l'elenco completo.",
+    description: "Legge lo stato attuale odierno del personale. ASSENTE significa previsto nel planning, oltre l'orario limite, senza timbratura e senza assenza approvata; NON_ENTRATO significa previsto ma non ancora entrato. Usa il filtro preciso richiesto.",
     strict: true,
     parameters: {
       type: "object",
       properties: {
         status: {
           type: ["string", "null"],
-          enum: ["IN_TURNO", "IN_PAUSA", "USCITO", "NON_ENTRATO", null],
+          enum: ["IN_TURNO", "IN_PAUSA", "USCITO", "NON_ENTRATO", "ASSENTE", null],
           description: "Stato preciso richiesto; null soltanto quando serve davvero il riepilogo completo del personale.",
         },
       },
@@ -784,19 +786,57 @@ async function getTeamStatus(scope: TeamStatusScope | null) {
         select: { type: true, timestamp: true, time: true },
         orderBy: { timestamp: "asc" },
       },
+      schedule_entries: {
+        where: { date: { gte: start, lt: end } },
+        select: {
+          start_time: true,
+          end_time: true,
+          location: { select: { name: true } },
+          category: { select: { name: true, code: true, start_time: true, end_time: true } },
+        },
+        take: 1,
+      },
+      leave_requests: {
+        where: { status: "APPROVED", start_date: { lt: end }, end_date: { gte: start } },
+        select: { id: true },
+        take: 1,
+      },
     },
     orderBy: { name: "asc" },
   });
 
   const people = workers.map((worker) => {
     const state = deriveAttendanceState(worker.attendance_logs);
+    const shift = worker.schedule_entries[0];
+    const plannedStart = shift?.start_time ?? shift?.category.start_time ?? null;
+    const plannedEnd = shift?.end_time ?? shift?.category.end_time ?? null;
+    const schedulePolicy = shift ? compareScheduledClock({
+      plannedStart,
+      plannedEnd,
+      locationName: shift.location?.name || worker.location?.name,
+      categoryName: shift.category.name,
+      categoryCode: shift.category.code,
+      hasClockEntry: worker.attendance_logs.some((log) => log.type === "ENTRATA"),
+      hasApprovedLeave: worker.leave_requests.length > 0,
+    }) : null;
+    const status = state.status === "IN"
+      ? "IN_TURNO"
+      : state.status === "BREAK"
+        ? "IN_PAUSA"
+        : state.lastExit
+          ? "USCITO"
+          : schedulePolicy?.absent
+            ? "ASSENTE"
+            : shift && !schedulePolicy?.rest && !schedulePolicy?.closed && worker.leave_requests.length === 0
+              ? "NON_ENTRATO"
+              : "NON_PREVISTO";
     return {
       name: worker.name,
       photoUrl: worker.photo_url,
       role: worker.mansione || "Non specificato",
       location: worker.location?.name || "Nessuna sede",
-      status: state.status === "IN" ? "IN_TURNO" : state.status === "BREAK" ? "IN_PAUSA" : state.lastExit ? "USCITO" : "NON_ENTRATO",
-      since: state.lastValidLog?.time || null,
+      status,
+      since: state.lastValidLog?.time || plannedStart,
     };
   });
 
@@ -810,6 +850,7 @@ async function getTeamStatus(scope: TeamStatusScope | null) {
       onBreak: people.filter((person) => person.status === "IN_PAUSA").length,
       exited: people.filter((person) => person.status === "USCITO").length,
       notEntered: people.filter((person) => person.status === "NON_ENTRATO").length,
+      absent: people.filter((person) => person.status === "ASSENTE").length,
     },
     people: filteredPeople,
   };
@@ -850,7 +891,7 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
       }
     : {};
   const where: Prisma.StaffTaskWhereInput = { AND: [baseWhere, statusWhere, periodWhere, queryWhere] };
-  const [groups, recent] = await Promise.all([
+  const [groups, taskCandidates, matchedCount] = await Promise.all([
     prisma.staffTask.groupBy({ by: ["status"], where: baseWhere, _count: { _all: true } }),
     prisma.staffTask.findMany({
       where,
@@ -878,26 +919,42 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
         created_by: { select: { name: true } },
         comments: {
           select: { message: true, created_at: true, user: { select: { name: true } } },
-          orderBy: { created_at: "asc" },
-          take: 20,
+          orderBy: { created_at: "desc" },
+          take: 6,
         },
       },
-      orderBy: [{ due_date: "asc" }, { updated_at: "desc" }],
+      orderBy: { updated_at: "desc" },
       take: 20,
     }),
+    prisma.staffTask.count({ where }),
   ]);
+  const statusRank: Record<string, number> = { ACTIVE: 1, WAITING: 2, NEW: 3, COMPLETED: 4 };
+  const recent = [...taskCandidates]
+    .sort((left, right) => {
+      const leftOverdue = left.status !== "COMPLETED" && Boolean(left.due_date && left.due_date < now);
+      const rightOverdue = right.status !== "COMPLETED" && Boolean(right.due_date && right.due_date < now);
+      if (leftOverdue !== rightOverdue) return leftOverdue ? -1 : 1;
+      const rankDifference = (statusRank[left.status] ?? 5) - (statusRank[right.status] ?? 5);
+      if (rankDifference) return rankDifference;
+      if (left.due_date && right.due_date) return left.due_date.getTime() - right.due_date.getTime();
+      if (left.due_date) return -1;
+      if (right.due_date) return 1;
+      return right.updated_at.getTime() - left.updated_at.getTime();
+    })
+    .slice(0, 8);
 
   return {
-    count: recent.length,
+    count: matchedCount,
+    shown: recent.length,
     requestedEmployee: resolved?.employee?.name || null,
     requestedTask: cleanTaskQuery || null,
     period: validPeriod ? { from: validPeriod.start.toISOString(), to: validPeriod.end.toISOString() } : null,
     totals: Object.fromEntries(groups.map((group) => [group.status, group._count._all])),
     overdue: await prisma.staffTask.count({ where: { ...baseWhere, status: { not: "COMPLETED" }, due_date: { lt: now } } }),
     tasks: recent.map((task) => {
-      const reports = task.comments.map((comment) => ({
+      const reports = [...task.comments].reverse().map((comment) => ({
         by: comment.user.name,
-        message: comment.message,
+        message: comment.message.slice(0, 500),
         at: comment.created_at.toISOString(),
       }));
       const requestedEmployee = resolved?.employee?.name.trim().toLocaleLowerCase("it") || "";
@@ -907,14 +964,17 @@ async function getTaskOverview(status: string | null, employeeName: string | nul
       return {
         id: task.id,
         title: task.title,
-        description: task.description,
+        description: task.description.slice(0, 700),
         status: task.status,
         priority: task.priority,
         category: task.category,
-        notes: task.notes,
-        checklist: taskChecklistProgress(task.checklist),
+        notes: task.notes?.slice(0, 500) || null,
+        checklist: (() => {
+          const progress = taskChecklistProgress(task.checklist);
+          return { ...progress, items: progress.items.slice(0, 12) };
+        })(),
         timerSeconds: task.timer_seconds,
-        completionNote: task.completion_note,
+        completionNote: task.completion_note?.slice(0, 500) || null,
         completionFilesCount: Array.isArray(task.completion_files) ? task.completion_files.length : 0,
         completionLinksCount: Array.isArray(task.completion_links) ? task.completion_links.length : 0,
         evaluation: task.evaluation,
@@ -2136,14 +2196,17 @@ function assistantCards(toolName: string, output: unknown, question: string): As
   if (toolName === "get_team_status" && Array.isArray(data.people)) {
     let people = data.people as Array<Record<string, unknown>>;
     if (normalizedQuestion.includes("paus")) people = people.filter((person) => person.status === "IN_PAUSA");
-    else if (normalizedQuestion.includes("assen") || normalizedQuestion.includes("non entr")) people = people.filter((person) => person.status === "NON_ENTRATO");
+    else if (normalizedQuestion.includes("assen")) people = people.filter((person) => person.status === "ASSENTE");
+    else if (normalizedQuestion.includes("non entr")) people = people.filter((person) => person.status === "NON_ENTRATO");
     else if (normalizedQuestion.includes("turno") || normalizedQuestion.includes("lavor")) people = people.filter((person) => person.status === "IN_TURNO");
 
     const statusConfig: Record<string, { label: string; tone: AssistantCard["tone"] }> = {
       IN_TURNO: { label: "In turno", tone: "green" },
       IN_PAUSA: { label: "In pausa", tone: "amber" },
       USCITO: { label: "Uscito", tone: "slate" },
-      NON_ENTRATO: { label: "Assente · non entrato", tone: "red" },
+      NON_ENTRATO: { label: "Non ancora entrato", tone: "amber" },
+      ASSENTE: { label: "Assente", tone: "red" },
+      NON_PREVISTO: { label: "Non previsto", tone: "slate" },
     };
     return people.slice(0, 20).map((person, index) => {
       const config = statusConfig[String(person.status)] || { label: String(person.status || "Stato"), tone: "slate" as const };
@@ -2386,7 +2449,7 @@ async function executeTool(
   if (call.name === "forget_memory") return forgetMemory(args, actorId);
   if (call.name === "prepare_communication") return prepareCommunication(args, actorId);
   if (call.name === "get_team_status") {
-    const requestedScope = typeof args.status === "string" && ["IN_TURNO", "IN_PAUSA", "USCITO", "NON_ENTRATO"].includes(args.status)
+    const requestedScope = typeof args.status === "string" && ["IN_TURNO", "IN_PAUSA", "USCITO", "NON_ENTRATO", "ASSENTE"].includes(args.status)
       ? args.status as TeamStatusScope
       : null;
     return { output: await getTeamStatus(impliedTeamScope || requestedScope) };
@@ -2485,18 +2548,27 @@ function extractOutputText(response: OpenAIResponse) {
 }
 
 async function createResponse(body: Record<string, unknown>, apiKey: string) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) {
+      throw new Error("Il servizio AI sta impiegando troppo tempo. Riprova con una domanda più specifica.");
+    }
+    throw new Error("Non riesco a collegarmi al servizio AI in questo momento.");
+  }
   const payload = await response.json() as OpenAIResponse;
   if (!response.ok) {
-    console.error("OpenAI Responses API error", response.status, payload.error?.message || "unknown");
+    console.error("OpenAI Responses API error", response.status, response.headers.get("x-request-id") || "no-request-id", payload.error?.message || "unknown");
     throw new Error(response.status === 401 ? "Chiave OpenAI non valida o non autorizzata." : "Il servizio AI non è disponibile in questo momento.");
   }
   return payload;
@@ -2654,7 +2726,7 @@ Per domande come “come va [persona] questo mese?”, “ha fatto ritardi?”, 
 Per domande su identità lavorativa, mansione, reparto, sede, responsabile, stato o contratto di una persona usa get_employee_profile e considera Staff Paradise la fonte autoritativa. Non dedurre mansione o sede da task, messaggi o presenze.
 Per le task cerca sempre nel database. Domande come “Steven ha completato task oggi?” richiedono get_task_overview con employee_name, status COMPLETED e intervallo di oggi; usa completedAt, non updatedAt, per stabilire se una task è stata completata nel giorno richiesto. Se viene citato il nome o parte del titolo della task, passalo in task_query.
 AVANZAMENTO TASK: per “come stanno andando le task di [persona]?” non applicare un filtro di stato o data se non richiesto. Per ogni task leggi obiettivo (description), stato, checklist, timerSeconds, scadenza, requestedEmployeeUpdates, reports e completionNote. Restituisci un riepilogo professionale breve per task con: titolo; avanzamento reale (stato e checklist); ultimo aggiornamento significativo riformulato; attività ancora da fare o blocco se esplicitamente registrato; scadenza. Usa prima requestedEmployeeUpdates per dire cosa ha comunicato la persona richiesta. Distingui sempre descrizione iniziale da aggiornamenti e nota finale. Non copiare lunghi messaggi parola per parola, non attribuire a un dipendente commenti di altri e non dedurre percentuali diverse da checklist.percentage. Se non esistono commenti o nota finale, scrivi “nessun aggiornamento inserito”, senza inventare progressi.
-“In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. Analogamente filtra IN_TURNO, NON_ENTRATO o USCITO quando richiesto e non elencare mai gli altri stati.
+“In pausa” significa esclusivamente chi risulta in pausa in questo momento dall'ultima timbratura odierna: non comprende chi ha già concluso una pausa. Per queste domande usa get_team_status con status IN_PAUSA. “Assente” indica soltanto una persona prevista nel planning, oltre l'orario limite e senza timbratura o assenza approvata: usa ASSENTE. “Non entrato” usa NON_ENTRATO. Analogamente filtra IN_TURNO o USCITO quando richiesto e non elencare mai gli altri stati.
 Una domanda breve di seguito come “chi sono?”, “quali?” o “dimmi i nomi” si riferisce alla categoria appena discussa, non a tutto il personale.
 Usa get_schedule_month_status per domande sulla turnistica o sul planning di un mese. Usa get_payslip_month_status per verificare se i cedolini sono stati caricati; indica sempre il mese e l'anno effettivamente controllati e se il periodo è stato dedotto automaticamente.
 Usa get_document_status per contratti, proroghe/rinnovi, cedolini/buste paga, CUD e documenti HR. “Cedolino” e “busta paga” corrispondono a BUSTA_PAGA; proroga e rinnovo corrispondono a PROROGA. Usa get_invoice_status per fatture emesse/da fare/annullate e non confondere le fatture con i documenti del personale.
@@ -2712,6 +2784,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
         parallel_tool_calls: false,
         store: false,
         max_output_tokens: 900,
+        truncation: "auto",
         safety_identifier: createHash("sha256").update(`${access.privateChatbot ? "bot" : "user"}:${access.actorId}`).digest("hex").slice(0, 32),
       }, apiKey);
       const calls = (response.output || []).filter((item): item is ToolCall => item.type === "function_call") as ToolCall[];

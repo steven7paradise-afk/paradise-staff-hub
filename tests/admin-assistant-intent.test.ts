@@ -19,6 +19,7 @@ test("does not turn a generic staff question into a status filter", () => {
 });
 
 test("recognizes current absences without mixing them with breaks", () => {
+  assert.equal(requestedTeamStatus([{ role: "user", content: "Chi è assente oggi?" }]), "ASSENTE");
   assert.equal(requestedTeamStatus([{ role: "user", content: "Chi non è entrato oggi?" }]), "NON_ENTRATO");
 });
 
@@ -29,6 +30,13 @@ test("recognizes a completed-task question without relying on the model", () => 
 test("forces a database search for task questions", () => {
   assert.equal(requiredAssistantTool("Steven ha completato task oggi?"), "get_task_overview");
   assert.equal(requiredAssistantTool("Come stanno andando le task di Steven?"), "get_task_overview");
+});
+
+test("prepares a communication even when its text mentions a task", () => {
+  assert.equal(
+    requiredAssistantTool("Prepara una comunicazione a Steven per ricordargli la task social"),
+    "prepare_communication",
+  );
 });
 
 test("forces Controllo Cliente search for a named client", () => {

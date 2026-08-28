@@ -1,4 +1,4 @@
-export type TeamStatusScope = "IN_TURNO" | "IN_PAUSA" | "USCITO" | "NON_ENTRATO";
+export type TeamStatusScope = "IN_TURNO" | "IN_PAUSA" | "USCITO" | "NON_ENTRATO" | "ASSENTE";
 
 type ConversationMessage = { role: "user" | "assistant"; content: string };
 
@@ -32,7 +32,8 @@ export function taskChecklistProgress(value: unknown) {
 function statusMention(value: string): TeamStatusScope | null {
   const text = value.toLocaleLowerCase("it");
   if (/paus/.test(text)) return "IN_PAUSA";
-  if (/assen|non (è |e )?ent|mancata timbratura/.test(text)) return "NON_ENTRATO";
+  if (/assen|mancata timbratura/.test(text)) return "ASSENTE";
+  if (/non (è |e )?ent/.test(text)) return "NON_ENTRATO";
   if (/uscit|fuori turno/.test(text)) return "USCITO";
   if (/in turno|al lavoro|lavorando/.test(text)) return "IN_TURNO";
   return null;
@@ -107,6 +108,9 @@ export function requestedRequestType(text: string): RequestOverviewType | null {
 
 export function requiredAssistantTool(text: string) {
   const normalized = text.toLocaleLowerCase("it");
+  if (/(?:prepara|scrivi|manda|invia|avvisa).{0,80}(?:comunicazione|messaggio|avviso)|(?:comunicazione|messaggio|avviso).{0,80}(?:prepara|scrivi|manda|invia)/.test(normalized)) {
+    return "prepare_communication";
+  }
   if (/\btask\b|compito|attività assegnata/.test(normalized)) return "get_task_overview";
   if (/controll[oi] client|sched[ae] client/.test(normalized)) return "search_client_controls";
   if (/\bordini?\b|numero ordine|ordine.{0,50}(?:assegn|complet|pront|compilat)|(?:assegn|complet|pront|compilat).{0,50}ordine/.test(normalized)) return "get_orders_overview";
