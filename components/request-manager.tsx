@@ -17,6 +17,8 @@ type RequestRecord = {
   reason: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
   adminNote: string | null;
+  employeeResponse: string | null;
+  employeeAcknowledgedAt: string | null;
   medicalCode: string | null;
   sicknessUnjustified: boolean;
   createdAt: string;
@@ -40,8 +42,8 @@ function requestTypeLabel(request: RequestRecord) {
 
 function requestStatusLabel(request: RequestRecord) {
   if (!isAutomaticLateRequest(request)) return statusLabels[request.status];
-  if (request.status === "APPROVED") return "Presa visione";
-  return "Da confermare";
+  if (request.status === "APPROVED") return "Gestito dall’amministrazione";
+  return "Da gestire";
 }
 
 function needsSicknessJustification(request: RequestRecord) {
@@ -158,20 +160,22 @@ function DecisionNoteField({
   value,
   onChange,
   automaticLate = false,
+  employeeResponse = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   automaticLate?: boolean;
+  employeeResponse?: boolean;
 }) {
   return (
     <label className="block space-y-1.5">
       <span className="text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-        {automaticLate ? "Comunicazione al dipendente" : "Motivo / nota admin"}
+        {employeeResponse ? "La tua risposta (facoltativa)" : automaticLate ? "Comunicazione al dipendente" : "Motivo / nota admin"}
       </span>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={automaticLate ? "Esempio: Recati in amministrazione, oppure scrivi un messaggio libero..." : "Scrivi il motivo dell'approvazione o del rifiuto..."}
+        placeholder={employeeResponse ? "Puoi spiegare il motivo del ritardo o lasciare un messaggio..." : automaticLate ? "Esempio: Recati in amministrazione, oppure scrivi un messaggio libero..." : "Scrivi il motivo dell'approvazione o del rifiuto..."}
         rows={2}
         className="w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-paradise-noir outline-none transition focus:border-paradise-pink focus:ring-2 focus:ring-paradise-pink/20"
       />
@@ -183,24 +187,28 @@ function RequestDetailPanel({
   request,
   canApprove,
   canFlag,
+  canAcknowledge,
   saving,
   medicalDraft,
   decisionDraft,
   onMedicalDraftChange,
   onDecisionDraftChange,
   onChangeStatus,
+  onAcknowledge,
   onUpdateSickness,
   onClose,
 }: {
   request: RequestRecord;
   canApprove: boolean;
   canFlag: boolean;
+  canAcknowledge: boolean;
   saving: string | null;
   medicalDraft: string;
   decisionDraft: string;
   onMedicalDraftChange: (value: string) => void;
   onDecisionDraftChange: (value: string) => void;
   onChangeStatus: (id: string, status: "APPROVED" | "REJECTED" | "FLAGGED") => void;
+  onAcknowledge: (id: string) => void;
   onUpdateSickness: (id: string, payload: { medicalCode?: string | null; sicknessUnjustified?: boolean }) => void;
   onClose?: () => void;
 }) {
@@ -208,7 +216,8 @@ function RequestDetailPanel({
   const automaticLate = isAutomaticLateRequest(request);
   const workerNote = request.reason?.trim() || "Nessuna nota lavoratore";
   const adminNote = request.adminNote?.trim() || "Nessuna nota admin";
-  const canEditDecision = (canApprove || canFlag) && isPending;
+  const canEmployeeAcknowledge = canAcknowledge && automaticLate && !request.employeeAcknowledgedAt;
+  const canEditDecision = ((canApprove || canFlag) && isPending) || canEmployeeAcknowledge;
 
   return (
     <aside className="overflow-hidden rounded-[30px] border border-paradise-pink/20 bg-white shadow-[0_24px_70px_rgba(92,44,67,0.10)] lg:sticky lg:top-5">
@@ -245,6 +254,18 @@ function RequestDetailPanel({
       </div>
 
       <div className="space-y-4 bg-[#fffdfd] px-4 py-5 sm:space-y-5 sm:px-7 sm:py-7">
+        {automaticLate ? (
+          <div className="flex items-center gap-4 rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-50 to-white p-4 sm:p-5">
+            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-rose-100 text-rose-600">
+              <UserRound className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-600">Dipendente in ritardo</p>
+              <p className="mt-1 truncate text-xl font-black text-paradise-noir sm:text-2xl">{request.employee}</p>
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
           <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-paradise-noir">
             <Calendar className="size-4 text-paradise-pink" /> Periodo e orario
@@ -317,7 +338,7 @@ function RequestDetailPanel({
 
         <div className="grid gap-3">
           <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
-            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><Hourglass className="size-4 text-paradise-pink" /> Motivo lavoratore</p>
+            <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><Hourglass className="size-4 text-paradise-pink" /> {automaticLate ? "Dettaglio del ritardo" : "Motivo lavoratore"}</p>
             <p className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65 sm:text-base">{workerNote}</p>
           </div>
           <div className={cn(
@@ -327,17 +348,37 @@ function RequestDetailPanel({
             <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><FileText className="size-4 text-paradise-pink" /> {automaticLate ? "Comunicazione amministrazione" : "Motivo approvazione / nota admin"}</p>
             <p className="mt-3 whitespace-pre-wrap rounded-xl border border-paradise-pink/15 bg-white/65 px-3 py-2.5 text-sm font-semibold leading-6 text-black/65 sm:text-base">{adminNote}</p>
           </div>
+          {automaticLate ? (
+            <div className={cn(
+              "rounded-2xl border p-4 sm:p-5",
+              request.employeeAcknowledgedAt ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60",
+            )}>
+              <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45">
+                <Eye className={cn("size-4", request.employeeAcknowledgedAt ? "text-emerald-600" : "text-amber-600")} />
+                Presa visione del dipendente
+              </p>
+              <p className="mt-2 text-sm font-black text-paradise-noir">
+                {request.employeeAcknowledgedAt ? `Confermata il ${formatDateTime(request.employeeAcknowledgedAt)}` : "Non ancora confermata"}
+              </p>
+              {request.employeeResponse ? (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-3 py-2.5">
+                  <p className="text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700">Risposta del dipendente</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65">{request.employeeResponse}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
-          <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><UserRound className="size-4 text-paradise-pink" /> {automaticLate ? "Presa visione" : "Approvazione"}</p>
+          <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><UserRound className="size-4 text-paradise-pink" /> {automaticLate ? "Gestione amministrazione" : "Approvazione"}</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Vista da" : "Approvata da"}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Gestita da" : "Approvata da"}</p>
               <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? request.approvedBy ?? "Non registrato" : automaticLate ? "Da confermare" : "Non ancora approvata"}</p>
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Vista il" : "Approvata il"}</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/30">{automaticLate ? "Gestita il" : "Approvata il"}</p>
               <p className="mt-1 text-sm font-black text-paradise-noir">{request.status === "APPROVED" ? formatDateTime(request.approvedAt) : "—"}</p>
             </div>
           </div>
@@ -350,14 +391,22 @@ function RequestDetailPanel({
                 <BellRing className="size-6" />
               </span>
               <div>
-                <p className="text-base font-black uppercase tracking-wide text-paradise-noir">{automaticLate ? "Presa visione" : "Gestione richiesta"}</p>
+                <p className="text-base font-black uppercase tracking-wide text-paradise-noir">{canEmployeeAcknowledge ? "Presa visione" : automaticLate ? "Gestione del ritardo" : "Gestione richiesta"}</p>
                 <p className="mt-1 text-sm font-medium leading-5 text-black/55">
-                  {automaticLate ? "Conferma di aver letto questa comunicazione e, se serve, lascia una risposta." : "Valuta la richiesta e comunica la decisione al dipendente."}
+                  {canEmployeeAcknowledge ? "Conferma di aver letto questa comunicazione e, se vuoi, lascia una risposta." : automaticLate ? "Registra la gestione del ritardo e comunica con il dipendente." : "Valuta la richiesta e comunica la decisione al dipendente."}
                 </p>
               </div>
             </div>
-            <DecisionNoteField value={decisionDraft} onChange={onDecisionDraftChange} automaticLate={automaticLate} />
-            {canApprove ? (
+            <DecisionNoteField value={decisionDraft} onChange={onDecisionDraftChange} automaticLate={automaticLate} employeeResponse={canEmployeeAcknowledge} />
+            {canEmployeeAcknowledge ? (
+              <button
+                disabled={saving === request.id}
+                onClick={() => onAcknowledge(request.id)}
+                className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-paradise-pink to-[#ef4f91] px-4 text-sm font-black text-white shadow-[0_10px_24px_rgba(236,72,140,0.24)] transition hover:brightness-95 disabled:opacity-50"
+              >
+                <Check className="size-4" /> Sì, ho preso visione
+              </button>
+            ) : canApprove ? (
               <div className={cn("mt-3 grid gap-2", !automaticLate && "sm:grid-cols-2")}>
                 <button
                   disabled={saving === request.id}
@@ -509,6 +558,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       reason: savedRequest.reason,
       status: savedRequest.status,
       adminNote: savedRequest.admin_note,
+      employeeResponse: savedRequest.employee_response ?? null,
+      employeeAcknowledgedAt: savedRequest.employee_acknowledged_at ?? null,
       medicalCode: savedRequest.medical_code,
       sicknessUnjustified: savedRequest.sickness_unjustified,
       createdAt: savedRequest.created_at,
@@ -597,6 +648,33 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       setSelectedRequestId(id);
     }
     setMessage(data.leaveRequest.medical_code ? "Protocollo malattia salvato. Assenza giustificata." : "Malattia contrassegnata come non giustificata.");
+  }
+
+  async function acknowledgeLateRequest(id: string) {
+    const employeeResponse = decisionDrafts[id]?.trim() ?? "";
+    setSaving(id);
+    const response = await fetch(`/api/requests/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acknowledge: true, employeeResponse: employeeResponse || null }),
+    });
+    const data = await response.json();
+    setSaving(null);
+    if (!response.ok) {
+      setMessage(data.error ?? "Presa visione non salvata.");
+      return;
+    }
+    setRequests((current) => current.map((request) => request.id === id ? {
+      ...request,
+      employeeResponse: data.leaveRequest.employee_response,
+      employeeAcknowledgedAt: data.leaveRequest.employee_acknowledged_at,
+    } : request));
+    setDecisionDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setMessage(employeeResponse ? "Presa visione e risposta inviate all’amministrazione." : "Presa visione confermata.");
   }
 
   return (
@@ -754,12 +832,14 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                 request={selectedRequest}
                 canApprove={canApprove}
                 canFlag={role === "RESPONSABILE"}
+                canAcknowledge={employeeView}
                 saving={saving}
                 medicalDraft={medicalDrafts[selectedRequest.id] ?? ""}
                 decisionDraft={decisionDrafts[selectedRequest.id] ?? ""}
                 onMedicalDraftChange={(value) => setMedicalDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
                 onDecisionDraftChange={(value) => setDecisionDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
                 onChangeStatus={(id, status) => changeStatus(id, status)}
+                onAcknowledge={(id) => acknowledgeLateRequest(id)}
                 onUpdateSickness={async (id, payload) => {
                   await updateSicknessJustification(id, payload);
                   setMedicalDrafts((current) => ({ ...current, [id]: "" }));

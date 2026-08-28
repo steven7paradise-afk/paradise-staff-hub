@@ -3,7 +3,7 @@ import { RequestStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule } from "@/lib/schedule-sync";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
@@ -23,6 +23,8 @@ export async function PATCH(
   const payload = await request.json();
   const status = payload.status ? (String(payload.status) as RequestStatus) : undefined;
   const adminNote = payload.adminNote !== undefined ? (payload.adminNote ? String(payload.adminNote).trim() : null) : undefined;
+  const acknowledge = payload.acknowledge === true;
+  const employeeResponse = payload.employeeResponse !== undefined ? (payload.employeeResponse ? String(payload.employeeResponse).trim() : null) : undefined;
   const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
   const sicknessUnjustified = payload.sicknessUnjustified !== undefined ? Boolean(payload.sicknessUnjustified) : undefined;
 
@@ -35,6 +37,15 @@ export async function PATCH(
   const isOwnRequest = existing.user_id === session.user.id;
   const isAdmin = approverRoles.has(session.user.role);
   const isResponsabile = session.user.role === "RESPONSABILE";
+
+  if (acknowledge || employeeResponse !== undefined) {
+    if (!automaticLate || !isOwnRequest) {
+      return NextResponse.json({ error: "Puoi confermare soltanto la presa visione di un tuo ritardo." }, { status: 403 });
+    }
+    if (!acknowledge) {
+      return NextResponse.json({ error: "Conferma la presa visione per inviare la risposta." }, { status: 400 });
+    }
+  }
 
   // Check permissions for status change
   if (status !== undefined) {
@@ -81,6 +92,8 @@ export async function PATCH(
           ...(status !== undefined ? { status } : {}),
           ...(status === "APPROVED" ? { approved_by: session.user.id, approved_at: new Date() } : status === "REJECTED" || status === "PENDING" ? { approved_by: null, approved_at: null } : {}),
           ...(adminNote !== undefined ? { admin_note: adminNote } : {}),
+          ...(acknowledge ? { employee_acknowledged_at: new Date() } : {}),
+          ...(employeeResponse !== undefined ? { employee_response: employeeResponse } : {}),
           ...(medicalCode !== undefined ? { medical_code: medicalCode, sickness_unjustified: !medicalCode } : {}),
           ...(medicalCode === undefined && sicknessUnjustified !== undefined
             ? sicknessUnjustified
@@ -154,6 +167,25 @@ export async function PATCH(
       });
     } catch (error) {
       console.error("Errore nella creazione della notifica in database:", error);
+    }
+  }
+
+  if (acknowledge) {
+    try {
+      const recipients = await prisma.user.findMany({
+        where: { active: true, role: { in: ["ZERO", "SUPER_ADMIN", "ADMIN"] } },
+        select: { id: true },
+      });
+      await createNotifications(recipients.map((recipient) => ({
+        user_id: recipient.id,
+        title: `Presa visione ritardo: ${leaveRequest.user.name}`,
+        message: `${leaveRequest.user.name} ha confermato la presa visione del ritardo del ${leaveRequest.start_date.toLocaleDateString("it-IT")}.${leaveRequest.employee_response ? ` Risposta: ${leaveRequest.employee_response}` : ""}`,
+        type: "RICHIESTA",
+        action_url: `/requests?request=${encodeURIComponent(leaveRequest.id)}`,
+        read: false,
+      })));
+    } catch (error) {
+      console.error("Errore nella notifica di presa visione del dipendente:", error);
     }
   }
 
