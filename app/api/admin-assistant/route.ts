@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { assistantApiKeyFromHeaders, assistantToolsForAccess, safeSecretMatches } from "@/lib/admin-assistant-bridge";
 import { buildAssistantDateContext, formatRomeDateTime, requestedDayPeriod, requestedMonthPeriod } from "@/lib/admin-assistant-date";
 import { requestedClientQuestionMode, requestedClientResponseType, requiredAssistantTool, requestedRequestType, requestedTaskStatus, requestedTeamStatus, taskChecklistProgress, verifiedClientAppointmentStatus, type RequestOverviewType, type TeamStatusScope } from "@/lib/admin-assistant-intent";
 import { deriveAttendanceState } from "@/lib/attendance-state";
@@ -16,6 +17,19 @@ const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 const MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-5.4-mini";
 const MAX_HISTORY = 10;
 const MAX_MESSAGE_LENGTH = 2_000;
+
+const PRIVATE_CHATBOT_AREAS = [
+  "personale",
+  "presenze e pause",
+  "planning e turni",
+  "ferie, permessi, riposi, malattie e ritardi",
+  "task e avanzamento",
+  "documenti HR e cedolini",
+  "clienti e appuntamenti",
+  "ordini",
+  "fatture",
+  "cassa",
+];
 
 const APP_PAGES = {
   dashboard: { path: "/dashboard", label: "Dashboard" },
@@ -82,6 +96,47 @@ type AssistantMetric = {
   detail: string;
   tone: AssistantCard["tone"];
 };
+
+type AssistantAccess = {
+  actorId: string;
+  actorRole: string;
+  privateChatbot: boolean;
+};
+
+async function authorizeAssistantRequest(request: NextRequest): Promise<AssistantAccess | NextResponse> {
+  const session = await auth();
+  if (session?.user?.id && ADMIN_ROLES.has(session.user.role)) {
+    return { actorId: session.user.id, actorRole: session.user.role, privateChatbot: false };
+  }
+
+  const receivedKey = assistantApiKeyFromHeaders(request.headers);
+  if (!receivedKey) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+
+  const configuredKey = process.env.CHATBOT_INTERNAL_API_KEY?.trim() || "";
+  const serviceUserId = process.env.CHATBOT_SERVICE_USER_ID?.trim() || "";
+  if (!configuredKey || !serviceUserId) {
+    return NextResponse.json(
+      { error: "Collegamento chatbot privato non configurato sul server." },
+      { status: 503 },
+    );
+  }
+  if (!safeSecretMatches(receivedKey, configuredKey)) {
+    return NextResponse.json({ error: "Chiave chatbot non valida." }, { status: 401 });
+  }
+
+  const serviceUser = await prisma.user.findUnique({
+    where: { id: serviceUserId },
+    select: { id: true, role: true, active: true },
+  });
+  if (!serviceUser?.active || !ADMIN_ROLES.has(serviceUser.role)) {
+    return NextResponse.json(
+      { error: "Account di servizio chatbot non valido o non autorizzato." },
+      { status: 403 },
+    );
+  }
+
+  return { actorId: serviceUser.id, actorRole: serviceUser.role, privateChatbot: true };
+}
 
 const tools = [
   {
@@ -2361,18 +2416,100 @@ async function createResponse(body: Record<string, unknown>, apiKey: string) {
   return payload;
 }
 
-export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id || !ADMIN_ROLES.has(session.user.role)) {
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
-  }
+export async function GET(request: NextRequest) {
+  const access = await authorizeAssistantRequest(request);
+  if (access instanceof NextResponse) return access;
+  const availableTools = assistantToolsForAccess(tools, access.privateChatbot);
 
-  const payload = await request.json().catch(() => null) as { messages?: ChatMessage[]; confirmActionToken?: string; cancelActionToken?: string } | null;
+  return NextResponse.json({
+    service: "Paradise Assistant",
+    endpoint: "/api/admin-assistant",
+    access: access.privateChatbot ? "private-chatbot" : "admin-session",
+    mode: access.privateChatbot ? "read-only" : "interactive",
+    areas: PRIVATE_CHATBOT_AREAS,
+    limits: { historyMessages: MAX_HISTORY, charactersPerMessage: MAX_MESSAGE_LENGTH },
+    request: { messages: [{ role: "user", content: "Chi è in pausa adesso?" }] },
+    directToolRequest: { tool: "get_team_status", arguments: { status: "IN_PAUSA" }, question: "Chi è in pausa adesso?" },
+    tools: availableTools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    })),
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const access = await authorizeAssistantRequest(request);
+  if (access instanceof NextResponse) return access;
+
+  const payload = await request.json().catch(() => null) as {
+    messages?: ChatMessage[];
+    tool?: string;
+    arguments?: Record<string, unknown>;
+    question?: string;
+    confirmActionToken?: string;
+    cancelActionToken?: string;
+  } | null;
+  if (access.privateChatbot && (payload?.confirmActionToken || payload?.cancelActionToken)) {
+    return NextResponse.json({ error: "L'integrazione chatbot privata è in sola lettura." }, { status: 403 });
+  }
   try {
-    if (payload?.confirmActionToken) return NextResponse.json(await confirmCommunication(payload.confirmActionToken, session.user.id));
-    if (payload?.cancelActionToken) return NextResponse.json(await cancelCommunication(payload.cancelActionToken, session.user.id));
+    if (payload?.confirmActionToken) return NextResponse.json(await confirmCommunication(payload.confirmActionToken, access.actorId));
+    if (payload?.cancelActionToken) return NextResponse.json(await cancelCommunication(payload.cancelActionToken, access.actorId));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Operazione non disponibile." }, { status: 400 });
+  }
+
+  if (access.privateChatbot && payload?.tool) {
+    const availableTools = assistantToolsForAccess(tools, true);
+    const requestedTool = availableTools.find((tool) => tool.name === payload.tool);
+    if (!requestedTool) {
+      return NextResponse.json({ error: "Strumento non disponibile o non consentito in sola lettura." }, { status: 400 });
+    }
+
+    const question = String(payload.question || payload.tool).trim().slice(0, MAX_MESSAGE_LENGTH);
+    const directMessages: ChatMessage[] = [{ role: "user", content: question }];
+    const dateContext = buildAssistantDateContext();
+    const impliedMonthPeriod = requestedMonthPeriod(question, dateContext);
+    const impliedDayPeriod = requestedDayPeriod(question, dateContext);
+    const impliedTaskStatus = requestedTaskStatus(question);
+    const impliedRequestType = requestedRequestType(question);
+    const impliedEmployeeName = await mentionedEmployeeName(question);
+    const impliedTeamScope = requestedTeamStatus(directMessages);
+    const call: ToolCall = {
+      type: "function_call",
+      name: requestedTool.name,
+      arguments: JSON.stringify(payload.arguments || {}),
+      call_id: `private-${randomUUID()}`,
+    };
+
+    try {
+      const result = await executeTool(
+        call,
+        access.actorId,
+        impliedTeamScope,
+        impliedMonthPeriod,
+        impliedDayPeriod,
+        impliedTaskStatus,
+        impliedEmployeeName,
+        impliedRequestType,
+      ) as {
+        output: unknown;
+        link?: { path: string; label: string };
+        navigation?: { path: string; label: string };
+      };
+      return NextResponse.json({
+        tool: requestedTool.name,
+        generatedAt: new Date().toISOString(),
+        data: result.output,
+        link: result.link || null,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Lettura dei dati non disponibile." },
+        { status: 400 },
+      );
+    }
   }
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -2404,7 +2541,11 @@ export async function POST(request: NextRequest) {
   const impliedEmployeeName = await mentionedEmployeeName(lastUserMessage);
   const requiredTool = requiredAssistantTool(lastUserMessage);
   const clientResponseType = requestedClientResponseType(lastUserMessage);
+  const accessInstructions = access.privateChatbot
+    ? "Questa richiesta proviene dal chatbot privato tramite un accesso in sola lettura. Non proporre, preparare o confermare operazioni di scrittura, invii o modifiche."
+    : "Questa richiesta proviene da una sessione amministrativa interattiva dell'applicazione.";
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
+${accessInstructions}
 DATA AUTORITATIVA DEL SERVER (non usare la data interna del modello): oggi ${dateContext.todayLabel}, ISO ${dateContext.today}, fuso ${dateContext.timeZone}; ieri ${dateContext.yesterday}; domani ${dateContext.tomorrow}; settimana corrente ${dateContext.weekStart} - ${dateContext.weekEnd}; mese corrente ${dateContext.currentMonthName} ${dateContext.currentYear}; mese precedente ${dateContext.previousMonthName} ${dateContext.previousMonthYear}.
 Rispondi in italiano, in modo sintetico e concreto. La persona autenticata è un amministratore.
 Usa sempre gli strumenti per domande su presenze, pause, task, ferie, permessi, malattie e ritardi: non inventare dati.
@@ -2458,6 +2599,9 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
   const cards: AssistantCard[] = [];
   const metrics: AssistantMetric[] = [];
   const impliedTeamScope = requestedTeamStatus(messages);
+  const availableTools = assistantToolsForAccess(tools, access.privateChatbot);
+  const availableToolNames = new Set(availableTools.map((tool) => tool.name));
+  const forcedTool = requiredTool && availableToolNames.has(requiredTool) ? requiredTool : null;
 
   try {
     for (let round = 0; round < 4; round += 1) {
@@ -2465,12 +2609,12 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
         model: MODEL,
         instructions,
         input,
-        tools,
-        tool_choice: round === 0 && requiredTool ? { type: "function", name: requiredTool } : requiredTool ? "none" : "auto",
+        tools: availableTools,
+        tool_choice: round === 0 && forcedTool ? { type: "function", name: forcedTool } : forcedTool ? "none" : "auto",
         parallel_tool_calls: false,
         store: false,
         max_output_tokens: 900,
-        safety_identifier: createHash("sha256").update(session.user.id).digest("hex").slice(0, 32),
+        safety_identifier: createHash("sha256").update(`${access.privateChatbot ? "bot" : "user"}:${access.actorId}`).digest("hex").slice(0, 32),
       }, apiKey);
       const calls = (response.output || []).filter((item): item is ToolCall => item.type === "function_call") as ToolCall[];
       if (calls.length === 0) {
@@ -2480,7 +2624,7 @@ Quando la risposta riguarda persone in pausa, assenti, in malattia o in ritardo,
 
       input.push(...(response.output || []));
       for (const call of calls) {
-        const result = await executeTool(call, session.user.id, impliedTeamScope, impliedMonthPeriod, impliedDayPeriod, impliedTaskStatus, impliedEmployeeName, impliedRequestType) as {
+        const result = await executeTool(call, access.actorId, impliedTeamScope, impliedMonthPeriod, impliedDayPeriod, impliedTaskStatus, impliedEmployeeName, impliedRequestType) as {
           output: unknown;
           link?: { path: string; label: string };
           navigation?: { path: string; label: string };
