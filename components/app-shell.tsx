@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
-import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
+import { MANSIONI_PERMISSIONS_SETTING_KEY, ROLE_PERMISSIONS_SETTING_KEY, mergePermissionSets, normalizeMansionePermissions, normalizeRolePermissions, roleLabels, routePermissions, visibleForRole, type PermissionSet, type Role } from "@/lib/roles";
 import { normalizeServicePage, servicePages } from "@/lib/service-pages";
 import { ASSISTANCE_TABLES_ACCESS_KEY, canUseAssistanceTables, normalizeAssistanceTablesAccess } from "@/lib/assistance-tables";
 import { canViewPlanning, normalizePlanningAccess, PLANNING_ACCESS_KEY } from "@/lib/planning-access";
@@ -278,9 +278,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   const cleanMansione = currentUser?.mansione?.trim().toLowerCase();
   const effectivePermissionSet: PermissionSet | null = currentRole === "ZERO"
     ? null
-    : currentRole !== "ADMIN" && cleanMansione && mansionePermissionMap[cleanMansione]?.view.length > 0
-      ? mansionePermissionMap[cleanMansione]
-      : rolePermissionMap[currentRole];
+    : mergePermissionSets(rolePermissionMap[currentRole], cleanMansione ? mansionePermissionMap[cleanMansione] : null);
   const taskNavItem = { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: [currentRole] as Role[], section: "Generale" };
   const tablesNavItem = { href: "/tables", label: "Tabelle", iconName: "Table2", roles: [currentRole] as Role[], section: "Generale" };
   let baseItems = visibleForRole(nav, currentRole)

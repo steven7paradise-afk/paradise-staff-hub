@@ -223,6 +223,14 @@ export function normalizeMansionePermissions(value: unknown): MansionePermission
   );
 }
 
+// La mansione estende il ruolo: non deve nascondere pagine abilitate per il ruolo.
+export function mergePermissionSets(base: PermissionSet, extension?: PermissionSet | null): PermissionSet {
+  if (!extension) return base;
+  const view = Array.from(new Set([...base.view, ...extension.view]));
+  const edit = Array.from(new Set([...base.edit, ...extension.edit])).filter((route) => view.includes(route));
+  return { view, edit };
+}
+
 function matchRoute(pathname: string) {
   return Object.keys(routePermissions)
     .sort((a, b) => b.length - a.length)
@@ -323,11 +331,7 @@ export async function getEffectivePermissionSet(prisma: any, user: { id: string;
   const mansionePermissions = normalizeMansionePermissions(mansioneSetting?.value);
   const cleanMansione = user.mansione?.trim().toLowerCase();
 
-  if (role !== "ADMIN" && cleanMansione && mansionePermissions[cleanMansione]?.view.length > 0) {
-    return mansionePermissions[cleanMansione];
-  }
-
-  return rolePermissions[role];
+  return mergePermissionSets(rolePermissions[role], cleanMansione ? mansionePermissions[cleanMansione] : null);
 }
 
 export async function canAccessForUser(prisma: any, pathname: string, user: { id: string; role?: Role | string; mansione?: string | null; access_list?: any }) {
