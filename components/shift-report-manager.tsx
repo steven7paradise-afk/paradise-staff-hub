@@ -42,6 +42,11 @@ const sectionFields: Array<{ key: keyof Pick<ShiftReportData, "staffPresentation
 function localDay() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
+function currentRomeMinute(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(value);
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value || 0);
+  return part("hour") * 60 + part("minute");
+}
 function dateLabel(value: string) {
   return new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 }
@@ -66,6 +71,8 @@ export function ShiftReportManager() {
   const [managerNote, setManagerNote] = useState("");
   const [productName, setProductName] = useState("");
   const [productCategory, setProductCategory] = useState("");
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+  const [clockTick, setClockTick] = useState(() => Date.now());
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   const load = async (nextDay = day, nextLocationId = locationId) => {
@@ -88,11 +95,16 @@ export function ShiftReportManager() {
   };
 
   useEffect(() => { void load(day, locationId); }, [day, locationId]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const report = data?.report ?? null;
   const automatic = (report?.automatic_data || data?.automatic) as AutomaticData | undefined;
   const editable = !data?.manager && (!report || report.status === "DRAFT" || report.status === "DA_CORREGGERE");
   const reportData = data?.manager && report ? report.report_data : form;
+  const submitAvailable = day < localDay() || (day === localDay() && currentRomeMinute(new Date(clockTick)) >= 18 * 60 + 30);
 
   const submit = async (action: "SAVE" | "SUBMIT" | "APPROVE" | "REQUEST_CORRECTION") => {
     setSaving(action);
@@ -309,7 +321,7 @@ export function ShiftReportManager() {
               </section>
             </> : <div className="rounded-[28px] border border-dashed border-black/10 bg-white py-20 text-center"><ShieldCheck className="mx-auto size-9 text-black/15" /><p className="mt-3 font-black">Nessun report inviato per questa sede e data.</p></div>}
 
-            {editable ? <div className="sticky bottom-4 z-10 flex flex-wrap justify-end gap-2 rounded-2xl border border-black/8 bg-white/90 p-3 shadow-xl backdrop-blur-xl"><button type="button" onClick={() => void submit("SAVE")} disabled={Boolean(saving)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-black/10 px-4 text-xs font-black disabled:opacity-50">{saving === "SAVE" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Salva bozza</button><button type="button" onClick={() => void submit("SUBMIT")} disabled={Boolean(saving)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#e77fba] px-5 text-xs font-black text-white shadow-lg disabled:opacity-50">{saving === "SUBMIT" ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} Invia report</button></div> : null}
+            {editable ? <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-black/8 bg-white/90 p-3 shadow-xl backdrop-blur-xl"><p className="mr-auto text-[10px] font-bold text-black/40">Le modifiche restano in bozza finché non invii il report.</p><button type="button" onClick={() => void submit("SAVE")} disabled={Boolean(saving)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-black/10 px-4 text-xs font-black disabled:opacity-50">{saving === "SAVE" ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Salva modifiche</button>{submitAvailable ? <button type="button" onClick={() => setConfirmSubmitOpen(true)} disabled={Boolean(saving)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#e77fba] px-5 text-xs font-black text-white shadow-lg disabled:opacity-50"><Send className="size-4" /> Invia report</button> : <span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-[10px] font-black text-amber-800"><Clock3 className="size-4" /> Invio disponibile dalle 18:30</span>}</div> : null}
 
             {data?.manager && report?.status === "DA_VERIFICARE" ? <section className="rounded-[28px] border border-[#ead7e2] bg-white p-5 shadow-sm sm:p-6"><div className="flex items-center gap-3"><ShieldCheck className="size-6 text-[#d95e9f]" /><div><h2 className="text-lg font-black">Verifica Store Manager</h2><p className="text-xs font-semibold text-black/45">L’approvazione rende il report definitivo per KPI e analisi.</p></div></div><label className="mt-4 block text-xs font-black">Note Store Manager<textarea value={managerNote} onChange={(event) => setManagerNote(event.target.value)} rows={4} placeholder="Nota facoltativa per l’approvazione, obbligatoria se richiedi correzioni…" className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-[#fffafd] p-3 text-sm font-semibold outline-none focus:border-[#e77fba]" /></label><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => void submit("REQUEST_CORRECTION")} disabled={Boolean(saving)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-black text-rose-700 disabled:opacity-50"><XCircle className="size-4" /> Richiedi correzione</button><button type="button" onClick={() => void submit("APPROVE")} disabled={Boolean(saving)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-xs font-black text-white shadow-lg disabled:opacity-50"><CheckCircle2 className="size-4" /> Approva report</button></div></section> : null}
 
@@ -329,6 +341,7 @@ export function ShiftReportManager() {
           </aside> : null}
         </div>
       )}
+      {confirmSubmitOpen ? <div className="fixed inset-0 z-[100] grid place-items-center bg-black/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="confirm-shift-report-title"><div className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/10 bg-[#fbfaf7] shadow-[0_30px_100px_rgba(0,0,0,0.4)]"><div className="border-b border-black/8 px-6 py-5"><p className="font-serif text-[10px] font-bold uppercase tracking-[0.22em] text-[#b44f84]">Chiusura del turno</p><h2 id="confirm-shift-report-title" className="mt-2 font-serif text-2xl font-semibold">Sei sicura di voler inviare?</h2></div><div className="px-6 py-5"><p className="text-sm font-semibold leading-relaxed text-black/60">Controlla che clienti, pause, prodotti, anomalie e recap siano completi. Dopo l’invio il report passerà allo Store Manager e non potrai modificarlo, salvo richiesta di correzione.</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setConfirmSubmitOpen(false)} disabled={Boolean(saving)} className="min-h-12 rounded-xl border border-black/10 bg-white text-xs font-black">Torna al report</button><button type="button" onClick={() => { setConfirmSubmitOpen(false); void submit("SUBMIT"); }} disabled={Boolean(saving)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-black text-xs font-black text-white"><Send className="size-4" /> Sì, invia</button></div></div></div></div> : null}
     </div>
   );
 }

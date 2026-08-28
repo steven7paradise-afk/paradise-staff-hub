@@ -5,7 +5,7 @@ import { isClientControlFormName } from "@/lib/client-control-form";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { attendanceActualMinutes, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
+import { attendanceActualMinutes, currentRomeMinutes, scheduledEntryPolicy } from "@/lib/scheduled-attendance";
 import { answerText, normalizeShiftReportData, romeDayRange } from "@/lib/shift-reports";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -208,6 +208,11 @@ export async function POST(request: NextRequest) {
   if (session.user.role !== "RESPONSABILE") return NextResponse.json({ error: "Solo il Responsabile di Turno può compilare il report" }, { status: 403 });
   if (action !== "SAVE" && action !== "SUBMIT") return NextResponse.json({ error: "Azione non valida" }, { status: 400 });
   const day = String(payload.date || todayInRome());
+  const today = todayInRome();
+  if (day > today) return NextResponse.json({ error: "Non puoi compilare un report futuro" }, { status: 400 });
+  if (action === "SUBMIT" && day === today && currentRomeMinutes() < 18 * 60 + 30) {
+    return NextResponse.json({ error: "Il report di oggi può essere inviato dalle 18:30" }, { status: 409 });
+  }
   const locationId = session.user.sedeId;
   if (!locationId) return NextResponse.json({ error: "Il Responsabile non ha una sede assegnata" }, { status: 400 });
   const { date } = romeDayRange(day);
