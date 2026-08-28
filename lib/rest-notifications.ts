@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendPushNotification } from "@/lib/push-sender";
+import { isRestReminderTime, romeCalendarDate } from "@/lib/rest-reminder-time";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 function isRestCategory(category: { name: string; code: string }) {
@@ -21,7 +22,10 @@ function formatNextShift(date: Date) {
   }).format(date);
 }
 
-export async function ensureTomorrowRestNotifications(today: Date) {
+export async function ensureTomorrowRestNotifications(now = new Date()) {
+  if (!isRestReminderTime(now)) return { created: 0, deferred: true };
+
+  const today = romeCalendarDate(now);
   const tomorrow = new Date(today);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const dayAfter = new Date(tomorrow);
@@ -53,11 +57,12 @@ export async function ensureTomorrowRestNotifications(today: Date) {
       const nextShift = futureEntries.find(
         (candidate) => candidate.user_id === entry.user_id && !isRestCategory(candidate.category),
       );
+      const restDayLabel = formatNextShift(tomorrow);
       const nextLabel = nextShift ? formatNextShift(nextShift.date) : "al prossimo turno";
       return {
         user_id: entry.user_id,
-        title: `Buon riposo, ${firstName(entry.user.name)}`,
-        message: `Domani sei di riposo. Ci vediamo ${nextLabel}.`,
+        title: `Domani, ${restDayLabel}, sei di riposo`,
+        message: `Ciao ${firstName(entry.user.name)}, questo avviso riguarda domani e non modifica il turno di oggi. Ci vediamo ${nextLabel}.`,
         type: reminderType,
         action_url: "/my-shifts",
         read: false,
@@ -67,8 +72,8 @@ export async function ensureTomorrowRestNotifications(today: Date) {
   if (notifications.length > 0) {
     await prisma.notification.createMany({ data: notifications });
 
-    // External delivery must never delay or break the dashboard response.
-    void Promise.allSettled(notifications.flatMap((notification) => {
+    // Wait for external delivery so the scheduled job cannot finish before the push is sent.
+    await Promise.allSettled(notifications.flatMap((notification) => {
       const entry = tomorrowEntries.find((item) => item.user_id === notification.user_id);
       return [
         sendPushNotification(
@@ -84,7 +89,7 @@ export async function ensureTomorrowRestNotifications(today: Date) {
           actionUrl: notification.action_url,
         }),
       ];
-    })).catch((error) => console.error("Rest reminder delivery error:", error));
+    }));
   }
-  return { created: notifications.length };
+  return { created: notifications.length, deferred: false };
 }

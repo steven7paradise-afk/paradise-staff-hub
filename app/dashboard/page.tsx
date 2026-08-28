@@ -133,7 +133,7 @@ export default async function DashboardPage() {
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
 
-  await safe(ensureTomorrowRestNotifications(statusToday), { created: 0 });
+  await safe(ensureTomorrowRestNotifications(), { created: 0, deferred: true });
 
   const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
   if (managementRoles.has(role)) {
