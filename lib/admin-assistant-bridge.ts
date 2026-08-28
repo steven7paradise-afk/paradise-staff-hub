@@ -1,9 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 
-const MUTATING_ASSISTANT_TOOLS = new Set([
+const PRIVATE_CHATBOT_BLOCKED_TOOLS = new Set([
   "remember_instruction",
   "forget_memory",
-  "prepare_communication",
 ]);
 
 export function assistantApiKeyFromHeaders(headers: Pick<Headers, "get">) {
@@ -20,9 +19,5 @@ export function safeSecretMatches(received: string, expected: string) {
 
 export function assistantToolsForAccess<T extends { name: string }>(availableTools: readonly T[], readOnly: boolean) {
   if (!readOnly) return [...availableTools];
-  return availableTools.filter((tool) => !MUTATING_ASSISTANT_TOOLS.has(tool.name));
-}
-
-export function isMutatingAssistantTool(name: string) {
-  return MUTATING_ASSISTANT_TOOLS.has(name);
+  return availableTools.filter((tool) => !PRIVATE_CHATBOT_BLOCKED_TOOLS.has(tool.name));
 }

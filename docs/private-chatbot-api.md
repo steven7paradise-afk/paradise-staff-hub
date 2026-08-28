@@ -78,7 +78,43 @@ Sono accettati al massimo gli ultimi 10 messaggi, con un massimo di 2.000 caratt
 - clienti, appuntamenti e schede Controllo Cliente;
 - ordini, fatture e cassa.
 
-L'accesso tramite chiave privata è in sola lettura: non può salvare memorie, inviare comunicazioni o confermare operazioni. Password, PIN, token, chiavi di integrazione e altri segreti non vengono esposti.
+L'accesso tramite chiave privata può leggere i dati e inviare comunicazioni soltanto con una conferma esplicita. Non può salvare o cancellare memorie e non può eseguire altre modifiche. Password, PIN, token, chiavi di integrazione e altri segreti non vengono esposti.
+
+## Comunicazioni con conferma
+
+Il chatbot può preparare un messaggio per una persona, un salone oppure l'Ufficio Paradise:
+
+```json
+{
+  "tool": "prepare_communication",
+  "arguments": {
+    "recipient_scope": "SALONE",
+    "recipient_name": "Salone Duomo",
+    "task_query": null,
+    "title": "Aggiornamento operativo",
+    "message": "Domani la riunione inizierà alle ore 09:30."
+  },
+  "question": "Prepara questa comunicazione per il Salone Duomo"
+}
+```
+
+La risposta contiene l'anteprima, il numero dei destinatari e `pendingAction.token`. Il bot deve mostrare destinatario, titolo e testo e chiedere: “Vuoi inviare questa comunicazione?”. Solo dopo una risposta affermativa deve inviare:
+
+```json
+{
+  "confirmActionToken": "<pendingAction.token>"
+}
+```
+
+Per annullare:
+
+```json
+{
+  "cancelActionToken": "<pendingAction.token>"
+}
+```
+
+Il token scade dopo 10 minuti e non può essere riutilizzato.
 
 ## Esempio
 

@@ -22,7 +22,7 @@ test("compares private keys without accepting missing or different values", () =
   assert.equal(safeSecretMatches("", "same-key"), false);
 });
 
-test("removes write tools from private chatbot access", () => {
+test("keeps confirmed communications but blocks assistant-memory writes", () => {
   const tools = [
     { name: "get_team_status" },
     { name: "remember_instruction" },
@@ -31,7 +31,7 @@ test("removes write tools from private chatbot access", () => {
   ];
   assert.deepEqual(
     assistantToolsForAccess(tools, true).map((tool) => tool.name),
-    ["get_team_status", "get_orders_overview"],
+    ["get_team_status", "prepare_communication", "get_orders_overview"],
   );
   assert.equal(assistantToolsForAccess(tools, false).length, tools.length);
 });

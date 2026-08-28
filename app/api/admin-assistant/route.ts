@@ -61,8 +61,9 @@ type OpenAIResponse = {
 type CommunicationAction = {
   type: "SEND_COMMUNICATION";
   auditId: string;
-  recipientId: string;
-  recipientName: string;
+  recipientIds: string[];
+  recipientNames: string[];
+  recipientLabel: string;
   title: string;
   message: string;
   taskId: string | null;
@@ -181,17 +182,18 @@ const tools = [
   {
     type: "function",
     name: "prepare_communication",
-    description: "Prepara una comunicazione professionale a una persona, verificando destinatario e task. Non invia: crea un'anteprima da confermare.",
+    description: "Prepara una comunicazione professionale a una persona, a tutto un salone o all'ufficio. Non invia: crea un'anteprima da confermare esplicitamente.",
     strict: true,
     parameters: {
       type: "object",
       properties: {
-        recipient_name: { type: "string", description: "Nome o parte del nome del destinatario." },
+        recipient_scope: { type: "string", enum: ["PERSONA", "SALONE", "UFFICIO"], description: "Tipo di destinatario." },
+        recipient_name: { type: ["string", "null"], description: "Nome della persona o del salone. Per UFFICIO può essere null." },
         task_query: { type: ["string", "null"], description: "Titolo o parole della task da collegare, se citata." },
         title: { type: "string", description: "Titolo professionale e sintetico della comunicazione." },
         message: { type: "string", description: "Testo professionale completo, pronto per l'anteprima." },
       },
-      required: ["recipient_name", "task_query", "title", "message"],
+      required: ["recipient_scope", "recipient_name", "task_query", "title", "message"],
       additionalProperties: false,
     },
   },
@@ -538,40 +540,83 @@ function decodeAction(token: string) {
 }
 
 async function prepareCommunication(args: Record<string, unknown>, actorId: string) {
+  const requestedScope = String(args.recipient_scope || "PERSONA").trim().toUpperCase();
+  const recipientScope = (["PERSONA", "SALONE", "UFFICIO"] as const).find((scope) => scope === requestedScope) || "PERSONA";
   const recipientQuery = String(args.recipient_name || "").trim().slice(0, 100);
   const taskQuery = typeof args.task_query === "string" ? args.task_query.trim().slice(0, 140) : "";
   const title = String(args.title || "").trim().slice(0, 120);
   const message = String(args.message || "").trim().slice(0, 3_000);
-  if (recipientQuery.length < 2 || !title || !message) {
+  if ((recipientScope !== "UFFICIO" && recipientQuery.length < 2) || !title || !message) {
     return { output: { prepared: false, error: "Destinatario, titolo o messaggio mancanti." } };
   }
+  if (recipientScope !== "PERSONA" && taskQuery) {
+    return { output: { prepared: false, error: "Una task può essere collegata soltanto a una comunicazione destinata a una singola persona." } };
+  }
 
-  const candidates = await prisma.user.findMany({
-    where: {
-      active: true,
-      employee_status: { not: "Ex dipendente" },
-      name: { contains: recipientQuery, mode: "insensitive" },
-    },
-    select: { id: true, name: true, location: { select: { name: true } } },
-    orderBy: { name: "asc" },
-    take: 6,
-  });
-  const exact = candidates.find((candidate) => candidate.name.toLocaleLowerCase("it").trim() === recipientQuery.toLocaleLowerCase("it").trim());
-  const recipient = exact || (candidates.length === 1 ? candidates[0] : null);
-  if (!recipient) {
-    return {
-      output: {
-        prepared: false,
-        error: candidates.length ? "Destinatario ambiguo: chiedi all'amministratore di scegliere il nome completo." : "Nessun destinatario attivo trovato.",
-        candidates: candidates.map((candidate) => ({ name: candidate.name, location: candidate.location?.name || "Nessuna sede" })),
+  let recipients: Array<{ id: string; name: string }> = [];
+  let recipientLabel = "";
+  let targetType = "USER";
+  let targetId = "";
+
+  if (recipientScope === "PERSONA") {
+    const candidates = await prisma.user.findMany({
+      where: {
+        active: true,
+        employee_status: { not: "Ex dipendente" },
+        name: { contains: recipientQuery, mode: "insensitive" },
       },
-    };
+      select: { id: true, name: true, location: { select: { name: true } } },
+      orderBy: { name: "asc" },
+      take: 6,
+    });
+    const exact = candidates.find((candidate) => candidate.name.toLocaleLowerCase("it").trim() === recipientQuery.toLocaleLowerCase("it").trim());
+    const recipient = exact || (candidates.length === 1 ? candidates[0] : null);
+    if (!recipient) {
+      return {
+        output: {
+          prepared: false,
+          error: candidates.length ? "Destinatario ambiguo: chiedi all'amministratore di scegliere il nome completo." : "Nessun destinatario attivo trovato.",
+          candidates: candidates.map((candidate) => ({ name: candidate.name, location: candidate.location?.name || "Nessuna sede" })),
+        },
+      };
+    }
+    recipients = [{ id: recipient.id, name: recipient.name }];
+    recipientLabel = recipient.name;
+    targetId = recipient.id;
+  } else {
+    const locationQuery = recipientScope === "UFFICIO" ? (recipientQuery || "Ufficio Paradise") : recipientQuery;
+    const locations = await prisma.location.findMany({
+      where: { active: true, name: { contains: locationQuery, mode: "insensitive" } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+      take: 6,
+    });
+    const exact = locations.find((location) => location.name.toLocaleLowerCase("it").trim() === locationQuery.toLocaleLowerCase("it").trim());
+    const location = exact || (locations.length === 1 ? locations[0] : null);
+    if (!location) {
+      return {
+        output: {
+          prepared: false,
+          error: locations.length ? "Sede ambigua: chiedi di scegliere il nome completo." : "Nessuna sede attiva trovata.",
+          candidates: locations.map((candidate) => candidate.name),
+        },
+      };
+    }
+    recipients = await prisma.user.findMany({
+      where: { active: true, employee_status: { not: "Ex dipendente" }, sede_id: location.id },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    if (!recipients.length) return { output: { prepared: false, error: `Nessun lavoratore attivo assegnato a ${location.name}.` } };
+    recipientLabel = location.name;
+    targetType = "LOCATION";
+    targetId = location.id;
   }
 
   const task = taskQuery
     ? await prisma.staffTask.findFirst({
         where: {
-          assignees: { some: { id: recipient.id } },
+          assignees: { some: { id: recipients[0].id } },
           OR: [
             { title: { contains: taskQuery, mode: "insensitive" } },
             { description: { contains: taskQuery, mode: "insensitive" } },
@@ -582,24 +627,25 @@ async function prepareCommunication(args: Record<string, unknown>, actorId: stri
       })
     : null;
   if (taskQuery && !task) {
-    return { output: { prepared: false, error: `Non trovo una task “${taskQuery}” assegnata a ${recipient.name}. Chiedi di specificare meglio la task.` } };
+    return { output: { prepared: false, error: `Non trovo una task “${taskQuery}” assegnata a ${recipientLabel}. Chiedi di specificare meglio la task.` } };
   }
 
   const audit = await prisma.assistantActionLog.create({
     data: {
       user_id: actorId,
       action: "SEND_COMMUNICATION",
-      target_type: "USER",
-      target_id: recipient.id,
-      summary: `Comunicazione a ${recipient.name}: ${title}`,
-      payload: { recipientId: recipient.id, recipientName: recipient.name, title, message, taskId: task?.id || null, taskTitle: task?.title || null },
+      target_type: targetType,
+      target_id: targetId,
+      summary: `Comunicazione a ${recipientLabel}: ${title}`,
+      payload: { recipientIds: recipients.map((recipient) => recipient.id), recipientNames: recipients.map((recipient) => recipient.name), recipientLabel, title, message, taskId: task?.id || null, taskTitle: task?.title || null },
     },
   });
   const action: CommunicationAction = {
     type: "SEND_COMMUNICATION",
     auditId: audit.id,
-    recipientId: recipient.id,
-    recipientName: recipient.name,
+    recipientIds: recipients.map((recipient) => recipient.id),
+    recipientNames: recipients.map((recipient) => recipient.name),
+    recipientLabel,
     title,
     message,
     taskId: task?.id || null,
@@ -610,7 +656,7 @@ async function prepareCommunication(args: Record<string, unknown>, actorId: stri
     token: encodeAction(action, expiresAt),
     type: action.type,
     label: "Invia comunicazione",
-    recipient: recipient.name,
+    recipient: recipientLabel,
     title,
     message,
     expiresAt: new Date(expiresAt).toISOString(),
@@ -618,7 +664,9 @@ async function prepareCommunication(args: Record<string, unknown>, actorId: stri
   return {
     output: {
       prepared: true,
-      recipient: recipient.name,
+      recipient: recipientLabel,
+      recipientCount: recipients.length,
+      recipients: recipients.map((recipient) => recipient.name),
       task: task ? { title: task.title, status: task.status, dueDate: task.due_date?.toISOString() || null } : null,
       title,
       message,
@@ -636,13 +684,18 @@ async function confirmCommunication(token: string, actorId: string) {
   if (!audit || audit.user_id !== actorId || audit.status !== "PENDING") {
     throw new Error("Questa operazione non è più disponibile.");
   }
-  const recipient = await prisma.user.findFirst({ where: { id: action.recipientId, active: true }, select: { id: true, name: true } });
-  if (!recipient) throw new Error("Il destinatario non è più disponibile.");
+  const recipients = await prisma.user.findMany({
+    where: { id: { in: action.recipientIds }, active: true, employee_status: { not: "Ex dipendente" } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  if (!recipients.length || recipients.length !== action.recipientIds.length) {
+    throw new Error("Uno o più destinatari non sono più disponibili. Prepara nuovamente la comunicazione.");
+  }
 
   try {
-    const notificationId = randomUUID();
-    await createNotifications([{
-      id: notificationId,
+    const notifications = recipients.map((recipient) => ({
+      id: randomUUID(),
       user_id: recipient.id,
       title: action.title,
       message: action.message,
@@ -651,11 +704,21 @@ async function confirmCommunication(token: string, actorId: string) {
       action_url: action.taskId ? "/tasks" : "/notifications",
       read: false,
       created_at: new Date(),
-    }], {
-      deliveryActionUrl: () => `/notifications?communication=${encodeURIComponent(notificationId)}`,
+    }));
+    await createNotifications(notifications, {
+      deliveryActionUrl: (notification) => notification.id
+        ? `/notifications?communication=${encodeURIComponent(notification.id)}`
+        : "/notifications",
     });
     await prisma.assistantActionLog.update({ where: { id: audit.id }, data: { status: "COMPLETED", confirmed_at: new Date() } });
-    return { answer: `Comunicazione inviata a ${recipient.name}.`, links: [APP_PAGES.communications] };
+    return {
+      answer: recipients.length === 1
+        ? `Comunicazione inviata a ${recipients[0].name}.`
+        : `Comunicazione inviata a ${action.recipientLabel}: ${recipients.length} destinatari.`,
+      recipient: action.recipientLabel,
+      recipientCount: recipients.length,
+      links: [APP_PAGES.communications],
+    };
   } catch (error) {
     await prisma.assistantActionLog.update({ where: { id: audit.id }, data: { status: "FAILED", confirmed_at: new Date() } }).catch(() => null);
     throw error;
@@ -2425,7 +2488,7 @@ export async function GET(request: NextRequest) {
     service: "Paradise Assistant",
     endpoint: "/api/admin-assistant",
     access: access.privateChatbot ? "private-chatbot" : "admin-session",
-    mode: access.privateChatbot ? "read-only" : "interactive",
+    mode: access.privateChatbot ? "read-and-confirmed-communications" : "interactive",
     areas: PRIVATE_CHATBOT_AREAS,
     limits: { historyMessages: MAX_HISTORY, charactersPerMessage: MAX_MESSAGE_LENGTH },
     request: { messages: [{ role: "user", content: "Chi è in pausa adesso?" }] },
@@ -2450,9 +2513,6 @@ export async function POST(request: NextRequest) {
     confirmActionToken?: string;
     cancelActionToken?: string;
   } | null;
-  if (access.privateChatbot && (payload?.confirmActionToken || payload?.cancelActionToken)) {
-    return NextResponse.json({ error: "L'integrazione chatbot privata è in sola lettura." }, { status: 403 });
-  }
   try {
     if (payload?.confirmActionToken) return NextResponse.json(await confirmCommunication(payload.confirmActionToken, access.actorId));
     if (payload?.cancelActionToken) return NextResponse.json(await cancelCommunication(payload.cancelActionToken, access.actorId));
@@ -2497,11 +2557,13 @@ export async function POST(request: NextRequest) {
         output: unknown;
         link?: { path: string; label: string };
         navigation?: { path: string; label: string };
+        pendingAction?: PendingAction;
       };
       return NextResponse.json({
         tool: requestedTool.name,
         generatedAt: new Date().toISOString(),
         data: result.output,
+        pendingAction: result.pendingAction || null,
         link: result.link || null,
       });
     } catch (error) {
@@ -2542,7 +2604,7 @@ export async function POST(request: NextRequest) {
   const requiredTool = requiredAssistantTool(lastUserMessage);
   const clientResponseType = requestedClientResponseType(lastUserMessage);
   const accessInstructions = access.privateChatbot
-    ? "Questa richiesta proviene dal chatbot privato tramite un accesso in sola lettura. Non proporre, preparare o confermare operazioni di scrittura, invii o modifiche."
+    ? "Questa richiesta proviene dal chatbot privato. Puoi leggere i dati e preparare comunicazioni con prepare_communication. Non dichiarare mai che una comunicazione è stata inviata: mostra destinatario e testo e chiedi conferma esplicita; l'invio avverrà soltanto tramite confirmActionToken. Non effettuare altre scritture o modifiche."
     : "Questa richiesta proviene da una sessione amministrativa interattiva dell'applicazione.";
   const instructions = `Sei Paradise Assistant, assistente operativo interno di Paradise Beauty.
 ${accessInstructions}
