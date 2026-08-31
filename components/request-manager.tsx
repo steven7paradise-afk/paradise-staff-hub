@@ -843,7 +843,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                 decisionDraft={decisionDrafts[selectedRequest.id] ?? ""}
                 onMedicalDraftChange={(value) => setMedicalDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
                 onDecisionDraftChange={(value) => setDecisionDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
-                onChangeStatus={(id, status) => changeStatus(id, status)}
+                onChangeStatus={(id, status, lateAccountingMode) => changeStatus(id, status, lateAccountingMode)}
                 onAcknowledge={(id) => acknowledgeLateRequest(id)}
                 onUpdateSickness={async (id, payload) => {
                   await updateSicknessJustification(id, payload);

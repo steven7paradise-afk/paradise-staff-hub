@@ -141,19 +141,18 @@ export async function PATCH(
       }
 
       if (automaticLate && status === "APPROVED" && lateAccountingMode) {
-        const nextDay = new Date(existing.start_date);
-        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-        const entry = await tx.attendanceLog.findFirst({
-          where: {
-            user_id: existing.user_id,
-            type: "ENTRATA",
-            date: { gte: existing.start_date, lt: nextDay },
-          },
-          orderBy: { timestamp: "asc" },
-        });
-        if (!entry) throw new Error("Timbratura di entrata non trovata per il ritardo.");
-
         if (lateAccountingMode === "ACTUAL") {
+          const nextDay = new Date(existing.start_date);
+          nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+          const entry = await tx.attendanceLog.findFirst({
+            where: {
+              user_id: existing.user_id,
+              type: "ENTRATA",
+              date: { gte: existing.start_date, lt: nextDay },
+            },
+            orderBy: { timestamp: "asc" },
+          });
+          if (!entry) throw new Error("Timbratura di entrata non trovata per il ritardo.");
           const actualTimestamp = actualEntryTimestamp(entry);
           if (!actualTimestamp) throw new Error("Ora effettiva della timbratura non disponibile.");
           const actualTime = new Intl.DateTimeFormat("it-IT", {
@@ -171,14 +170,10 @@ export async function PATCH(
             },
           });
           lateAccountingLabel = `conteggio dall’ora effettiva (${actualTime})`;
+          shouldUnlockWorkHours = true;
         } else {
-          await tx.attendanceLog.update({
-            where: { id: entry.id },
-            data: { note: `${entry.note || ""} - [PENALITA_RITARDO_30] Decisione admin: mantenuta la prassi -30 minuti.` },
-          });
           lateAccountingLabel = "mantenuta la prassi -30 minuti";
         }
-        shouldUnlockWorkHours = true;
       }
 
       return { updated, syncResult };
