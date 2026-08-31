@@ -4721,7 +4721,7 @@ export function AppointmentsBrowser({
               </section>
 
               {serviceDetailsModalOpen ? (
-                <div className="fixed inset-0 z-[135] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-6">
+                <GlobalFullscreenLayer className="flex items-center justify-center overflow-hidden bg-[#21171D]/50 p-3 backdrop-blur-[3px] sm:p-6">
                   <button
                     type="button"
                     onClick={() => setServiceDetailsModalOpen(false)}
@@ -4732,37 +4732,53 @@ export function AppointmentsBrowser({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="service-details-title"
-                    className="relative z-10 flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-[#F3B5D4] bg-white shadow-[0_30px_90px_rgba(0,0,0,0.28)]"
+                    className="relative z-10 flex max-h-[calc(100dvh-24px)] w-full max-w-4xl flex-col overflow-hidden rounded-[26px] border border-white/80 bg-[#FCF8FA] shadow-[0_32px_100px_rgba(55,26,42,0.32)] sm:max-h-[calc(100dvh-48px)] sm:rounded-[30px]"
                   >
-                    <div className="flex items-start justify-between gap-4 border-b border-[#F3D8E5] bg-[#FFF3F8] px-5 py-5 sm:px-7">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
-                          Compilazione rapida
-                        </p>
-                        <h3 id="service-details-title" className="mt-1 text-2xl font-black text-[#1F1F1F]">
-                          2. Dettagli del servizio
-                        </h3>
-                        <p className="mt-1 text-xs font-bold text-black/50">
-                          Tocca le risposte e poi chiudi il pop-up.
-                        </p>
+                    <div className="flex items-start justify-between gap-4 border-b border-[#EEC9DA] bg-[linear-gradient(110deg,#FFF0F6_0%,#FFFFFF_72%)] px-5 py-4 sm:px-7 sm:py-5">
+                      <div className="flex min-w-0 items-center gap-3.5">
+                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#B83D7F] text-white shadow-[0_8px_20px_rgba(184,61,127,0.25)]">
+                          <Pencil className="size-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
+                            Compilazione rapida · circa 1 minuto
+                          </p>
+                          <h3 id="service-details-title" className="mt-0.5 truncate text-xl font-black text-[#241C20] sm:text-2xl">
+                            Dettagli del servizio
+                          </h3>
+                          <p className="mt-0.5 text-[11px] font-bold text-black/50 sm:text-xs">
+                            Tocca una risposta per ogni sezione. Il salvataggio è automatico.
+                          </p>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setServiceDetailsModalOpen(false)}
-                        className="grid size-11 shrink-0 place-items-center rounded-full border border-[#F3B5D4] bg-white text-[#B83D7F] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95"
-                        aria-label="Chiudi pop-up dettagli servizio"
-                      >
-                        <X className="size-5" />
-                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={polishClientControlNote}
+                          disabled={!hasClientControlNoteContext() || clientControlPolishing}
+                          className="hidden min-h-10 items-center gap-1.5 rounded-xl border border-[#E7B6CD] bg-white px-3 text-[10px] font-black text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95 disabled:opacity-45 sm:inline-flex"
+                        >
+                          <Sparkles className="size-3.5" />
+                          {clientControlPolishing ? "Sistemo..." : "Sistema nota"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setServiceDetailsModalOpen(false)}
+                          className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#E7B6CD] bg-white text-[#A52E6B] shadow-sm transition hover:bg-[#FFF0F6] active:scale-95"
+                          aria-label="Chiudi pop-up dettagli servizio"
+                        >
+                          <X className="size-5" />
+                        </button>
+                      </div>
                     </div>
 
-                    <section className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-7">
-                <div className="flex items-center justify-end gap-3 border-b border-black/5 pb-3">
+                    <section className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-[#FCF8FA] p-4 sm:p-6 md:grid-cols-2">
+                <div className="flex items-center justify-end md:hidden">
                   <button
                     type="button"
                     onClick={polishClientControlNote}
                     disabled={!hasClientControlNoteContext() || clientControlPolishing}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#D96B94] px-4 py-1.5 text-[11px] font-bold text-white shadow-2xs transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#D96B94] px-4 text-[11px] font-black text-white shadow-sm transition active:scale-95 hover:bg-[#C85982] disabled:opacity-45"
                   >
                     <Sparkles className="size-3.5" />
                     {clientControlPolishing ? "Sistemo..." : "Sistema la nota"}
@@ -4770,9 +4786,10 @@ export function AppointmentsBrowser({
                 </div>
 
                 {/* 1. Quanti grammi? */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    QUANTI GRAMMI?
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">1</span>
+                    Quanti grammi?
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     {["100g", "150g", "200g"].map((gram) => {
@@ -4786,7 +4803,7 @@ export function AppointmentsBrowser({
                             setSelectedGrammi(next);
                             updateShopifyNote({ grammi: next });
                           }}
-                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                          className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4804,7 +4821,7 @@ export function AppointmentsBrowser({
                         setSelectedGrammi(next);
                         updateShopifyNote({ grammi: next === "custom" ? customGrammiInput : next });
                       }}
-                      className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                      className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                         selectedGrammi === "custom"
                           ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                           : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4822,16 +4839,17 @@ export function AppointmentsBrowser({
                           updateShopifyNote({ grammi: val });
                         }}
                         placeholder="es. 250g"
-                        className="h-8 w-24 rounded-full border border-[#D96B94] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                        className="h-11 w-28 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
                       />
                     )}
                   </div>
                 </div>
 
                 {/* 2. Lunghezza */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    LUNGHEZZA
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
+                    Lunghezza
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {["50cm", "55cm", "65cm", "75cm"].map((len) => {
@@ -4845,7 +4863,7 @@ export function AppointmentsBrowser({
                             setSelectedLunghezza(next);
                             updateShopifyNote({ lunghezza: next });
                           }}
-                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border ${
+                          className={`min-h-11 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4859,9 +4877,10 @@ export function AppointmentsBrowser({
                 </div>
 
                 {/* 3. Quante fasce? */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    QUANTE FASCE?
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
+                    Quante fasce?
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {["1", "2", "3", "4", "5"].map((num) => {
@@ -4875,7 +4894,7 @@ export function AppointmentsBrowser({
                             setSelectedFasce(next);
                             updateShopifyNote({ fasce: next });
                           }}
-                          className={`size-9 rounded-xl text-xs font-black transition active:scale-95 border grid place-items-center ${
+                          className={`grid size-11 place-items-center rounded-xl border text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4893,7 +4912,7 @@ export function AppointmentsBrowser({
                         setSelectedFasce(next);
                         updateShopifyNote({ fasce: next === "custom" ? customFasceInput : next });
                       }}
-                      className={`h-9 rounded-xl px-3 text-xs font-black transition active:scale-95 border grid place-items-center ${
+                      className={`grid h-11 place-items-center rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                         selectedFasce === "custom"
                           ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                           : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4911,16 +4930,17 @@ export function AppointmentsBrowser({
                           updateShopifyNote({ fasce: val });
                         }}
                         placeholder="es. 6"
-                        className="h-9 w-20 rounded-xl border border-[#D96B94] bg-white px-3 text-xs font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
+                        className="h-11 w-24 rounded-xl border-2 border-[#D96B94] bg-white px-3 text-sm font-bold text-[#1F1F1F] outline-none focus:ring-2 focus:ring-[#D96B94]/20"
                       />
                     )}
                   </div>
                 </div>
 
                 {/* 4. Come era la cliente? */}
-                <div>
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-black/50 mb-1.5">
-                    COME ERA LA CLIENTE?
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
+                  <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
+                    Come era la cliente?
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -4939,7 +4959,7 @@ export function AppointmentsBrowser({
                             setSelectedAtteggiamento(next);
                             updateShopifyNote({ atteggiamento: next });
                           }}
-                          className={`rounded-full px-4 py-1.5 text-xs font-black transition active:scale-95 border flex items-center gap-1.5 ${
+                          className={`flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
                             selected
                               ? "bg-[#D96B94] text-white border-[#D96B94] shadow-2xs"
                               : "bg-white text-[#B83D7F] border-[#F3B5D4] hover:bg-[#FCE5F3]"
@@ -4954,10 +4974,10 @@ export function AppointmentsBrowser({
                 </div>
 
                 {/* 5. Note Extra (con limite di caratteri) */}
-                <div>
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="block text-[10px] font-black uppercase tracking-wider text-black/50">
-                      NOTE EXTRA (MAX 250 CARATTERI)
+                    <span className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      Note extra <span className="text-black/35">· facoltative</span>
                     </span>
                     <span className="text-[10px] font-extrabold text-black/40">
                       {extraNoteText.length}/250
@@ -4972,22 +4992,26 @@ export function AppointmentsBrowser({
                       setExtraNoteText(text);
                       updateShopifyNote({ extraNote: text });
                     }}
-                    className="h-11 w-full rounded-2xl border border-[#F3B5D4] bg-white px-3.5 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94]"
+                    className="mt-2 h-12 w-full rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
                     placeholder="Scrivi qui eventuali note extra per la cliente..."
                   />
                 </div>
                     </section>
-                    <div className="border-t border-[#F3D8E5] bg-white p-4 sm:px-7">
+                    <div className="flex items-center justify-between gap-4 border-t border-[#EEC9DA] bg-white px-4 py-3 sm:px-7">
+                      <span className="hidden items-center gap-2 text-[10px] font-black text-emerald-700 sm:inline-flex">
+                        <Check className="size-4" />
+                        Selezioni salvate automaticamente
+                      </span>
                       <button
                         type="button"
                         onClick={() => setServiceDetailsModalOpen(false)}
-                        className="h-12 w-full rounded-2xl bg-[#B83D7F] px-5 text-sm font-black text-white shadow-sm transition hover:bg-[#A93270] active:scale-[0.99]"
+                        className="h-12 w-full rounded-2xl bg-[#B83D7F] px-8 text-sm font-black text-white shadow-[0_8px_20px_rgba(184,61,127,0.22)] transition hover:bg-[#A93270] active:scale-[0.99] sm:w-auto sm:min-w-56"
                       >
                         Fatto · chiudi
                       </button>
                     </div>
                   </div>
-                </div>
+                </GlobalFullscreenLayer>
               ) : null}
 
               {/* NOTA SHOPIFY (Read-only) */}
