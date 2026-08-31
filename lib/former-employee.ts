@@ -1,5 +1,11 @@
 export const FORMER_EMPLOYEE_STATUS = "Ex dipendente";
 
+export function resolveEmployeeActive(requestedActive: unknown, requestedStatus: string, currentActive: boolean) {
+  if (typeof requestedActive === "boolean") return requestedActive;
+  if (requestedStatus === FORMER_EMPLOYEE_STATUS) return true;
+  return currentActive;
+}
+
 export function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

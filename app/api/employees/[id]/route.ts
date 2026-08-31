@@ -4,7 +4,7 @@ import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
-import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
+import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS, resolveEmployeeActive } from "@/lib/former-employee";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
@@ -110,7 +110,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       whatsapp_phone: data.whatsappPhone !== undefined ? (data.whatsappPhone ? String(data.whatsappPhone).trim() : null) : undefined,
       mansione: data.mansione !== undefined ? (data.mansione ? String(data.mansione).trim() : null) : undefined,
       iban: data.iban !== undefined ? (data.iban ? String(data.iban).trim().toUpperCase() : null) : undefined,
-      active: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? true : (data.active !== undefined ? Boolean(data.active) : undefined),
+      active: resolveEmployeeActive(data.active, requestedEmployeeStatus, current.active),
       employee_status: data.employeeStatus !== undefined ? requestedEmployeeStatus : undefined,
       manager_id: data.managerId !== undefined ? (data.managerId ? String(data.managerId) : null) : undefined,
       access_list: requestedEmployeeStatus === FORMER_EMPLOYEE_STATUS ? ["/documents"] : (data.accessList !== undefined ? data.accessList : undefined),
