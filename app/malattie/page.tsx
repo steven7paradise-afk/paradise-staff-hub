@@ -34,6 +34,7 @@ export default async function MalattiePage(props: {
   const requests = await prisma.leaveRequest.findMany({
     where: {
       type: "MALATTIA",
+      status: { not: "REJECTED" },
       start_date: { lte: endOfYear },
       end_date: { gte: startOfYear },
       user: {

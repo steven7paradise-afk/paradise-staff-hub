@@ -10,6 +10,7 @@ const leaveTypeCategory: Record<LeaveType, { code: string; name: string; color: 
 
 export const UNJUSTIFIED_ABSENCE_MARKER = "[ASSENZA_INGIUSTIFICATA]";
 const unjustifiedAbsenceCategory = { code: "AI", name: "Assenza ingiustificata", color: "#B91C1C", text_color: "#FFFFFF" };
+const absenceCategory = { code: "AS", name: "Assenza", color: "#FCA5A5", text_color: "#7F1D1D" };
 
 function atStartOfDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -43,7 +44,8 @@ export async function syncApprovedLeaveToSchedule(
   }
 
   const unjustifiedAbsence = String(leaveRequest.reason || "").includes(UNJUSTIFIED_ABSENCE_MARKER);
-  const categorySeed = unjustifiedAbsence ? unjustifiedAbsenceCategory : leaveTypeCategory[leaveRequest.type as LeaveType];
+  const unconfirmedSickness = leaveRequest.type === "MALATTIA" && !leaveRequest.medical_code;
+  const categorySeed = unjustifiedAbsence ? unjustifiedAbsenceCategory : unconfirmedSickness ? absenceCategory : leaveTypeCategory[leaveRequest.type as LeaveType];
   const allCategories = (await prisma.scheduleCategory.findMany({
     where: {
       location_id: leaveRequest.user.sede_id,
@@ -55,6 +57,8 @@ export async function syncApprovedLeaveToSchedule(
 
   if (unjustifiedAbsence) {
     matchingCategory = allCategories.find((c) => c.code === "AI" || c.name.toLowerCase().includes("assenza ingiustificata"));
+  } else if (unconfirmedSickness) {
+    matchingCategory = allCategories.find((c) => c.code === "AS" || c.name.toLowerCase() === "assenza");
   } else if (type === "FERIE") {
     matchingCategory = allCategories.find((c) => c.code === "F" || c.code === "FE" || c.name.toLowerCase().includes("ferie"));
   } else if (type === "PERMESSO") {
@@ -73,7 +77,7 @@ export async function syncApprovedLeaveToSchedule(
       where: { id: matchingCategory.id },
       data: {
         active: true,
-        ...(unjustifiedAbsence ? unjustifiedAbsenceCategory : {}),
+        ...(unjustifiedAbsence ? unjustifiedAbsenceCategory : unconfirmedSickness ? absenceCategory : {}),
       },
     });
   } else {

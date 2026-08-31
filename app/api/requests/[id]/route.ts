@@ -154,6 +154,8 @@ export async function PATCH(
       let syncResult = null;
       if (status === "APPROVED" && (!automaticLate || resolvesMissingClockAsAbsence)) {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
+      } else if ((medicalCode !== undefined || sicknessUnjustified !== undefined) && existing.status === "APPROVED") {
+        syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
       } else if (status !== undefined && existing.status === "APPROVED" && !automaticLate) {
         await revertApprovedLeaveFromSchedule(tx, updated.id);
       }
@@ -284,4 +286,38 @@ export async function PATCH(
   }
 
   return NextResponse.json({ leaveRequest, scheduleSync, calendarSync, lateAccountingLabel });
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.id || !approverRoles.has(session.user.role)) {
+    return NextResponse.json({ error: "Solo l’amministrazione può eliminare una pratica." }, { status: 403 });
+  }
+
+  const { id } = await context.params;
+  const existing = await prisma.leaveRequest.findUnique({ where: { id } });
+  if (!existing || existing.type !== "MALATTIA") {
+    return NextResponse.json({ error: "Pratica di assenza o malattia non trovata." }, { status: 404 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (existing.status === "APPROVED") await revertApprovedLeaveFromSchedule(tx, existing.id);
+    await tx.leaveRequest.update({
+      where: { id: existing.id },
+      data: {
+        status: "REJECTED",
+        approved_by: null,
+        approved_at: null,
+        admin_note: `${existing.admin_note ? `${existing.admin_note} — ` : ""}[ELIMINATA_DA_MALATTIE]`,
+      },
+    });
+  });
+
+  await syncLeaveRequestToGoogleCalendar(existing.id).catch((error) => {
+    console.error("Errore rimozione pratica dal calendario:", error);
+  });
+  return NextResponse.json({ deleted: true });
 }
