@@ -745,6 +745,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   note: string | null;
   email: string | null;
   phone: string | null;
+  createdAt: string | null;
   financialStatus: string | null;
   paymentGateways: string[];
   paymentMethod: "CARTA" | "CASHMATIC" | "CONTANTI" | "MISTO" | "DA_VERIFICARE";
@@ -846,6 +847,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const note = orderData.note || null;
       const email = orderData.customer?.email || null;
       const phone = orderData.customer?.phone || null;
+      const createdAt = orderData.created_at ? String(orderData.created_at) : null;
       const financialStatus = orderData.financial_status ? String(orderData.financial_status) : null;
       let paymentTransaction: any = null;
       let successfulPaymentTransactions: any[] = [];
@@ -913,6 +915,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         note,
         email,
         phone,
+        createdAt,
         financialStatus,
         paymentGateways,
         paymentMethod,

@@ -116,6 +116,13 @@
     linear-gradient(145deg, color-mix(in srgb, var(--background) 88%, white), var(--background));
 }
 
+/* Appuntamenti è una schermata operativa ad alta densità: un canvas uniforme
+   riduce il rumore visivo e mantiene leggibili filtri e righe durante la cassa. */
+.app-content-surface:has(.appointments-workspace),
+.app-content-surface:has(.appointments-workspace) .app-liquid-canvas {
+  background: #f6eef2;
+}
+
 .app-content-surface .app-liquid-canvas :is(
   [class~="bg-white"],
   [class~="bg-white/50"],

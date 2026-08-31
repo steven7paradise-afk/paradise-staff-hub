@@ -108,9 +108,12 @@ export async function POST(request: NextRequest) {
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
     : null;
   const canSubmitFromDashboard = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(String(session?.user?.role ?? ""));
-  const canSubmitFromSelectedPcProfile = Boolean(operationalUser?.isPC && operationalUser.id !== "PC_CASSA");
+  // Il PC cassa è già protetto dal link monouso della sede. Il salvataggio non
+  // deve fallire se il cookie del profilo operatore tarda ad aggiornarsi o se
+  // il nome della collaboratrice non coincide perfettamente con il database.
+  const canSubmitFromAuthorizedPc = Boolean(operationalUser?.isPC);
 
-  if (!tabletDevice && !canSubmitFromDashboard && !canSubmitFromSelectedPcProfile) {
+  if (!tabletDevice && !canSubmitFromDashboard && !canSubmitFromAuthorizedPc) {
     return NextResponse.json({ error: "Tablet non autorizzato" }, { status: 401 });
   }
 
@@ -145,14 +148,22 @@ export async function POST(request: NextRequest) {
     customAtteggiamento?: string;
     customExtraNote?: string;
     manualPaymentMethod?: "CARTA" | "SHOPIFY" | "CONTANTI";
+    saveAsDraft?: boolean;
   } | null;
 
   const isFinito = !!body?.isFinito;
+  const isDraft = !!body?.saveAsDraft;
   const salonName = textValue(body?.salon || tabletDevice?.location?.name);
   const clientName = textValue(body?.clientName);
   const staffIds = Array.isArray(body?.staffIds) ? body!.staffIds.filter(Boolean) : [];
 
-  if (!isFinito && (!salonName || !clientName || staffIds.length === 0)) {
+  const bookingIdFromBody = textValue(body?.bookingId);
+  if (
+    !isFinito &&
+    (!salonName ||
+      (!clientName && !(isDraft && bookingIdFromBody)) ||
+      (!isDraft && staffIds.length === 0))
+  ) {
     return NextResponse.json({ error: "Completa sede, nome cliente e collaboratore." }, { status: 400 });
   }
 
@@ -167,7 +178,7 @@ export async function POST(request: NextRequest) {
   }
 
   let staffForSalon: any[] = [];
-  if (!isFinito) {
+  if (!isFinito && staffIds.length > 0) {
     const selectedStaff = await prisma.user.findMany({
       where: {
         id: { in: staffIds },
@@ -184,7 +195,7 @@ export async function POST(request: NextRequest) {
     });
 
     staffForSalon = selectedStaff.filter((employee) => sameSalon(employee.location?.name, location.name));
-    if (staffForSalon.length === 0) {
+    if (!isDraft && staffForSalon.length === 0) {
       return NextResponse.json({ error: "Nessun collaboratore attivo per questa sede." }, { status: 400 });
     }
   }
@@ -215,7 +226,9 @@ export async function POST(request: NextRequest) {
   let shopifyTotalPrice: number | null = null;
   let shopifyOrderNote = "";
 
-  if (shopifyOrder) {
+  // Una bozza deve salvarsi immediatamente: le verifiche Shopify vengono
+  // eseguite soltanto quando il controllo viene confermato.
+  if (shopifyOrder && !isDraft) {
     const { getShopifyOrderDetails } = await import("@/lib/shopify");
     const details = await getShopifyOrderDetails(shopifyOrder).catch(() => null);
     if (details) {
@@ -228,7 +241,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const secondOrderDetails = secondShopifyOrder
+  const secondOrderDetails = secondShopifyOrder && !isDraft
     ? await import("@/lib/shopify").then(({ getShopifyOrderDetails }) =>
         getShopifyOrderDetails(secondShopifyOrder).catch(() => null)
       )
@@ -263,7 +276,7 @@ export async function POST(request: NextRequest) {
     verifiedPaymentMethod !== "DA_VERIFICARE"
   );
 
-  if (!isFinito && !isNoShow) {
+  if (!isFinito && !isNoShow && !isDraft) {
     if (!secondShopifyOrder) {
       return NextResponse.json({ error: "Inserisci il 2° codice ordine del pagamento finale." }, { status: 400 });
     }
@@ -283,7 +296,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Auto-mark as "Da controllare" if there's a payment mismatch
-  let correctnessVal = isNoShow ? "No Show" : isFinito ? "Finito" : "Controllato";
+  let correctnessVal = isNoShow ? "No Show" : isFinito ? "Finito" : isDraft ? "Bozza" : "Controllato";
 
   // Upload helper for Google Drive
   const uploadToDriveHelper = async (base64String: string, suffix: string) => {
@@ -407,7 +420,7 @@ export async function POST(request: NextRequest) {
     client_control_declared_payment_method: manualPaymentMethod,
   } : {
     [CLIENT_CONTROL_FIELD_IDS.location]: location.name,
-    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName,
+    [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isDraft ? "Cliente da completare" : ""),
     [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
     [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
     [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
@@ -419,8 +432,10 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.paymentReference]: secondOrderDetails?.paymentReference || "",
     [CLIENT_CONTROL_FIELD_IDS.paymentProcessedAt]: secondOrderDetails?.transactionProcessedAt || "",
     client_control_payment_breakdown: secondOrderDetails?.paymentBreakdown || [],
-    [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: staffNames[0],
-    [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: staffNames,
+    // In bozza la collaboratrice può essere ancora da scegliere: non cancellare
+    // quella già salvata quando il campo non è stato compilato.
+    [CLIENT_CONTROL_FIELD_IDS.serviceOwner]: staffNames[0] || undefined,
+    [CLIENT_CONTROL_FIELD_IDS.serviceStaff]: staffNames.length ? staffNames : undefined,
     [CLIENT_CONTROL_FIELD_IDS.shopifyOrder]: shopifyOrder,
     [CLIENT_CONTROL_FIELD_IDS.instagramTag]: textValue(body?.instagramTag),
     [CLIENT_CONTROL_FIELD_IDS.notes]: boolValue(body?.notes),
@@ -443,12 +458,17 @@ export async function POST(request: NextRequest) {
     custom_fasce: textValue(body?.customFasce),
     custom_atteggiamento: textValue(body?.customAtteggiamento),
     custom_extra_note: textValue(body?.customExtraNote),
+    client_control_is_draft: isDraft,
     client_control_created_from: "Tablet Clock",
     client_control_shopify_order_note: shopifyOrderNote || "",
     client_control_shopify_expected_paid: shopifyTotalPrice,
     client_control_declared_paid: moneyValue(body?.paid),
     client_control_declared_payment_method: manualPaymentMethod,
   };
+
+  const cleanAnswers = Object.fromEntries(
+    Object.entries(answers).filter(([, value]) => value !== undefined),
+  ) as Record<string, any>;
 
   const bookingId = textValue(body?.bookingId);
   const cleanOrder = shopifyOrder ? shopifyOrder.replace(/#/g, "").trim() : "";
@@ -496,7 +516,7 @@ export async function POST(request: NextRequest) {
   if (existingResponse) {
     const updatedAnswers = {
       ...(existingResponse.answers as Record<string, any>),
-      ...answers,
+      ...cleanAnswers,
     };
     response = await prisma.serviceFormResponse.update({
       where: { id: existingResponse.id },
@@ -514,7 +534,7 @@ export async function POST(request: NextRequest) {
         user_role: "TABLET",
         user_location_id: location.id,
         user_location_name: location.name,
-        answers,
+        answers: cleanAnswers,
         status: "NEW",
         priority: "MEDIA",
         activity_log: [
@@ -532,17 +552,19 @@ export async function POST(request: NextRequest) {
   if (bookingId) {
     const auditAuthor = operationalUser?.name || operationalUser?.email || "Staff";
     const changes = previousAnswers
-      ? clientControlChangeSummary(previousAnswers, answers as Record<string, unknown>)
+      ? clientControlChangeSummary(previousAnswers, cleanAnswers)
       : [];
     try {
-      if (operation === "created" || changes.length > 0) {
+      if (isDraft || operation === "created" || changes.length > 0) {
         await prisma.shopifyOrderComment.create({
           data: {
             order_name: bookingId,
             user_name: auditAuthor,
             user_role: operationalUser?.role || "DIPENDENTE",
             message:
-              operation === "updated"
+              isDraft
+                ? `BOZZA CONTROLLO CLIENTE SALVATA${changes.length ? ` · ${changes.join("; ")}` : ""}`
+                : operation === "updated"
                 ? `MODIFICA CONTROLLO CLIENTE · ${changes.join("; ")}`
                 : `CREAZIONE CONTROLLO CLIENTE · Collaboratrici: ${staffNames.join(", ") || "non assegnate"}`,
           },
@@ -556,7 +578,7 @@ export async function POST(request: NextRequest) {
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
   const targetOrders = extractShopifyOrderCodes(body?.shopifyOrder, body?.secondShopifyOrder);
 
-  if (targetOrders.length > 0) {
+  if (!isDraft && targetOrders.length > 0) {
     const writerName = isNoShow ? "NO SHOW" : (staffNames.join(" e ") || "Staff");
     const collaboratorName = isNoShow ? "NO SHOW" : (staffNames.join(", ") || "");
 
@@ -573,7 +595,7 @@ export async function POST(request: NextRequest) {
   }
 
   // AUTO-UPDATE APPOINTMENT STATUS TO COMPLETATO
-  if (bookingId) {
+  if (bookingId && !isDraft) {
     try {
       const SETTING_KEY = "appointment_status_overrides";
       const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } }).catch(() => null);
@@ -600,6 +622,7 @@ export async function POST(request: NextRequest) {
     ok: true,
     id: response.id,
     operation,
+    draft: isDraft,
     createdAt: response.created_at.toISOString(),
   });
 }
