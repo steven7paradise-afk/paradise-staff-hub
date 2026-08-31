@@ -4685,28 +4685,34 @@ export function AppointmentsBrowser({
               )}
 
               {/* Nuova Sezione Dettagli Extension & Cliente */}
-              <section className="overflow-hidden rounded-[24px] border-2 border-[#F3B5D4] bg-[#FFF8FB] shadow-[0_10px_28px_rgba(184,61,127,0.08)]">
+              <section className="overflow-hidden rounded-[24px] border-2 border-[#D6A43B] bg-[#FFF9E7] shadow-[0_12px_32px_rgba(161,113,20,0.18)]">
                 <button
                   type="button"
                   onClick={() => setServiceDetailsModalOpen(true)}
-                  className="flex min-h-20 w-full items-center justify-between gap-4 bg-[linear-gradient(100deg,#FFF0F6,#FFF8FC)] px-5 py-4 text-left transition hover:bg-[#FFE9F3] active:scale-[0.995] sm:px-6"
+                  className="group flex min-h-20 w-full items-center justify-between gap-4 bg-[linear-gradient(100deg,#FFF3C4,#FFFCF1)] px-5 py-4 text-left transition duration-300 hover:-translate-y-0.5 hover:bg-[#FFEDAE] active:scale-[0.995] sm:px-6"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#D96B94] text-white shadow-sm">
-                      <Pencil className="size-5" />
+                    <span className="relative grid size-12 shrink-0 place-items-center">
+                      <span className="absolute inset-0 rounded-2xl bg-[#E4B84D]/35 motion-safe:animate-ping motion-reduce:animate-none" />
+                      <span className="relative grid size-12 place-items-center rounded-2xl bg-[#B7791F] text-white shadow-[0_8px_20px_rgba(183,121,31,0.28)]">
+                        <Pencil className="size-5" />
+                      </span>
                     </span>
                     <span>
-                      <span className="block text-base font-black text-[#1F1F1F]">
+                      <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#B7791F] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-white shadow-sm motion-safe:animate-pulse motion-reduce:animate-none">
+                        <span className="size-1.5 rounded-full bg-white" /> Tocca qui
+                      </span>
+                      <span className="block text-base font-black text-[#5C4216]">
                         2. Dettagli del servizio
                       </span>
-                      <span className="mt-1 block text-xs font-bold text-black/50">
+                      <span className="mt-1 block text-xs font-bold text-[#7A6536]">
                         Tocca qui per inserire grammi, lunghezza, fasce e note
                       </span>
                     </span>
                   </span>
-                  <span className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[#F3B5D4] bg-white px-4 py-3 text-xs font-black text-[#B83D7F] shadow-sm">
+                  <span className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-[#B7791F] bg-[#B7791F] px-4 py-3 text-xs font-black text-white shadow-[0_8px_20px_rgba(183,121,31,0.24)] transition group-hover:bg-[#96620E]">
                     <span className="hidden sm:inline">Apri pop-up</span>
-                    <ChevronRight className="size-5" />
+                    <ChevronRight className="size-5 motion-safe:animate-pulse motion-reduce:animate-none" />
                   </span>
                 </button>
               </section>
@@ -4797,14 +4803,14 @@ export function AppointmentsBrowser({
                   >
                     <div className="flex items-start justify-between gap-4 border-b border-[#EEC9DA] bg-[linear-gradient(110deg,#FFF0F6_0%,#FFFFFF_72%)] px-5 py-4 sm:px-7 sm:py-5">
                       <div className="flex min-w-0 items-center gap-3.5">
-                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#B83D7F] text-white shadow-[0_8px_20px_rgba(184,61,127,0.25)]">
+                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#B7791F] text-white shadow-[0_8px_20px_rgba(183,121,31,0.28)] motion-safe:animate-pulse motion-reduce:animate-none">
                           <Pencil className="size-5" />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
+                          <p className="inline-flex rounded-full bg-[#FFF1C2] px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-[#8A5A0A]">
                             Compilazione rapida · circa 1 minuto
                           </p>
-                          <h3 id="service-details-title" className="mt-0.5 truncate text-xl font-black text-[#241C20] sm:text-2xl">
+                          <h3 id="service-details-title" className="mt-1 truncate text-xl font-black text-[#604415] sm:text-2xl">
                             Dettagli del servizio
                           </h3>
                           <p className="mt-0.5 text-[11px] font-bold text-black/50 sm:text-xs">
