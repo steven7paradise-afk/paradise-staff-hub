@@ -178,20 +178,20 @@ export function ShiftReportManager() {
   const selectedReports = useMemo(() => data?.reports ?? [], [data?.reports]);
 
   return (
-    <div className="space-y-5 pb-24">
-      <section className="overflow-hidden rounded-[28px] border border-black/5 bg-[#1d1921] text-white shadow-[0_20px_70px_rgba(43,24,35,0.16)]">
-        <div className="flex flex-col gap-5 px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-7">
+    <div className="space-y-3 pb-20 sm:space-y-5 sm:pb-24">
+      <section className="overflow-hidden rounded-[20px] border border-black/5 bg-[#1d1921] text-white shadow-[0_20px_70px_rgba(43,24,35,0.16)] sm:rounded-[28px]">
+        <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:gap-5 sm:px-7 sm:py-6">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f49acd]">Responsabile di Turno</p>
-            <h1 className="mt-2 text-2xl font-black sm:text-3xl">Report della giornata</h1>
-            <p className="mt-2 max-w-2xl text-sm text-white/55">Dati operativi, andamento clienti e verifica finale dello Store Manager.</p>
+            <h1 className="mt-1 text-xl font-black sm:mt-2 sm:text-3xl">Report della giornata</h1>
+            <p className="mt-1 max-w-2xl text-xs text-white/55 sm:mt-2 sm:text-sm">Dati operativi, andamento clienti e verifica finale dello Store Manager.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <label className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <label className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:py-2">
               <span className="block text-[9px] font-black uppercase tracking-wider text-white/40">Giorno</span>
               <input type="date" value={day} max={localDay()} onChange={(event) => setDay(event.target.value)} className="mt-1 bg-transparent text-xs font-black text-white outline-none" />
             </label>
-            {data?.manager ? <label className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            {data?.manager ? <label className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:py-2">
               <span className="block text-[9px] font-black uppercase tracking-wider text-white/40">Sede</span>
               <select value={locationId} onChange={(event) => setLocationId(event.target.value)} className="mt-1 bg-[#1d1921] text-xs font-black text-white outline-none">
                 {data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
@@ -211,14 +211,14 @@ export function ShiftReportManager() {
       {report?.status === "DA_CORREGGERE" && report.manager_notes ? <div className="flex gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-800"><AlertTriangle className="mt-0.5 size-5 shrink-0" /><div><p className="text-xs font-black uppercase">Correzione richiesta</p><p className="mt-1 text-sm font-semibold">{report.manager_notes}</p></div></div> : null}
 
       {loading ? <div className="grid min-h-64 place-items-center rounded-[28px] border border-black/5 bg-white"><Loader2 className="size-7 animate-spin text-[#e77fba]" /></div> : (
-        <div className={cn("grid gap-5", data?.manager && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
-          <div className="space-y-5">
-            {automatic ? <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
-              <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Dati automatici</p><h2 className="mt-1 text-xl font-black">Situazione del turno</h2></div><Sparkles className="size-5 text-[#e77fba]" /></div>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {[{ label: "Previsti", value: automatic.totals.expected }, { label: "Presenti", value: automatic.totals.present }, { label: "Ritardi", value: automatic.totals.late }, { label: "Assenti", value: automatic.totals.absent }, { label: "Clienti", value: automatic.totals.clients }].map((metric) => <div key={metric.label} className="rounded-2xl border border-black/5 bg-[#fff8fc] p-3"><p className="text-[9px] font-black uppercase text-black/40">{metric.label}</p><p className="mt-1 text-2xl font-black">{metric.value}</p></div>)}
+        <div className={cn("grid gap-3 sm:gap-5", data?.manager && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
+          <div className="space-y-3 sm:space-y-5">
+            {automatic ? <section className="rounded-[20px] border border-black/5 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#d95e9f] sm:text-[10px]">Dati automatici</p><h2 className="mt-0.5 text-lg font-black sm:mt-1 sm:text-xl">Situazione del turno</h2></div><Sparkles className="size-4 text-[#e77fba] sm:size-5" /></div>
+              <div className="mt-3 grid grid-cols-5 divide-x divide-black/5 overflow-hidden rounded-xl border border-black/5 bg-[#fff9fc] sm:mt-4 sm:gap-2 sm:divide-x-0 sm:overflow-visible sm:border-0 sm:bg-transparent">
+                {[{ label: "Previsti", value: automatic.totals.expected }, { label: "Presenti", value: automatic.totals.present }, { label: "Ritardi", value: automatic.totals.late }, { label: "Assenti", value: automatic.totals.absent }, { label: "Clienti", value: automatic.totals.clients }].map((metric) => <div key={metric.label} className="min-w-0 px-1 py-2 text-center sm:rounded-2xl sm:border sm:border-black/5 sm:bg-[#fff8fc] sm:p-3 sm:text-left"><p className="truncate text-[7px] font-black uppercase tracking-[-0.02em] text-black/40 sm:text-[9px] sm:tracking-normal">{metric.label}</p><p className="mt-0.5 text-lg font-black leading-none tabular-nums sm:mt-1 sm:text-2xl sm:leading-normal">{metric.value}</p></div>)}
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-3 sm:gap-3">
                 <FactList title="Presenze" icon={<UserCheck className="size-4" />} items={automatic.present.map((item) => `${item.name} · ${item.time}`)} empty="Nessuna entrata" />
                 <FactList title="Ritardi" icon={<Clock3 className="size-4" />} items={automatic.late.map((item) => `${item.name} · ${item.planned} → ${item.actual} · +${item.minutes} min`)} empty="Nessun ritardo" warning />
                 <FactList title="Assenze" icon={<Users className="size-4" />} items={automatic.absences.map((item) => `${item.name}${item.schedule ? ` · ${item.schedule}` : ""}`)} empty="Nessuna assenza" warning />
@@ -226,9 +226,9 @@ export function ShiftReportManager() {
             </section> : null}
 
             {!data?.manager || report ? <>
-              <section className="rounded-[28px] border border-black/5 bg-[#fbfaf7] p-4 shadow-sm sm:p-6">
-                <div className="border-b border-black/8 pb-4"><p className="font-serif text-[11px] font-bold uppercase tracking-[0.24em] text-black/45">Daily standards</p><h2 className="mt-1 font-serif text-2xl font-semibold tracking-tight">Checklist del Responsabile</h2></div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <section className="rounded-[20px] border border-black/5 bg-[#fbfaf7] p-3 shadow-sm sm:rounded-[28px] sm:p-6">
+                <div className="border-b border-black/8 pb-2.5 sm:pb-4"><p className="font-serif text-[9px] font-bold uppercase tracking-[0.2em] text-black/45 sm:text-[11px] sm:tracking-[0.24em]">Daily standards</p><h2 className="mt-0.5 font-serif text-xl font-semibold tracking-tight sm:mt-1 sm:text-2xl">Checklist del Responsabile</h2></div>
+                <div className="mt-3 grid gap-1.5 sm:mt-4 sm:grid-cols-2 sm:gap-2">
                   <YesNoControl label="Abbigliamento conforme" value={reportData.checks?.clothingCompliant ?? null} disabled={!editable} onChange={(value) => updateCheck("clothingCompliant", value)} />
                   <YesNoControl label="Staff ordinato e presentabile" value={reportData.checks?.staffPresentable ?? null} disabled={!editable} onChange={(value) => updateCheck("staffPresentable", value)} />
                   <YesNoControl label="Planning controllato" value={reportData.checks?.planningChecked ?? null} disabled={!editable} onChange={(value) => updateCheck("planningChecked", value)} />
@@ -237,15 +237,15 @@ export function ShiftReportManager() {
                   <YesNoControl label="Aree comuni in ordine" value={reportData.checks?.commonAreasOrdered ?? null} disabled={!editable} onChange={(value) => updateCheck("commonAreasOrdered", value)} />
                   <YesNoControl label="Materiali disponibili" value={reportData.checks?.materialsAvailable ?? null} disabled={!editable} onChange={(value) => updateCheck("materialsAvailable", value)} />
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-3">
                   <TextArea label="Problemi o sovraccarichi nel planning" value={reportData.planningIssues || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, planningIssues: value }))} />
                   <TextArea label="Modifiche organizzative effettuate" value={reportData.organizationalChanges || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, organizationalChanges: value }))} />
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
+              <section className="rounded-[20px] border border-black/5 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#d95e9f]">Pause staff</p><h2 className="mt-1 text-xl font-black">Registro della giornata</h2>
-                <div className="mt-4 space-y-2">{automatic?.pauseTimeline?.length ? automatic.pauseTimeline.map((pause, pauseIndex) => {
+                <div className="mt-3 space-y-2 sm:mt-4">{automatic?.pauseTimeline?.length ? automatic.pauseTimeline.map((pause, pauseIndex) => {
                   const pauseNumber = automatic.pauseTimeline.slice(0, pauseIndex + 1).filter((item) => item.userId === pause.userId).length;
                   const start = pause.start.slice(0, 5);
                   const end = pause.end?.slice(0, 5) || null;
@@ -256,12 +256,12 @@ export function ShiftReportManager() {
                     <div><p className="text-xs font-black text-black/70">{start} → {end || "In corso"}</p><p className="mt-0.5 text-[9px] font-bold text-black/35">{duration === null ? "Pausa non conclusa" : `Durata ${duration} minuti`}</p></div>
                     <input disabled={!editable} value={reportData.pauseNotes?.[pause.id] || reportData.pauseNotes?.[pause.userId] || ""} onChange={(event) => setForm((current) => ({ ...current, pauseNotes: { ...current.pauseNotes, [pause.id]: event.target.value } }))} placeholder="Aggiungi una nota a questa pausa…" className="h-10 rounded-xl border border-black/8 bg-white px-3 text-[10px] font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" />
                   </div>;
-                }) : <p className="rounded-2xl border border-dashed border-black/10 py-6 text-center text-xs font-semibold text-black/35">Nessuna pausa registrata.</p>}</div>
+                }) : <p className="rounded-xl border border-dashed border-black/10 py-4 text-center text-[11px] font-semibold text-black/35 sm:rounded-2xl sm:py-6 sm:text-xs">Nessuna pausa registrata.</p>}</div>
               </section>
 
-              <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
+              <section className="rounded-[20px] border border-black/5 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
                 <div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Materiali</p><h2 className="mt-1 text-xl font-black">Prodotti terminati</h2><p className="mt-1 text-xs font-semibold text-black/40">{editable ? "Seleziona soltanto i prodotti finiti durante il turno." : "Prodotti dichiarati terminati nel report."}</p></div></div>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-1.5 sm:mt-4 sm:gap-2">
                   {data?.products.filter((product) => product.active || reportData.finishedProducts?.some((item) => item.id === product.id)).map((product) => {
                     const selected = reportData.finishedProducts?.some((item) => item.id === product.id);
                     return <button key={product.id} type="button" disabled={!editable} onClick={() => toggleFinishedProduct(product)} className={cn("inline-flex min-h-10 items-center gap-2 rounded-xl border px-3 text-xs font-black transition disabled:cursor-default", selected ? "border-rose-300 bg-rose-50 text-rose-700" : "border-black/8 bg-[#fffafd] text-black/55")}><span className={cn("grid size-4 place-items-center rounded border", selected ? "border-rose-500 bg-rose-500 text-white" : "border-black/15 bg-white")}>{selected ? <Check className="size-3" /> : null}</span>{product.name}{product.category ? <small className="font-bold opacity-45">{product.category}</small> : null}</button>;
@@ -270,21 +270,21 @@ export function ShiftReportManager() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
+              <section className="rounded-[20px] border border-black/5 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
                 <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Valutazione Responsabile</p>
-                <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_180px]">
-                  <label><span className="text-sm font-black">Com’è andata la giornata?</span><textarea disabled={!editable} value={reportData.daySummary} onChange={(event) => setForm((current) => ({ ...current, daySummary: event.target.value }))} rows={4} placeholder="Risultati, clima del team e fatti importanti…" className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-[#fffafd] p-3 text-sm font-semibold outline-none focus:border-[#e77fba] disabled:opacity-70" /></label>
-                  <label><span className="text-sm font-black">Valutazione</span><select disabled={!editable} value={reportData.dayRating} onChange={(event) => setForm((current) => ({ ...current, dayRating: Number(event.target.value) }))} className="mt-2 h-12 w-full rounded-2xl border border-black/10 bg-[#fffafd] px-3 text-sm font-black outline-none disabled:opacity-70">{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}/5</option>)}</select></label>
+                <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-[1fr_180px] sm:gap-4">
+                  <label><span className="text-xs font-black sm:text-sm">Com’è andata la giornata?</span><textarea disabled={!editable} value={reportData.daySummary} onChange={(event) => setForm((current) => ({ ...current, daySummary: event.target.value }))} rows={4} placeholder="Risultati, clima del team e fatti importanti…" className="mt-1.5 h-16 w-full resize-none rounded-xl border border-black/10 bg-[#fffafd] p-2.5 text-xs font-semibold outline-none focus:border-[#e77fba] disabled:opacity-70 sm:mt-2 sm:h-auto sm:rounded-2xl sm:p-3 sm:text-sm" /></label>
+                  <label><span className="text-xs font-black sm:text-sm">Valutazione</span><select disabled={!editable} value={reportData.dayRating} onChange={(event) => setForm((current) => ({ ...current, dayRating: Number(event.target.value) }))} className="mt-1.5 h-10 w-full rounded-xl border border-black/10 bg-[#fffafd] px-3 text-xs font-black outline-none disabled:opacity-70 sm:mt-2 sm:h-12 sm:rounded-2xl sm:text-sm">{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}/5</option>)}</select></label>
                 </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {sectionFields.map((field) => <label key={field.key} className="rounded-2xl border border-black/5 bg-[#fffafd] p-3"><span className="text-xs font-black">{field.label}</span><span className="mt-0.5 block text-[10px] font-semibold text-black/40">{field.description}</span><textarea disabled={!editable} value={reportData[field.key]} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} rows={3} placeholder="Nessuna segnalazione" className="mt-2 w-full resize-none rounded-xl border border-black/8 bg-white p-2.5 text-xs font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent disabled:opacity-70" /></label>)}
+                <div className="mt-3 grid gap-2 sm:mt-5 sm:grid-cols-2 sm:gap-3">
+                  {sectionFields.map((field) => <label key={field.key} className="rounded-xl border border-black/5 bg-[#fffafd] p-2.5 sm:rounded-2xl sm:p-3"><span className="text-[11px] font-black sm:text-xs">{field.label}</span><span className="mt-0.5 hidden text-[10px] font-semibold text-black/40 sm:block">{field.description}</span><textarea disabled={!editable} value={reportData[field.key]} onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))} rows={3} placeholder="Nessuna segnalazione" className="mt-1.5 h-14 w-full resize-none rounded-lg border border-black/8 bg-white p-2 text-[11px] font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent disabled:opacity-70 sm:mt-2 sm:h-auto sm:rounded-xl sm:p-2.5 sm:text-xs" /></label>)}
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-black/5 bg-white p-4 shadow-sm sm:p-6">
+              <section className="rounded-[20px] border border-black/5 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-2xl bg-[#fde9f4] text-[#c64f90]"><MessageSquareText className="size-5" /></div><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d95e9f]">Timeline clienti</p><h2 className="text-xl font-black">Com’è andata con ogni cliente?</h2></div></div>{editable && automatic?.clientTimeline.length ? <button type="button" onClick={markAllClientsOk} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[10px] font-black text-emerald-700"><CheckCircle2 className="size-4" /> Segna tutte: Tutto OK</button> : null}</div>
                 {automatic?.clientTimeline.length ? <p className="mt-3 text-[10px] font-bold text-black/45">Verificate {automatic.clientTimeline.filter((client) => reportData.clientChecks?.[client.id]?.status).length} di {automatic.clientTimeline.length} clienti.</p> : null}
-                <div className="mt-5 space-y-3">
+                <div className="mt-3 space-y-2 sm:mt-5 sm:space-y-3">
                   {automatic?.clientTimeline.length ? automatic.clientTimeline.map((client) => {
                     const storedCheck = reportData.clientChecks?.[client.id];
                     const check = {
@@ -305,13 +305,13 @@ export function ShiftReportManager() {
                       <div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" disabled={!editable} onClick={() => updateClientCheck(client.id, { escalated: !check.escalated })} className={cn("rounded-full border px-3 py-1.5 text-[9px] font-black uppercase", check.escalated ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/45")}>Escalation a Leydi {check.escalated ? "attiva" : "no"}</button></div>
                       {(editable || check.note) ? <textarea disabled={!editable} value={check.note} onChange={(event) => updateClientCheck(client.id, { note: event.target.value })} rows={2} placeholder="Nota finale facoltativa…" className="mt-2 w-full resize-none rounded-xl border border-black/8 bg-white p-2.5 text-xs font-semibold outline-none focus:border-[#e77fba] disabled:bg-transparent" /> : null}
                     </div>;
-                  }) : <div className="rounded-2xl border border-dashed border-black/10 py-8 text-center text-sm font-semibold text-black/35">Nessun Controllo Cliente completato in questa giornata.</div>}
+                  }) : <div className="rounded-xl border border-dashed border-black/10 py-5 text-center text-xs font-semibold text-black/35 sm:rounded-2xl sm:py-8 sm:text-sm">Nessun Controllo Cliente completato in questa giornata.</div>}
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-black/5 bg-[#1d1921] p-4 text-white shadow-xl sm:p-6">
-                <p className="font-serif text-[10px] font-bold uppercase tracking-[0.24em] text-[#f49acd]">Closing notes</p><h2 className="mt-1 font-serif text-2xl font-semibold">Recap fine turno</h2>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <section className="rounded-[20px] border border-black/5 bg-[#1d1921] p-3 text-white shadow-xl sm:rounded-[28px] sm:p-6">
+                <p className="font-serif text-[9px] font-bold uppercase tracking-[0.2em] text-[#f49acd] sm:text-[10px] sm:tracking-[0.24em]">Closing notes</p><h2 className="mt-0.5 font-serif text-xl font-semibold sm:mt-1 sm:text-2xl">Recap fine turno</h2>
+                <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-3">
                   <TextArea dark label="Problematiche ancora aperte" value={reportData.openProblems || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, openProblems: value }))} />
                   <TextArea dark label="Situazioni da monitorare" value={reportData.monitorSituations || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, monitorSituations: value }))} />
                   <TextArea dark label="Task da creare" value={reportData.tasksToCreate || ""} disabled={!editable} onChange={(value) => setForm((current) => ({ ...current, tasksToCreate: value }))} />
@@ -347,13 +347,13 @@ export function ShiftReportManager() {
 }
 
 function FactList({ title, icon, items, empty, warning = false }: { title: string; icon: React.ReactNode; items: string[]; empty: string; warning?: boolean }) {
-  return <div className={cn("rounded-2xl border p-3", warning && items.length ? "border-amber-200 bg-amber-50" : "border-black/5 bg-white")}><div className="flex items-center gap-2 text-xs font-black">{icon}{title}</div><div className="mt-2 space-y-1">{items.length ? items.map((item, index) => <p key={`${item}-${index}`} className="text-[10px] font-bold text-black/60">{item}</p>) : <p className="text-[10px] font-semibold text-black/30">{empty}</p>}</div></div>;
+  return <div className={cn("rounded-xl border p-2.5 sm:rounded-2xl sm:p-3", warning && items.length ? "border-amber-200 bg-amber-50" : "border-black/5 bg-white")}><div className="flex items-center gap-1.5 text-[11px] font-black sm:gap-2 sm:text-xs">{icon}{title}</div><div className="mt-1.5 space-y-0.5 sm:mt-2 sm:space-y-1">{items.length ? items.map((item, index) => <p key={`${item}-${index}`} className="text-[9px] font-bold text-black/60 sm:text-[10px]">{item}</p>) : <p className="text-[9px] font-semibold text-black/30 sm:text-[10px]">{empty}</p>}</div></div>;
 }
 
 function YesNoControl({ label, value, disabled, onChange }: { label: string; value: boolean | null; disabled: boolean; onChange: (value: boolean) => void }) {
-  return <div className="flex min-h-14 items-center justify-between gap-3 rounded-xl border border-black/8 bg-white px-3"><p className="text-xs font-semibold text-black/75">{label}</p><div className="flex gap-1">{[{ label: "Sì", value: true }, { label: "No", value: false }].map((choice) => <button key={choice.label} type="button" disabled={disabled} onClick={() => onChange(choice.value)} className={cn("min-h-8 rounded-lg border px-3 text-[10px] font-black uppercase transition disabled:cursor-default", value === choice.value ? choice.value ? "border-black bg-black text-white" : "border-rose-500 bg-rose-500 text-white" : "border-black/10 bg-[#fbfaf7] text-black/35")}>{choice.label}</button>)}</div></div>;
+  return <div className="flex min-h-11 items-center justify-between gap-2 rounded-lg border border-black/8 bg-white px-2.5 sm:min-h-14 sm:gap-3 sm:rounded-xl sm:px-3"><p className="text-[11px] font-semibold text-black/75 sm:text-xs">{label}</p><div className="flex gap-1">{[{ label: "Sì", value: true }, { label: "No", value: false }].map((choice) => <button key={choice.label} type="button" disabled={disabled} onClick={() => onChange(choice.value)} className={cn("min-h-8 rounded-lg border px-2.5 text-[9px] font-black uppercase transition disabled:cursor-default sm:px-3 sm:text-[10px]", value === choice.value ? choice.value ? "border-black bg-black text-white" : "border-rose-500 bg-rose-500 text-white" : "border-black/10 bg-[#fbfaf7] text-black/35")}>{choice.label}</button>)}</div></div>;
 }
 
 function TextArea({ label, value, disabled, onChange, dark = false }: { label: string; value: string; disabled: boolean; onChange: (value: string) => void; dark?: boolean }) {
-  return <label className="block"><span className={cn("text-[10px] font-black uppercase tracking-[0.12em]", dark ? "text-white/55" : "text-black/55")}>{label}</span><textarea disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} rows={3} placeholder="Nessuna segnalazione" className={cn("mt-2 w-full resize-none rounded-xl border p-3 text-xs font-semibold outline-none disabled:opacity-70", dark ? "border-white/10 bg-white/5 text-white placeholder:text-white/20 focus:border-[#f49acd]" : "border-black/8 bg-white text-black focus:border-black/30")} /></label>;
+  return <label className="block"><span className={cn("text-[9px] font-black uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em]", dark ? "text-white/55" : "text-black/55")}>{label}</span><textarea disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} rows={3} placeholder="Nessuna segnalazione" className={cn("mt-1.5 h-14 w-full resize-none rounded-lg border p-2 text-[11px] font-semibold outline-none disabled:opacity-70 sm:mt-2 sm:h-auto sm:rounded-xl sm:p-3 sm:text-xs", dark ? "border-white/10 bg-white/5 text-white placeholder:text-white/20 focus:border-[#f49acd]" : "border-black/8 bg-white text-black focus:border-black/30")} /></label>;
 }
