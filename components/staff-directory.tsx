@@ -2493,276 +2493,227 @@ export function StaffDirectory({
         </div>
       )}
 
-      {/* MODAL: CREATE MANUALLY NEW EMPLOYEE */}
+      {/* FULLSCREEN: CREATE MANUALLY NEW EMPLOYEE */}
       {showCreateModal && newEmployeeForm && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-md animate-in fade-in duration-200">
-          <Card className="w-full max-w-2xl p-0 border border-white/50 bg-white/95 dark:bg-neutral-900/95 shadow-luxury overflow-hidden rounded-[30px] flex flex-col max-h-[90vh]">
-            <div className="flex items-start justify-between border-b border-black/5 dark:border-white/5 bg-gradient-to-b from-white to-neutral-50/50 dark:from-neutral-900 dark:to-neutral-900 px-6 py-5 shrink-0">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-paradise-pink">HR ADMINISTRATION</p>
-                <h2 className="mt-1 text-xl font-bold text-paradise-noir dark:text-white">Nuovo Dipendente Manuale</h2>
+        <div className="fixed inset-0 z-50 bg-[#f4edf1] animate-in fade-in duration-200 dark:bg-neutral-950">
+          <Card className="flex h-[100dvh] w-full max-w-none flex-col overflow-hidden rounded-none border-0 bg-[#fbf8fa] p-0 shadow-none dark:bg-neutral-950">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#eadde4] bg-white px-4 py-4 dark:border-white/10 dark:bg-neutral-900 sm:px-7 sm:py-5 lg:px-12 2xl:px-20">
+              <div className="flex min-w-0 items-center gap-3.5">
+                <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#f8d7e7] to-[#ffeaf3] text-[#b83d7f] shadow-sm">
+                  <UserPlus className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#b83d7f]">Anagrafica staff</p>
+                  <h2 className="truncate text-xl font-extrabold text-paradise-noir dark:text-white sm:text-2xl">Aggiungi nuovo dipendente</h2>
+                  <p className="mt-0.5 hidden text-xs font-medium text-neutral-500 sm:block">Inserisci i dati essenziali: le credenziali possono essere generate automaticamente.</p>
+                </div>
               </div>
               <button 
-                className="grid size-10 place-items-center rounded-xl border border-black/10 bg-white dark:bg-neutral-800 dark:border-white/10 shadow-sm transition hover:bg-paradise-nude active:scale-95" 
+                type="button"
+                aria-label="Chiudi"
+                className="grid size-10 shrink-0 place-items-center rounded-2xl border border-black/10 bg-white text-neutral-600 shadow-sm transition hover:border-[#e9a9c8] hover:bg-[#fff3f8] hover:text-[#b83d7f] active:scale-95 dark:border-white/10 dark:bg-neutral-800 dark:text-white/70"
                 onClick={() => setShowCreateModal(false)}
               >
-                <X className="size-5 text-black/70 dark:text-white/70" />
+                <X className="size-5" />
               </button>
             </div>
 
             {errorMsg && (
-              <div className="mx-6 mt-4 shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800" role="alert">
+              <div className="mx-4 mt-4 shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800 sm:mx-7 lg:mx-12 2xl:mx-20" role="alert">
                 {errorMsg}
               </div>
             )}
 
-            <form onSubmit={handleCreateEmployee} className="flex-1 overflow-y-auto p-6 space-y-4 luxury-scroll">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Nome e Cognome *</span>
-                  <Field 
-                    required
-                    value={newEmployeeForm.name || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, name: e.target.value } : null)}
-                    placeholder="E.g. Angela Bianchi"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Email Aziendale *</span>
-                  <Field 
-                    required
-                    type="email"
-                    value={newEmployeeForm.email || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, email: e.target.value } : null)}
-                    placeholder="E.g. angela@paradisebeauty.it"
-                  />
-                </label>
-              </div>
+            <form onSubmit={handleCreateEmployee} className="flex min-h-0 flex-1 flex-col">
+              <div className="luxury-scroll flex-1 space-y-5 overflow-y-auto p-4 sm:p-6 lg:px-12 lg:py-8 2xl:px-20">
+                <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><User className="size-4" /></div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Dati personali</h3>
+                      <p className="text-[11px] font-medium text-neutral-500">Identità e contatti del dipendente</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Nome e cognome <b className="text-[#c23878]">*</b></span>
+                      <Field required autoComplete="name" value={newEmployeeForm.name || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, name: e.target.value } : null)} placeholder="Es. Angela Bianchi" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Email aziendale <b className="text-[#c23878]">*</b></span>
+                      <Field required type="email" autoComplete="email" value={newEmployeeForm.email || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, email: e.target.value } : null)} placeholder="nome@paradisebeauty.it" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Numero WhatsApp</span>
+                      <Field inputMode="tel" autoComplete="tel" value={newEmployeeForm.whatsappPhone || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)} placeholder="+39 333 000 0000" />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Foto profilo</span>
+                      <Field type="url" value={newEmployeeForm.photoUrl || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)} placeholder="Incolla il link della foto" />
+                    </label>
+                  </div>
+                </section>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">URL Foto Profilo</span>
-                  <Field 
-                    value={newEmployeeForm.photoUrl || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, photoUrl: e.target.value } : null)}
-                    placeholder="https://..."
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Numero WhatsApp</span>
-                  <Field 
-                    value={newEmployeeForm.whatsappPhone || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, whatsappPhone: e.target.value } : null)}
-                    placeholder="E.g. +39..."
-                  />
-                </label>
-              </div>
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                  <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><Briefcase className="size-4" /></div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Ruolo e sede</h3>
+                        <p className="text-[11px] font-medium text-neutral-500">Assegnazione operativa</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1.5 sm:col-span-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Mansione <b className="text-[#c23878]">*</b></span>
+                        <Select value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()} onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "custom") {
+                            setCustomMansioneCreate(true);
+                            setNewEmployeeForm(prev => prev ? { ...prev, mansione: "" } : null);
+                          } else {
+                            setCustomMansioneCreate(false);
+                            setNewEmployeeForm(prev => prev ? { ...prev, mansione: val } : null);
+                          }
+                        }}>
+                          <option value="">Seleziona la mansione</option>
+                          {mansioniList.map((m) => <option key={m} value={m.toLowerCase()}>{m}</option>)}
+                          <option value="custom">+ Aggiungi altra mansione</option>
+                        </Select>
+                        {customMansioneCreate && <Field required value={newEmployeeForm.mansione || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)} placeholder="Scrivi la nuova mansione" className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200" />}
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Salone <b className="text-[#c23878]">*</b></span>
+                        <Select value={newEmployeeForm.sedeId || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, sedeId: e.target.value } : null)}>
+                          {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Responsabile</span>
+                        <Select value={newEmployeeForm.managerId || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, managerId: e.target.value } : null)}>
+                          <option value="">Nessuno</option>
+                          {managers.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Stato <b className="text-[#c23878]">*</b></span>
+                        <Select value={newEmployeeForm.employeeStatus || "Attivo"} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}>
+                          {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </Select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Ruolo sistema <b className="text-[#c23878]">*</b></span>
+                        <Select value={newEmployeeForm.role || "DIPENDENTE"} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, role: e.target.value } : null)}>
+                          {createRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                        </Select>
+                      </label>
+                    </div>
+                  </section>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Mansione *</span>
-                  <Select 
-                    value={customMansioneCreate ? "custom" : (newEmployeeForm.mansione || "").toLowerCase()}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "custom") {
-                        setCustomMansioneCreate(true);
-                        setNewEmployeeForm(prev => prev ? { ...prev, mansione: "" } : null);
-                      } else {
-                        setCustomMansioneCreate(false);
-                        setNewEmployeeForm(prev => prev ? { ...prev, mansione: val } : null);
-                      }
-                    }}
-                  >
-                    <option value="">Seleziona mansione...</option>
-                    {mansioniList.map((m) => (
-                      <option key={m} value={m.toLowerCase()}>{m}</option>
-                    ))}
-                    <option value="custom">+ Aggiungi altra mansione...</option>
-                  </Select>
-                  {customMansioneCreate && (
-                    <Field 
-                      required
-                      value={newEmployeeForm.mansione || ""}
-                      onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, mansione: e.target.value } : null)}
-                      placeholder="Inserisci nuova mansione..."
-                      className="mt-2 animate-in fade-in slide-in-from-top-1 duration-200"
-                    />
-                  )}
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Stato Dipendente *</span>
-                  <Select 
-                    value={newEmployeeForm.employeeStatus || "Attivo"}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, employeeStatus: e.target.value } : null)}
-                  >
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Ruolo Sistema *</span>
-                  <Select 
-                    value={newEmployeeForm.role || "DIPENDENTE"}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, role: e.target.value } : null)}
-                  >
-                    {createRoleOptions.map((role) => (
-                      <option key={role.value} value={role.value}>{role.label}</option>
-                    ))}
-                  </Select>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Salone Sede *</span>
-                  <Select 
-                    value={newEmployeeForm.sedeId || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, sedeId: e.target.value } : null)}
-                  >
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>{loc.name}</option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Responsabile Diretto</span>
-                  <Select 
-                    value={newEmployeeForm.managerId || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, managerId: e.target.value } : null)}
-                  >
-                    <option value="">Nessuno</option>
-                    {managers.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Data di Nascita</span>
-                  <Field 
-                    type="date"
-                    value={newEmployeeForm.birthDate || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Codice</span>
-                  <Field 
-                    value={newEmployeeForm.fiscalCode || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, fiscalCode: e.target.value } : null)}
-                    placeholder="Codice..."
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">IBAN</span>
-                  <Field 
-                    value={newEmployeeForm.iban || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)}
-                    placeholder="IT..."
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Inizio Rapporto *</span>
-                  <Field 
-                    required
-                    type="date"
-                    value={newEmployeeForm.contractStart || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Fine Contratto</span>
-                  <Field 
-                    type="date"
-                    value={newEmployeeForm.contractEnd || ""}
-                    onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-black/5 dark:border-white/5 pt-3">
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">PIN Personalizzato (4-6 cifre)</span>
-                  <Field 
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="Lascia vuoto per generare casuale"
-                    maxLength={6}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">Conferma PIN</span>
-                  <Field 
-                    value={pinConfirmInput}
-                    onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="Ripeti PIN"
-                    maxLength={6}
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-[11px] font-bold tracking-wide uppercase text-[#B85B68]">Password Provvisoria</span>
-                  <Field 
-                    type="password"
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="Lascia vuoto per generare casuale"
-                  />
-                </label>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500 block mb-1">Accessi Abilitati</span>
-                <div className="flex flex-wrap gap-2">
-                  {ACCESS_PRESETS.map((access) => {
-                    const active = Array.isArray(newEmployeeForm.accessList) ? newEmployeeForm.accessList.includes(access) : false;
-                    return (
-                      <button
-                        key={access}
-                        type="button"
-                        onClick={() => toggleAccessInCreate(access)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95",
-                          active 
-                            ? "bg-paradise-pink/20 border-paradise-pink text-paradise-noir dark:text-white" 
-                            : "bg-white dark:bg-neutral-800 border-black/10 dark:border-white/10 text-neutral-500"
-                        )}
-                      >
-                        {ACCESS_LABELS[access] || access}
-                      </button>
-                    );
-                  })}
+                  <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><ClipboardList className="size-4" /></div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Contratto</h3>
+                        <p className="text-[11px] font-medium text-neutral-500">Dati amministrativi e durata</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Inizio rapporto <b className="text-[#c23878]">*</b></span>
+                        <Field required type="date" value={newEmployeeForm.contractStart || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractStart: e.target.value } : null)} />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Fine contratto</span>
+                        <Field type="date" value={newEmployeeForm.contractEnd || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, contractEnd: e.target.value } : null)} />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Data di nascita</span>
+                        <Field type="date" value={newEmployeeForm.birthDate || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, birthDate: e.target.value } : null)} />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Codice fiscale</span>
+                        <Field value={newEmployeeForm.fiscalCode || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, fiscalCode: e.target.value.toUpperCase() } : null)} placeholder="Codice fiscale" />
+                      </label>
+                      <label className="space-y-1.5 sm:col-span-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">IBAN</span>
+                        <Field value={newEmployeeForm.iban || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, iban: e.target.value.toUpperCase() } : null)} placeholder="IT00 0000 0000 0000 0000 0000 000" />
+                      </label>
+                    </div>
+                  </section>
                 </div>
+
+                <section className="rounded-[22px] border border-[#efc5d9] bg-gradient-to-br from-[#fff7fa] to-[#fff] p-4 shadow-sm dark:border-[#6c3152] dark:from-[#25151f] dark:to-neutral-900 sm:p-5">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="grid size-9 place-items-center rounded-xl bg-[#b83d7f] text-white shadow-sm"><Key className="size-4" /></div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Credenziali di accesso</h3>
+                        <p className="text-[11px] font-medium text-neutral-500">Lascia vuoto per generarle automaticamente</p>
+                      </div>
+                    </div>
+                    <span className="hidden rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-extrabold text-emerald-700 sm:inline-flex">Invio via email</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#a33a70]">PIN (4–6 cifre)</span>
+                      <Field inputMode="numeric" autoComplete="off" value={pinInput} onChange={(e) => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Genera automaticamente" maxLength={6} />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#a33a70]">Conferma PIN</span>
+                      <Field inputMode="numeric" autoComplete="off" value={pinConfirmInput} onChange={(e) => setPinConfirmInput(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Ripeti il PIN" maxLength={6} />
+                    </label>
+                    <label className="space-y-1.5">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#a33a70]">Password provvisoria</span>
+                      <Field type="password" autoComplete="new-password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Genera automaticamente" />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="grid size-9 place-items-center rounded-xl bg-[#fff0f6] text-[#b83d7f]"><Shield className="size-4" /></div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">Accessi abilitati</h3>
+                      <p className="text-[11px] font-medium text-neutral-500">Seleziona le aree visibili al dipendente</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ACCESS_PRESETS.map((access) => {
+                      const active = Array.isArray(newEmployeeForm.accessList) ? newEmployeeForm.accessList.includes(access) : false;
+                      return (
+                        <button key={access} type="button" onClick={() => toggleAccessInCreate(access)} className={cn(
+                          "inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all active:scale-95",
+                          active ? "border-[#c23878] bg-[#c23878] text-white shadow-sm" : "border-black/10 bg-[#fbf8fa] text-neutral-600 hover:border-[#e6a7c5] hover:bg-[#fff3f8] dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
+                        )}>
+                          {active && <Check className="size-3.5" />}
+                          {ACCESS_LABELS[access] || access}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <label className="block rounded-[22px] border border-[#eadde4] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-neutral-900 sm:p-5">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">Note amministrazione HR</span>
+                  <textarea value={newEmployeeForm.hrNotes || ""} onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, hrNotes: e.target.value } : null)} placeholder="Aggiungi informazioni interne sul contratto o sul dipendente…" rows={2} className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-[#fbf8fa] p-3 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/15 dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </label>
               </div>
 
-              <label className="block space-y-1">
-                <span className="text-[11px] font-bold tracking-wide uppercase text-neutral-500">Note Amministrazione HR (Interne)</span>
-                <textarea 
-                  value={newEmployeeForm.hrNotes || ""}
-                  onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, hrNotes: e.target.value } : null)}
-                  placeholder="Dettagli del contratto..."
-                  rows={2}
-                  className="w-full rounded-2xl border border-black/10 bg-white/80 dark:bg-white/10 dark:text-white p-3 text-sm outline-none transition focus:border-paradise-pink focus:ring-4 focus:ring-paradise-pink/20"
-                />
-              </label>
-
-              <div className="pt-3 flex justify-end gap-3 border-t border-black/5 dark:border-white/5">
+              <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#eadde4] bg-white px-4 py-4 shadow-[0_-10px_30px_rgba(91,49,73,0.06)] dark:border-white/10 dark:bg-neutral-900 sm:flex-row sm:items-center sm:justify-between sm:px-7 lg:px-12 2xl:px-20">
+                <p className="text-[11px] font-semibold text-neutral-500"><span className="text-[#c23878]">*</span> Campi obbligatori</p>
+                <div className="flex gap-3">
                 <Button type="button" variant="soft" onClick={() => setShowCreateModal(false)}>
                   Annulla
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={submitting}
-                  className="bg-gradient-to-r from-paradise-pink to-[#ffa8dd] text-paradise-noir font-bold"
+                  className="min-w-44 bg-gradient-to-r from-[#c23878] to-[#e16fa5] font-extrabold text-white shadow-lg shadow-[#c23878]/20"
                 >
-                  {submitting ? "Creazione..." : "Crea Dipendente"}
+                  {submitting ? "Salvataggio…" : "Salva dipendente"}
                 </Button>
+                </div>
               </div>
             </form>
           </Card>
