@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
     prisma.workHourRecord.findMany({ where: { date: { gte: start, lt: end } } }),
     prisma.attendanceLog.findMany({
       where: { date: { gte: start, lt: end }, user: { role: { notIn: ["ZERO", "SUPER_ADMIN"] } } },
-      select: { user_id: true, date: true, type: true, timestamp: true },
+      select: { user_id: true, date: true, type: true, timestamp: true, note: true },
       orderBy: { timestamp: "asc" },
     }),
     prisma.scheduleEntry.findMany({
@@ -265,7 +265,7 @@ export async function PUT(request: NextRequest) {
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
   const logs = await prisma.attendanceLog.findMany({
     where: { user_id: userId, date: { gte: dayStart, lt: dayEnd } },
-    select: { type: true, timestamp: true },
+    select: { type: true, timestamp: true, note: true },
     orderBy: { timestamp: "asc" },
   });
   const clock = calculateClockHours(logs);

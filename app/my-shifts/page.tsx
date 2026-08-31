@@ -82,7 +82,7 @@ export default async function MyShiftsPage({ searchParams }: { searchParams: Pro
   const [user, schedules, logs, records] = await Promise.all([
     prisma.user.findUnique({ where: { id: targetUserId }, include: { location: true } }),
     prisma.scheduleEntry.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, include: { category: true }, orderBy: { date: "asc" } }),
-    prisma.attendanceLog.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true }, orderBy: { timestamp: "asc" } }),
+    prisma.attendanceLog.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } }, select: { date: true, type: true, timestamp: true, time: true, note: true }, orderBy: { timestamp: "asc" } }),
     prisma.workHourRecord.findMany({ where: { user_id: targetUserId, date: { gte: queryStart, lt: queryEnd } } }),
   ]);
   

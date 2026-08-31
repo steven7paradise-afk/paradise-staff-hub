@@ -207,7 +207,7 @@ function RequestDetailPanel({
   decisionDraft: string;
   onMedicalDraftChange: (value: string) => void;
   onDecisionDraftChange: (value: string) => void;
-  onChangeStatus: (id: string, status: "APPROVED" | "REJECTED" | "FLAGGED") => void;
+  onChangeStatus: (id: string, status: "APPROVED" | "REJECTED" | "FLAGGED", lateAccountingMode?: "ACTUAL" | "PENALTY_30") => void;
   onAcknowledge: (id: string) => void;
   onUpdateSickness: (id: string, payload: { medicalCode?: string | null; sicknessUnjustified?: boolean }) => void;
   onClose?: () => void;
@@ -396,13 +396,27 @@ function RequestDetailPanel({
               </button>
             ) : canApprove ? (
               <div className={cn("mt-3 grid gap-2", !automaticLate && "sm:grid-cols-2")}>
+                {automaticLate ? (
+                  <div className="mb-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">
+                    Scegli come conteggiare il ritardo nelle ore del dipendente.
+                  </div>
+                ) : null}
                 <button
                   disabled={saving === request.id}
-                  onClick={() => onChangeStatus(request.id, "APPROVED")}
+                  onClick={() => onChangeStatus(request.id, "APPROVED", automaticLate ? "ACTUAL" : undefined)}
                   className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-paradise-pink to-[#ef4f91] px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(236,72,140,0.24)] transition hover:brightness-95 disabled:opacity-50 sm:text-sm"
                 >
-                  <Check className="size-3.5" /> {automaticLate ? "Conferma presa visione" : "Approva"}
+                  <Check className="size-3.5" /> {automaticLate ? "Conta dall’ora timbrata" : "Approva"}
                 </button>
+                {automaticLate ? (
+                  <button
+                    disabled={saving === request.id}
+                    onClick={() => onChangeStatus(request.id, "APPROVED", "PENALTY_30")}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 text-xs font-black text-amber-800 transition hover:bg-amber-50 disabled:opacity-50 sm:text-sm"
+                  >
+                    <Clock className="size-3.5" /> Mantieni prassi -30 minuti
+                  </button>
+                ) : null}
                 {!automaticLate ? <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "REJECTED")}
@@ -570,7 +584,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     setMessage("Richiesta inviata correttamente.");
   }
 
-  async function changeStatus(id: string, status: "APPROVED" | "REJECTED" | "FLAGGED") {
+  async function changeStatus(id: string, status: "APPROVED" | "REJECTED" | "FLAGGED", lateAccountingMode?: "ACTUAL" | "PENALTY_30") {
     const selectedRequest = requests.find((request) => request.id === id);
     const automaticLate = selectedRequest ? isAutomaticLateRequest(selectedRequest) : false;
     const adminNote = decisionDrafts[id]?.trim() ?? "";
@@ -582,7 +596,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     const response = await fetch(`/api/requests/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, adminNote: adminNote || null }),
+      body: JSON.stringify({ status, adminNote: adminNote || null, lateAccountingMode }),
     });
     const data = await response.json();
     setSaving(null);
@@ -603,7 +617,10 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       return next;
     });
     if (automaticLate && status === "APPROVED") {
-      setMessage(adminNote ? "Presa visione confermata e comunicazione inviata al dipendente." : "Presa visione confermata.");
+      const accountingMessage = lateAccountingMode === "ACTUAL"
+        ? "Ore conteggiate dall’ora effettiva della timbratura."
+        : "Mantenuta la prassi -30 minuti.";
+      setMessage(`${adminNote ? "Presa visione confermata e comunicazione inviata al dipendente." : "Presa visione confermata."} ${accountingMessage}`);
       return;
     }
     if (status === "APPROVED" && data.calendarSync?.skipped) {

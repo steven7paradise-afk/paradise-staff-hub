@@ -7,8 +7,31 @@ import { createNotification, createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule } from "@/lib/schedule-sync";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
+import { COUNT_FROM_ACTUAL_ENTRY_MARKER } from "@/lib/work-hours";
+import { unlockWorkHourRecord } from "@/lib/work-hour-sync";
 
 const approverRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
+type LateAccountingMode = "ACTUAL" | "PENALTY_30";
+
+function actualEntryTimestamp(log: { timestamp: Date; note: string | null }) {
+  const match = String(log.note || "").match(/Ora rilevata\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/i);
+  if (!match) return null;
+  const actualSeconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(log.timestamp);
+  const storedSeconds = Number(parts.find((part) => part.type === "hour")?.value || 0) * 3600
+    + Number(parts.find((part) => part.type === "minute")?.value || 0) * 60
+    + Number(parts.find((part) => part.type === "second")?.value || 0);
+  let difference = actualSeconds - storedSeconds;
+  if (difference > 12 * 3600) difference -= 24 * 3600;
+  if (difference < -12 * 3600) difference += 24 * 3600;
+  return new Date(log.timestamp.getTime() + difference * 1000);
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -27,6 +50,7 @@ export async function PATCH(
   const employeeResponse = payload.employeeResponse !== undefined ? (payload.employeeResponse ? String(payload.employeeResponse).trim() : null) : undefined;
   const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
   const sicknessUnjustified = payload.sicknessUnjustified !== undefined ? Boolean(payload.sicknessUnjustified) : undefined;
+  const lateAccountingMode = payload.lateAccountingMode ? String(payload.lateAccountingMode) as LateAccountingMode : undefined;
 
   const existing = await prisma.leaveRequest.findUnique({ where: { id }, include: { user: true } });
   if (!existing) {
@@ -61,6 +85,9 @@ export async function PATCH(
     if (automaticLate && status === "REJECTED") {
       return NextResponse.json({ error: "I ritardi automatici non vengono rifiutati: conferma soltanto la presa visione." }, { status: 400 });
     }
+    if (automaticLate && status === "APPROVED" && !["ACTUAL", "PENALTY_30"].includes(String(lateAccountingMode))) {
+      return NextResponse.json({ error: "Scegli come conteggiare la timbratura in ritardo." }, { status: 400 });
+    }
     if (isResponsabile && existing.user.sede_id !== session.user.sedeId) {
       return NextResponse.json({ error: "Richiesta fuori dalla propria sede" }, { status: 403 });
     }
@@ -83,6 +110,8 @@ export async function PATCH(
 
   let leaveRequest;
   let scheduleSync: { syncedDays: number; categoryCode: string } | null = null;
+  let lateAccountingLabel: string | null = null;
+  let shouldUnlockWorkHours = false;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -111,6 +140,47 @@ export async function PATCH(
         await revertApprovedLeaveFromSchedule(tx, updated.id);
       }
 
+      if (automaticLate && status === "APPROVED" && lateAccountingMode) {
+        const nextDay = new Date(existing.start_date);
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+        const entry = await tx.attendanceLog.findFirst({
+          where: {
+            user_id: existing.user_id,
+            type: "ENTRATA",
+            date: { gte: existing.start_date, lt: nextDay },
+          },
+          orderBy: { timestamp: "asc" },
+        });
+        if (!entry) throw new Error("Timbratura di entrata non trovata per il ritardo.");
+
+        if (lateAccountingMode === "ACTUAL") {
+          const actualTimestamp = actualEntryTimestamp(entry);
+          if (!actualTimestamp) throw new Error("Ora effettiva della timbratura non disponibile.");
+          const actualTime = new Intl.DateTimeFormat("it-IT", {
+            timeZone: "Europe/Rome",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }).format(actualTimestamp);
+          await tx.attendanceLog.update({
+            where: { id: entry.id },
+            data: {
+              timestamp: actualTimestamp,
+              time: actualTime,
+              note: `${entry.note || ""} - [${COUNT_FROM_ACTUAL_ENTRY_MARKER}] Decisione admin: conteggio dall’ora effettiva.`,
+            },
+          });
+          lateAccountingLabel = `conteggio dall’ora effettiva (${actualTime})`;
+        } else {
+          await tx.attendanceLog.update({
+            where: { id: entry.id },
+            data: { note: `${entry.note || ""} - [PENALITA_RITARDO_30] Decisione admin: mantenuta la prassi -30 minuti.` },
+          });
+          lateAccountingLabel = "mantenuta la prassi -30 minuti";
+        }
+        shouldUnlockWorkHours = true;
+      }
+
       return { updated, syncResult };
     });
 
@@ -122,6 +192,12 @@ export async function PATCH(
       { error: "Errore durante il salvataggio dello stato o la sincronizzazione nel planning." },
       { status: 500 }
     );
+  }
+
+  if (shouldUnlockWorkHours) {
+    await unlockWorkHourRecord(existing.user_id, existing.start_date).catch((error) => {
+      console.error("Errore durante il ricalcolo delle ore dopo la gestione del ritardo:", error);
+    });
   }
 
   // Always update Google Calendar status sync (both to update details or delete if rejected)
@@ -159,7 +235,7 @@ export async function PATCH(
         user_id: leaveRequest.user_id,
         title: automaticLate && status === "APPROVED" ? "Ritardo preso in visione" : `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
         message: automaticLate && status === "APPROVED"
-          ? `L’amministrazione ha preso visione del ritardo del ${leaveRequest.start_date.toLocaleDateString("it-IT")}${leaveRequest.end_time ? `, ingresso ${leaveRequest.end_time}` : ""}.${leaveRequest.admin_note ? ` Comunicazione: ${leaveRequest.admin_note}` : ""}`
+          ? `L’amministrazione ha preso visione del ritardo del ${leaveRequest.start_date.toLocaleDateString("it-IT")}${leaveRequest.end_time ? `, ingresso ${leaveRequest.end_time}` : ""}${lateAccountingLabel ? `; ${lateAccountingLabel}` : ""}.${leaveRequest.admin_note ? ` Comunicazione: ${leaveRequest.admin_note}` : ""}`
           : `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}${leaveRequest.admin_note ? ` Nota admin: ${leaveRequest.admin_note}` : ""}`,
         type: "RICHIESTA",
         action_url: "/requests",
@@ -189,5 +265,5 @@ export async function PATCH(
     }
   }
 
-  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });
+  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync, lateAccountingLabel });
 }

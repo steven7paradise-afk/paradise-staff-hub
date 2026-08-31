@@ -13,7 +13,7 @@ type Category = {
 };
 
 type ScheduleRow = { date: Date; start_time?: string | null; end_time?: string | null; category: Category };
-type ClockLog = { date: Date; type: AttendanceType; timestamp: Date };
+type ClockLog = { date: Date; type: AttendanceType; timestamp: Date; note?: string | null };
 type StoredHours = { date: Date; hours: number; paid_break: boolean; manual_override: boolean; note: string | null };
 
 export type PersonalDayHours = {

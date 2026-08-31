@@ -1,6 +1,8 @@
 import type { AttendanceType } from "@prisma/client";
 
-type AttendancePoint = { type: AttendanceType; timestamp: Date };
+export const COUNT_FROM_ACTUAL_ENTRY_MARKER = "CONTEGGIO_RITARDO_DA_TIMBRATURA_REALE";
+
+type AttendancePoint = { type: AttendanceType; timestamp: Date; note?: string | null };
 
 export type ClockHours = {
   grossHours: number;
@@ -66,7 +68,9 @@ export function calculateClockHours(logs: AttendancePoint[]): ClockHours {
   const lastExitLabel = [...orderedActual].reverse().find((log) => log.type === "USCITA")?.timestamp ?? null;
   const roundedLogs = orderedActual.map((log) => ({
     ...log,
-    timestamp: roundToNearest30Minutes(log.timestamp),
+    timestamp: log.type === "ENTRATA" && log.note?.includes(COUNT_FROM_ACTUAL_ENTRY_MARKER)
+      ? log.timestamp
+      : roundToNearest30Minutes(log.timestamp),
   }));
   const ordered = [...roundedLogs].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   let enteredAt: Date | null = null;

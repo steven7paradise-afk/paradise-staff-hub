@@ -67,7 +67,7 @@ export default async function ProfilePage() {
     fotoForm,
   ] = await Promise.all([
     prisma.scheduleEntry.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, include: { category: true } }),
-    prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true }, orderBy: { timestamp: "asc" } }),
+    prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true, note: true }, orderBy: { timestamp: "asc" } }),
     prisma.workHourRecord.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } } }),
     prisma.leaveRequest.count({ where: { user_id: user.id, status: "PENDING" } }),
     prisma.document.findMany({ where: { user_id: user.id }, orderBy: { created_at: "desc" } }),
