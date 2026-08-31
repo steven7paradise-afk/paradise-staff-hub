@@ -8,6 +8,7 @@ import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth
 import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
 import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 
 const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   }
 
   const user = await prisma.user.findUnique({ where: { id: employeeId }, include: { location: true } });
-  if (!user?.active || !user.pin_hash) {
+  if (!user?.active || user.employee_status === FORMER_EMPLOYEE_STATUS || !user.pin_hash) {
     return NextResponse.json({ error: "Dipendente non abilitato alla timbratura" }, { status: 403 });
   }
 

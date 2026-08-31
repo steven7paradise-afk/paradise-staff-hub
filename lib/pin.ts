@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 
 const PIN_CACHE_TTL_MS = 60_000;
 type PinWorker = { id: string; name: string; photo_url: string | null; role: string; mansione: string | null };
@@ -45,12 +46,23 @@ export async function identifyWorkerByPin(pin: string, _locationId: string, _isO
   const lookup = pinLookup(pin);
   const cached = workerPinCache.get(lookup);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.worker;
+    const stillEnabled = await prisma.user.findFirst({
+      where: {
+        id: cached.worker.id,
+        active: true,
+        employee_status: { not: FORMER_EMPLOYEE_STATUS },
+        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+      },
+      select: { id: true },
+    });
+    if (stillEnabled) return cached.worker;
+    workerPinCache.delete(lookup);
   }
 
   const quickMatch = await prisma.user.findFirst({
     where: {
       active: true,
+      employee_status: { not: FORMER_EMPLOYEE_STATUS },
       role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       pin_lookup: lookup,
     },
@@ -69,6 +81,7 @@ export async function identifyWorkerByPin(pin: string, _locationId: string, _isO
   const candidates = await prisma.user.findMany({
     where: {
       active: true,
+      employee_status: { not: FORMER_EMPLOYEE_STATUS },
       role: { notIn: ["ZERO", "SUPER_ADMIN"] },
       pin_hash: { not: null },
     },
