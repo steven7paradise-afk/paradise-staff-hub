@@ -13,6 +13,7 @@ type MenuItem = {
   label: string;
   iconName: string;
   section?: string;
+  badge?: number;
 };
 
 type SidebarFolder = {
@@ -172,6 +173,7 @@ export function DesktopSidebarNav({
                   {section.items.map((item) => {
                     const isActive = isItemActive(item.href);
                     const displayLabel = getSidebarLabel(item.href, item.label);
+                    const itemBadge = item.href === "/notifications" ? unreadNotifications : item.badge ?? 0;
 
                     return (
                       <Link
@@ -195,9 +197,9 @@ export function DesktopSidebarNav({
                         </span>
                         <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
 
-                        {item.href === "/notifications" && unreadNotifications > 0 ? (
+                        {itemBadge > 0 ? (
                           <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
-                            {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                            {itemBadge > 99 ? "99+" : itemBadge}
                           </span>
                         ) : null}
                       </Link>

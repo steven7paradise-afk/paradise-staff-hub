@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { canAccessSalonShiftModules, isSalonCollaborator } from "@/lib/salon-shift-access";
 import { brandingCss, getBrandingTheme } from "@/lib/branding";
@@ -195,11 +196,34 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     ? prisma.notification.count({ where: { user_id: session.user.id, read: false } }).catch(() => 0)
     : Promise.resolve(0);
 
-  const [settingsList, formsAccessSettings, currentUser, unreadNotifications] = await Promise.all([
+  const requestScope: Prisma.LeaveRequestWhereInput = currentRole === "DIPENDENTE" && session?.user?.id
+    ? { user_id: session.user.id }
+    : currentRole === "RESPONSABILE" && session?.user?.sedeId
+      ? { user: { sede_id: session.user.sedeId } }
+      : {};
+  const requestActionsPromise = session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"].includes(currentRole)
+    ? prisma.leaveRequest.count({
+        where: {
+          ...requestScope,
+          NOT: { admin_note: { contains: "[ELIMINATA_DA_MALATTIE]" } },
+          OR: [
+            { type: "MALATTIA", medical_code: null },
+            {
+              reason: { startsWith: "RITARDO AUTOMATICO — " },
+              employee_viewed_at: null,
+              employee_acknowledged_at: null,
+            },
+          ],
+        },
+      }).catch(() => 0)
+    : Promise.resolve(0);
+
+  const [settingsList, formsAccessSettings, currentUser, unreadNotifications, requestActions] = await Promise.all([
     settingsPromise,
     formsAccessPromise,
     currentUserPromise,
     unreadNotificationsPromise,
+    requestActionsPromise,
   ]);
   const displayUser = isPcCassa && pcDisplayUser ? pcDisplayUser : currentUser;
   const isFormerEmployee = currentUser?.employee_status === FORMER_EMPLOYEE_STATUS;
@@ -359,6 +383,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     label: getSidebarLabel(item.href, item.label),
     iconName: item.iconName,
     section: item.section,
+    badge: item.href === "/requests" ? requestActions : undefined,
   }));
   let effectiveSidebarConfig = sidebarConfig;
   if (isFormerEmployee) {

@@ -47,6 +47,7 @@ export async function PATCH(
   const payload = await request.json();
   const status = payload.status ? (String(payload.status) as RequestStatus) : undefined;
   const adminNote = payload.adminNote !== undefined ? (payload.adminNote ? String(payload.adminNote).trim() : null) : undefined;
+  const markViewed = payload.markViewed === true;
   const acknowledge = payload.acknowledge === true;
   const employeeResponse = payload.employeeResponse !== undefined ? (payload.employeeResponse ? String(payload.employeeResponse).trim() : null) : undefined;
   const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
@@ -66,11 +67,11 @@ export async function PATCH(
   const isAdmin = approverRoles.has(session.user.role);
   const isResponsabile = session.user.role === "RESPONSABILE";
 
-  if (acknowledge || employeeResponse !== undefined) {
+  if (markViewed || acknowledge || employeeResponse !== undefined) {
     if (!automaticLate || !isOwnRequest) {
-      return NextResponse.json({ error: "Puoi confermare soltanto la presa visione di un tuo ritardo." }, { status: 403 });
+      return NextResponse.json({ error: "Puoi registrare soltanto la presa visione di un tuo ritardo." }, { status: 403 });
     }
-    if (!acknowledge) {
+    if (employeeResponse !== undefined && !acknowledge) {
       return NextResponse.json({ error: "Conferma la presa visione per inviare la risposta." }, { status: 400 });
     }
   }
@@ -139,6 +140,7 @@ export async function PATCH(
           } : {}),
           ...(status === "APPROVED" ? { approved_by: session.user.id, approved_at: new Date() } : status === "REJECTED" || status === "PENDING" ? { approved_by: null, approved_at: null } : {}),
           ...(adminNote !== undefined ? { admin_note: adminNote } : {}),
+          ...(markViewed || acknowledge ? { employee_viewed_at: existing.employee_viewed_at ?? new Date() } : {}),
           ...(acknowledge ? { employee_acknowledged_at: new Date() } : {}),
           ...(employeeResponse !== undefined ? { employee_response: employeeResponse } : {}),
           ...(medicalCode !== undefined ? { medical_code: medicalCode, sickness_unjustified: !medicalCode } : {}),
@@ -218,17 +220,21 @@ export async function PATCH(
     });
   }
 
-  // Always update Google Calendar status sync (both to update details or delete if rejected)
+  // A silent view receipt must not trigger calendar synchronization.
   let calendarSync = null;
-  try {
-    calendarSync = automaticLate && !resolvesMissingClockAsAbsence
-      ? { skipped: true, reason: "I ritardi presi in visione non vengono inseriti nel calendario." }
-      : await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
-  } catch (error) {
-    calendarSync = {
-      skipped: true,
-      reason: error instanceof Error ? error.message : "Google Calendar non sincronizzato",
-    };
+  if (markViewed && status === undefined && !acknowledge && employeeResponse === undefined && medicalCode === undefined && sicknessUnjustified === undefined) {
+    calendarSync = { skipped: true, reason: "Visualizzazione registrata senza sincronizzazione del calendario." };
+  } else {
+    try {
+      calendarSync = automaticLate && !resolvesMissingClockAsAbsence
+        ? { skipped: true, reason: "I ritardi presi in visione non vengono inseriti nel calendario." }
+        : await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
+    } catch (error) {
+      calendarSync = {
+        skipped: true,
+        reason: error instanceof Error ? error.message : "Google Calendar non sincronizzato",
+      };
+    }
   }
 
   if (status !== undefined) {

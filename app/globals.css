@@ -623,9 +623,19 @@ textarea {
 @media (min-width: 1280px) {
   .sidebar-collapsed .sidebar-label,
   .sidebar-collapsed .sidebar-subtitle,
-  .sidebar-collapsed .sidebar-role,
-  .sidebar-collapsed .sidebar-badge {
+  .sidebar-collapsed .sidebar-role {
     display: none !important;
+  }
+
+  .sidebar-collapsed .sidebar-nav-link .sidebar-badge {
+    position: absolute;
+    right: 0.15rem;
+    top: 0.15rem;
+    display: block !important;
+    min-width: 1.1rem;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.58rem;
+    line-height: 1;
   }
 
 

@@ -54,6 +54,7 @@ export default async function RequestsPage() {
           status: request.status,
           adminNote: request.admin_note,
           employeeResponse: request.employee_response,
+          employeeViewedAt: request.employee_viewed_at?.toISOString() ?? null,
           employeeAcknowledgedAt: request.employee_acknowledged_at?.toISOString() ?? null,
           medicalCode: request.medical_code,
           sicknessUnjustified: request.sickness_unjustified,

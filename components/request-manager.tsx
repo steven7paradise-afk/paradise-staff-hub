@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Send, X, Flag, Calendar, Clock, Heart, Coffee, FileText, Sparkles, Plus, AlertCircle, ShieldCheck, Eye, BellRing, UserRound, Hourglass } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import type { Role } from "@/lib/roles";
@@ -18,6 +18,7 @@ type RequestRecord = {
   status: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
   adminNote: string | null;
   employeeResponse: string | null;
+  employeeViewedAt: string | null;
   employeeAcknowledgedAt: string | null;
   medicalCode: string | null;
   sicknessUnjustified: boolean;
@@ -55,8 +56,16 @@ function needsSicknessJustification(request: RequestRecord) {
   return request.type === "MALATTIA" && !request.medicalCode;
 }
 
+function isDeletedSicknessRequest(request: RequestRecord) {
+  return request.adminNote?.includes("[ELIMINATA_DA_MALATTIE]") ?? false;
+}
+
 function needsEmployeeAcknowledgement(request: RequestRecord) {
   return isAutomaticLateRequest(request) && !request.employeeAcknowledgedAt;
+}
+
+function needsEmployeeView(request: RequestRecord) {
+  return needsEmployeeAcknowledgement(request) && !request.employeeViewedAt;
 }
 
 function requestFilterForRecord(request: RequestRecord): ActiveRequestFilter {
@@ -353,14 +362,18 @@ function RequestDetailPanel({
           {automaticLate ? (
             <div className={cn(
               "rounded-2xl border p-4 sm:p-5",
-              request.employeeAcknowledgedAt ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60",
+              request.employeeAcknowledgedAt ? "border-emerald-200 bg-emerald-50/60" : request.employeeViewedAt ? "border-sky-200 bg-sky-50/60" : "border-amber-200 bg-amber-50/60",
             )}>
               <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45">
-                <Eye className={cn("size-4", request.employeeAcknowledgedAt ? "text-emerald-600" : "text-amber-600")} />
+                <Eye className={cn("size-4", request.employeeAcknowledgedAt ? "text-emerald-600" : request.employeeViewedAt ? "text-sky-600" : "text-amber-600")} />
                 Presa visione del dipendente
               </p>
               <p className="mt-2 text-sm font-black text-paradise-noir">
-                {request.employeeAcknowledgedAt ? `Confermata il ${formatDateTime(request.employeeAcknowledgedAt)}` : "Non ancora confermata"}
+                {request.employeeAcknowledgedAt
+                  ? `Confermata il ${formatDateTime(request.employeeAcknowledgedAt)}`
+                  : request.employeeViewedAt
+                    ? `Vista il ${formatDateTime(request.employeeViewedAt)} · conferma non ancora inviata`
+                    : "Non ancora vista né confermata"}
               </p>
               {request.employeeResponse ? (
                 <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-3 py-2.5">
@@ -528,10 +541,12 @@ function DatePickerStable({ label, value, onChange }: { label: string; value: st
 }
 
 export function RequestManager({ initialRequests, role, workers }: { initialRequests: RequestRecord[]; role: Role; workers: WorkerOption[] }) {
-  const orderedInitialRequests = [...initialRequests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const orderedInitialRequests = initialRequests
+    .filter((request) => !isDeletedSicknessRequest(request))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const newestInitialRequest = orderedInitialRequests[0] ?? null;
   const initialActionRequest = orderedInitialRequests.find(needsSicknessJustification)
-    ?? orderedInitialRequests.find(needsEmployeeAcknowledgement)
+    ?? orderedInitialRequests.find(needsEmployeeView)
     ?? newestInitialRequest;
   const [requests, setRequests] = useState(initialRequests);
   const [openForm, setOpenForm] = useState(false);
@@ -547,10 +562,13 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const employeeView = role === "DIPENDENTE";
   const canApprove = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canCreateForWorkers = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
-  const orderedRequests = [...requests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const orderedRequests = requests
+    .filter((request) => !isDeletedSicknessRequest(request))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
   const acknowledgementRequests = orderedRequests.filter(needsEmployeeAcknowledgement);
-  const actionRequiredCount = new Set([...urgentSicknessRequests, ...acknowledgementRequests].map((request) => request.id)).size;
+  const unseenAcknowledgementRequests = acknowledgementRequests.filter(needsEmployeeView);
+  const actionRequiredCount = new Set([...urgentSicknessRequests, ...unseenAcknowledgementRequests].map((request) => request.id)).size;
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
   const requestSections = ([
     { key: "LATE", title: "Ritardi", description: "Timbrature oltre la tolleranza da approvare o rifiutare.", tone: "gold", items: [] },
@@ -572,6 +590,28 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   ];
   const visibleRequests = activeFilter === "JUSTIFY" ? urgentSicknessRequests : activeSection?.items ?? [];
   const selectedRequest = requests.find((request) => request.id === selectedRequestId && visibleRequests.some((item) => item.id === request.id)) ?? visibleRequests[0] ?? null;
+
+  useEffect(() => {
+    if (!employeeView || !selectedRequest || !isAutomaticLateRequest(selectedRequest) || selectedRequest.employeeViewedAt) return;
+    let cancelled = false;
+
+    async function registerView() {
+      const response = await fetch(`/api/requests/${selectedRequest.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markViewed: true }),
+      });
+      if (!response.ok || cancelled) return;
+      const data = await response.json();
+      setRequests((current) => current.map((request) => request.id === selectedRequest.id ? {
+        ...request,
+        employeeViewedAt: data.leaveRequest.employee_viewed_at,
+      } : request));
+    }
+
+    void registerView();
+    return () => { cancelled = true; };
+  }, [employeeView, selectedRequest]);
 
   async function createRequest() {
     if (!form.startDate || !form.endDate) {
@@ -607,6 +647,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       status: savedRequest.status,
       adminNote: savedRequest.admin_note,
       employeeResponse: savedRequest.employee_response ?? null,
+      employeeViewedAt: savedRequest.employee_viewed_at ?? null,
       employeeAcknowledgedAt: savedRequest.employee_acknowledged_at ?? null,
       medicalCode: savedRequest.medical_code,
       sicknessUnjustified: savedRequest.sickness_unjustified,
@@ -757,6 +798,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     setRequests((current) => current.map((request) => request.id === id ? {
       ...request,
       employeeResponse: data.leaveRequest.employee_response,
+      employeeViewedAt: data.leaveRequest.employee_viewed_at,
       employeeAcknowledgedAt: data.leaveRequest.employee_acknowledged_at,
     } : request));
     setDecisionDrafts((current) => {
@@ -854,30 +896,30 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
         </p>
       ) : null}
 
-      <div className="mb-4 grid gap-2.5 sm:grid-cols-3">
-        <div className="requests-glass-surface rounded-[20px] border border-white/80 bg-white/65 px-4 py-3.5 shadow-[0_8px_24px_rgba(67,45,57,0.07)] backdrop-blur-xl">
+      <div className="mb-3 grid grid-cols-3 gap-2 sm:mb-4 sm:gap-2.5">
+        <div className="requests-glass-surface min-w-0 rounded-[18px] border border-white/80 bg-white/65 px-2.5 py-3 shadow-[0_8px_24px_rgba(67,45,57,0.07)] backdrop-blur-xl sm:rounded-[20px] sm:px-4 sm:py-3.5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/50">Azioni richieste</p>
-            <AlertCircle className="size-4 text-paradise-pink" />
+            <p className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-black/50 sm:text-[10px] sm:tracking-[0.16em]"><span className="sm:hidden">Da fare</span><span className="hidden sm:inline">Azioni richieste</span></p>
+            <AlertCircle className="hidden size-4 text-paradise-pink sm:block" />
           </div>
-          <p className="mt-1 text-2xl font-black tracking-tight text-paradise-noir">{actionRequiredCount}</p>
-          <p className="mt-0.5 text-[10px] font-semibold text-black/40">Solo pratiche ancora da completare</p>
+          <p className="mt-1 text-xl font-black tracking-tight text-paradise-noir sm:text-2xl">{actionRequiredCount}</p>
+          <p className="mt-0.5 hidden text-[10px] font-semibold text-black/40 sm:block">Solo pratiche ancora da completare</p>
         </div>
-        <div className="requests-glass-surface rounded-[20px] border border-rose-200/80 bg-rose-50/70 px-4 py-3.5 shadow-[0_8px_24px_rgba(190,24,93,0.06)] backdrop-blur-xl">
+        <div className="requests-glass-surface min-w-0 rounded-[18px] border border-rose-200/80 bg-rose-50/70 px-2.5 py-3 shadow-[0_8px_24px_rgba(190,24,93,0.06)] backdrop-blur-xl sm:rounded-[20px] sm:px-4 sm:py-3.5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-700">Da giustificare</p>
-            <Heart className="size-4 text-rose-500" />
+            <p className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-rose-700 sm:text-[10px] sm:tracking-[0.16em]"><span className="sm:hidden">Giustifiche</span><span className="hidden sm:inline">Da giustificare</span></p>
+            <Heart className="hidden size-4 text-rose-500 sm:block" />
           </div>
-          <p className="mt-1 text-2xl font-black tracking-tight text-rose-800">{urgentSicknessRequests.length}</p>
-          <p className="mt-0.5 text-[10px] font-semibold text-rose-800/55">Certificato o protocollo mancante</p>
+          <p className="mt-1 text-xl font-black tracking-tight text-rose-800 sm:text-2xl">{urgentSicknessRequests.length}</p>
+          <p className="mt-0.5 hidden text-[10px] font-semibold text-rose-800/55 sm:block">Certificato o protocollo mancante</p>
         </div>
-        <div className="requests-glass-surface rounded-[20px] border border-amber-200/80 bg-amber-50/70 px-4 py-3.5 shadow-[0_8px_24px_rgba(180,83,9,0.06)] backdrop-blur-xl">
+        <div className="requests-glass-surface min-w-0 rounded-[18px] border border-amber-200/80 bg-amber-50/70 px-2.5 py-3 shadow-[0_8px_24px_rgba(180,83,9,0.06)] backdrop-blur-xl sm:rounded-[20px] sm:px-4 sm:py-3.5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-800">Da prendere visione</p>
-            <Eye className="size-4 text-amber-600" />
+            <p className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-amber-800 sm:text-[10px] sm:tracking-[0.16em]"><span className="sm:hidden">Non viste</span><span className="hidden sm:inline">Da prendere visione</span></p>
+            <Eye className="hidden size-4 text-amber-600 sm:block" />
           </div>
-          <p className="mt-1 text-2xl font-black tracking-tight text-amber-900">{acknowledgementRequests.length}</p>
-          <p className="mt-0.5 text-[10px] font-semibold text-amber-900/55">Comunicazioni non ancora confermate</p>
+          <p className="mt-1 text-xl font-black tracking-tight text-amber-900 sm:text-2xl">{unseenAcknowledgementRequests.length}</p>
+          <p className="mt-0.5 hidden text-[10px] font-semibold text-amber-900/55 sm:block">Non viste e non confermate · {acknowledgementRequests.length} senza conferma</p>
         </div>
       </div>
 
