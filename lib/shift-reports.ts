@@ -2,6 +2,9 @@ export const SHIFT_REPORT_STATUSES = ["DRAFT", "DA_VERIFICARE", "DA_CORREGGERE",
 export type ShiftReportStatus = typeof SHIFT_REPORT_STATUSES[number];
 
 export type ShiftReportData = {
+  attendanceAllPresent: boolean | null;
+  reportedLate: string;
+  reportedAbsences: string;
   daySummary: string;
   dayRating: number;
   staffPresentation: string;
@@ -11,7 +14,7 @@ export type ShiftReportData = {
   clientIssues: string;
   refusedServices: string;
   anomalies: string;
-  clientChecks: Record<string, { status: "OK" | "PROBLEM" | ""; problem: string; solution: string; escalated: boolean; note: string }>;
+  clientChecks: Record<string, { status: "OK" | "PROBLEM" | ""; problem: string; solution: string; resolved: boolean | null; escalated: boolean; note: string }>;
   finishedProducts: Array<{ id: string; name: string }>;
   checks: {
     clothingCompliant: boolean | null;
@@ -29,10 +32,15 @@ export type ShiftReportData = {
   monitorSituations: string;
   tasksToCreate: string;
   notesForLeydi: string;
+  refusedServiceReason: string;
+  refusedServiceDecision: string;
   pauseNotes: Record<string, string>;
 };
 
 export const emptyShiftReportData: ShiftReportData = {
+  attendanceAllPresent: null,
+  reportedLate: "",
+  reportedAbsences: "",
   daySummary: "",
   dayRating: 3,
   staffPresentation: "",
@@ -52,6 +60,8 @@ export const emptyShiftReportData: ShiftReportData = {
   monitorSituations: "",
   tasksToCreate: "",
   notesForLeydi: "",
+  refusedServiceReason: "",
+  refusedServiceDecision: "",
   pauseNotes: {},
 };
 
@@ -71,6 +81,7 @@ export function normalizeShiftReportData(value: unknown): ShiftReportData {
       status,
       problem: String(check.problem ?? "").trim().slice(0, 2000),
       solution: String(check.solution ?? "").trim().slice(0, 2000),
+      resolved: typeof check.resolved === "boolean" ? check.resolved : null,
       escalated: check.escalated === true,
       note: String(check.note ?? "").trim().slice(0, 2000),
     }];
@@ -89,6 +100,9 @@ export function normalizeShiftReportData(value: unknown): ShiftReportData {
   const rawPauseNotes = raw.pauseNotes && typeof raw.pauseNotes === "object" && !Array.isArray(raw.pauseNotes) ? raw.pauseNotes as Record<string, unknown> : {};
   const pauseNotes = Object.fromEntries(Object.entries(rawPauseNotes).slice(0, 100).map(([id, note]) => [id.slice(0, 100), String(note ?? "").trim().slice(0, 1000)]));
   return {
+    attendanceAllPresent: typeof raw.attendanceAllPresent === "boolean" ? raw.attendanceAllPresent : null,
+    reportedLate: text("reportedLate"),
+    reportedAbsences: text("reportedAbsences"),
     daySummary: text("daySummary"),
     dayRating: rating,
     staffPresentation: text("staffPresentation"),
@@ -113,6 +127,8 @@ export function normalizeShiftReportData(value: unknown): ShiftReportData {
     monitorSituations: text("monitorSituations"),
     tasksToCreate: text("tasksToCreate"),
     notesForLeydi: text("notesForLeydi"),
+    refusedServiceReason: text("refusedServiceReason"),
+    refusedServiceDecision: text("refusedServiceDecision"),
     pauseNotes,
   };
 }

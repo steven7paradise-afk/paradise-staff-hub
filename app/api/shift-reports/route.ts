@@ -218,7 +218,10 @@ export async function POST(request: NextRequest) {
   const { date } = romeDayRange(day);
   const reportData = normalizeShiftReportData(payload.reportData);
   if (action === "SUBMIT" && !reportData.daySummary) return NextResponse.json({ error: "Scrivi il riepilogo della giornata prima dell’invio" }, { status: 400 });
-  if (action === "SUBMIT" && Object.values(reportData.checks).some((value) => value === null)) return NextResponse.json({ error: "Completa tutte le verifiche Sì / No prima dell’invio" }, { status: 400 });
+  if (action === "SUBMIT" && reportData.attendanceAllPresent === null) return NextResponse.json({ error: "Indica se tutto il personale era presente" }, { status: 400 });
+  if (action === "SUBMIT" && reportData.attendanceAllPresent === false && !reportData.reportedLate && !reportData.reportedAbsences) return NextResponse.json({ error: "Indica i ritardi o le assenze dichiarate" }, { status: 400 });
+  if (action === "SUBMIT" && [reportData.checks.staffPresentable, reportData.checks.salonClean, reportData.checks.materialsAvailable].some((value) => value === null)) return NextResponse.json({ error: "Completa Presentabilità staff, Ordine / pulizia e Materiali prima dell’invio" }, { status: 400 });
+  if (action === "SUBMIT" && [reportData.refusedServices, reportData.refusedServiceReason, reportData.refusedServiceDecision].some(Boolean) && ![reportData.refusedServices, reportData.refusedServiceReason, reportData.refusedServiceDecision].every(Boolean)) return NextResponse.json({ error: "Completa servizio rifiutato, motivo e decisione presa da" }, { status: 400 });
   const existing = await prisma.shiftReport.findUnique({ where: { date_location_id: { date, location_id: locationId } } });
   if (existing && existing.responsible_id !== session.user.id) return NextResponse.json({ error: "Il report di questa sede è già assegnato a un altro Responsabile" }, { status: 409 });
   if (existing && !["DRAFT", "DA_CORREGGERE"].includes(existing.status)) return NextResponse.json({ error: "Il report è già stato inviato e non può essere modificato" }, { status: 409 });
@@ -227,8 +230,8 @@ export async function POST(request: NextRequest) {
     const clients = (automaticData.clientTimeline as Array<{ id: string }>);
     const missingCheck = clients.find((client) => !reportData.clientChecks[client.id]?.status);
     if (missingCheck) return NextResponse.json({ error: `Conferma l’esito della cliente: ${String((missingCheck as { client?: string }).client || "cliente non indicata")}` }, { status: 400 });
-    const incompleteProblem = clients.find((client) => reportData.clientChecks[client.id]?.status === "PROBLEM" && (!reportData.clientChecks[client.id]?.problem || !reportData.clientChecks[client.id]?.solution));
-    if (incompleteProblem) return NextResponse.json({ error: "Per ogni cliente con problemi indica problema e soluzione adottata" }, { status: 400 });
+    const incompleteProblem = clients.find((client) => reportData.clientChecks[client.id]?.status === "PROBLEM" && (!reportData.clientChecks[client.id]?.problem || !reportData.clientChecks[client.id]?.solution || reportData.clientChecks[client.id]?.resolved === null));
+    if (incompleteProblem) return NextResponse.json({ error: "Per ogni cliente con problemi indica problema, soluzione e se è stato risolto" }, { status: 400 });
   }
   const status = action === "SUBMIT" ? "DA_VERIFICARE" : existing?.status === "DA_CORREGGERE" ? "DA_CORREGGERE" : "DRAFT";
   const now = new Date();

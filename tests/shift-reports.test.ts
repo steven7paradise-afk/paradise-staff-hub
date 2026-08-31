@@ -6,17 +6,23 @@ test("normalizza la verifica per singolo cliente", () => {
   const report = normalizeShiftReportData({
     daySummary: "  Giornata positiva  ",
     dayRating: 9,
+    attendanceAllPresent: false,
+    reportedLate: "  Anna +10 minuti  ",
+    reportedAbsences: "  Nessuna  ",
     clientChecks: {
       client1: { status: "OK", note: " Tutto bene " },
-      client2: { status: "PROBLEM", note: " Cliente insoddisfatta " },
+      client2: { status: "PROBLEM", resolved: false, note: " Cliente insoddisfatta " },
       invalid: { status: "UNKNOWN", note: "test" },
     },
     finishedProducts: [{ id: "prod-1", name: "Shampoo Paradise" }, { id: "", name: "Non valido" }],
   });
   assert.equal(report.daySummary, "Giornata positiva");
   assert.equal(report.dayRating, 5);
-  assert.deepEqual(report.clientChecks.client1, { status: "OK", problem: "", solution: "", escalated: false, note: "Tutto bene" });
-  assert.deepEqual(report.clientChecks.client2, { status: "PROBLEM", problem: "", solution: "", escalated: false, note: "Cliente insoddisfatta" });
+  assert.equal(report.attendanceAllPresent, false);
+  assert.equal(report.reportedLate, "Anna +10 minuti");
+  assert.equal(report.reportedAbsences, "Nessuna");
+  assert.deepEqual(report.clientChecks.client1, { status: "OK", problem: "", solution: "", resolved: null, escalated: false, note: "Tutto bene" });
+  assert.deepEqual(report.clientChecks.client2, { status: "PROBLEM", problem: "", solution: "", resolved: false, escalated: false, note: "Cliente insoddisfatta" });
   assert.equal(report.clientChecks.invalid.status, "");
   assert.deepEqual(report.finishedProducts, [{ id: "prod-1", name: "Shampoo Paradise" }]);
 });
