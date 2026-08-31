@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getOperationalUser } from "@/lib/operational-session";
 
 export async function GET(request: NextRequest) {
-  // 1. Authenticate user
-  const session = await auth();
-  if (!session?.user?.id) {
+  // The invoice form is also used from an authorized salon PC, where there is
+  // no standard Auth.js session. Resolve both normal and operational users.
+  const user = await getOperationalUser(request);
+  if (!user?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
@@ -32,7 +33,9 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
     if (!data.isValid) {
-      return NextResponse.json({ error: "Partita IVA inesistente o non valida nel registro VIES." }, { status: 404 });
+      return NextResponse.json({
+        error: "Partita IVA non presente nel registro europeo VIES. Può essere valida solo in Italia: inserisci manualmente ragione sociale e indirizzo.",
+      }, { status: 404 });
     }
 
     // Clean address format: the VIES API often returns addresses containing newlines

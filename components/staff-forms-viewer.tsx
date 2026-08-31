@@ -412,6 +412,27 @@ export function StaffFormsViewer({
       return;
     }
 
+    const savedCustomer = pastCustomers.find((customer) =>
+      String(customer.vatNumber || "").replace(/\D/g, "") === vat
+    );
+    if (savedCustomer) {
+      setAnswers((prev) => ({
+        ...prev,
+        invoice_client_type: savedCustomer.type,
+        invoice_client_name: savedCustomer.name,
+        invoice_fiscal_code: savedCustomer.fiscalCode,
+        invoice_vat_number: vat,
+        invoice_sdi_code: savedCustomer.sdiCode,
+        invoice_pec: savedCustomer.pec,
+        invoice_address: savedCustomer.address,
+      }));
+      setVatLookupStatus({
+        success: true,
+        message: `✓ CLIENTE GIÀ REGISTRATO\n• Ragione Sociale: ${savedCustomer.name}\n• Indirizzo: ${savedCustomer.address || "da completare"}`,
+      });
+      return;
+    }
+
     setLoadingVat(true);
     setVatLookupStatus(null);
 
