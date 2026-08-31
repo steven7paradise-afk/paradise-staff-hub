@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
   if (session.user.role === "RESPONSABILE" && selectedLocationId !== session.user.sedeId) return NextResponse.json({ error: "Sede non autorizzata" }, { status: 403 });
 
   const { date } = romeDayRange(day);
-  const [automatic, report, recentReports, products] = await Promise.all([
+  const [automatic, report, recentReports, products, viewer] = await Promise.all([
     automaticReportData(day, selectedLocationId),
     prisma.shiftReport.findUnique({ where: { date_location_id: { date, location_id: selectedLocationId } }, include: reportInclude }),
     prisma.shiftReport.findMany({
@@ -144,8 +144,12 @@ export async function GET(request: NextRequest) {
       where: managerRoles.has(session.user.role) ? {} : { active: true },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, name: true, photo_url: true },
+    }),
   ]);
-  return NextResponse.json({ day, locations: session.user.role === "RESPONSABILE" ? locations.filter((location) => location.id === session.user.sedeId) : locations, automatic, report, reports: recentReports, products, manager: managerRoles.has(session.user.role) });
+  return NextResponse.json({ day, locations: session.user.role === "RESPONSABILE" ? locations.filter((location) => location.id === session.user.sedeId) : locations, automatic, report, reports: recentReports, products, viewer, manager: managerRoles.has(session.user.role) });
 }
 
 export async function POST(request: NextRequest) {
