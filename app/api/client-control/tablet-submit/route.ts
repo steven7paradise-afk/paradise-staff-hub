@@ -275,6 +275,13 @@ export async function POST(request: NextRequest) {
     verifiedPaymentStatus === "paid" &&
     verifiedPaymentMethod !== "DA_VERIFICARE"
   );
+  // Gli importi collegati agli ordini non sono valori dichiarati dall'operatrice:
+  // quando Shopify è disponibile, il server usa sempre il totale verificato.
+  const trustedDepositPaid = !isDraft && shopifyTotalPrice != null
+    ? shopifyTotalPrice
+    : moneyValue(body?.depositPaid);
+  const trustedPaid = secondOrderDetails?.totalPrice
+    ?? (moneyValue(body?.paid) || shopifyTotalPrice);
 
   if (!isFinito && !isNoShow && !isDraft) {
     if (!secondShopifyOrder) {
@@ -391,8 +398,8 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isNoShow ? "No Show" : "Finito"),
     [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
     [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
-    [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
-    [CLIENT_CONTROL_FIELD_IDS.paid]: secondOrderDetails?.totalPrice ?? (moneyValue(body?.paid) || shopifyTotalPrice),
+    [CLIENT_CONTROL_FIELD_IDS.depositPaid]: trustedDepositPaid,
+    [CLIENT_CONTROL_FIELD_IDS.paid]: trustedPaid,
     [CLIENT_CONTROL_FIELD_IDS.paymentMethod]: verifiedPaymentMethod,
     [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: paymentGatewayAnswer,
     [CLIENT_CONTROL_FIELD_IDS.paymentStatus]: secondOrderDetails?.financialStatus || "",
@@ -423,8 +430,8 @@ export async function POST(request: NextRequest) {
     [CLIENT_CONTROL_FIELD_IDS.clientName]: clientName || shopifyClientName || (isDraft ? "Cliente da completare" : ""),
     [CLIENT_CONTROL_FIELD_IDS.email]: textValue(body?.email),
     [CLIENT_CONTROL_FIELD_IDS.phone]: textValue(body?.phone),
-    [CLIENT_CONTROL_FIELD_IDS.depositPaid]: moneyValue(body?.depositPaid),
-    [CLIENT_CONTROL_FIELD_IDS.paid]: secondOrderDetails?.totalPrice ?? (moneyValue(body?.paid) || shopifyTotalPrice),
+    [CLIENT_CONTROL_FIELD_IDS.depositPaid]: trustedDepositPaid,
+    [CLIENT_CONTROL_FIELD_IDS.paid]: trustedPaid,
     [CLIENT_CONTROL_FIELD_IDS.paymentMethod]: verifiedPaymentMethod,
     [CLIENT_CONTROL_FIELD_IDS.paymentGateway]: paymentGatewayAnswer,
     [CLIENT_CONTROL_FIELD_IDS.paymentStatus]: secondOrderDetails?.financialStatus || "",

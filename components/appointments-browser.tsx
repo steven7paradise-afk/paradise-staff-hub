@@ -28,7 +28,7 @@ import {
   LockKeyhole,
   RefreshCw,
   Cloud,
-  AtSign,
+  Instagram,
   ChevronDown,
   Receipt,
   User,
@@ -163,6 +163,45 @@ export function formatOrderDate(dateStr?: string | null): string {
   } catch {
     return "";
   }
+}
+
+function getOrderDayKey(dateStr?: string | null): string {
+  if (!dateStr) return "data-sconosciuta";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "data-sconosciuta";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function formatOrderDay(dateStr?: string | null): string {
+  if (!dateStr) return "Data non disponibile";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "Data non disponibile";
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatOrderTime(dateStr?: string | null): string {
+  if (!dateStr) return "--:--";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 type AppointmentRecord = {
@@ -2064,6 +2103,29 @@ export function AppointmentsBrowser({
     });
   }, [clientMatchingOrders, secondOrderDetails, selectedOrderDetails]);
 
+  const clientShopifyNoteGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { dayKey: string; label: string; orders: ShopifyClientOrder[] }
+    >();
+
+    clientShopifyNoteHistory.slice(0, 8).forEach((order) => {
+      const dayKey = getOrderDayKey(order.createdAt);
+      const current = groups.get(dayKey);
+      if (current) {
+        current.orders.push(order);
+        return;
+      }
+      groups.set(dayKey, {
+        dayKey,
+        label: formatOrderDay(order.createdAt),
+        orders: [order],
+      });
+    });
+
+    return Array.from(groups.values());
+  }, [clientShopifyNoteHistory]);
+
   useEffect(() => {
     if (
       !clientControlOpen ||
@@ -3937,23 +3999,23 @@ export function AppointmentsBrowser({
                 </div>
 
                 <div className="grid gap-4 border-t border-[#F3E3EB] bg-[#FFFCFD] p-5 lg:grid-cols-[220px_1fr] lg:items-end sm:px-6">
-                  <label className="block">
-                    <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-black/40">
-                      <AtSign className="size-3.5 text-[#D96B94]" />
-                      Instagram cliente
+                  <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF0F6] px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#D96B94]/25">
+                    <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                    <span className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        aria-label="Instagram cliente"
+                        value={clientControlForm.instagramTag}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            instagramTag: event.target.value,
+                          }))
+                        }
+                        placeholder="@usercliente"
+                        className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                      />
                     </span>
-                    <input
-                      type="text"
-                      value={clientControlForm.instagramTag}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          instagramTag: event.target.value,
-                        }))
-                      }
-                      placeholder="@cliente"
-                      className="mt-2 h-11 w-full rounded-xl border border-neutral-200 bg-white px-3.5 text-xs font-black text-[#B83D7F] outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
-                    />
                   </label>
 
                   <div>
@@ -4388,14 +4450,11 @@ export function AppointmentsBrowser({
                   <input
                     type="text"
                     value={clientControlForm.depositPaid}
-                    onChange={(event) =>
-                      setClientControlForm((prev) => ({
-                        ...prev,
-                        depositPaid: event.target.value,
-                      }))
-                    }
-                    className="h-12 w-full rounded-2xl border border-[#F4D3E2] bg-white px-4 text-sm font-black text-[#1F1F1F] outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20 transition shadow-2xs"
-                    placeholder="0.00"
+                    readOnly
+                    aria-readonly="true"
+                    title="Importo acquisito automaticamente dall'ordine acconto"
+                    className="h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black text-[#1F1F1F] outline-none shadow-2xs"
+                    placeholder="Importato dall'ordine acconto"
                   />
                 </label>
 
@@ -4608,41 +4667,48 @@ export function AppointmentsBrowser({
                     Carico le note Shopify della cliente…
                   </div>
                 ) : clientShopifyNoteHistory.length ? (
-                  <div className="divide-y divide-[#F1E3EA]">
-                    {clientShopifyNoteHistory.slice(0, 8).map((order) => (
-                      <details key={`shopify-note-${order.id || order.orderName}`} className="group">
-                        <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,0.75fr)_minmax(0,1.4fr)_auto] items-center gap-3 px-5 py-3 text-left marker:content-none transition hover:bg-[#FFF9FC] sm:px-6">
-                          <span className="min-w-0">
-                            <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-black/35">
-                              Giorno
-                            </span>
-                            <span className="mt-0.5 block truncate text-[11px] font-black tabular-nums text-[#30252A]">
-                              {formatOrderDate(order.createdAt) || "Data non disponibile"}
-                            </span>
+                  <div className="divide-y-4 divide-[#F8EAF1]">
+                    {clientShopifyNoteGroups.map((group) => (
+                      <details key={`shopify-note-day-${group.dayKey}`} className="group/day">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-[#F1DCE6] bg-[#FFF3F8] px-5 py-3 marker:content-none transition hover:bg-[#FFEAF3] sm:px-6">
+                          <span className="text-[11px] font-black capitalize text-[#30252A]">
+                            {group.label}
                           </span>
-                          <span className="min-w-0">
-                            <span className="block text-[9px] font-black uppercase tracking-[0.14em] text-black/35">
-                              Servizio
-                            </span>
-                            <span className="mt-0.5 block truncate text-[11px] font-bold text-[#30252A]">
-                              {order.serviceTitle || "Servizio Shopify"}
-                            </span>
-                            <span className="mt-0.5 block text-[9px] font-black text-[#B83D7F]">
-                              {order.orderName ? `Ordine ${order.orderName}` : "Ordine Shopify"}
-                            </span>
-                          </span>
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#F0BFD4] bg-[#FFF0F6] px-3 py-2 text-[10px] font-black text-[#B83D7F]">
-                            Vedi nota
-                            <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" />
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[9px] font-black text-[#A52E6B] shadow-2xs">
+                            {group.orders.length} {group.orders.length === 1 ? "nota" : "note"}
+                            <ChevronDown className="size-3.5 transition-transform group-open/day:rotate-180" />
                           </span>
                         </summary>
-                        <div className="border-t border-[#F2E2E9] bg-[#FFFCFD] px-5 py-4 sm:px-6">
-                          <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[#A52E6B]">
-                            Nota presa da Shopify
-                          </p>
-                          <p className="mt-2 whitespace-pre-wrap text-xs font-semibold leading-relaxed text-[#44353C]">
-                            {order.note}
-                          </p>
+                        <div className="divide-y divide-[#F1E3EA]">
+                          {group.orders.map((order) => (
+                            <details key={`shopify-note-${order.id || order.orderName}`} className="group/note">
+                              <summary className="grid cursor-pointer list-none grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 text-left marker:content-none transition hover:bg-[#FFF9FC] sm:px-6">
+                                <span className="text-[11px] font-black tabular-nums text-[#655D61]">
+                                  {formatOrderTime(order.createdAt)}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[11px] font-bold text-[#30252A]">
+                                    {order.serviceTitle || "Servizio Shopify"}
+                                  </span>
+                                  <span className="mt-0.5 block text-[9px] font-black text-[#B83D7F]">
+                                    {order.orderName ? `Ordine ${order.orderName}` : "Ordine Shopify"}
+                                  </span>
+                                </span>
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-[#F0BFD4] bg-[#FFF0F6] px-3 py-2 text-[10px] font-black text-[#B83D7F]">
+                                  Vedi nota
+                                  <ChevronDown className="size-3.5 transition-transform group-open/note:rotate-180" />
+                                </span>
+                              </summary>
+                              <div className="border-t border-[#F2E2E9] bg-[#FFFCFD] px-5 py-4 sm:px-6">
+                                <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[#A52E6B]">
+                                  Nota presa da Shopify
+                                </p>
+                                <p className="mt-2 whitespace-pre-wrap text-xs font-semibold leading-relaxed text-[#44353C]">
+                                  {order.note}
+                                </p>
+                              </div>
+                            </details>
+                          ))}
                         </div>
                       </details>
                     ))}
@@ -6735,14 +6801,11 @@ export function AppointmentsBrowser({
                     <input
                       inputMode="decimal"
                       value={clientControlForm.depositPaid}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          depositPaid: event.target.value,
-                        }))
-                      }
-                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
-                      placeholder="0.00"
+                      readOnly
+                      aria-readonly="true"
+                      title="Importo acquisito automaticamente dall'ordine acconto"
+                      className="mt-1 h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black outline-none"
+                      placeholder="Importato dall'ordine acconto"
                     />
                   </label>
                   <label className="block">
@@ -6757,21 +6820,22 @@ export function AppointmentsBrowser({
                       placeholder="Importato dal 2° ordine"
                     />
                   </label>
-                  <label className="block">
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
-                      IG tag
+                  <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF0F6] px-4 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#D96B94]/25">
+                    <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                    <span className="min-w-0 flex-1">
+                      <input
+                        aria-label="Instagram cliente"
+                        value={clientControlForm.instagramTag}
+                        onChange={(event) =>
+                          setClientControlForm((prev) => ({
+                            ...prev,
+                            instagramTag: event.target.value,
+                          }))
+                        }
+                        className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                        placeholder="@usercliente"
+                      />
                     </span>
-                    <input
-                      value={clientControlForm.instagramTag}
-                      onChange={(event) =>
-                        setClientControlForm((prev) => ({
-                          ...prev,
-                          instagramTag: event.target.value,
-                        }))
-                      }
-                      className="mt-1 h-12 w-full rounded-2xl border border-black/10 px-4 text-sm font-bold outline-none focus:border-[#E88AC5]"
-                      placeholder="@cliente"
-                    />
                   </label>
                   <label className="block md:col-span-2">
                     <span className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">
