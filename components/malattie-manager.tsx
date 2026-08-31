@@ -42,21 +42,11 @@ type SickRequest = {
 };
 
 type WorkerOption = { id: string; name: string; photoUrl: string | null };
+type WorkerReportView = "UNJUSTIFIED" | "JUSTIFIED" | "ALL";
 
 function localDateValue() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function authenticatedStaffPhotoUrl(photoUrl: string | null | undefined) {
-  if (!photoUrl) return "";
-  if (photoUrl.startsWith("/api/drive-image")) return photoUrl;
-  const fileMatch = photoUrl.match(/\/file\/d\/([^/]+)/);
-  const idMatch = photoUrl.match(/[?&]id=([^&]+)/);
-  const fileId = fileMatch?.[1] || idMatch?.[1];
-  return fileId && photoUrl.includes("drive.google.com")
-    ? `/api/drive-image?id=${encodeURIComponent(decodeURIComponent(fileId))}`
-    : resolveDrivePhotoUrl(photoUrl);
 }
 
 function formatDate(dateStr: string) {
@@ -95,6 +85,7 @@ export function MalattieManager({
   const [requests, setRequests] = useState(initialRequests);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedWorkerId, setSelectedWorkerId] = useState("");
+  const [workerReportView, setWorkerReportView] = useState<WorkerReportView>("UNJUSTIFIED");
   const [savingId, setSavingId] = useState("");
   const [message, setMessage] = useState("");
   const [inpsVerifier, setInpsVerifier] = useState<{ employeeName: string; fiscalCode: string; protocolCode: string } | null>(null);
@@ -181,6 +172,22 @@ export function MalattieManager({
       return a.name.localeCompare(b.name);
     });
   }, [filteredRequests, workers]);
+
+  const workerReportCounts = useMemo(() => ({
+    UNJUSTIFIED: workerStats.filter((worker) => worker.status === "unjustified").length,
+    JUSTIFIED: workerStats.filter((worker) => worker.status === "justified").length,
+    ALL: workerStats.length,
+  }), [workerStats]);
+
+  const visibleWorkerStats = useMemo(() => {
+    if (workerReportView === "UNJUSTIFIED") {
+      return workerStats.filter((worker) => worker.status === "unjustified");
+    }
+    if (workerReportView === "JUSTIFIED") {
+      return workerStats.filter((worker) => worker.status === "justified");
+    }
+    return workerStats;
+  }, [workerReportView, workerStats]);
 
   async function handleUpdateCode(id: string, code: string) {
     setSavingId(id);
@@ -374,21 +381,54 @@ export function MalattieManager({
       {/* Analytics Card */}
       {workerStats.length > 0 && (
         <Card className="p-6 bg-white shadow-xl border border-black/5 dark:bg-[#121212] dark:border-white/5">
-          <div className="flex items-center gap-2 mb-4 border-b border-black/5 dark:border-white/5 pb-3">
-            <TrendingUp className="size-5 text-red-500" />
-            <h2 className="text-sm font-bold text-black dark:text-white uppercase tracking-wider">
-              Analisi e Report Dipendenti
-            </h2>
+          <div className="mb-4 border-b border-black/5 pb-4 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="size-5 text-red-500" />
+              <h2 className="text-sm font-bold text-black dark:text-white uppercase tracking-wider">
+                Analisi e Report Dipendenti
+              </h2>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Filtro report dipendenti">
+              {([
+                { value: "UNJUSTIFIED", label: "Non giustificati" },
+                { value: "JUSTIFIED", label: "Giustificati" },
+                { value: "ALL", label: "Tutti" },
+              ] as const).map((tab) => {
+                const active = workerReportView === tab.value;
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setWorkerReportView(tab.value)}
+                    className={cn(
+                      "inline-flex min-h-10 items-center gap-2 rounded-xl border px-4 text-[11px] font-black transition",
+                      !active && "border-black/10 bg-white text-black/55 hover:border-black/20 hover:text-black dark:border-white/10 dark:bg-white/[0.03] dark:text-white/60",
+                      active && tab.value === "UNJUSTIFIED" && "border-rose-500 bg-rose-500 text-white shadow-sm",
+                      active && tab.value === "JUSTIFIED" && "border-emerald-600 bg-emerald-600 text-white shadow-sm",
+                      active && tab.value === "ALL" && "border-black bg-black text-white shadow-sm dark:border-white dark:bg-white dark:text-black"
+                    )}
+                  >
+                    {tab.label}
+                    <span className={cn("rounded-full px-2 py-0.5 text-[9px]", active ? "bg-white/20" : "bg-black/5 dark:bg-white/10")}>
+                      {workerReportCounts[tab.value]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+          {visibleWorkerStats.length > 0 ? (
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {workerStats.map((stat, idx) => {
+            {visibleWorkerStats.map((stat) => {
               const isUnjustified = stat.status === "unjustified";
               const isJustified = stat.status === "justified";
               const isNone = stat.status === "none";
 
               return (
                 <div 
-                  key={idx} 
+                  key={stat.id}
                   className={cn(
                     "flex items-center gap-3.5 p-4 rounded-3xl border transition hover:scale-[1.02] duration-300",
                     isUnjustified && "bg-rose-50/60 border-rose-200/80 dark:bg-rose-950/10 dark:border-rose-900/30 text-rose-900 dark:text-rose-200",
@@ -398,7 +438,7 @@ export function MalattieManager({
                 >
                   {stat.photoUrl ? (
                     <img
-                      src={authenticatedStaffPhotoUrl(stat.photoUrl)}
+                      src={resolveDrivePhotoUrl(stat.photoUrl)}
                       alt={stat.name}
                       className={cn(
                         "size-12 rounded-full object-cover shadow-sm shrink-0 border-2",
@@ -447,6 +487,11 @@ export function MalattieManager({
               );
             })}
           </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-black/10 bg-black/[0.015] px-5 py-8 text-center text-xs font-bold text-black/45 dark:border-white/10 dark:bg-white/[0.02] dark:text-white/45">
+              Nessun dipendente in questa categoria.
+            </div>
+          )}
         </Card>
       )}
 
@@ -526,7 +571,7 @@ export function MalattieManager({
                         <div className="flex items-center gap-2.5">
                           {req.employeePhoto ? (
                             <img
-                              src={authenticatedStaffPhotoUrl(req.employeePhoto)}
+                              src={resolveDrivePhotoUrl(req.employeePhoto)}
                               alt={req.employeeName}
                               className="size-8 rounded-full object-cover border border-black/10 shadow-sm shrink-0"
                             />
