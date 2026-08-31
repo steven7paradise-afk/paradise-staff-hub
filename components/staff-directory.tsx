@@ -307,6 +307,9 @@ export function StaffDirectory({
   monthlyOverview: MonthlyStaffOverview;
 }) {
   const router = useRouter();
+  const createRoleOptions = userRole === "ADMIN"
+    ? ROLE_OPTIONS.filter((option) => option.value !== "ADMIN")
+    : ROLE_OPTIONS;
   const [staff, setStaff] = useState<Employee[]>(initialStaff);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
@@ -869,8 +872,11 @@ export function StaffDirectory({
       const emailText = data.emailStatus?.skipped
         ? " Email NON inviata: configura provider email o invia credenziali manualmente."
         : " Email con credenziali inviata al dipendente.";
+      const notificationText = data.notificationStatus?.sent === false
+        ? " Notifica interna non inviata: controlla il servizio notifiche."
+        : " Notifica interna inviata.";
         
-      setCreationMessage(`Dipendente creato con successo! PIN: ${pinInput || "generato automaticamente"} e password provvisoria generata. ${emailText}`);
+      setCreationMessage(`Dipendente creato con successo! PIN: ${pinInput || "generato automaticamente"} e password provvisoria generata. ${emailText}${notificationText}`);
       setNewEmployeeForm(null);
       setPinInput("");
       setPinConfirmInput("");
@@ -2504,6 +2510,12 @@ export function StaffDirectory({
               </button>
             </div>
 
+            {errorMsg && (
+              <div className="mx-6 mt-4 shrink-0 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800" role="alert">
+                {errorMsg}
+              </div>
+            )}
+
             <form onSubmit={handleCreateEmployee} className="flex-1 overflow-y-auto p-6 space-y-4 luxury-scroll">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="space-y-1">
@@ -2595,7 +2607,7 @@ export function StaffDirectory({
                     value={newEmployeeForm.role || "DIPENDENTE"}
                     onChange={(e) => setNewEmployeeForm(prev => prev ? { ...prev, role: e.target.value } : null)}
                   >
-                    {ROLE_OPTIONS.map((role) => (
+                    {createRoleOptions.map((role) => (
                       <option key={role.value} value={role.value}>{role.label}</option>
                     ))}
                   </Select>

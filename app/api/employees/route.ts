@@ -3,10 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
+import { createNotifications } from "@/lib/notifications";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
+const creatableRolesByActor: Record<string, Set<UserRole>> = {
+  ZERO: new Set(["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"]),
+  SUPER_ADMIN: new Set(["ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"]),
+  ADMIN: new Set(["RESPONSABILE", "MAGAZZINO", "DIPENDENTE"]),
+};
 
 function apiError(message: string, status = 500) {
   return NextResponse.json({ error: message }, { status });
@@ -73,8 +79,8 @@ export async function POST(request: NextRequest) {
     if (!Object.values(UserRole).includes(role)) {
       return apiError("Ruolo non valido.", 400);
     }
-    if (role === "ZERO" || (data.role !== undefined && session.user.role !== "ZERO")) {
-      return apiError("Solo Zero può assegnare un ruolo di sistema; il ruolo Zero non è assegnabile.", 403);
+    if (!creatableRolesByActor[session.user.role]?.has(role)) {
+      return apiError("Non hai i permessi per assegnare questo ruolo. Scegli un ruolo operativo consentito.", 403);
     }
     if (await isPinAlreadyAssigned(pin)) {
       return apiError("Questo PIN e gia assegnato a un altro lavoratore. Inserisci un codice unico.", 409);
@@ -125,6 +131,33 @@ export async function POST(request: NextRequest) {
       emailStatus = { skipped: true, reason: error instanceof Error ? error.message : "Email non inviata" };
     }
 
+    let notificationStatus: { sent: boolean; reason?: string } = { sent: true };
+    try {
+      await createNotifications([
+        {
+          user_id: user.id,
+          title: "Account Paradise attivato",
+          message: "Il tuo profilo staff è stato creato. Apri il profilo per controllare i tuoi dati.",
+          type: "STAFF_ACCOUNT_CREATED",
+          action_url: "/profile",
+          read: false,
+        },
+        {
+          user_id: session.user.id,
+          title: "Nuovo dipendente creato",
+          message: `${name} è stato aggiunto correttamente allo staff.`,
+          type: "STAFF_CREATED",
+          action_url: `/staff?employee=${encodeURIComponent(user.id)}`,
+          read: false,
+        },
+      ]);
+    } catch (error) {
+      notificationStatus = {
+        sent: false,
+        reason: error instanceof Error ? error.message : "Notifica interna non inviata",
+      };
+    }
+
     return NextResponse.json({
       ...user,
       password_hash: undefined,
@@ -132,6 +165,7 @@ export async function POST(request: NextRequest) {
       pinConfigured: true,
       generatedCredentials: !providedPassword || !providedPin,
       emailStatus,
+      notificationStatus,
     });
   } catch (error) {
     console.error("Employee create error:", error);
