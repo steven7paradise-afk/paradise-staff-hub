@@ -987,16 +987,14 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   )}
                 >
                   <span>{filter.label}</span>
-                  {filter.count > 0 ? (
-                    <span
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-xs",
-                        selected ? "bg-white/15 text-white" : filter.tone === "pink" ? "bg-paradise-softPink/70 text-[#B85B68]" : filter.tone === "gold" ? "bg-paradise-gold/20 text-[#9E7A3B]" : filter.tone === "green" ? "bg-emerald-500/10 text-emerald-700" : "bg-black/10 text-black/65"
-                      )}
-                    >
-                      {filter.count}
-                    </span>
-                  ) : null}
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-xs",
+                      selected ? "bg-white/15 text-white" : filter.tone === "pink" ? "bg-paradise-softPink/70 text-[#B85B68]" : filter.tone === "gold" ? "bg-paradise-gold/20 text-[#9E7A3B]" : filter.tone === "green" ? "bg-emerald-500/10 text-emerald-700" : "bg-black/10 text-black/65"
+                    )}
+                  >
+                    {filter.count}
+                  </span>
                 </button>
               );
             })}
@@ -1051,7 +1049,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   Seleziona una voce per mostrarne il dettaglio.
                 </p>
               </div>
-              <Badge tone={activeFilter === "JUSTIFY" ? "pink" : activeSection?.tone ?? "dark"}>{visibleRequests.length} richieste</Badge>
+              <Badge tone={activeFilter === "JUSTIFY" ? "pink" : activeSection?.tone ?? "dark"}>{visibleRequests.length} totali</Badge>
             </div>
 
             {visibleRequests.length === 0 ? (

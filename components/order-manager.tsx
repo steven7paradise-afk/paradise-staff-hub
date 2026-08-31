@@ -4,7 +4,7 @@ import Papa from "papaparse";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Truck, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Trash2, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
@@ -360,6 +360,7 @@ export function OrderManager({
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selected, setSelected] = useState<OrderResponse | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [mobileStatus, setMobileStatus] = useState("ALL");
   const [changingStatusTo, setChangingStatusTo] = useState<string | null>(null);
   const [statusNoteText, setStatusNoteText] = useState("");
@@ -502,6 +503,31 @@ export function OrderManager({
     setSelected(null);
     const nextUrl = nextParams.size > 0 ? `${pathname}?${nextParams.toString()}` : pathname;
     router.replace(nextUrl, { scroll: false });
+  }
+
+  async function deleteOrder(order: OrderResponse) {
+    if (deletingId || !["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentUserRole)) return;
+
+    const confirmed = window.confirm(
+      `Eliminare definitivamente l'ordine ${orderNumber(order)} di ${orderClientName(order)}?\n\nQuesta azione non può essere annullata.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingId(order.id);
+    try {
+      const response = await fetch(`/api/service-forms/responses/${order.id}`, { method: "DELETE" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || "Impossibile eliminare l'ordine.");
+      }
+
+      setOrders((current) => current.filter((item) => item.id !== order.id));
+      closeSelectedOrder();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Errore durante l'eliminazione dell'ordine.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const filteredOrders = useMemo(() => {
@@ -1077,6 +1103,17 @@ export function OrderManager({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                {["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentUserRole) ? (
+                  <Button
+                    variant="soft"
+                    onClick={() => void deleteOrder(selected)}
+                    disabled={deletingId === selected.id}
+                    className="border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {deletingId === selected.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    <span className="hidden sm:inline">Elimina</span>
+                  </Button>
+                ) : null}
                 <Button
                   variant="soft"
                   onClick={() => void import("@/lib/order-label-pdf-client")
@@ -1400,30 +1437,6 @@ export function OrderManager({
                     <p className="inline-flex items-center gap-2"><CalendarDays className="size-4 text-black/40" /> {orderDate(selected)}</p>
                   </div>
                 </Card>
-                {currentUserRole === "SUPER_ADMIN" && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!confirm("Sei sicuro di voler eliminare definitivamente questo ordine? Questa azione non può essere annullata.")) return;
-                      try {
-                        const response = await fetch(`/api/service-forms/responses/${selected.id}`, {
-                          method: "DELETE"
-                        });
-                        if (response.ok) {
-                          setOrders(current => current.filter(item => item.id !== selected.id));
-                          closeSelectedOrder();
-                        } else {
-                          alert("Errore durante l'eliminazione dell'ordine.");
-                        }
-                      } catch (err) {
-                        alert("Errore di connessione.");
-                      }
-                    }}
-                    className="w-full inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-sm font-black text-red-700 transition hover:bg-red-100"
-                  >
-                    Elimina Ordine
-                  </button>
-                )}
               </div>
             </div>
           </div>

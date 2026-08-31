@@ -197,7 +197,7 @@ export function DesktopSidebarNav({
                         </span>
                         <span className="sidebar-label min-w-0 flex-1 truncate">{displayLabel}</span>
 
-                        {itemBadge > 0 ? (
+                        {item.href === "/requests" || itemBadge > 0 ? (
                           <span className="sidebar-badge ml-auto min-w-5 rounded-full bg-[#C66170] px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-[0_0_8px_rgba(198,97,112,0.35)]">
                             {itemBadge > 99 ? "99+" : itemBadge}
                           </span>

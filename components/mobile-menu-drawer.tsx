@@ -229,7 +229,7 @@ export function MobileMenuDrawer({
                               <span className="truncate">{displayLabel}</span>
                             </div>
 
-                            {itemBadge > 0 ? (
+                            {item.href === "/requests" || itemBadge > 0 ? (
                               <span className="grid min-w-7 shrink-0 place-items-center rounded-full bg-red-500 px-2 py-1 text-xs font-black text-white shadow-[0_0_14px_rgba(239,68,68,0.45)]">
                                 {itemBadge > 99 ? "99+" : itemBadge}
                               </span>

@@ -205,7 +205,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
 
-  if (user.role !== "ZERO") {
+  if (!["ZERO", "SUPER_ADMIN", "ADMIN"].includes(user.role)) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   }
 
@@ -213,11 +213,24 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const response = await prisma.serviceFormResponse.findUnique({
       where: { id },
-      select: { id: true, user_location_id: true },
+      select: {
+        id: true,
+        user_location_id: true,
+        form: { select: { name: true, category: true } },
+      },
     });
 
     if (!response) {
       return NextResponse.json({ error: "Risposta non trovata" }, { status: 404 });
+    }
+
+    // ZERO conserva il permesso storico sulle risposte. Admin e Super Admin
+    // ricevono invece il permesso aggiuntivo soltanto per i moduli ordine.
+    const formName = response.form?.name?.trim().toLowerCase() ?? "";
+    const formCategory = response.form?.category?.trim().toLowerCase() ?? "";
+    const isOrder = formName.includes("ordine") || formCategory.includes("ordini");
+    if (user.role !== "ZERO" && !isOrder) {
+      return NextResponse.json({ error: "Puoi eliminare soltanto gli ordini" }, { status: 403 });
     }
 
     await prisma.serviceFormResponse.delete({ where: { id } });
