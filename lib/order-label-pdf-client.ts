@@ -274,7 +274,7 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
 
       <rect x="55" y="260" width="790" height="395" rx="30" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
       <line x1="455" y1="290" x2="455" y2="625" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
-      <image href="${qrCodeDataUrl}" x="75" y="280" width="355" height="355" preserveAspectRatio="xMidYMid meet" image-rendering="pixelated"/>
+      <rect x="75" y="280" width="355" height="355" fill="#ffffff"/>
 
       <text x="495" y="320" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" letter-spacing="2.2" fill="#9b496c">CLIENTE</text>
       <text x="495" y="378" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="900" fill="#111111">${escapeSvgText(shortSvgText(client, 19))}</text>
@@ -302,6 +302,14 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const imageX = (pageWidth - imageWidth) / 2;
   const imageY = (pageHeight - imageHeight) / 2;
   doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
+  // Add the QR directly to jsPDF. Embedding a data-URL image inside the SVG
+  // and then rasterizing that SVG causes Chromium/WebKit to occasionally drop
+  // the nested image, producing an empty QR box on newly-created labels.
+  const qrX = imageX + imageWidth * (75 / 900);
+  const qrY = imageY + imageHeight * (280 / 1020);
+  const qrWidth = imageWidth * (355 / 900);
+  const qrHeight = imageHeight * (355 / 1020);
+  doc.addImage(qrCodeDataUrl, "PNG", qrX, qrY, qrWidth, qrHeight, undefined, "NONE");
   return {
     doc,
     labelImageDataUrl,
