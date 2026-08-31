@@ -55,6 +55,10 @@ function needsSicknessJustification(request: RequestRecord) {
   return request.type === "MALATTIA" && !request.medicalCode;
 }
 
+function needsEmployeeAcknowledgement(request: RequestRecord) {
+  return isAutomaticLateRequest(request) && !request.employeeAcknowledgedAt;
+}
+
 function requestFilterForRecord(request: RequestRecord): ActiveRequestFilter {
   if (needsSicknessJustification(request)) return "JUSTIFY";
   if (isAutomaticLateRequest(request)) return "LATE";
@@ -228,20 +232,20 @@ function RequestDetailPanel({
   const canEditDecision = ((canApprove || canFlag) && isPending) || canEmployeeAcknowledge;
 
   return (
-    <aside className="overflow-hidden rounded-[30px] border border-paradise-pink/20 bg-white shadow-[0_24px_70px_rgba(92,44,67,0.10)] lg:sticky lg:top-5">
-      <div className="relative flex items-start justify-between gap-4 overflow-hidden border-b border-paradise-pink/15 bg-gradient-to-br from-white via-[#fffafd] to-paradise-softPink/45 px-5 py-6 sm:px-8 sm:py-8">
+    <aside className="overflow-hidden rounded-[26px] border border-paradise-pink/20 bg-white shadow-[0_18px_50px_rgba(92,44,67,0.09)]">
+      <div className="relative flex items-start justify-between gap-4 overflow-hidden border-b border-paradise-pink/15 bg-gradient-to-br from-white via-[#fffafd] to-paradise-softPink/45 px-5 py-5 sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute -right-10 -top-14 size-40 rounded-full bg-paradise-pink/10 blur-2xl" />
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Dettaglio richiesta</p>
-          <h2 className="mt-2 text-2xl font-black leading-tight text-paradise-noir sm:text-4xl">
-            Ciao <span className="text-paradise-pink">{request.employee}</span>,
+          <h2 className="mt-1.5 text-2xl font-black leading-tight text-paradise-noir sm:text-3xl">
+            {request.employee}
           </h2>
-          <p className="mt-2 max-w-2xl text-sm font-medium text-black/60 sm:text-base">
-            {automaticLate ? "ti informiamo che questa comunicazione è stata registrata." : "qui trovi tutti i dettagli della tua richiesta."}
+          <p className="mt-1.5 max-w-2xl text-sm font-semibold text-black/50">
+            {requestTypeLabel(request)} · {formatDate(request.startDate)}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <span className={cn(
-              "inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-black sm:text-sm",
+              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-black",
               request.status === "APPROVED" && "border-emerald-200 bg-emerald-50 text-emerald-700",
               request.status === "PENDING" && "border-amber-200 bg-amber-50 text-amber-700",
               request.status === "REJECTED" && "border-rose-200 bg-rose-50 text-rose-700",
@@ -249,7 +253,7 @@ function RequestDetailPanel({
             )}>
               <Eye className="size-4" /> {requestStatusLabel(request)}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-paradise-pink/20 bg-paradise-pink/10 px-3.5 py-2 text-xs font-black text-paradise-pink sm:text-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-paradise-pink/20 bg-paradise-pink/10 px-3 py-1.5 text-xs font-black text-paradise-pink">
               <Clock className="size-4" /> {requestTypeLabel(request)}
             </span>
           </div>
@@ -261,21 +265,23 @@ function RequestDetailPanel({
         ) : null}
       </div>
 
-      <div className="space-y-4 bg-[#fffdfd] px-4 py-5 sm:space-y-5 sm:px-7 sm:py-7">
-        <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
+      <div className="space-y-3 bg-[#fffdfd] px-4 py-4 sm:px-5 sm:py-5">
+        <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4">
           <p className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-paradise-noir">
             <Calendar className="size-4 text-paradise-pink" /> Periodo e orario
           </p>
-          <p className="mt-4 flex flex-wrap items-center gap-2 text-sm font-black text-paradise-noir sm:text-lg">
-            <Calendar className="size-5 text-paradise-pink" />
-            {formatDate(request.startDate)} <span className="text-black/25">→</span> {formatDate(request.endDate)}
-          </p>
-          <p className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-black/60 sm:text-base">
-            <Clock className="size-5 text-paradise-pink" />
-            {request.startTime || request.endTime ? `${request.startTime ?? "--:--"} - ${request.endTime ?? "--:--"}` : "Intera giornata"}
-            <span className="text-black/30">•</span>
-            {daysLabel(request)}
-          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <p className="flex flex-wrap items-center gap-2 text-sm font-black text-paradise-noir sm:text-base">
+              <Calendar className="size-5 text-paradise-pink" />
+              {formatDate(request.startDate)} <span className="text-black/25">→</span> {formatDate(request.endDate)}
+            </p>
+            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-black/60">
+              <Clock className="size-5 text-paradise-pink" />
+              {request.startTime || request.endTime ? `${request.startTime ?? "--:--"} - ${request.endTime ?? "--:--"}` : "Intera giornata"}
+              <span className="text-black/30">•</span>
+              {daysLabel(request)}
+            </p>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -332,7 +338,7 @@ function RequestDetailPanel({
           </div>
         ) : null}
 
-        <div className="grid gap-3">
+        <div className="grid gap-3 xl:grid-cols-2">
           <div className="rounded-2xl border border-paradise-pink/15 bg-white p-4 sm:p-5">
             <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-black/45"><Hourglass className="size-4 text-paradise-pink" /> {automaticLate ? "Dettaglio del ritardo" : "Motivo lavoratore"}</p>
             <p className="mt-3 whitespace-pre-wrap text-sm font-semibold leading-6 text-black/65 sm:text-base">{workerNote}</p>
@@ -474,7 +480,7 @@ function RequestDetailPanel({
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-3 rounded-2xl border border-paradise-pink/10 bg-gradient-to-r from-paradise-softPink/25 to-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex flex-col gap-3 rounded-2xl border border-paradise-pink/10 bg-gradient-to-r from-paradise-softPink/25 to-white p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Heart className="size-5 shrink-0 text-paradise-pink" />
             <div>
@@ -522,7 +528,11 @@ function DatePickerStable({ label, value, onChange }: { label: string; value: st
 }
 
 export function RequestManager({ initialRequests, role, workers }: { initialRequests: RequestRecord[]; role: Role; workers: WorkerOption[] }) {
-  const newestInitialRequest = [...initialRequests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+  const orderedInitialRequests = [...initialRequests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const newestInitialRequest = orderedInitialRequests[0] ?? null;
+  const initialActionRequest = orderedInitialRequests.find(needsSicknessJustification)
+    ?? orderedInitialRequests.find(needsEmployeeAcknowledgement)
+    ?? newestInitialRequest;
   const [requests, setRequests] = useState(initialRequests);
   const [openForm, setOpenForm] = useState(false);
   const today = new Date();
@@ -532,15 +542,16 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [saving, setSaving] = useState<string | null>(null);
   const [medicalDrafts, setMedicalDrafts] = useState<Record<string, string>>({});
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
-  const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>(newestInitialRequest ? requestFilterForRecord(newestInitialRequest) : "JUSTIFY");
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(newestInitialRequest?.id ?? null);
+  const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>(initialActionRequest ? requestFilterForRecord(initialActionRequest) : "JUSTIFY");
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(initialActionRequest?.id ?? null);
   const employeeView = role === "DIPENDENTE";
   const canApprove = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canCreateForWorkers = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const orderedRequests = [...requests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
+  const acknowledgementRequests = orderedRequests.filter(needsEmployeeAcknowledgement);
+  const actionRequiredCount = new Set([...urgentSicknessRequests, ...acknowledgementRequests].map((request) => request.id)).size;
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
-  const pendingRequests = requests.filter((request) => request.status === "PENDING").length;
   const requestSections = ([
     { key: "LATE", title: "Ritardi", description: "Timbrature oltre la tolleranza da approvare o rifiutare.", tone: "gold", items: [] },
     { key: "PERMESSO", title: "Permessi", description: "Entrate posticipate, uscite anticipate e permessi orari.", tone: "pink", items: [] },
@@ -561,7 +572,6 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   ];
   const visibleRequests = activeFilter === "JUSTIFY" ? urgentSicknessRequests : activeSection?.items ?? [];
   const selectedRequest = requests.find((request) => request.id === selectedRequestId && visibleRequests.some((item) => item.id === request.id)) ?? visibleRequests[0] ?? null;
-  const approvedRequests = requests.filter((request) => request.status === "APPROVED").length;
 
   async function createRequest() {
     if (!form.startDate || !form.endDate) {
@@ -758,8 +768,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   }
 
   return (
-    <div className="operations-liquid-page requests-liquid min-h-[calc(100dvh-12rem)] rounded-[32px] border border-white/70 p-4 shadow-[0_18px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl sm:p-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="operations-liquid-page requests-liquid mx-auto min-h-[calc(100dvh-12rem)] max-w-[1600px] rounded-[28px] border border-white/70 p-4 shadow-[0_18px_55px_rgba(61,35,49,0.08)] backdrop-blur-2xl sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Button
           onClick={() => setOpenForm((current) => !current)}
           className="rounded-[20px] bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300"
@@ -844,27 +854,35 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
         </p>
       ) : null}
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-[22px] border border-black/5 bg-white px-5 py-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/35">Totale</p>
-          <p className="mt-1 text-2xl font-black text-paradise-noir">{requests.length}</p>
+      <div className="mb-4 grid gap-2.5 sm:grid-cols-3">
+        <div className="requests-glass-surface rounded-[20px] border border-white/80 bg-white/65 px-4 py-3.5 shadow-[0_8px_24px_rgba(67,45,57,0.07)] backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/50">Azioni richieste</p>
+            <AlertCircle className="size-4 text-paradise-pink" />
+          </div>
+          <p className="mt-1 text-2xl font-black tracking-tight text-paradise-noir">{actionRequiredCount}</p>
+          <p className="mt-0.5 text-[10px] font-semibold text-black/40">Solo pratiche ancora da completare</p>
         </div>
-        <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">In attesa</p>
-          <p className="mt-1 text-2xl font-black text-amber-900">{pendingRequests}</p>
+        <div className="requests-glass-surface rounded-[20px] border border-rose-200/80 bg-rose-50/70 px-4 py-3.5 shadow-[0_8px_24px_rgba(190,24,93,0.06)] backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-700">Da giustificare</p>
+            <Heart className="size-4 text-rose-500" />
+          </div>
+          <p className="mt-1 text-2xl font-black tracking-tight text-rose-800">{urgentSicknessRequests.length}</p>
+          <p className="mt-0.5 text-[10px] font-semibold text-rose-800/55">Certificato o protocollo mancante</p>
         </div>
-        <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Approvate / confermate</p>
-          <p className="mt-1 text-2xl font-black text-emerald-900">{approvedRequests}</p>
-        </div>
-        <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-rose-500">Da giustificare</p>
-          <p className="mt-1 text-2xl font-black text-rose-700">{urgentSicknessRequests.length}</p>
+        <div className="requests-glass-surface rounded-[20px] border border-amber-200/80 bg-amber-50/70 px-4 py-3.5 shadow-[0_8px_24px_rgba(180,83,9,0.06)] backdrop-blur-xl">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-800">Da prendere visione</p>
+            <Eye className="size-4 text-amber-600" />
+          </div>
+          <p className="mt-1 text-2xl font-black tracking-tight text-amber-900">{acknowledgementRequests.length}</p>
+          <p className="mt-0.5 text-[10px] font-semibold text-amber-900/55">Comunicazioni non ancora confermate</p>
         </div>
       </div>
 
       {requests.length > 0 ? (
-        <div className="mb-5 overflow-x-auto rounded-[26px] border border-black/5 bg-white p-2 shadow-sm">
+        <div className="mb-4 overflow-x-auto rounded-[22px] border border-black/5 bg-white p-1.5 shadow-sm">
           <div className="flex min-w-max gap-2">
             {filterButtons.map((filter) => {
               const selected = activeFilter === filter.key;
@@ -877,8 +895,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                     setSelectedRequestId(null);
                   }}
                   className={cn(
-                    "flex min-h-12 items-center gap-3 rounded-[20px] px-4 text-sm font-black transition active:scale-[0.98]",
-                    selected ? "bg-paradise-noir text-white shadow-sm" : "bg-neutral-50 text-paradise-noir hover:bg-paradise-nude/50"
+                    "flex min-h-11 items-center gap-2.5 rounded-[16px] px-3.5 text-xs font-black transition active:scale-[0.98]",
+                    selected ? "bg-paradise-noir text-white shadow-[0_6px_16px_rgba(20,17,19,0.16)]" : "bg-white/55 text-paradise-noir hover:bg-white/90"
                   )}
                 >
                   <span>{filter.label}</span>
@@ -905,8 +923,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       ) : null}
 
       {requests.length > 0 ? (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.65fr)]">
-          <div className="min-w-0">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(340px,0.72fr)_minmax(0,1.55fr)]">
+          <div className="min-w-0 lg:order-2">
             {selectedRequest ? (
               <RequestDetailPanel
                 request={selectedRequest}
@@ -934,8 +952,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
             )}
           </div>
 
-          <section className="overflow-hidden rounded-[26px] border border-black/5 bg-white shadow-sm lg:sticky lg:top-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-5 py-4">
+          <section className="overflow-hidden rounded-[24px] border border-black/5 bg-white shadow-sm lg:order-1 lg:sticky lg:top-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/5 px-4 py-3.5">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/35">Elenco richieste</p>
                 <h2 className="mt-1 text-lg font-black text-paradise-noir">{activeFilter === "JUSTIFY" ? "Da giustificare" : activeSection?.title}</h2>
@@ -951,7 +969,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                 Nessuna richiesta in questa sezione.
               </div>
             ) : (
-              <div className="max-h-[72dvh] space-y-2 overflow-y-auto p-3">
+              <div className="max-h-[68dvh] space-y-2 overflow-y-auto p-2.5">
                   {visibleRequests.map((request) => {
                     const isSelected = selectedRequest?.id === request.id;
                     const hasSicknessProblem = needsSicknessJustification(request);
@@ -962,12 +980,12 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                         type="button"
                         onClick={() => setSelectedRequestId(request.id)}
                         className={cn(
-                          "w-full rounded-2xl border p-4 text-left transition hover:border-paradise-pink/30 hover:bg-paradise-softPink/10",
+                          "w-full rounded-2xl border p-3 text-left transition hover:border-paradise-pink/30 hover:bg-paradise-softPink/10",
                           isSelected ? "border-paradise-pink/50 bg-paradise-softPink/20 shadow-sm ring-2 ring-paradise-pink/10" : "border-black/5 bg-white"
                         )}
                       >
                         <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-black/5 bg-neutral-50">
+                          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-black/5 bg-neutral-50">
                             {getRequestIcon(request.type)}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -978,15 +996,15 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                               </div>
                               {!isSelected ? <span className="shrink-0 text-lg text-black/20">›</span> : null}
                             </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
                               <Badge tone={statusTone(request.status)}>{requestStatusLabel(request)}</Badge>
                               {hasSicknessProblem ? <Badge tone="pink">Manca protocollo</Badge> : null}
                             </div>
-                            <p className="mt-3 flex items-center gap-2 text-xs font-bold text-black/60">
+                            <p className="mt-2 flex items-center gap-2 text-xs font-bold text-black/60">
                               <Calendar className="size-3.5 text-black/30" />
                               {formatDate(request.startDate)} <span className="text-black/20">→</span> {formatDate(request.endDate)}
                             </p>
-                            <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-black/45">
+                            <p className="mt-1 line-clamp-1 text-xs font-semibold leading-5 text-black/45">
                               {request.adminNote?.trim() || request.reason?.trim() || "Nessuna nota inserita"}
                             </p>
                           </div>
