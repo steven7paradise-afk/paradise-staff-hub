@@ -28,7 +28,7 @@ type RequestRecord = {
 
 type WorkerOption = { id: string; name: string; location: string | null };
 type ActiveRequestFilter = "JUSTIFY" | "LATE" | RequestRecord["type"];
-type AutomaticAbsenceResolution = "SICKNESS" | "UNJUSTIFIED";
+type AutomaticAbsenceResolution = "LATE" | "SICKNESS" | "UNJUSTIFIED";
 
 const typeLabels = { FERIE: "Ferie", PERMESSO: "Permesso", RIPOSO: "Riposo", MALATTIA: "Malattia", ALTRO: "Altro" };
 const statusLabels = { PENDING: "In attesa", APPROVED: "Approvata", REJECTED: "Rifiutata", FLAGGED: "Segnalata" };
@@ -406,7 +406,7 @@ function RequestDetailPanel({
               <div className={cn("mt-3 grid gap-2", !automaticLate && "sm:grid-cols-2")}>
                 {automaticMissingClock ? (
                   <div className="mb-1 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-900">
-                    Nessuna entrata rilevata. Scegli come registrare l’assenza nel planning.
+                    Nessuna entrata rilevata. Scegli se mantenerla come ritardo oppure registrarla come assenza nel planning.
                   </div>
                 ) : automaticLate ? (
                   <div className="mb-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">
@@ -414,6 +414,13 @@ function RequestDetailPanel({
                   </div>
                 ) : null}
                 {automaticMissingClock ? <>
+                  <button
+                    disabled={saving === request.id}
+                    onClick={() => onResolveAutomaticAbsence(request.id, "LATE")}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 text-xs font-black text-amber-900 transition hover:bg-amber-100 disabled:opacity-50 sm:text-sm"
+                  >
+                    <Clock className="size-3.5" /> Mantieni come ritardo
+                  </button>
                   <button
                     disabled={saving === request.id}
                     onClick={() => onResolveAutomaticAbsence(request.id, "SICKNESS")}
@@ -714,9 +721,11 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       delete next[id];
       return next;
     });
-    setActiveFilter(resolution === "SICKNESS" ? "JUSTIFY" : "ALTRO");
+    setActiveFilter(resolution === "LATE" ? "LATE" : resolution === "SICKNESS" ? "JUSTIFY" : "ALTRO");
     setSelectedRequestId(id);
-    setMessage(resolution === "SICKNESS"
+    setMessage(resolution === "LATE"
+      ? "Ritardo confermato: planning invariato e timbratura mantenuta secondo la prassi -30 minuti."
+      : resolution === "SICKNESS"
       ? "Assenza registrata come malattia e inserita nel planning."
       : "Assenza non giustificata inserita nel planning.");
   }
