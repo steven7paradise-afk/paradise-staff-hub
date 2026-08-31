@@ -115,6 +115,41 @@ type ClientControlAppointmentForm = {
   bookingId?: string | null;
 };
 
+const SERVICE_DETAIL_OPTIONS = [
+  "Applicazione",
+  "Riapplicazione",
+  "Piega",
+  "Taglio",
+  "Microcheratina",
+  "Nanoplastia",
+  "Colore",
+] as const;
+
+function detectServiceDetails(serviceTitle?: string | null): string[] {
+  const title = normalizeSearchValue(serviceTitle);
+  const detected: string[] = [];
+  const add = (service: (typeof SERVICE_DETAIL_OPTIONS)[number]) => {
+    if (!detected.includes(service)) detected.push(service);
+  };
+
+  if (/riapplicazione|riapplica/.test(title)) add("Riapplicazione");
+  else if (/applicazione|applica/.test(title)) add("Applicazione");
+  if (/piega|messa in piega/.test(title)) add("Piega");
+  if (/taglio|spuntata/.test(title)) add("Taglio");
+  if (/micro\s?cheratina/.test(title)) add("Microcheratina");
+  if (/nanoplastia|nano\s?plastia/.test(title)) add("Nanoplastia");
+  if (/colore|colorazione|tinta/.test(title)) add("Colore");
+
+  return detected;
+}
+
+function readStoredServiceDetails(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : String(value || "").split(/[,;|]+/);
+  return raw
+    .map((item) => String(item).trim())
+    .filter((item) => SERVICE_DETAIL_OPTIONS.some((option) => option === item));
+}
+
 type ManualPaymentMethod = "CARTA" | "SHOPIFY" | "CONTANTI";
 
 export function getShopifyAdminOrderUrl(orderNameOrId?: string | null, numericId?: string | number | null): string {
@@ -1638,6 +1673,7 @@ export function AppointmentsBrowser({
   const [customFasceInput, setCustomFasceInput] = useState("");
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
+  const [selectedServiceDetails, setSelectedServiceDetails] = useState<string[]>([]);
   const [isDepositUnlockedManually, setIsDepositUnlockedManually] = useState(false);
   const [isSecondUnlockedManually, setIsSecondUnlockedManually] = useState(false);
 
@@ -1647,6 +1683,7 @@ export function AppointmentsBrowser({
     fasce?: string;
     atteggiamento?: string;
     extraNote?: string;
+    services?: string[];
   }) {
     const rawG = overrides?.grammi !== undefined ? overrides.grammi : selectedGrammi;
     const g = rawG === "custom" ? customGrammiInput : rawG;
@@ -1658,8 +1695,10 @@ export function AppointmentsBrowser({
 
     const a = overrides?.atteggiamento !== undefined ? overrides.atteggiamento : selectedAtteggiamento;
     const n = overrides?.extraNote !== undefined ? overrides.extraNote : extraNoteText;
+    const services = overrides?.services !== undefined ? overrides.services : selectedServiceDetails;
 
     const parts: string[] = [];
+    if (services.length) parts.push(`Servizi: ${services.join(", ")}`);
     if (g) parts.push(`Grammi: ${g}`);
     if (l) parts.push(`Lunghezza: ${l}`);
     if (f) parts.push(`Fasce: ${f}`);
@@ -2349,6 +2388,8 @@ export function AppointmentsBrowser({
     setCustomFasceInput("");
     setSelectedAtteggiamento("");
     setExtraNoteText("");
+    const detectedServiceDetails = detectServiceDetails(booking.serviceTitle);
+    setSelectedServiceDetails(detectedServiceDetails);
     setIsDepositUnlockedManually(false);
     setIsSecondUnlockedManually(false);
     try {
@@ -2382,7 +2423,9 @@ export function AppointmentsBrowser({
           ? booking.bookingStr.replace(/^#/, "")
           : "",
         instagramTag: "",
-        customNoteText: "",
+        customNoteText: detectedServiceDetails.length
+          ? `Servizi: ${detectedServiceDetails.join(", ")}`
+          : "",
         notes: false,
         beforeMedia: false,
         afterMedia: false,
@@ -2529,6 +2572,23 @@ export function AppointmentsBrowser({
       if (existingAnswers.custom_extra_note) {
         setExtraNoteText(String(existingAnswers.custom_extra_note));
       }
+      const storedServices = readStoredServiceDetails(existingAnswers.custom_services);
+      const detectedServices = detectServiceDetails(booking.serviceTitle);
+      const combinedServices = Array.from(new Set([...storedServices, ...detectedServices]));
+      setSelectedServiceDetails(combinedServices);
+      if (combinedServices.length) {
+        setClientControlForm((current) => {
+          if (/\bServizi\s*:/i.test(current.customNoteText)) return current;
+          const serviceLine = `Servizi: ${combinedServices.join(", ")}`;
+          return {
+            ...current,
+            customNoteText: current.customNoteText.trim()
+              ? `${serviceLine}\n${current.customNoteText.trim()}`
+              : serviceLine,
+            notes: true,
+          };
+        });
+      }
     }
   }
 
@@ -2587,6 +2647,7 @@ export function AppointmentsBrowser({
         customFasce: customFasceVal || "",
         customAtteggiamento: selectedAtteggiamento || "",
         customExtraNote: extraNoteText || "",
+        customServices: selectedServiceDetails,
         saveAsDraft,
       };
 
@@ -4785,10 +4846,49 @@ export function AppointmentsBrowser({
                   </button>
                 </div>
 
+                <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
+                      <span className="grid size-6 place-items-center rounded-lg bg-[#B83D7F] text-[10px] text-white">1</span>
+                      Servizi eseguiti
+                    </span>
+                    <span className="rounded-full bg-[#F8E5EE] px-2.5 py-1 text-[9px] font-black text-[#A52E6B]">
+                      Rilevati automaticamente dalla prenotazione
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {SERVICE_DETAIL_OPTIONS.map((service) => {
+                      const selected = selectedServiceDetails.includes(service);
+                      return (
+                        <button
+                          key={service}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => {
+                            const next = selected
+                              ? selectedServiceDetails.filter((item) => item !== service)
+                              : [...selectedServiceDetails, service];
+                            setSelectedServiceDetails(next);
+                            updateShopifyNote({ services: next });
+                          }}
+                          className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-black transition active:scale-95 ${
+                            selected
+                              ? "border-[#B83D7F] bg-[#B83D7F] text-white shadow-[0_6px_14px_rgba(184,61,127,0.20)]"
+                              : "border-[#E8C3D4] bg-white text-[#8F2E61] hover:border-[#D96B94] hover:bg-[#FFF6FA]"
+                          }`}
+                        >
+                          {selected ? <Check className="size-4" /> : null}
+                          {service}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* 1. Quanti grammi? */}
                 <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
                   <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">1</span>
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
                     Quanti grammi?
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
@@ -4848,7 +4948,7 @@ export function AppointmentsBrowser({
                 {/* 2. Lunghezza */}
                 <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
                   <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">2</span>
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
                     Lunghezza
                   </span>
                   <div className="flex flex-wrap gap-2">
@@ -4879,7 +4979,7 @@ export function AppointmentsBrowser({
                 {/* 3. Quante fasce? */}
                 <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
                   <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">3</span>
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
                     Quante fasce?
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -4939,7 +5039,7 @@ export function AppointmentsBrowser({
                 {/* 4. Come era la cliente? */}
                 <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)]">
                   <span className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
-                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">4</span>
+                    <span className="grid size-6 place-items-center rounded-lg bg-[#F8E5EE] text-[10px] text-[#A52E6B]">5</span>
                     Come era la cliente?
                   </span>
                   <div className="flex flex-wrap gap-2">

@@ -85,6 +85,7 @@ function clientControlChangeSummary(
     { key: CLIENT_CONTROL_FIELD_IDS.afterMedia, label: "Foto/video dopo", kind: "boolean" },
     { key: CLIENT_CONTROL_FIELD_IDS.products, label: "Prodotti", kind: "boolean" },
     { key: CLIENT_CONTROL_FIELD_IDS.review, label: "Recensione", kind: "boolean" },
+    { key: "custom_services", label: "Servizi eseguiti", kind: "list" },
     { key: "custom_grammi", label: "Grammi", kind: "text" },
     { key: "custom_lunghezza", label: "Lunghezza", kind: "text" },
     { key: "custom_fasce", label: "Fasce", kind: "text" },
@@ -147,6 +148,7 @@ export async function POST(request: NextRequest) {
     customFasce?: string;
     customAtteggiamento?: string;
     customExtraNote?: string;
+    customServices?: string[];
     manualPaymentMethod?: "CARTA" | "SHOPIFY" | "CONTANTI";
     saveAsDraft?: boolean;
   } | null;
@@ -460,6 +462,9 @@ export async function POST(request: NextRequest) {
     photo_dopo_fronte: answerPhotoDopoFronte || undefined,
     photo_dopo_dietro: answerPhotoDopoDietro || undefined,
     second_shopify_order: secondShopifyOrder,
+    custom_services: Array.isArray(body?.customServices)
+      ? body.customServices.map((value: unknown) => textValue(value)).filter(Boolean)
+      : [],
     custom_grammi: textValue(body?.customGrammi),
     custom_lunghezza: textValue(body?.customLunghezza),
     custom_fasce: textValue(body?.customFasce),
