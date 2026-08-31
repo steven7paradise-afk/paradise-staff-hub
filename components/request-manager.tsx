@@ -68,6 +68,12 @@ function needsEmployeeView(request: RequestRecord) {
   return needsEmployeeAcknowledgement(request) && !request.employeeViewedAt;
 }
 
+function needsRequestAction(request: RequestRecord) {
+  if (needsSicknessJustification(request)) return true;
+  if (isAutomaticLateRequest(request)) return request.status === "PENDING" || needsEmployeeView(request);
+  return request.status === "PENDING";
+}
+
 function requestFilterForRecord(request: RequestRecord): ActiveRequestFilter {
   if (needsSicknessJustification(request)) return "JUSTIFY";
   if (isAutomaticLateRequest(request)) return "LATE";
@@ -215,6 +221,7 @@ function RequestDetailPanel({
   onResolveAutomaticAbsence,
   onAcknowledge,
   onUpdateSickness,
+  onConvertToUnjustified,
   onClose,
 }: {
   request: RequestRecord;
@@ -230,6 +237,7 @@ function RequestDetailPanel({
   onResolveAutomaticAbsence: (id: string, resolution: AutomaticAbsenceResolution) => void;
   onAcknowledge: (id: string) => void;
   onUpdateSickness: (id: string, payload: { medicalCode?: string | null; sicknessUnjustified?: boolean }) => void;
+  onConvertToUnjustified: (id: string) => void;
   onClose?: () => void;
 }) {
   const isPending = request.status === "PENDING";
@@ -328,7 +336,7 @@ function RequestDetailPanel({
                   onChange={(event) => onMedicalDraftChange(event.target.value)}
                   className="h-11 rounded-xl border border-black/10 bg-white px-3 text-sm font-semibold outline-none focus:border-rose-500/50 focus:ring-2 focus:ring-rose-500/10"
                 />
-                <div className="grid gap-2">
+                <div className={cn("grid gap-2", canApprove && "sm:grid-cols-2")}>
                   <button
                     type="button"
                     disabled={saving === request.id}
@@ -341,6 +349,16 @@ function RequestDetailPanel({
                   >
                     Salva codice
                   </button>
+                  {canApprove ? (
+                    <button
+                      type="button"
+                      disabled={saving === request.id}
+                      onClick={() => onConvertToUnjustified(request.id)}
+                      className="min-h-11 rounded-xl border border-red-300 bg-white px-4 text-xs font-black text-red-800 transition hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Segna non giustificata
+                    </button>
+                  ) : null}
                 </div>
               </div>
             )}
@@ -547,6 +565,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const newestInitialRequest = orderedInitialRequests[0] ?? null;
   const initialActionRequest = orderedInitialRequests.find(needsSicknessJustification)
     ?? orderedInitialRequests.find(needsEmployeeView)
+    ?? orderedInitialRequests.find((request) => request.status === "PENDING")
     ?? newestInitialRequest;
   const [requests, setRequests] = useState(initialRequests);
   const [openForm, setOpenForm] = useState(false);
@@ -568,7 +587,8 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const urgentSicknessRequests = orderedRequests.filter(needsSicknessJustification);
   const acknowledgementRequests = orderedRequests.filter(needsEmployeeAcknowledgement);
   const unseenAcknowledgementRequests = acknowledgementRequests.filter(needsEmployeeView);
-  const actionRequiredCount = new Set([...urgentSicknessRequests, ...unseenAcknowledgementRequests].map((request) => request.id)).size;
+  const pendingRequests = orderedRequests.filter((request) => request.status === "PENDING");
+  const actionRequiredCount = new Set([...urgentSicknessRequests, ...unseenAcknowledgementRequests, ...pendingRequests].map((request) => request.id)).size;
   const archiveRequests = orderedRequests.filter((request) => !needsSicknessJustification(request));
   const requestSections = ([
     { key: "LATE", title: "Ritardi", description: "Timbrature oltre la tolleranza da approvare o rifiutare.", tone: "gold", items: [] },
@@ -586,7 +606,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const activeSection = requestSections.find((section) => section.key === activeFilter);
   const filterButtons: Array<{ key: ActiveRequestFilter; label: string; count: number; tone: "pink" | "gold" | "green" | "dark" }> = [
     { key: "JUSTIFY", label: "Da giustificare", count: urgentSicknessRequests.length, tone: "pink" },
-    ...requestSections.map((section) => ({ key: section.key, label: section.title, count: section.items.length, tone: section.tone })),
+    ...requestSections.map((section) => ({ key: section.key, label: section.title, count: section.items.filter(needsRequestAction).length, tone: section.tone })),
   ];
   const visibleRequests = activeFilter === "JUSTIFY" ? urgentSicknessRequests : activeSection?.items ?? [];
   const selectedRequest = requests.find((request) => request.id === selectedRequestId && visibleRequests.some((item) => item.id === request.id)) ?? visibleRequests[0] ?? null;
@@ -740,6 +760,31 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
       setSelectedRequestId(id);
     }
     setMessage(data.leaveRequest.medical_code ? "Protocollo malattia salvato. Assenza giustificata." : "Malattia contrassegnata come non giustificata.");
+  }
+
+  async function convertSicknessToUnjustified(id: string) {
+    setSaving(id);
+    const response = await fetch(`/api/requests/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ convertToUnjustified: true }),
+    });
+    const data = await response.json();
+    setSaving(null);
+    if (!response.ok) {
+      setMessage(data.error ?? "Assenza non giustificata non salvata.");
+      return;
+    }
+    setRequests((current) => current.map((request) => request.id === id ? {
+      ...request,
+      type: data.leaveRequest.type,
+      reason: data.leaveRequest.reason,
+      medicalCode: data.leaveRequest.medical_code,
+      sicknessUnjustified: data.leaveRequest.sickness_unjustified,
+    } : request));
+    setActiveFilter("ALTRO");
+    setSelectedRequestId(id);
+    setMessage("Assenza registrata come non giustificata e spostata in Altro.");
   }
 
   async function resolveAutomaticAbsence(id: string, resolution: AutomaticAbsenceResolution) {
@@ -942,14 +987,16 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   )}
                 >
                   <span>{filter.label}</span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-1 text-xs",
-                      selected ? "bg-white/15 text-white" : filter.tone === "pink" ? "bg-paradise-softPink/70 text-[#B85B68]" : filter.tone === "gold" ? "bg-paradise-gold/20 text-[#9E7A3B]" : filter.tone === "green" ? "bg-emerald-500/10 text-emerald-700" : "bg-black/10 text-black/65"
-                    )}
-                  >
-                    {filter.count}
-                  </span>
+                  {filter.count > 0 ? (
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-xs",
+                        selected ? "bg-white/15 text-white" : filter.tone === "pink" ? "bg-paradise-softPink/70 text-[#B85B68]" : filter.tone === "gold" ? "bg-paradise-gold/20 text-[#9E7A3B]" : filter.tone === "green" ? "bg-emerald-500/10 text-emerald-700" : "bg-black/10 text-black/65"
+                      )}
+                    >
+                      {filter.count}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -985,6 +1032,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                   await updateSicknessJustification(id, payload);
                   setMedicalDrafts((current) => ({ ...current, [id]: "" }));
                 }}
+                onConvertToUnjustified={convertSicknessToUnjustified}
               />
             ) : (
               <div className="rounded-[28px] border border-black/5 bg-white px-6 py-16 text-center shadow-sm">

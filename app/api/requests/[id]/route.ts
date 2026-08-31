@@ -52,6 +52,7 @@ export async function PATCH(
   const employeeResponse = payload.employeeResponse !== undefined ? (payload.employeeResponse ? String(payload.employeeResponse).trim() : null) : undefined;
   const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
   const sicknessUnjustified = payload.sicknessUnjustified !== undefined ? Boolean(payload.sicknessUnjustified) : undefined;
+  const convertToUnjustified = payload.convertToUnjustified === true;
   const lateAccountingMode = payload.lateAccountingMode ? String(payload.lateAccountingMode) as LateAccountingMode : undefined;
   const absenceResolution = payload.absenceResolution ? String(payload.absenceResolution) as AutomaticAbsenceResolution : undefined;
 
@@ -106,13 +107,16 @@ export async function PATCH(
   }
 
   // Check permissions for sickness justification changes
-  if (medicalCode !== undefined || sicknessUnjustified !== undefined) {
+  if (medicalCode !== undefined || sicknessUnjustified !== undefined || convertToUnjustified) {
     const canUpdateCode = isOwnRequest || isAdmin || (isResponsabile && existing.user.sede_id === session.user.sedeId);
     if (!canUpdateCode) {
       return NextResponse.json({ error: "Non autorizzato a modificare la giustificazione della malattia" }, { status: 403 });
     }
     if (existing.type !== "MALATTIA") {
       return NextResponse.json({ error: "La giustificazione si applica solo alle malattie." }, { status: 400 });
+    }
+    if (convertToUnjustified && !isAdmin && !(isResponsabile && existing.user.sede_id === session.user.sedeId)) {
+      return NextResponse.json({ error: "Solo l’amministrazione può registrare un’assenza come non giustificata." }, { status: 403 });
     }
   }
 
@@ -140,6 +144,12 @@ export async function PATCH(
           } : {}),
           ...(status === "APPROVED" ? { approved_by: session.user.id, approved_at: new Date() } : status === "REJECTED" || status === "PENDING" ? { approved_by: null, approved_at: null } : {}),
           ...(adminNote !== undefined ? { admin_note: adminNote } : {}),
+          ...(convertToUnjustified ? {
+            type: "ALTRO" as const,
+            reason: `${UNJUSTIFIED_ABSENCE_MARKER} Assenza senza timbratura rilevata automaticamente e registrata come non giustificata.`,
+            medical_code: null,
+            sickness_unjustified: false,
+          } : {}),
           ...(markViewed || acknowledge ? { employee_viewed_at: existing.employee_viewed_at ?? new Date() } : {}),
           ...(acknowledge ? { employee_acknowledged_at: new Date() } : {}),
           ...(employeeResponse !== undefined ? { employee_response: employeeResponse } : {}),
@@ -156,7 +166,7 @@ export async function PATCH(
       let syncResult = null;
       if (status === "APPROVED" && (!automaticLate || resolvesMissingClockAsAbsence)) {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
-      } else if ((medicalCode !== undefined || sicknessUnjustified !== undefined) && existing.status === "APPROVED") {
+      } else if ((medicalCode !== undefined || sicknessUnjustified !== undefined || convertToUnjustified) && existing.status === "APPROVED") {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
       } else if (status !== undefined && existing.status === "APPROVED" && !automaticLate) {
         await revertApprovedLeaveFromSchedule(tx, updated.id);
@@ -222,7 +232,7 @@ export async function PATCH(
 
   // A silent view receipt must not trigger calendar synchronization.
   let calendarSync = null;
-  if (markViewed && status === undefined && !acknowledge && employeeResponse === undefined && medicalCode === undefined && sicknessUnjustified === undefined) {
+  if (markViewed && status === undefined && !acknowledge && employeeResponse === undefined && medicalCode === undefined && sicknessUnjustified === undefined && !convertToUnjustified) {
     calendarSync = { skipped: true, reason: "Visualizzazione registrata senza sincronizzazione del calendario." };
   } else {
     try {

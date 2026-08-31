@@ -207,6 +207,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
           ...requestScope,
           NOT: { admin_note: { contains: "[ELIMINATA_DA_MALATTIE]" } },
           OR: [
+            { status: "PENDING" },
             { type: "MALATTIA", medical_code: null },
             {
               reason: { startsWith: "RITARDO AUTOMATICO — " },
