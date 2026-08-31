@@ -5,13 +5,14 @@ import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { createNotification, createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule } from "@/lib/schedule-sync";
+import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule, UNJUSTIFIED_ABSENCE_MARKER } from "@/lib/schedule-sync";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
 import { COUNT_FROM_ACTUAL_ENTRY_MARKER } from "@/lib/work-hours";
 import { unlockWorkHourRecord } from "@/lib/work-hour-sync";
 
 const approverRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 type LateAccountingMode = "ACTUAL" | "PENALTY_30";
+type AutomaticAbsenceResolution = "SICKNESS" | "UNJUSTIFIED";
 
 function actualEntryTimestamp(log: { timestamp: Date; note: string | null }) {
   const match = String(log.note || "").match(/Ora rilevata\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/i);
@@ -51,12 +52,14 @@ export async function PATCH(
   const medicalCode = payload.medicalCode !== undefined ? (payload.medicalCode ? String(payload.medicalCode).trim() : null) : undefined;
   const sicknessUnjustified = payload.sicknessUnjustified !== undefined ? Boolean(payload.sicknessUnjustified) : undefined;
   const lateAccountingMode = payload.lateAccountingMode ? String(payload.lateAccountingMode) as LateAccountingMode : undefined;
+  const absenceResolution = payload.absenceResolution ? String(payload.absenceResolution) as AutomaticAbsenceResolution : undefined;
 
   const existing = await prisma.leaveRequest.findUnique({ where: { id }, include: { user: true } });
   if (!existing) {
     return NextResponse.json({ error: "Richiesta non trovata" }, { status: 404 });
   }
   const automaticLate = isAutomaticLateReason(existing.reason);
+  const automaticMissingClock = automaticLate && /nessuna timbratura/i.test(existing.reason || "");
 
   const isOwnRequest = existing.user_id === session.user.id;
   const isAdmin = approverRoles.has(session.user.role);
@@ -85,7 +88,10 @@ export async function PATCH(
     if (automaticLate && status === "REJECTED") {
       return NextResponse.json({ error: "I ritardi automatici non vengono rifiutati: conferma soltanto la presa visione." }, { status: 400 });
     }
-    if (automaticLate && status === "APPROVED" && !["ACTUAL", "PENALTY_30"].includes(String(lateAccountingMode))) {
+    if (automaticMissingClock && status === "APPROVED" && !["SICKNESS", "UNJUSTIFIED"].includes(String(absenceResolution))) {
+      return NextResponse.json({ error: "Scegli se registrare malattia o assenza non giustificata." }, { status: 400 });
+    }
+    if (automaticLate && !automaticMissingClock && status === "APPROVED" && !["ACTUAL", "PENALTY_30"].includes(String(lateAccountingMode))) {
       return NextResponse.json({ error: "Scegli come conteggiare la timbratura in ritardo." }, { status: 400 });
     }
     if (isResponsabile && existing.user.sede_id !== session.user.sedeId) {
@@ -119,6 +125,17 @@ export async function PATCH(
         where: { id },
         data: {
           ...(status !== undefined ? { status } : {}),
+          ...(automaticMissingClock && status === "APPROVED" && absenceResolution === "SICKNESS" ? {
+            type: "MALATTIA" as const,
+            reason: "Assenza senza timbratura rilevata automaticamente. Registrata dall’amministrazione come malattia.",
+            sickness_unjustified: true,
+          } : {}),
+          ...(automaticMissingClock && status === "APPROVED" && absenceResolution === "UNJUSTIFIED" ? {
+            type: "ALTRO" as const,
+            reason: `${UNJUSTIFIED_ABSENCE_MARKER} Assenza senza timbratura rilevata automaticamente e registrata come non giustificata.`,
+            sickness_unjustified: false,
+            medical_code: null,
+          } : {}),
           ...(status === "APPROVED" ? { approved_by: session.user.id, approved_at: new Date() } : status === "REJECTED" || status === "PENDING" ? { approved_by: null, approved_at: null } : {}),
           ...(adminNote !== undefined ? { admin_note: adminNote } : {}),
           ...(acknowledge ? { employee_acknowledged_at: new Date() } : {}),
@@ -134,7 +151,7 @@ export async function PATCH(
       });
 
       let syncResult = null;
-      if (status === "APPROVED" && !automaticLate) {
+      if (status === "APPROVED" && (!automaticLate || automaticMissingClock)) {
         syncResult = await syncApprovedLeaveToSchedule(tx, updated.id, session.user.id);
       } else if (status !== undefined && existing.status === "APPROVED" && !automaticLate) {
         await revertApprovedLeaveFromSchedule(tx, updated.id);
@@ -198,7 +215,7 @@ export async function PATCH(
   // Always update Google Calendar status sync (both to update details or delete if rejected)
   let calendarSync = null;
   try {
-    calendarSync = automaticLate
+    calendarSync = automaticLate && !automaticMissingClock
       ? { skipped: true, reason: "I ritardi presi in visione non vengono inseriti nel calendario." }
       : await syncLeaveRequestToGoogleCalendar(leaveRequest.id);
   } catch (error) {
@@ -228,8 +245,10 @@ export async function PATCH(
     try {
       await createNotification({
         user_id: leaveRequest.user_id,
-        title: automaticLate && status === "APPROVED" ? "Ritardo preso in visione" : `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
-        message: automaticLate && status === "APPROVED"
+        title: automaticMissingClock && status === "APPROVED" ? "Assenza registrata" : automaticLate && status === "APPROVED" ? "Ritardo preso in visione" : `Richiesta ${status === "APPROVED" ? "approvata" : status === "REJECTED" ? "rifiutata" : "in verifica"}`,
+        message: automaticMissingClock && status === "APPROVED"
+          ? `L’amministrazione ha registrato l’assenza del ${leaveRequest.start_date.toLocaleDateString("it-IT")} come ${absenceResolution === "SICKNESS" ? "malattia" : "assenza non giustificata"}.${leaveRequest.admin_note ? ` Comunicazione: ${leaveRequest.admin_note}` : ""}`
+          : automaticLate && status === "APPROVED"
           ? `L’amministrazione ha preso visione del ritardo del ${leaveRequest.start_date.toLocaleDateString("it-IT")}${leaveRequest.end_time ? `, ingresso ${leaveRequest.end_time}` : ""}${lateAccountingLabel ? `; ${lateAccountingLabel}` : ""}.${leaveRequest.admin_note ? ` Comunicazione: ${leaveRequest.admin_note}` : ""}`
           : `${leaveRequest.type.toLowerCase()} dal ${leaveRequest.start_date.toLocaleDateString("it-IT")} al ${leaveRequest.end_date.toLocaleDateString("it-IT")}${leaveRequest.start_time && leaveRequest.end_time ? `, ${leaveRequest.start_time}-${leaveRequest.end_time}` : ""}: ${status === "APPROVED" ? "approvata." : status === "REJECTED" ? "rifiutata." : "inoltrata all'amministrazione."}${leaveRequest.admin_note ? ` Nota admin: ${leaveRequest.admin_note}` : ""}`,
         type: "RICHIESTA",

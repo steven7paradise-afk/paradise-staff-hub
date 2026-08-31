@@ -8,6 +8,9 @@ const leaveTypeCategory: Record<LeaveType, { code: string; name: string; color: 
   ALTRO: { code: "A", name: "Altro", color: "#EADCF8", text_color: "#33213F" },
 };
 
+export const UNJUSTIFIED_ABSENCE_MARKER = "[ASSENZA_INGIUSTIFICATA]";
+const unjustifiedAbsenceCategory = { code: "AI", name: "Assenza ingiustificata", color: "#B91C1C", text_color: "#FFFFFF" };
+
 function atStartOfDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
@@ -39,7 +42,8 @@ export async function syncApprovedLeaveToSchedule(
     throw new Error("Richiesta non trovata");
   }
 
-  const categorySeed = leaveTypeCategory[leaveRequest.type as LeaveType];
+  const unjustifiedAbsence = String(leaveRequest.reason || "").includes(UNJUSTIFIED_ABSENCE_MARKER);
+  const categorySeed = unjustifiedAbsence ? unjustifiedAbsenceCategory : leaveTypeCategory[leaveRequest.type as LeaveType];
   const allCategories = (await prisma.scheduleCategory.findMany({
     where: {
       location_id: leaveRequest.user.sede_id,
@@ -49,7 +53,9 @@ export async function syncApprovedLeaveToSchedule(
   let matchingCategory = null;
   const type = leaveRequest.type; // FERIE, PERMESSO, RIPOSO, MALATTIA, ALTRO
 
-  if (type === "FERIE") {
+  if (unjustifiedAbsence) {
+    matchingCategory = allCategories.find((c) => c.code === "AI" || c.name.toLowerCase().includes("assenza ingiustificata"));
+  } else if (type === "FERIE") {
     matchingCategory = allCategories.find((c) => c.code === "F" || c.code === "FE" || c.name.toLowerCase().includes("ferie"));
   } else if (type === "PERMESSO") {
     matchingCategory = allCategories.find((c) => c.code === "P" || c.code === "PE" || c.name.toLowerCase().includes("permesso"));
@@ -67,6 +73,7 @@ export async function syncApprovedLeaveToSchedule(
       where: { id: matchingCategory.id },
       data: {
         active: true,
+        ...(unjustifiedAbsence ? unjustifiedAbsenceCategory : {}),
       },
     });
   } else {

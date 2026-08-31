@@ -28,12 +28,17 @@ type RequestRecord = {
 
 type WorkerOption = { id: string; name: string; location: string | null };
 type ActiveRequestFilter = "JUSTIFY" | "LATE" | RequestRecord["type"];
+type AutomaticAbsenceResolution = "SICKNESS" | "UNJUSTIFIED";
 
 const typeLabels = { FERIE: "Ferie", PERMESSO: "Permesso", RIPOSO: "Riposo", MALATTIA: "Malattia", ALTRO: "Altro" };
 const statusLabels = { PENDING: "In attesa", APPROVED: "Approvata", REJECTED: "Rifiutata", FLAGGED: "Segnalata" };
 
 function isAutomaticLateRequest(request: RequestRecord) {
   return request.reason?.startsWith("RITARDO AUTOMATICO — ") ?? false;
+}
+
+function isAutomaticMissingClockRequest(request: RequestRecord) {
+  return isAutomaticLateRequest(request) && /nessuna timbratura/i.test(request.reason || "");
 }
 
 function requestTypeLabel(request: RequestRecord) {
@@ -194,6 +199,7 @@ function RequestDetailPanel({
   onMedicalDraftChange,
   onDecisionDraftChange,
   onChangeStatus,
+  onResolveAutomaticAbsence,
   onAcknowledge,
   onUpdateSickness,
   onClose,
@@ -208,12 +214,14 @@ function RequestDetailPanel({
   onMedicalDraftChange: (value: string) => void;
   onDecisionDraftChange: (value: string) => void;
   onChangeStatus: (id: string, status: "APPROVED" | "REJECTED" | "FLAGGED", lateAccountingMode?: "ACTUAL" | "PENALTY_30") => void;
+  onResolveAutomaticAbsence: (id: string, resolution: AutomaticAbsenceResolution) => void;
   onAcknowledge: (id: string) => void;
   onUpdateSickness: (id: string, payload: { medicalCode?: string | null; sicknessUnjustified?: boolean }) => void;
   onClose?: () => void;
 }) {
   const isPending = request.status === "PENDING";
   const automaticLate = isAutomaticLateRequest(request);
+  const automaticMissingClock = isAutomaticMissingClockRequest(request);
   const workerNote = request.reason?.trim() || "Nessuna nota lavoratore";
   const adminNote = request.adminNote?.trim() || "Nessuna nota admin";
   const canEmployeeAcknowledge = canAcknowledge && automaticLate && !request.employeeAcknowledgedAt;
@@ -379,9 +387,9 @@ function RequestDetailPanel({
                 <BellRing className="size-6" />
               </span>
               <div>
-                <p className="text-base font-black uppercase tracking-wide text-paradise-noir">{canEmployeeAcknowledge ? "Presa visione" : automaticLate ? "Gestione del ritardo" : "Gestione richiesta"}</p>
+                <p className="text-base font-black uppercase tracking-wide text-paradise-noir">{canEmployeeAcknowledge ? "Presa visione" : automaticMissingClock ? "Gestione dell’assenza" : automaticLate ? "Gestione del ritardo" : "Gestione richiesta"}</p>
                 <p className="mt-1 text-sm font-medium leading-5 text-black/55">
-                  {canEmployeeAcknowledge ? "Conferma di aver letto questa comunicazione e, se vuoi, lascia una risposta." : automaticLate ? "Registra la gestione del ritardo e comunica con il dipendente." : "Valuta la richiesta e comunica la decisione al dipendente."}
+                  {canEmployeeAcknowledge ? "Conferma di aver letto questa comunicazione e, se vuoi, lascia una risposta." : automaticMissingClock ? "Registra l’assenza nel planning e comunica la decisione al dipendente." : automaticLate ? "Registra la gestione del ritardo e comunica con il dipendente." : "Valuta la richiesta e comunica la decisione al dipendente."}
                 </p>
               </div>
             </div>
@@ -396,18 +404,38 @@ function RequestDetailPanel({
               </button>
             ) : canApprove ? (
               <div className={cn("mt-3 grid gap-2", !automaticLate && "sm:grid-cols-2")}>
-                {automaticLate ? (
+                {automaticMissingClock ? (
+                  <div className="mb-1 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-900">
+                    Nessuna entrata rilevata. Scegli come registrare l’assenza nel planning.
+                  </div>
+                ) : automaticLate ? (
                   <div className="mb-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">
                     Scegli come conteggiare il ritardo nelle ore del dipendente.
                   </div>
                 ) : null}
-                <button
-                  disabled={saving === request.id}
-                  onClick={() => onChangeStatus(request.id, "APPROVED", automaticLate ? "ACTUAL" : undefined)}
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-paradise-pink to-[#ef4f91] px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(236,72,140,0.24)] transition hover:brightness-95 disabled:opacity-50 sm:text-sm"
-                >
-                  <Check className="size-3.5" /> {automaticLate ? "Conta dall’ora timbrata" : "Approva"}
-                </button>
+                {automaticMissingClock ? <>
+                  <button
+                    disabled={saving === request.id}
+                    onClick={() => onResolveAutomaticAbsence(request.id, "SICKNESS")}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(225,29,72,0.20)] transition hover:bg-rose-700 disabled:opacity-50 sm:text-sm"
+                  >
+                    <Heart className="size-3.5" /> Metti in malattia
+                  </button>
+                  <button
+                    disabled={saving === request.id}
+                    onClick={() => onResolveAutomaticAbsence(request.id, "UNJUSTIFIED")}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-300 bg-white px-4 text-xs font-black text-red-800 transition hover:bg-red-50 disabled:opacity-50 sm:text-sm"
+                  >
+                    <AlertCircle className="size-3.5" /> Assenza non giustificata
+                  </button>
+                </> : <>
+                  <button
+                    disabled={saving === request.id}
+                    onClick={() => onChangeStatus(request.id, "APPROVED", automaticLate ? "ACTUAL" : undefined)}
+                    className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-paradise-pink to-[#ef4f91] px-4 text-xs font-black text-white shadow-[0_10px_24px_rgba(236,72,140,0.24)] transition hover:brightness-95 disabled:opacity-50 sm:text-sm"
+                  >
+                    <Check className="size-3.5" /> {automaticLate ? "Conta dall’ora timbrata" : "Approva"}
+                  </button>
                 {automaticLate ? (
                   <button
                     disabled={saving === request.id}
@@ -417,6 +445,7 @@ function RequestDetailPanel({
                     <Clock className="size-3.5" /> Mantieni prassi -30 minuti
                   </button>
                 ) : null}
+                </>}
                 {!automaticLate ? <button
                   disabled={saving === request.id}
                   onClick={() => onChangeStatus(request.id, "REJECTED")}
@@ -655,6 +684,43 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
     setMessage(data.leaveRequest.medical_code ? "Protocollo malattia salvato. Assenza giustificata." : "Malattia contrassegnata come non giustificata.");
   }
 
+  async function resolveAutomaticAbsence(id: string, resolution: AutomaticAbsenceResolution) {
+    const adminNote = decisionDrafts[id]?.trim() ?? "";
+    setSaving(id);
+    const response = await fetch(`/api/requests/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "APPROVED", absenceResolution: resolution, adminNote: adminNote || null }),
+    });
+    const data = await response.json();
+    setSaving(null);
+    if (!response.ok) {
+      setMessage(data.error ?? "Assenza non salvata nel planning.");
+      return;
+    }
+    setRequests((current) => current.map((request) => request.id === id ? {
+      ...request,
+      type: data.leaveRequest.type,
+      reason: data.leaveRequest.reason,
+      status: data.leaveRequest.status,
+      adminNote: data.leaveRequest.admin_note,
+      medicalCode: data.leaveRequest.medical_code,
+      sicknessUnjustified: data.leaveRequest.sickness_unjustified,
+      approvedBy: data.leaveRequest.approver?.name ?? null,
+      approvedAt: data.leaveRequest.approved_at ?? null,
+    } : request));
+    setDecisionDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setActiveFilter(resolution === "SICKNESS" ? "JUSTIFY" : "ALTRO");
+    setSelectedRequestId(id);
+    setMessage(resolution === "SICKNESS"
+      ? "Assenza registrata come malattia e inserita nel planning."
+      : "Assenza non giustificata inserita nel planning.");
+  }
+
   async function acknowledgeLateRequest(id: string) {
     const employeeResponse = decisionDrafts[id]?.trim() ?? "";
     setSaving(id);
@@ -844,6 +910,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
                 onMedicalDraftChange={(value) => setMedicalDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
                 onDecisionDraftChange={(value) => setDecisionDrafts((current) => ({ ...current, [selectedRequest.id]: value }))}
                 onChangeStatus={(id, status, lateAccountingMode) => changeStatus(id, status, lateAccountingMode)}
+                onResolveAutomaticAbsence={(id, resolution) => resolveAutomaticAbsence(id, resolution)}
                 onAcknowledge={(id) => acknowledgeLateRequest(id)}
                 onUpdateSickness={async (id, payload) => {
                   await updateSicknessJustification(id, payload);
