@@ -145,7 +145,7 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, edgeToEdgeMain = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; edgeToEdgeMain?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const isPcCassa = pcMode;
   if (!session?.user?.id && !isPcCassa) redirect("/login");
@@ -486,7 +486,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         transparentMobileHeader && !hideMobileHeader && "pt-[calc(env(safe-area-inset-top)+72px)] xl:pt-8",
         currentRole === "DIPENDENTE" && (hideMobileHeader ? "pb-0 xl:pb-8" : "pb-28 xl:pb-8")
       )}>
-        {!isFormerEmployee ? <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
+        {!isFormerEmployee && !hideDesktopControls ? <div className={cn("hidden justify-end xl:flex", edgeToEdgeMain ? "absolute right-6 top-6 z-30" : "mb-5")}>
           <TopControls
             unread={unreadNotifications}
             name={displayUser?.name ?? session?.user?.name ?? "Paradise"}
@@ -522,9 +522,21 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
         "--sidebar-icon": branding.sidebar_icon_color || (getContrastYIQ(branding.sidebar_color || "#FFFFFF") === "dark" ? "#1F1F1F" : "#FFFFFF"),
         "--dark-sidebar-text": branding.dark_sidebar_text_color || (getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF"),
         "--dark-sidebar-icon": branding.dark_sidebar_icon_color || (getContrastYIQ(branding.dark_sidebar_color || "#1B1A1F") === "dark" ? "#1F1F1F" : "#FFFFFF"),
+        ...(compactDarkSidebar ? {
+          "--user-sidebar-color": "#211E20",
+          "--sidebar-gradient-from": "#292528",
+          "--sidebar-gradient-mid": "#1D1A1C",
+          "--sidebar-gradient-to": "#111011",
+          "--sidebar-text": "#FFFFFF",
+          "--sidebar-icon": "#FFFFFF",
+          "--sidebar-active-bg": "rgba(255,255,255,0.14)",
+          "--sidebar-active-text": "#FFFFFF",
+          "--sidebar-active-icon": "#F49BC4",
+        } : {}),
       } as React.CSSProperties}
       transparentMain={transparentMain}
-      forceCollapsed={isPcCassa}
+      forceCollapsed={isPcCassa || compactDarkSidebar}
+      hideDesktopSidebar={hideDesktopSidebar}
     />
   );
 }

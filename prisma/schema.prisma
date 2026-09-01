@@ -92,6 +92,8 @@ model User {
   documents         Document[]       @relation("UserDocuments")
   uploadedDocuments Document[]       @relation("DocumentUploader")
   notifications     Notification[]
+  sent_internal_emails InternalEmail[] @relation("InternalEmailSender")
+  received_internal_emails InternalEmailRecipient[] @relation("InternalEmailRecipientUser")
   schedule_entries  ScheduleEntry[]
   schedule_overrides ScheduleWorkerOverride[]
   assigned_tasks    StaffTask[]      @relation("AssignedTasks")
@@ -362,6 +364,41 @@ model Notification {
   user       User     @relation(fields: [user_id], references: [id])
 
   @@map("notifications")
+}
+
+model InternalEmail {
+  id          String   @id @default(cuid())
+  sender_id   String
+  subject     String
+  body        String
+  status      String   @default("SENT")
+  draft_recipient_ids Json?
+  attachments Json?
+  sender_deleted Boolean @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  sender      User     @relation("InternalEmailSender", fields: [sender_id], references: [id])
+  recipients InternalEmailRecipient[]
+
+  @@index([sender_id, created_at])
+  @@map("internal_emails")
+}
+
+model InternalEmailRecipient {
+  id           String    @id @default(cuid())
+  email_id     String
+  recipient_id String
+  read_at      DateTime?
+  starred      Boolean   @default(false)
+  archived     Boolean   @default(false)
+  deleted      Boolean   @default(false)
+  created_at   DateTime  @default(now())
+  email        InternalEmail @relation(fields: [email_id], references: [id], onDelete: Cascade)
+  recipient    User      @relation("InternalEmailRecipientUser", fields: [recipient_id], references: [id])
+
+  @@unique([email_id, recipient_id])
+  @@index([recipient_id, created_at])
+  @@map("internal_email_recipients")
 }
 
 model ShopifyPaymentReview {

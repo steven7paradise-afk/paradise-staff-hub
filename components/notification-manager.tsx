@@ -194,6 +194,7 @@ export function NotificationManager({
   focusNotificationId = null,
   initialSection = "BLOG",
   openCommunicationDirectly = false,
+  internalEmailUnread = 0,
 }: {
   role: Role;
   notifications: NotificationItem[];
@@ -204,8 +205,10 @@ export function NotificationManager({
   focusNotificationId?: string | null;
   initialSection?: SectionTab;
   openCommunicationDirectly?: boolean;
+  internalEmailUnread?: number;
 }) {
   const canSend = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
+  const canUseInternalEmail = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const showBlogView = false;
   const [sectionTab, setSectionTab] = useState<SectionTab>(initialSection);
   const [selectedResponseIdForModal, setSelectedResponseIdForModal] = useState<string | null>(null);
@@ -650,6 +653,15 @@ export function NotificationManager({
                 <CheckCheck className="size-4" /> Segna tutte lette
               </button>
             ) : null}
+            {canUseInternalEmail ? (
+              <button
+                type="button"
+                onClick={() => router.push("/email")}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[0.08] px-5 text-xs font-black text-white transition hover:bg-white/[0.15] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f4a8c6]"
+              >
+                <Mail className="size-4" /> Apri Email
+              </button>
+            ) : null}
             {canSend ? (
               <button
                 type="button"
@@ -716,7 +728,9 @@ export function NotificationManager({
             { label: "Comunicazioni da vedere", value: stats.blogUnread, icon: MessageSquareText, bg: "bg-pink-100 text-[#A74758]", action: () => { setSectionTab("BLOG"); setFilter("UNREAD"); } },
             { label: "Totale non lette", value: stats.unread, icon: Mail, bg: "bg-violet-100 text-violet-700", action: () => { setSectionTab("ALL"); setFilter("UNREAD"); } },
             { label: "Timbrature da vedere", value: stats.attendanceUnread, icon: BellRing, bg: "bg-rose-100 text-rose-700", action: () => { setSectionTab("ATTENDANCE"); setFilter("UNREAD"); } },
-            { label: "Urgenti da vedere", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700", action: () => { setSectionTab("ALL"); setFilter("URGENT"); } },
+            canUseInternalEmail
+              ? { label: "Email da leggere", value: internalEmailUnread, icon: Mail, bg: "bg-[#F8DCE9] text-[#A74770]", action: () => router.push("/email") }
+              : { label: "Urgenti da vedere", value: stats.urgent, icon: AlertTriangle, bg: "bg-amber-100 text-amber-700", action: () => { setSectionTab("ALL"); setFilter("URGENT"); } },
           ].map((metric) => {
             const Icon = metric.icon;
             return (

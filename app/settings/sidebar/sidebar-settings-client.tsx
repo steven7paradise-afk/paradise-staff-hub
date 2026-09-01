@@ -58,6 +58,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/staff": "Staff Paradise",
   "/team": "Team",
   "/notifications": "Comunicazioni",
+  "/email": "Email",
   "/profile": "Profilo",
   "/settings": "Impostazioni",
   "/settings/app": "App",
@@ -111,7 +112,7 @@ export function SidebarSettingsClient({
     initialLayout && Array.isArray(initialLayout) && initialLayout.length > 0
       ? initialLayout
       : [
-          { id: "generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications"] },
+          { id: "generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications", "/email"] },
           { id: "planning", title: "Planning & Saloni", routes: ["/schedules", "/orders", "/magazzino", "/foto"] },
           { id: "staff", title: "Gestione Staff", routes: ["/requests", "/documents", "/malattie"] },
           { id: "settings", title: "Impostazioni", routes: ["/profile", "/settings"] }

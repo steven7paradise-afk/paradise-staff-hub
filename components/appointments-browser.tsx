@@ -6445,11 +6445,11 @@ export function AppointmentsBrowser({
                                         event.preventDefault();
                                         event.stopPropagation();
                                       }}
-                                      className="grid size-9 shrink-0 touch-none cursor-grab place-items-center rounded-lg border border-[#D8DCE3] bg-white text-[#6B778C] shadow-sm transition hover:border-[#4C9AFF] hover:text-[#172B4D] active:cursor-grabbing active:scale-95"
+                                      className="grid size-11 shrink-0 touch-none cursor-grab place-items-center rounded-xl border border-[#D8DCE3] bg-white text-[#6B778C] shadow-sm transition hover:border-[#4C9AFF] hover:text-[#172B4D] active:cursor-grabbing active:scale-95"
                                       aria-label={`Sposta appuntamento di ${booking.customerName}`}
                                       title="Trascina per spostare"
                                     >
-                                      <GripVertical className="size-4" strokeWidth={2.5} />
+                                      <GripVertical className="size-5" strokeWidth={2.5} />
                                     </button>
                                   </div>
                                 </div>

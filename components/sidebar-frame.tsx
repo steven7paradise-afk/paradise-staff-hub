@@ -12,6 +12,7 @@ export function SidebarFrame({
   style,
   transparentMain = false,
   forceCollapsed = false,
+  hideDesktopSidebar = false,
 }: {
   aside: React.ReactNode;
   main: React.ReactNode;
@@ -19,6 +20,7 @@ export function SidebarFrame({
   style: React.CSSProperties;
   transparentMain?: boolean;
   forceCollapsed?: boolean;
+  hideDesktopSidebar?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
@@ -77,6 +79,7 @@ export function SidebarFrame({
       <div
         className={cn(
           "app-liquid-sidebar relative transition-[width,background-color] duration-300 xl:fixed xl:inset-y-0 xl:left-0 xl:z-40 xl:h-screen xl:overflow-visible",
+          hideDesktopSidebar && "xl:hidden",
           isCollapsed
             ? "xl:w-[88px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
             : "xl:w-[264px] bg-[color:var(--user-sidebar-color,var(--sidebar))] border-r border-black/5 dark:border-white/10 xl:bg-[linear-gradient(165deg,var(--sidebar-gradient-from),var(--sidebar-gradient-mid)_54%,var(--sidebar-gradient-to))] xl:border-white/10"
@@ -95,7 +98,7 @@ export function SidebarFrame({
         ) : null}
         {aside}
       </div>
-      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
+      <div className={cn("min-w-0 transition-[margin-left] duration-300 xl:h-screen xl:overflow-hidden", hideDesktopSidebar ? "xl:ml-0" : isCollapsed ? "xl:ml-[88px]" : "xl:ml-[264px]")}>
         <div className="xl:flex xl:h-screen xl:flex-col">
           <div className={cn(
             "app-content-surface flex-1 overflow-hidden border-0 shadow-none xl:flex xl:flex-col",

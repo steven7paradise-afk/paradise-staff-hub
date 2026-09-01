@@ -2,6 +2,9 @@ import { google } from "googleapis";
 import { Readable } from "stream";
 import { getGooglePrivateKey } from "@/lib/google-auth";
 
+const INTERNAL_EMAIL_DRIVE_FOLDER_ID = "15wxG2AtfKFsB7woZBI-o7PcKuX_1_IPP";
+const INTERNAL_EMAIL_DRIVE_WRITER = "staff-hub-sync@paradise-staff-hub-sync-502511.iam.gserviceaccount.com";
+
 export function getPrivateKey() {
   return getGooglePrivateKey({
     jsonEnvNames: ["DRIVE_SERVICE_ACCOUNT_JSON", "GOOGLE_SERVICE_ACCOUNT_JSON"],
@@ -630,6 +633,81 @@ export async function uploadTaskImageToGoogleDrive(
     thumbnailLink: response.data.thumbnailLink,
     previewUrl: directDriveImageUrl(fileId),
     folderId: taskFolderId,
+  };
+}
+
+function getInternalEmailDriveClient() {
+  const clientEmail = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || INTERNAL_EMAIL_DRIVE_WRITER;
+  const privateKey = getPrivateKey();
+  if (!privateKey) throw new Error("Google Drive private key is not configured");
+  const auth = new google.auth.JWT({ email: clientEmail, key: privateKey, scopes: ["https://www.googleapis.com/auth/drive"] });
+  return google.drive({ version: "v3", auth });
+}
+
+export async function ensureInternalEmailDriveFolder() {
+  const configuredFolderId = process.env.GOOGLE_DRIVE_EMAIL_FOLDER_ID?.trim() || INTERNAL_EMAIL_DRIVE_FOLDER_ID;
+  const rootFolderId = driveFolderId(
+    process.env.GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID,
+    "0ABkOsn4uZjSQUk9PVA"
+  );
+  const drive = getInternalEmailDriveClient();
+  const folderId = configuredFolderId || await getOrCreateSubfolder(drive, rootFolderId, "Email interne");
+  const folder = await drive.files.get({
+    fileId: folderId,
+    fields: "id,name,webViewLink",
+    supportsAllDrives: true,
+  });
+  return {
+    id: folderId,
+    name: folder.data.name || "Email interne",
+    webViewLink: folder.data.webViewLink || null,
+  };
+}
+
+export async function uploadInternalEmailImageToGoogleDrive(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+) {
+  const drive = getInternalEmailDriveClient();
+  const root = await ensureInternalEmailDriveFolder();
+  const monthLabel = new Intl.DateTimeFormat("it-IT", {
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Europe/Rome",
+  }).format(new Date()).replace("/", "-");
+  const monthFolderId = await getOrCreateSubfolder(drive, root.id, monthLabel);
+  const bufferStream = new Readable();
+  bufferStream.push(buffer);
+  bufferStream.push(null);
+  const response = await drive.files.create({
+    requestBody: {
+      name: cleanDriveName(fileName),
+      parents: [monthFolderId],
+    },
+    media: { mimeType, body: bufferStream },
+    fields: "id,name,webViewLink,webContentLink,mimeType,thumbnailLink",
+    supportsAllDrives: true,
+  });
+  const fileId = response.data.id!;
+  try {
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: "reader", type: "anyone" },
+      supportsAllDrives: true,
+    });
+  } catch (error) {
+    console.error("Failed to set public permissions on internal email image", error);
+  }
+  return {
+    id: fileId,
+    name: response.data.name || fileName,
+    mimeType: response.data.mimeType || mimeType,
+    webViewLink: response.data.webViewLink || null,
+    webContentLink: response.data.webContentLink || null,
+    thumbnailLink: response.data.thumbnailLink || null,
+    previewUrl: directDriveImageUrl(fileId),
+    folderId: monthFolderId,
   };
 }
 
