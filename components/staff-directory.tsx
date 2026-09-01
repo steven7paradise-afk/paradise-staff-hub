@@ -8,12 +8,13 @@ import {
   MapPin, ClipboardList, CheckCircle, Award, SlidersHorizontal, 
   Sparkles, Key, Shield, ToggleLeft, ToggleRight, ListCheck,
   Archive, Plus, Trash2, UserPlus, Printer, ExternalLink, Pencil,
-  ChevronLeft, Copy, Check, HeartPulse, AlarmClock, Clock3, Umbrella
+  ChevronLeft, Copy, Check, HeartPulse, AlarmClock, Clock3, Umbrella, AlertTriangle
 } from "lucide-react";
 import { Badge, Button, Card, Field, Select } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { EmployeeContractDocuments, type EmployeeContractDocument } from "@/components/employee-contract-documents";
+import { calendarDaysBetween, shouldShowContractRenewalPopup } from "@/lib/contract-renewal-reminders";
 
 type Employee = {
   id: string;
@@ -83,6 +84,30 @@ type ContractRow = {
   documentUrl?: string;
   historyIndex?: number;
 };
+
+type ContractRenewalReminder = {
+  employee: Employee;
+  contractEnd: string;
+  daysLeft: number;
+  id: string;
+};
+
+function latestContractEnd(employee: Employee) {
+  const dates = [
+    employee.contractEnd,
+    ...(employee.contractHistory ?? []).map((item) => item.endDate || ""),
+  ].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
+  return dates.sort().at(-1) || "";
+}
+
+function romeTodayKey() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
 
 type EmploymentHistoryEvent = {
   id: string;
@@ -307,6 +332,7 @@ export function StaffDirectory({
   monthlyOverview: MonthlyStaffOverview;
 }) {
   const router = useRouter();
+  const canManageContractRenewals = userRole === "ZERO" || userRole === "SUPER_ADMIN" || userRole === "ADMIN";
   const createRoleOptions = userRole === "ADMIN"
     ? ROLE_OPTIONS.filter((option) => option.value !== "ADMIN")
     : ROLE_OPTIONS;
@@ -343,6 +369,46 @@ export function StaffDirectory({
   const [employmentHistoryFilter, setEmploymentHistoryFilter] = useState<EmploymentHistoryFilter>("ALL");
   const [copiedPhotoUrl, setCopiedPhotoUrl] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
+  const [handledContractReminderIds, setHandledContractReminderIds] = useState<Set<string>>(new Set());
+  const [contractRemindersReady, setContractRemindersReady] = useState(false);
+  const [contractDecisionEmployeeId, setContractDecisionEmployeeId] = useState<string | null>(null);
+  const [contractDecisionError, setContractDecisionError] = useState("");
+
+  const todayKey = romeTodayKey();
+  const contractRenewalReminders = staff.flatMap((employee): ContractRenewalReminder[] => {
+    const contractEnd = latestContractEnd(employee);
+    const daysLeft = contractEnd ? calendarDaysBetween(todayKey, contractEnd) : null;
+    if (!shouldShowContractRenewalPopup({
+      active: employee.active && employee.employeeStatus !== "Ex dipendente",
+      daysLeft,
+      renewalStatus: employee.contractRenewalStatus,
+    }) || daysLeft === null) return [];
+    return [{ employee, contractEnd, daysLeft, id: `${employee.id}:${contractEnd}` }];
+  });
+  const currentContractReminder = contractRemindersReady
+    ? contractRenewalReminders.find((reminder) => !handledContractReminderIds.has(reminder.id)) || null
+    : null;
+  const contractPopupOpen = canManageContractRenewals && Boolean(currentContractReminder);
+
+  useEffect(() => {
+    const dismissed = new Set<string>();
+    for (const reminder of contractRenewalReminders) {
+      if (reminder.daysLeft <= 0) continue;
+      const storageKey = `paradise:contract-renewal-popup:${reminder.id}:${todayKey}`;
+      if (window.localStorage.getItem(storageKey) === "dismissed") dismissed.add(reminder.id);
+    }
+    setHandledContractReminderIds((current) => new Set([...current, ...dismissed]));
+    setContractRemindersReady(true);
+  // The reminder list is refreshed by server data; the date is intentionally fixed to the Rome calendar day.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff, todayKey]);
+
+  useEffect(() => {
+    if (!contractPopupOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [contractPopupOpen]);
 
   useEffect(() => {
     if (!isEditing) setStaff(initialStaff);
@@ -507,6 +573,43 @@ export function StaffDirectory({
     setArchiveMode(false);
     setExpiryMode(false);
     setMonthlyOverviewMode((current) => current === mode ? null : mode);
+  };
+
+  const dismissContractReminder = (reminder: ContractRenewalReminder) => {
+    if (reminder.daysLeft > 0) {
+      window.localStorage.setItem(`paradise:contract-renewal-popup:${reminder.id}:${todayKey}`, "dismissed");
+    }
+    setHandledContractReminderIds((current) => new Set(current).add(reminder.id));
+    setContractDecisionError("");
+  };
+
+  const saveContractRenewalDecision = async (status: "RINNOVATO" | "NON_RINNOVATO") => {
+    if (!currentContractReminder) return;
+    const reminder = currentContractReminder;
+    const employeeId = reminder.employee.id;
+    setContractDecisionEmployeeId(employeeId);
+    setContractDecisionError("");
+    try {
+      const response = await fetch(`/api/employees/${employeeId}/contract-renewal-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await readJsonResponse(response);
+      if (!response.ok) throw new Error(data?.error || "Decisione sul rinnovo non salvata.");
+      setStaff((current) => current.map((employee) => employee.id === employeeId
+        ? { ...employee, contractRenewalStatus: status }
+        : employee));
+      setHandledContractReminderIds((current) => new Set(current).add(reminder.id));
+      setSuccessMsg(status === "RINNOVATO"
+        ? `Hai indicato che il contratto di ${reminder.employee.name} verrà rinnovato.`
+        : `Hai indicato che il contratto di ${reminder.employee.name} non verrà rinnovato.`);
+      window.setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (error) {
+      setContractDecisionError(error instanceof Error ? error.message : "Decisione sul rinnovo non salvata.");
+    } finally {
+      setContractDecisionEmployeeId(null);
+    }
   };
 
   // Filters
@@ -1102,7 +1205,7 @@ export function StaffDirectory({
     const nextHistory: ContractHistoryItem[] = editingRenewalIndex === null
       ? [...currentHistory, historyItem]
       : currentHistory.map((item, index) => index === editingRenewalIndex ? historyItem : item);
-    const nextEmployee = { ...editForm, contractHistory: nextHistory };
+    const nextEmployee = { ...editForm, contractHistory: nextHistory, contractRenewalStatus: "DA_VALUTARE" };
     setSubmitting(true);
     setErrorMsg("");
     setSuccessMsg("");
@@ -1130,7 +1233,7 @@ export function StaffDirectory({
           iban: nextEmployee.iban || undefined,
           contractHistory: nextHistory,
           contractType: nextEmployee.contractType || "",
-          contractRenewalStatus: nextEmployee.contractRenewalStatus || "DA_VALUTARE",
+          contractRenewalStatus: "DA_VALUTARE",
         }),
       });
       const data = await readJsonResponse(response);
@@ -1632,9 +1735,9 @@ export function StaffDirectory({
                           value={editForm.contractRenewalStatus || "DA_VALUTARE"}
                           onChange={(e) => setEditForm(prev => prev ? { ...prev, contractRenewalStatus: e.target.value } : null)}
                         >
-                          <option value="DA_VALUTARE">Da valutare — avvisi 7, 3, 1 e 0 giorni</option>
-                          <option value="NON_RINNOVATO">Non rinnovato — avvisi 1 e 0 giorni</option>
-                          <option value="RINNOVATO">Rinnovato — ferma avvisi scadenza corrente</option>
+                          <option value="DA_VALUTARE">Da valutare — avvisi 7, 3, 2, 1 giorni e alla scadenza</option>
+                          <option value="NON_RINNOVATO">Non verrà rinnovato</option>
+                          <option value="RINNOVATO">Verrà rinnovato — ferma gli avvisi</option>
                         </Select>
                       </label>
 
@@ -2074,6 +2177,92 @@ export function StaffDirectory({
 
   return (
     <div className="w-full space-y-6">
+      {canManageContractRenewals && currentContractReminder ? (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/55 px-3 py-6 backdrop-blur-[2px] sm:px-8" role="presentation">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contract-renewal-popup-title"
+            aria-describedby="contract-renewal-popup-description"
+            className="relative w-full max-w-6xl overflow-hidden border-y-[10px] border-black bg-white text-black shadow-[0_30px_100px_rgba(0,0,0,0.45)]"
+          >
+            <div className="max-h-[88vh] overflow-y-auto px-6 py-7 sm:px-12 sm:py-10 lg:px-16">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-lg font-black tracking-[0.36em] sm:text-2xl">PARADISE</p>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">Avviso contratti</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissContractReminder(currentContractReminder)}
+                  className="min-h-11 self-start px-2 text-sm font-semibold underline underline-offset-4 transition hover:text-[#B83D7F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                >
+                  Prosegui senza decidere
+                </button>
+              </div>
+
+              <div className="mt-8 grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start">
+                <span className={cn(
+                  "grid size-14 place-items-center rounded-full border",
+                  currentContractReminder.daysLeft <= 0
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-amber-200 bg-amber-50 text-amber-700",
+                )}>
+                  <AlertTriangle className="size-6" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 id="contract-renewal-popup-title" className="text-2xl font-black tracking-tight sm:text-3xl">
+                    {currentContractReminder.daysLeft < 0
+                      ? "Contratto scaduto"
+                      : currentContractReminder.daysLeft === 0
+                        ? "Il contratto scade oggi"
+                        : "Contratto in scadenza"}
+                  </h2>
+                  <p id="contract-renewal-popup-description" className="mt-3 max-w-3xl text-sm font-medium leading-6 text-black/65 sm:text-base">
+                    Indica se il contratto di <strong className="text-black">{currentContractReminder.employee.name}</strong> verrà rinnovato. Se il contratto è già scaduto, questo avviso ricomparirà a ogni ingresso nella pagina Staff finché non sarà dichiarato il rinnovo.
+                  </p>
+                  <div className="mt-6 grid gap-3 border-y border-black/10 py-5 sm:grid-cols-3">
+                    <div><p className="text-[9px] font-black uppercase tracking-wider text-black/40">Dipendente</p><p className="mt-1 font-black">{currentContractReminder.employee.name}</p></div>
+                    <div><p className="text-[9px] font-black uppercase tracking-wider text-black/40">Sede</p><p className="mt-1 font-black">{currentContractReminder.employee.location}</p></div>
+                    <div><p className="text-[9px] font-black uppercase tracking-wider text-black/40">Scadenza</p><p className="mt-1 font-black">{formatContractDate(currentContractReminder.contractEnd)}</p></div>
+                  </div>
+                  <p className={cn("mt-4 text-sm font-black", currentContractReminder.daysLeft <= 0 ? "text-red-700" : "text-[#B83D7F]") }>
+                    {currentContractReminder.daysLeft < 0
+                      ? `Scaduto da ${Math.abs(currentContractReminder.daysLeft)} ${Math.abs(currentContractReminder.daysLeft) === 1 ? "giorno" : "giorni"}`
+                      : currentContractReminder.daysLeft === 0
+                        ? "Scade oggi"
+                        : currentContractReminder.daysLeft === 1
+                          ? "Manca 1 giorno"
+                          : `Mancano ${currentContractReminder.daysLeft} giorni`}
+                  </p>
+                </div>
+              </div>
+
+              {contractDecisionError ? <p className="mt-5 border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700" role="alert">{contractDecisionError}</p> : null}
+
+              <div className="mt-8 flex flex-col justify-end gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={contractDecisionEmployeeId === currentContractReminder.employee.id}
+                  onClick={() => void saveContractRenewalDecision("NON_RINNOVATO")}
+                  className="min-h-14 border border-black bg-white px-6 text-sm font-black uppercase tracking-wide transition hover:bg-black/5 disabled:cursor-wait disabled:opacity-50"
+                >
+                  Non verrà rinnovato
+                </button>
+                <button
+                  type="button"
+                  disabled={contractDecisionEmployeeId === currentContractReminder.employee.id}
+                  onClick={() => void saveContractRenewalDecision("RINNOVATO")}
+                  className="min-h-14 bg-black px-8 text-sm font-black uppercase tracking-wide text-white transition hover:bg-[#D96B94] disabled:cursor-wait disabled:opacity-50"
+                >
+                  {contractDecisionEmployeeId === currentContractReminder.employee.id ? "Salvataggio..." : "Verrà rinnovato"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <button type="button" onClick={() => selectMonthlyOverview("ABSENCES")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "ABSENCES" ? "border-orange-300 ring-2 ring-orange-100" : "border-orange-100")}>
           <div>

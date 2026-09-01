@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 
-const FULL_REMINDER_DAYS = new Set([7, 3, 1, 0]);
+const FULL_REMINDER_DAYS = new Set([7, 3, 2, 1, 0]);
 const NOT_RENEWED_REMINDER_DAYS = new Set([1, 0]);
 
 function daysUntil(date: Date) {
