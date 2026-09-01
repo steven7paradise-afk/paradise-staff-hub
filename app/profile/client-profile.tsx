@@ -241,7 +241,7 @@ export function ClientProfile({
   useEffect(() => {
     setWorkedTimerNow(romeWallClockMilliseconds());
     const latestType = todayShift?.attendance.at(-1)?.type;
-    if (latestType !== "ENTRATA" && latestType !== "RIENTRO") return;
+    if (latestType !== "ENTRATA" && latestType !== "RIENTRO" && latestType !== "PAUSA") return;
     const timer = window.setInterval(() => setWorkedTimerNow(romeWallClockMilliseconds()), 1000);
     return () => window.clearInterval(timer);
   }, [todayShift?.attendance]);
