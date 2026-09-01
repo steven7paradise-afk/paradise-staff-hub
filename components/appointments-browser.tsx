@@ -1431,7 +1431,15 @@ export function AppointmentsBrowser({
     bookingId: string;
     x: number;
     y: number;
+    touch?: boolean;
   } | null>(null);
+  const boardLongPressTimerRef = useRef<number | null>(null);
+  const boardLongPressStartRef = useRef<{
+    bookingId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const boardLongPressTriggeredRef = useRef<string | null>(null);
   const [salon, setSalon] = useState<SalonFilter>(initialSalon);
   const [anchorDate, setAnchorDate] = useState(
     () => dateFromLocalKey(initialAnchorDate) || new Date(),
@@ -3643,6 +3651,73 @@ export function AppointmentsBrowser({
       base.splice(targetIndex + (position === "after" ? 1 : 0), 0, workerId);
       return base;
     });
+  }
+
+  function cancelBoardLongPress() {
+    if (boardLongPressTimerRef.current !== null) {
+      window.clearTimeout(boardLongPressTimerRef.current);
+      boardLongPressTimerRef.current = null;
+    }
+    boardLongPressStartRef.current = null;
+  }
+
+  function openBoardStatusMenu(
+    booking: AppointmentRecord,
+    status: AppointmentStatusValue,
+    x: number,
+    y: number,
+    touch = false,
+  ) {
+    if (booking.isCanceled) return;
+    if (status === "COMPLETATO") {
+      showPushToast(
+        "Stato bloccato",
+        "Un appuntamento completato non può più essere modificato.",
+        "error",
+      );
+      return;
+    }
+    setBoardStatusMenu({
+      bookingId: booking.id,
+      x: Math.min(x, window.innerWidth - 240),
+      y: Math.min(y, window.innerHeight - 390),
+      touch,
+    });
+  }
+
+  function startBoardLongPress(
+    event: React.PointerEvent<HTMLButtonElement>,
+    booking: AppointmentRecord,
+    status: AppointmentStatusValue,
+  ) {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    if (booking.isCanceled) return;
+    cancelBoardLongPress();
+    boardLongPressTriggeredRef.current = null;
+    boardLongPressStartRef.current = {
+      bookingId: booking.id,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    boardLongPressTimerRef.current = window.setTimeout(() => {
+      boardLongPressTimerRef.current = null;
+      boardLongPressTriggeredRef.current = booking.id;
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.(30);
+      }
+      openBoardStatusMenu(booking, status, event.clientX, event.clientY, true);
+    }, 600);
+  }
+
+  function moveBoardLongPress(event: React.PointerEvent<HTMLButtonElement>) {
+    const start = boardLongPressStartRef.current;
+    if (!start) return;
+    if (
+      Math.abs(event.clientX - start.x) > 10 ||
+      Math.abs(event.clientY - start.y) > 10
+    ) {
+      cancelBoardLongPress();
+    }
   }
 
   useEffect(() => {
@@ -6015,6 +6090,7 @@ export function AppointmentsBrowser({
                   <div>
                     <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#172B4D]">Board</h2>
                     <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">Personale timbrato e schede ordinate per orario</p>
+                    <p className="mt-1 text-[10px] font-bold text-[#9E3262] sm:hidden">Tieni premuta una scheda per cambiare stato</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -6136,6 +6212,7 @@ export function AppointmentsBrowser({
                                 type="button"
                                 draggable={savingTeamId !== booking.id}
                                 onDragStart={(event) => {
+                                  cancelBoardLongPress();
                                   event.dataTransfer.effectAllowed = "move";
                                   event.dataTransfer.setData("text/plain", booking.id);
                                   setDraggedBoardBookingId(booking.id);
@@ -6144,26 +6221,44 @@ export function AppointmentsBrowser({
                                   setDraggedBoardBookingId(null);
                                   setBoardDropTargetId(null);
                                 }}
-                                onClick={() => void openClientControlForBooking(booking)}
+                                onPointerDown={(event) => startBoardLongPress(event, booking, status)}
+                                onPointerMove={moveBoardLongPress}
+                                onPointerUp={cancelBoardLongPress}
+                                onPointerCancel={cancelBoardLongPress}
+                                onPointerLeave={(event) => {
+                                  if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                    cancelBoardLongPress();
+                                  }
+                                }}
+                                onClick={(event) => {
+                                  if (boardLongPressTriggeredRef.current === booking.id) {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    boardLongPressTriggeredRef.current = null;
+                                    return;
+                                  }
+                                  void openClientControlForBooking(booking);
+                                }}
                                 onContextMenu={(event) => {
                                   if (booking.isCanceled) return;
                                   event.preventDefault();
                                   event.stopPropagation();
-                                  if (status === "COMPLETATO") {
-                                    showPushToast(
-                                      "Stato bloccato",
-                                      "Un appuntamento completato non può più essere modificato.",
-                                      "error",
-                                    );
-                                    return;
+                                  const isTouchPress =
+                                    boardLongPressStartRef.current?.bookingId === booking.id ||
+                                    boardLongPressTriggeredRef.current === booking.id;
+                                  if (isTouchPress) {
+                                    cancelBoardLongPress();
+                                    boardLongPressTriggeredRef.current = booking.id;
                                   }
-                                  setBoardStatusMenu({
-                                    bookingId: booking.id,
-                                    x: Math.min(event.clientX, window.innerWidth - 240),
-                                    y: Math.min(event.clientY, window.innerHeight - 390),
-                                  });
+                                  openBoardStatusMenu(
+                                    booking,
+                                    status,
+                                    event.clientX,
+                                    event.clientY,
+                                    isTouchPress,
+                                  );
                                 }}
-                                className={`w-full cursor-grab rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition active:cursor-grabbing hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
+                                className={`w-full cursor-grab touch-manipulation select-none rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition active:cursor-grabbing hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
                                   !booking.isCanceled && status === "COMPLETATO"
                                     ? "border-[#A9D8B8] bg-[#EAF7EE]"
                                     : !booking.isCanceled && status === "IN_ATTESA"
@@ -6447,16 +6542,32 @@ export function AppointmentsBrowser({
             }}
           >
             <div
-              className="fixed w-56 overflow-hidden rounded-2xl border border-[#E3D9DE] bg-white p-2 shadow-[0_20px_55px_rgba(52,35,43,0.24)]"
-              style={{
+              className={boardStatusMenu.touch
+                ? "fixed inset-x-3 bottom-3 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[28px] border border-[#E3D9DE] bg-white p-3 shadow-[0_20px_55px_rgba(52,35,43,0.28)] sm:inset-x-auto sm:left-1/2 sm:w-[420px] sm:-translate-x-1/2"
+                : "fixed w-56 overflow-hidden rounded-2xl border border-[#E3D9DE] bg-white p-2 shadow-[0_20px_55px_rgba(52,35,43,0.24)]"
+              }
+              style={boardStatusMenu.touch ? undefined : {
                 left: Math.max(8, boardStatusMenu.x),
                 top: Math.max(8, boardStatusMenu.y),
               }}
               onClick={(event) => event.stopPropagation()}
             >
-              <p className="px-3 pb-2 pt-1 text-[9px] font-black uppercase tracking-[0.18em] text-black/40">
-                Cambia stato
-              </p>
+              <div className="flex items-center justify-between px-3 pb-2 pt-1">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/40">Cambia stato</p>
+                  {boardStatusMenu.touch ? <p className="mt-1 text-xs font-bold text-black/60">Seleziona il nuovo stato dell’appuntamento</p> : null}
+                </div>
+                {boardStatusMenu.touch ? (
+                  <button
+                    type="button"
+                    onClick={() => setBoardStatusMenu(null)}
+                    className="grid size-11 place-items-center rounded-full bg-black/5 text-black/55 active:scale-95"
+                    aria-label="Chiudi cambio stato"
+                  >
+                    <X className="size-5" />
+                  </button>
+                ) : null}
+              </div>
               <div className="space-y-1">
                 {appointmentStatusOptions.map((option) => {
                   const booking = initialBookings.find(
@@ -6473,7 +6584,7 @@ export function AppointmentsBrowser({
                         handleStatusChange(boardStatusMenu.bookingId, option.value);
                         setBoardStatusMenu(null);
                       }}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-black transition hover:brightness-[0.98] ${appointmentStatusClasses[option.value]}`}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 text-left font-black transition hover:brightness-[0.98] active:scale-[0.99] ${boardStatusMenu.touch ? "min-h-14 text-sm" : "py-2 text-xs"} ${appointmentStatusClasses[option.value]}`}
                     >
                       <span>{option.label}</span>
                       {selected ? <Check className="size-4" strokeWidth={3} /> : null}
