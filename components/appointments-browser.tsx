@@ -42,6 +42,7 @@ import {
   DollarSign,
   ExternalLink,
   History,
+  GripVertical,
   LayoutGrid,
   List,
 } from "lucide-react";
@@ -1440,6 +1441,12 @@ export function AppointmentsBrowser({
     y: number;
   } | null>(null);
   const boardLongPressTriggeredRef = useRef<string | null>(null);
+  const boardTouchPointersRef = useRef(
+    new Map<number, { bookingId: string; x: number; y: number }>(),
+  );
+  const [touchDraggedBoardBookingId, setTouchDraggedBoardBookingId] = useState<string | null>(null);
+  const touchDraggedBoardBookingIdRef = useRef<string | null>(null);
+  const touchBoardDropTargetIdRef = useRef<string | null>(null);
   const [salon, setSalon] = useState<SalonFilter>(initialSalon);
   const [anchorDate, setAnchorDate] = useState(
     () => dateFromLocalKey(initialAnchorDate) || new Date(),
@@ -3686,7 +3693,7 @@ export function AppointmentsBrowser({
   }
 
   function startBoardLongPress(
-    event: React.PointerEvent<HTMLButtonElement>,
+    event: React.PointerEvent<HTMLElement>,
     booking: AppointmentRecord,
     status: AppointmentStatusValue,
   ) {
@@ -3709,7 +3716,7 @@ export function AppointmentsBrowser({
     }, 600);
   }
 
-  function moveBoardLongPress(event: React.PointerEvent<HTMLButtonElement>) {
+  function moveBoardLongPress(event: React.PointerEvent<HTMLElement>) {
     const start = boardLongPressStartRef.current;
     if (!start) return;
     if (
@@ -3717,6 +3724,128 @@ export function AppointmentsBrowser({
       Math.abs(event.clientY - start.y) > 10
     ) {
       cancelBoardLongPress();
+    }
+  }
+
+  function startBoardTouchGesture(
+    event: React.PointerEvent<HTMLElement>,
+    booking: AppointmentRecord,
+    status: AppointmentStatusValue,
+  ) {
+    if (event.pointerType !== "touch") {
+      startBoardLongPress(event, booking, status);
+      return;
+    }
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    boardTouchPointersRef.current.set(event.pointerId, {
+      bookingId: booking.id,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    const bookingPointers = [...boardTouchPointersRef.current.values()].filter(
+      (pointer) => pointer.bookingId === booking.id,
+    );
+
+    if (bookingPointers.length >= 2) {
+      cancelBoardLongPress();
+      boardLongPressTriggeredRef.current = booking.id;
+      touchDraggedBoardBookingIdRef.current = booking.id;
+      touchBoardDropTargetIdRef.current = null;
+      setTouchDraggedBoardBookingId(booking.id);
+      setDraggedBoardBookingId(null);
+      setBoardStatusMenu(null);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate?.([30, 25, 30]);
+      }
+      return;
+    }
+
+    startBoardLongPress(event, booking, status);
+  }
+
+  function moveBoardTouchGesture(event: React.PointerEvent<HTMLElement>) {
+    const pointer = boardTouchPointersRef.current.get(event.pointerId);
+    if (pointer) {
+      boardTouchPointersRef.current.set(event.pointerId, {
+        ...pointer,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+
+    const draggedBookingId = touchDraggedBoardBookingIdRef.current;
+    if (!draggedBookingId) {
+      moveBoardLongPress(event);
+      return;
+    }
+
+    event.preventDefault();
+    const bookingPointers = [...boardTouchPointersRef.current.values()].filter(
+      (item) => item.bookingId === draggedBookingId,
+    );
+    if (!bookingPointers.length) return;
+    const centerX = bookingPointers.reduce((sum, item) => sum + item.x, 0) / bookingPointers.length;
+    const centerY = bookingPointers.reduce((sum, item) => sum + item.y, 0) / bookingPointers.length;
+    const target = document
+      .elementFromPoint(centerX, centerY)
+      ?.closest<HTMLElement>("[data-board-worker-id]");
+    const targetId = target?.dataset.boardWorkerId || null;
+    const allowedTargetId = targetId && targetId !== "unassigned" ? targetId : null;
+    touchBoardDropTargetIdRef.current = allowedTargetId;
+    setBoardDropTargetId(allowedTargetId);
+  }
+
+  function finishBoardTouchGesture(
+    event: React.PointerEvent<HTMLElement>,
+    canceled = false,
+  ) {
+    boardTouchPointersRef.current.delete(event.pointerId);
+    const draggedBookingId = touchDraggedBoardBookingIdRef.current;
+    if (!draggedBookingId) {
+      cancelBoardLongPress();
+      return;
+    }
+
+    const remainingPointers = [...boardTouchPointersRef.current.values()].filter(
+      (item) => item.bookingId === draggedBookingId,
+    );
+    if (remainingPointers.length >= 2) return;
+
+    const targetId = touchBoardDropTargetIdRef.current;
+    touchDraggedBoardBookingIdRef.current = null;
+    touchBoardDropTargetIdRef.current = null;
+    setTouchDraggedBoardBookingId(null);
+    setBoardDropTargetId(null);
+    cancelBoardLongPress();
+    if (!canceled && targetId) {
+      void moveBoardBooking(draggedBookingId, targetId);
+    }
+  }
+
+  function startBoardHandleDrag(
+    event: React.PointerEvent<HTMLButtonElement>,
+    bookingId: string,
+  ) {
+    event.stopPropagation();
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    event.preventDefault();
+    cancelBoardLongPress();
+    boardTouchPointersRef.current.clear();
+    boardTouchPointersRef.current.set(event.pointerId, {
+      bookingId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    boardLongPressTriggeredRef.current = bookingId;
+    touchDraggedBoardBookingIdRef.current = bookingId;
+    touchBoardDropTargetIdRef.current = null;
+    setTouchDraggedBoardBookingId(bookingId);
+    setDraggedBoardBookingId(null);
+    setBoardStatusMenu(null);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate?.(30);
     }
   }
 
@@ -6090,7 +6219,7 @@ export function AppointmentsBrowser({
                   <div>
                     <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#172B4D]">Board</h2>
                     <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">Personale timbrato e schede ordinate per orario</p>
-                    <p className="mt-1 text-[10px] font-bold text-[#9E3262] sm:hidden">Tieni premuta una scheda per cambiare stato</p>
+                    <p className="mt-1 text-[10px] font-bold text-[#9E3262] lg:hidden">Un dito premuto: cambia stato · Due dita: sposta</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -6207,26 +6336,19 @@ export function AppointmentsBrowser({
                           {column.bookings.length ? column.bookings.map((booking) => {
                             const status = getBookingStatus(booking);
                             return (
-                              <button
+                              <div
                                 key={booking.id}
-                                type="button"
-                                draggable={savingTeamId !== booking.id}
-                                onDragStart={(event) => {
-                                  cancelBoardLongPress();
-                                  event.dataTransfer.effectAllowed = "move";
-                                  event.dataTransfer.setData("text/plain", booking.id);
-                                  setDraggedBoardBookingId(booking.id);
-                                }}
-                                onDragEnd={() => {
-                                  setDraggedBoardBookingId(null);
-                                  setBoardDropTargetId(null);
-                                }}
-                                onPointerDown={(event) => startBoardLongPress(event, booking, status)}
-                                onPointerMove={moveBoardLongPress}
-                                onPointerUp={cancelBoardLongPress}
-                                onPointerCancel={cancelBoardLongPress}
+                                role="button"
+                                tabIndex={0}
+                                onPointerDown={(event) => startBoardTouchGesture(event, booking, status)}
+                                onPointerMove={moveBoardTouchGesture}
+                                onPointerUp={(event) => finishBoardTouchGesture(event)}
+                                onPointerCancel={(event) => finishBoardTouchGesture(event, true)}
                                 onPointerLeave={(event) => {
-                                  if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                  if (
+                                    (event.pointerType === "touch" || event.pointerType === "pen") &&
+                                    !touchDraggedBoardBookingIdRef.current
+                                  ) {
                                     cancelBoardLongPress();
                                   }
                                 }}
@@ -6238,6 +6360,12 @@ export function AppointmentsBrowser({
                                     return;
                                   }
                                   void openClientControlForBooking(booking);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    void openClientControlForBooking(booking);
+                                  }
                                 }}
                                 onContextMenu={(event) => {
                                   if (booking.isCanceled) return;
@@ -6258,14 +6386,16 @@ export function AppointmentsBrowser({
                                     isTouchPress,
                                   );
                                 }}
-                                className={`w-full cursor-grab touch-manipulation select-none rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition active:cursor-grabbing hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
+                                className={`w-full touch-[pan-x_pan-y] select-none rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
                                   !booking.isCanceled && status === "COMPLETATO"
                                     ? "border-[#A9D8B8] bg-[#EAF7EE]"
                                     : !booking.isCanceled && status === "IN_ATTESA"
                                       ? "border-[#E8CE78] bg-[#FFF4CC]"
                                     : "border-[#DFE1E6] bg-white"
                                 } ${
-                                  draggedBoardBookingId === booking.id ? "scale-[0.98] opacity-45" : ""
+                                  draggedBoardBookingId === booking.id || touchDraggedBoardBookingId === booking.id
+                                    ? "scale-[0.98] opacity-45 ring-2 ring-[#4C9AFF]"
+                                    : ""
                                 }`}
                               >
                                 <div className="flex items-start justify-between gap-2">
@@ -6273,9 +6403,55 @@ export function AppointmentsBrowser({
                                     <p className="text-[9px] font-black uppercase tracking-wider text-[#5E6C84]">{formatDate(booking.startDate)}</p>
                                     <p className="mt-0.5 text-xs font-black tabular-nums text-[#172B4D]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
                                   </div>
-                                  <span className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
-                                    {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                                      {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      draggable={savingTeamId !== booking.id}
+                                      onDragStart={(event) => {
+                                        event.stopPropagation();
+                                        cancelBoardLongPress();
+                                        event.dataTransfer.effectAllowed = "move";
+                                        event.dataTransfer.setData("text/plain", booking.id);
+                                        setDraggedBoardBookingId(booking.id);
+                                      }}
+                                      onDragEnd={(event) => {
+                                        event.stopPropagation();
+                                        setDraggedBoardBookingId(null);
+                                        setBoardDropTargetId(null);
+                                      }}
+                                      onPointerDown={(event) => startBoardHandleDrag(event, booking.id)}
+                                      onPointerMove={(event) => {
+                                        event.stopPropagation();
+                                        if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                          moveBoardTouchGesture(event);
+                                        }
+                                      }}
+                                      onPointerUp={(event) => {
+                                        event.stopPropagation();
+                                        if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                          finishBoardTouchGesture(event);
+                                        }
+                                      }}
+                                      onPointerCancel={(event) => {
+                                        event.stopPropagation();
+                                        if (event.pointerType === "touch" || event.pointerType === "pen") {
+                                          finishBoardTouchGesture(event, true);
+                                        }
+                                      }}
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                      }}
+                                      className="grid size-9 shrink-0 touch-none cursor-grab place-items-center rounded-lg border border-[#D8DCE3] bg-white text-[#6B778C] shadow-sm transition hover:border-[#4C9AFF] hover:text-[#172B4D] active:cursor-grabbing active:scale-95"
+                                      aria-label={`Sposta appuntamento di ${booking.customerName}`}
+                                      title="Trascina per spostare"
+                                    >
+                                      <GripVertical className="size-4" strokeWidth={2.5} />
+                                    </button>
+                                  </div>
                                 </div>
                                 <p className="mt-2.5 truncate text-xs font-black text-[#172B4D]">{booking.customerName}</p>
                                 <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-[#5E6C84]">{booking.serviceTitle}</p>
@@ -6283,7 +6459,7 @@ export function AppointmentsBrowser({
                                   <span>{formatDuration(booking.startDate, booking.endDate)}</span>
                                   <span>{getSalonLabel(booking.inferredSalon)}</span>
                                 </div>
-                              </button>
+                              </div>
                             );
                           }) : (
                             <div className="grid min-h-32 place-items-center rounded-[5px] border border-dashed border-[#C1C7D0] bg-white/40 px-4 text-center">
