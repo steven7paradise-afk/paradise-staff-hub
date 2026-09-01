@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getOperationalUser } from "@/lib/operational-session";
+import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -177,11 +178,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         }
 
         // 2. Sync status, latest custom note, and collaborator as Shopify Metafields!
-        const collaboratorName = Array.isArray(answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff])
-          ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].join(", ")
+        const selectedStaffNames = Array.isArray(answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff])
+          ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].map((value: unknown) => String(value ?? "").trim()).filter(Boolean)
           : typeof answers?.[CLIENT_CONTROL_FIELD_IDS.serviceStaff] === "string"
-            ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff]
-            : "";
+            ? answers[CLIENT_CONTROL_FIELD_IDS.serviceStaff].split(",").map((value: string) => value.trim()).filter(Boolean)
+            : [];
+        const activeStaffNames = await prisma.user.findMany({
+          where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+          select: { name: true },
+        });
+        const collaboratorName = formatShopifyStaffNames(
+          selectedStaffNames,
+          activeStaffNames.map((employee) => employee.name),
+        ).join(", ");
 
         await updateShopifyOrderMetafields(
           shopifyOrderName,

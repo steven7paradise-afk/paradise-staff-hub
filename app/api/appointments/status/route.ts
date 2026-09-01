@@ -71,6 +71,12 @@ export async function POST(request: NextRequest) {
     const currentMap = normalizeStatusMap(currentSetting?.value);
     const previousEntry = currentMap[bookingId] || {};
     const previousStatus = previousEntry.status;
+    if (previousStatus === "COMPLETATO" && status !== "COMPLETATO") {
+      return NextResponse.json(
+        { error: "Un appuntamento completato non può più essere modificato." },
+        { status: 409 },
+      );
+    }
     const signedBy = String(body?.signedBy || "").trim();
     const updatedBy = signedBy ? signedBy : sessionUserName;
 

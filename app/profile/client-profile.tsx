@@ -347,16 +347,16 @@ export function ClientProfile({
   ];
 
   return (
-    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-4 overflow-hidden px-3 pb-16 pt-[calc(env(safe-area-inset-top)+72px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:px-6 sm:pb-20 lg:px-8 xl:pt-20">
+    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-3 overflow-hidden px-2.5 pb-16 pt-0 font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-4 sm:px-6 sm:pb-20 lg:px-8 xl:pt-20">
       
       {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none rounded-[22px] border border-white/55 bg-white/75 p-4 shadow-[0_18px_55px_rgba(44,24,15,0.12)] backdrop-blur-2xl sm:p-5 md:p-6">
-        <div className="flex flex-col items-center justify-between gap-5 md:flex-row md:gap-8">
+      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none rounded-[20px] border border-white/55 bg-white/75 p-4 shadow-[0_18px_55px_rgba(44,24,15,0.12)] backdrop-blur-2xl sm:p-5 md:p-6">
+        <div className="flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-center md:gap-8">
           
           {/* Left Side: Avatar & Name */}
-          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left md:gap-5">
+          <div className="flex min-w-0 items-center gap-3 text-left sm:gap-4 md:gap-5">
             <div className="relative group shrink-0">
-              <div className="relative flex size-20 items-center justify-center overflow-hidden rounded-[18px] border border-white/70 bg-white/40 text-2xl font-serif text-neutral-800 shadow-[0_12px_30px_rgba(35,18,10,0.12)] sm:size-24 md:text-3xl">
+              <div className="relative flex size-16 items-center justify-center overflow-hidden rounded-[16px] border border-white/70 bg-white/40 text-xl font-serif text-neutral-800 shadow-[0_12px_30px_rgba(35,18,10,0.12)] sm:size-24 md:text-3xl">
                 {userPhoto ? (
                   <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
@@ -365,29 +365,29 @@ export function ClientProfile({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-500 bg-neutral-100 border border-neutral-200/60 px-3 py-1 rounded-full">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="rounded-full border border-neutral-200/60 bg-neutral-100 px-2 py-1 text-[8px] font-black uppercase tracking-[0.16em] text-neutral-500 sm:px-3 sm:text-[9px] sm:tracking-[0.25em]">
                   {isEmployee ? "Collaboratore" : user.role.replace("_", " ")}
                 </span>
-                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-500 bg-neutral-50 border border-neutral-200/60 px-3 py-1 rounded-full flex items-center gap-1">
+                <span className="flex items-center gap-1 rounded-full border border-neutral-200/60 bg-neutral-50 px-2 py-1 text-[8px] font-black uppercase tracking-[0.14em] text-neutral-500 sm:px-3 sm:text-[9px] sm:tracking-[0.25em]">
                   <MapPin size={9} className="text-neutral-400" />
                   {user.locationName}
                 </span>
               </div>
 
-              <h1 className="break-words text-2xl font-serif font-light text-neutral-900 sm:text-3xl">
+              <h1 className="truncate text-xl font-serif font-light text-neutral-900 sm:text-3xl">
                 {user.name}
               </h1>
 
-              <p className="break-all text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400 sm:text-[11px] sm:tracking-[0.2em]">
+              <p className="truncate text-[10px] font-semibold text-neutral-500 sm:text-[11px] sm:font-bold sm:uppercase sm:tracking-[0.2em]">
                 {user.email}
               </p>
             </div>
           </div>
 
           {/* Right Side: Luxury Points Display */}
-          <Link href="/points" className="group w-full shrink-0 border-t border-neutral-100 pt-5 md:w-72 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+          <Link href="/points" className="profile-points-card group w-full shrink-0 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 md:w-72 md:rounded-none md:border-0 md:border-l md:border-neutral-100 md:bg-transparent md:py-0 md:pl-8 md:pr-0">
             <span className="text-[9px] font-black uppercase tracking-[0.24em] text-neutral-400 transition group-hover:text-neutral-600">PUNTI PREMIUM</span>
             <span className="mt-1 block text-3xl font-serif font-light text-neutral-900 decoration-neutral-300 group-hover:underline">
               {availablePoints} <span className="text-xs font-sans font-bold tracking-[0.2em] text-neutral-500 uppercase ml-1">Punti</span>
@@ -402,11 +402,11 @@ export function ClientProfile({
       </div>
 
         {/* Premium Underlined Navigation Tabs (Dior Style) */}
-        <div className="profile-glass-section flex items-center gap-5 overflow-x-auto rounded-[18px] border border-neutral-200 bg-white px-4 pb-px sm:gap-8 sm:px-5">
+        <div className="profile-glass-section grid grid-cols-3 gap-1 rounded-[16px] border border-neutral-200 bg-white p-1 sm:flex sm:items-center sm:gap-8 sm:overflow-x-auto sm:px-5 sm:pb-px sm:pt-0">
           {[
-            { id: "points", label: "PARADISE" },
-            { id: "info", label: "Informazioni & Documenti" },
-            { id: "security", label: "Impostazioni & Sicurezza" }
+            { id: "points", label: "PARADISE", mobileLabel: "Paradise" },
+            { id: "info", label: "Informazioni & Documenti", mobileLabel: "Documenti" },
+            { id: "security", label: "Impostazioni & Sicurezza", mobileLabel: "Account" }
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -414,13 +414,14 @@ export function ClientProfile({
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={cn(
-                  "min-h-11 py-3 text-[10px] font-bold uppercase tracking-[0.18em] border-b-2 transition duration-200 whitespace-nowrap -mb-px sm:py-4 sm:text-xs sm:tracking-[0.25em]",
+                  "min-h-11 rounded-xl border text-[9px] font-bold uppercase tracking-[0.08em] transition duration-200 sm:-mb-px sm:whitespace-nowrap sm:rounded-none sm:border-x-0 sm:border-t-0 sm:py-4 sm:text-xs sm:tracking-[0.25em]",
                   isActive 
-                    ? "border-neutral-900 text-neutral-900 font-black" 
-                    : "border-transparent text-neutral-400 hover:text-neutral-600"
+                    ? "border-neutral-900 bg-neutral-900 text-white font-black sm:bg-transparent sm:text-neutral-900"
+                    : "border-transparent text-neutral-500 hover:text-neutral-700"
                 )}
               >
-                {tab.label}
+                <span className="sm:hidden">{tab.mobileLabel}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}
@@ -431,7 +432,7 @@ export function ClientProfile({
         <div className="flex flex-col gap-4 animate-in fade-in duration-200">
           
           {/* Target Progress Section */}
-          <div className="profile-glass-section order-3 space-y-5 rounded-[22px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-6">
+          <div className="profile-glass-section order-3 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6">
             <div className="flex flex-col justify-between gap-4 border-b border-neutral-100 pb-4 md:flex-row md:items-center">
               <div className="space-y-1.5 text-left">
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">OBIETTIVI MENSILI</span>
@@ -531,25 +532,25 @@ export function ClientProfile({
           </div>
 
           {/* WEEKLY PERSONAL SHIFTS */}
-          <div className="profile-glass-section order-1 flex flex-col gap-5 rounded-[22px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-6">
-            <div className="order-2 flex flex-col gap-4 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">
+          <div className="profile-glass-section order-1 flex flex-col gap-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:gap-5 sm:p-6">
+            <div className="order-1 flex flex-col gap-3 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">I MIEI TURNI</span>
                 <h2 className="mt-1 text-lg font-serif font-light uppercase text-neutral-900">Calendario settimanale</h2>
                 <p className="mt-1 text-xs font-medium text-neutral-400">Seleziona un giorno per vedere orario e timbrature.</p>
               </div>
-              <Link href="/my-shifts" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white">
+              <Link href="/my-shifts" className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white sm:w-auto">
                 Calendario completo <ChevronRight className="size-3.5" />
               </Link>
             </div>
 
-            <div className="order-1 space-y-3">
+            <div className="order-2 space-y-3">
               <div className="text-left">
                 <p className="text-[9px] font-black uppercase tracking-[0.28em] text-neutral-400">La tua giornata</p>
                 <p className="mt-1 text-sm font-serif text-neutral-900">{todayShift?.fullDateLabel || "Oggi"}</p>
               </div>
-              <div className="grid overflow-hidden rounded-[18px] border border-neutral-200 bg-neutral-50 lg:grid-cols-[1.35fr_0.8fr_0.65fr_1fr] lg:divide-x lg:divide-neutral-200">
-              <div className="flex min-w-0 items-center gap-4 p-4">
+              <div className="grid grid-cols-2 overflow-hidden rounded-[18px] border border-neutral-200 bg-neutral-50 lg:grid-cols-[1.35fr_0.8fr_0.65fr_1fr] lg:divide-x lg:divide-neutral-200">
+              <div className="col-span-2 flex min-w-0 items-center gap-3 p-4 lg:col-span-1">
                 <span className="relative grid size-12 shrink-0 place-items-center rounded-full border-[5px] border-emerald-100 bg-white text-neutral-900 shadow-sm">
                   <Clock className="size-4" />
                   {todayWorkState.status === "WORKING" ? <span className="absolute -right-1 -top-1 size-3 rounded-full bg-emerald-500 ring-2 ring-white" /> : null}
@@ -562,9 +563,9 @@ export function ClientProfile({
                   <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400">{todayWorkState.status === "BREAK" ? "Tempo trascorso in pausa" : "Tempo effettivamente lavorato oggi"}</p>
                 </div>
               </div>
-                <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Turno di oggi</p><p className="mt-2 text-sm font-black text-neutral-900">{todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} – ${todayShift.endTime}` : "Non programmato"}</p></div>
-                <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Entrata</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.firstEntry?.time || "--:--"}</p></div>
-                <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Ultima timbratura</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.latest ? `${attendanceLabel(todayWorkState.latest.type)} · ${todayWorkState.latest.time}` : "Nessuna"}</p></div>
+                <div className="border-t border-r border-neutral-200 p-3.5 lg:border-r-0 lg:border-t-0 lg:p-4"><p className="text-[9px] font-black uppercase tracking-wider text-neutral-500">Turno di oggi</p><p className="mt-2 text-sm font-black text-neutral-900">{todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} – ${todayShift.endTime}` : "Non programmato"}</p></div>
+                <div className="border-t border-neutral-200 p-3.5 lg:border-t-0 lg:p-4"><p className="text-[9px] font-black uppercase tracking-wider text-neutral-500">Entrata</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.firstEntry?.time || "--:--"}</p></div>
+                <div className="col-span-2 border-t border-neutral-200 p-3.5 lg:col-span-1 lg:border-t-0 lg:p-4"><p className="text-[9px] font-black uppercase tracking-wider text-neutral-500">Ultima timbratura</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.latest ? `${attendanceLabel(todayWorkState.latest.type)} · ${todayWorkState.latest.time}` : "Nessuna"}</p></div>
               </div>
             </div>
 
@@ -576,12 +577,12 @@ export function ClientProfile({
                   <button type="button" onClick={() => changeShiftWeek(visibleShiftWeekIndex + 1)} disabled={visibleShiftWeekIndex >= shiftWeeks.length - 1} className="grid size-11 place-items-center rounded-full border border-neutral-200 text-neutral-700 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-25" aria-label="Settimana successiva"><ChevronRight className="size-4" /></button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-7">
                   {visibleShiftWeek.days.map((day) => {
                     const selected = selectedShift?.dateKey === day.dateKey;
                     const hasShift = Boolean(day.startTime && day.endTime);
                     return (
-                      <button key={day.dateKey} type="button" onClick={() => setSelectedShiftDate(day.dateKey)} aria-pressed={selected} className={cn("relative min-h-28 rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900", selected ? "border-neutral-900 bg-neutral-900 text-white shadow-lg" : "border-neutral-200 bg-neutral-50 text-neutral-900 hover:-translate-y-0.5 hover:bg-white hover:shadow-md")}>
+                      <button key={day.dateKey} type="button" onClick={() => setSelectedShiftDate(day.dateKey)} aria-pressed={selected} className={cn("relative min-h-24 w-[92px] shrink-0 snap-start rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 sm:min-h-28 sm:w-auto", selected ? "border-neutral-900 bg-neutral-900 text-white shadow-lg" : "border-neutral-200 bg-neutral-50 text-neutral-900 hover:-translate-y-0.5 hover:bg-white hover:shadow-md")}>
                         {day.isToday ? <span className={cn("absolute right-2 top-2 size-2 rounded-full", selected ? "bg-white" : "bg-neutral-900")} aria-label="Oggi" /> : null}
                         <p className={cn("text-[9px] font-black uppercase tracking-[0.18em]", selected ? "text-white/55" : "text-neutral-400")}>{day.dayName}</p>
                         <p className="mt-1 text-2xl font-serif">{day.dayNumber}</p>
@@ -592,7 +593,7 @@ export function ClientProfile({
                 </div>
 
                 {selectedShift ? (
-                  <div className="grid gap-4 rounded-[22px] border border-neutral-200 bg-neutral-50 p-5 text-left lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)]">
+                  <div className="grid gap-4 rounded-[18px] border border-neutral-200 bg-neutral-50 p-4 text-left sm:p-5 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)]">
                     <div>
                       <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">{selectedShift.fullDateLabel}</p>
                       <div className="mt-3 flex items-start gap-3">
@@ -621,14 +622,14 @@ export function ClientProfile({
           </div>
 
           {/* PERSONAL HOLIDAYS */}
-          <div className="profile-glass-section order-2 space-y-5 rounded-[22px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-6">
+          <div className="profile-glass-section order-2 space-y-4 rounded-[20px] border border-neutral-200 bg-white p-4 shadow-2xs sm:space-y-5 sm:p-6">
             <div className="flex flex-col gap-4 border-b border-neutral-100 pb-5 text-left sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">LE MIE RICHIESTE</span>
                 <h2 className="mt-1 text-lg font-serif font-light uppercase text-neutral-900">Ferie, permessi e malattia</h2>
                 <p className="mt-1 text-xs font-medium text-neutral-400">Invia una richiesta e controllane date e stato.</p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <button type="button" onClick={() => { setHolidayFormOpen(true); setHolidayMessage(""); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-neutral-700">
                   <Plus className="size-3.5" /> Nuova richiesta
                 </button>
@@ -641,11 +642,11 @@ export function ClientProfile({
             {holidayMessage ? <p role="status" className={cn("rounded-xl border px-4 py-3 text-xs font-bold", holidayMessage.includes("correttamente") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>{holidayMessage}</p> : null}
 
             {visibleHolidayRequests.length ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-3">
                 {(showAllHolidayRequests ? visibleHolidayRequests : visibleHolidayRequests.slice(0, 3)).map((request) => {
                   const status = holidayStatus(request.status);
                   return (
-                    <article key={request.id} className="profile-glass-inset rounded-[20px] border border-neutral-200 bg-neutral-50 p-5 text-left">
+                    <article key={request.id} className="profile-glass-inset w-[82vw] max-w-sm shrink-0 snap-start rounded-[18px] border border-neutral-200 bg-neutral-50 p-4 text-left sm:p-5 md:w-auto md:max-w-none">
                       <div className="flex items-start justify-between gap-3">
                         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-neutral-900 text-white"><CalendarCheck2 className="size-4" /></span>
                         <span className={cn("rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-wider", status.className)}>{status.label}</span>

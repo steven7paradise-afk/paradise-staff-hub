@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
 import { appendShopifyOrderNote } from "@/lib/shopify";
+import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 
 const SETTING_KEY = "appointment_team_overrides";
+const STAFF_ALIAS_SETTING_KEY = "appointment_staff_aliases";
 
 type StoredTeammate = {
   id: string;
@@ -21,6 +23,18 @@ type TeamOverride = {
 function normalizeTeamOverrides(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, TeamOverride>;
+}
+
+type StaffAlias = {
+  userId: string;
+  externalName: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+function normalizeStaffAliases(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, StaffAlias>;
 }
 
 function isBuenosAiresLocation(value?: string | null) {
@@ -57,6 +71,17 @@ export async function POST(request: NextRequest) {
           })
           .filter((value: StoredTeammate | null): value is StoredTeammate => Boolean(value))
       : [];
+    const sourceTeammates: StoredTeammate[] = Array.isArray(body?.sourceTeammates)
+      ? body.sourceTeammates
+          .map((value: unknown) => {
+            if (!value || typeof value !== "object") return null;
+            const candidate = value as Record<string, unknown>;
+            const id = String(candidate.id || "").trim();
+            const name = String(candidate.name || "").trim();
+            return id && name ? { id, name } : null;
+          })
+          .filter((value: StoredTeammate | null): value is StoredTeammate => Boolean(value))
+      : [];
     const signedBy = String(body?.signedBy || "").trim();
 
     if (!bookingId || !requestedTeammates.length) {
@@ -64,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     const requestedIds = [...new Set(requestedTeammates.map((teammate) => teammate.id))];
-    const matchingUsers = await prisma.user.findMany({
+    const activeUsers = await prisma.user.findMany({
       where: { id: { in: requestedIds }, active: true },
       select: {
         id: true,
@@ -74,7 +99,7 @@ export async function POST(request: NextRequest) {
       },
     });
     const usersById = new Map(
-      matchingUsers
+      activeUsers
         .filter((user) => isBuenosAiresLocation(user.location?.name))
         .map((user) => [user.id, user]),
     );
@@ -95,6 +120,16 @@ export async function POST(request: NextRequest) {
     const updatedBy = signedBy ? signedBy : sessionUserName;
     const storedUpdatedBy = signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy;
     const teammateNames = teammates.map((teammate) => teammate.name).join(", ");
+    const salonRoster = await prisma.user.findMany({
+      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      select: { name: true, location: { select: { name: true } } },
+    });
+    const shopifyTeammateNames = formatShopifyStaffNames(
+      teammates.map((teammate) => teammate.name),
+      salonRoster
+        .filter((user) => isBuenosAiresLocation(user.location?.name))
+        .map((user) => user.name),
+    ).join(", ");
 
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     const currentOverrides = normalizeTeamOverrides(currentSetting?.value);
@@ -122,6 +157,34 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (sourceTeammates.length === 1 && teammates.length === 1) {
+      const source = sourceTeammates[0];
+      const sourceIsLocalUser = await prisma.user.findUnique({
+        where: { id: source.id },
+        select: { id: true },
+      });
+      if (!sourceIsLocalUser && source.id !== teammates[0].id) {
+        const aliasSetting = await prisma.setting.findUnique({
+          where: { key: STAFF_ALIAS_SETTING_KEY },
+        });
+        const currentAliases = normalizeStaffAliases(aliasSetting?.value);
+        const nextAlias: StaffAlias = {
+          userId: teammates[0].id,
+          externalName: source.name,
+          updatedAt: new Date().toISOString(),
+          updatedBy: storedUpdatedBy,
+        };
+        await prisma.setting.upsert({
+          where: { key: STAFF_ALIAS_SETTING_KEY },
+          update: { value: { ...currentAliases, [source.id]: nextAlias } },
+          create: {
+            key: STAFF_ALIAS_SETTING_KEY,
+            value: { [source.id]: nextAlias },
+          },
+        });
+      }
+    }
+
     const teamComment = await prisma.shopifyOrderComment.create({
       data: {
         order_name: bookingId,
@@ -136,7 +199,7 @@ export async function POST(request: NextRequest) {
       shopifyNoteSaved = await appendShopifyOrderNote(
         orderName,
         updatedBy,
-        `Collaboratrice assegnata da Paradise Staff Hub: ${teammateNames}.`,
+        `Collaboratrice assegnata da Paradise Staff Hub: ${shopifyTeammateNames}.`,
       ).catch((error) => {
         console.error("Failed to append appointment team to Shopify note:", error);
         return false;

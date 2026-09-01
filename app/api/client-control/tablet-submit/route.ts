@@ -6,6 +6,7 @@ import { CLIENT_CONTROL_FIELD_IDS, ensureClientControlForm } from "@/lib/client-
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import { appendShopifyOrderNote, updateShopifyOrderMetafields, extractShopifyOrderCodes, isFuzzyNameMatch } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
+import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 
 export const dynamic = "force-dynamic";
 
@@ -203,6 +204,19 @@ export async function POST(request: NextRequest) {
   }
 
   const staffNames = staffForSalon.map((s) => s.name);
+  const activeSalonStaff = await prisma.user.findMany({
+    where: {
+      active: true,
+      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+    },
+    select: { name: true, location: { select: { name: true } } },
+  });
+  const shopifyStaffNames = formatShopifyStaffNames(
+    staffNames,
+    activeSalonStaff
+      .filter((employee) => sameSalon(employee.location?.name, location.name))
+      .map((employee) => employee.name),
+  );
 
   const submitter = operationalUser?.id && operationalUser.id !== "PC_CASSA"
     ? { id: operationalUser.id }
@@ -591,8 +605,8 @@ export async function POST(request: NextRequest) {
   const targetOrders = extractShopifyOrderCodes(body?.shopifyOrder, body?.secondShopifyOrder);
 
   if (!isDraft && targetOrders.length > 0) {
-    const writerName = isNoShow ? "NO SHOW" : (staffNames.join(" e ") || "Staff");
-    const collaboratorName = isNoShow ? "NO SHOW" : (staffNames.join(", ") || "");
+    const writerName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(" e ") || "Staff");
+    const collaboratorName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(", ") || "");
 
     for (const singleOrder of targetOrders) {
       appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato")

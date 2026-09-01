@@ -42,6 +42,8 @@ import {
   DollarSign,
   ExternalLink,
   History,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
@@ -513,6 +515,25 @@ function normalizeSearchValue(value?: string | null) {
     .trim();
 }
 
+function staffNamesReferToSamePerson(
+  workerName?: string | null,
+  assignedName?: string | null,
+) {
+  const worker = normalizeSearchValue(workerName).split(" ").filter(Boolean);
+  const assigned = normalizeSearchValue(assignedName).split(" ").filter(Boolean);
+  if (!worker.length || !assigned.length) return false;
+  if (worker.join(" ") === assigned.join(" ")) return true;
+  if (worker[0] !== assigned[0] || assigned.length < 2 || worker.length < 2) {
+    return false;
+  }
+
+  const assignedSurname = assigned[assigned.length - 1];
+  const workerSurname = worker[worker.length - 1];
+  return assignedSurname.length === 1
+    ? workerSurname.startsWith(assignedSurname)
+    : workerSurname === assignedSurname;
+}
+
 function formatOrderCode(value?: string | null) {
   const raw = String(value || "").trim();
   if (!raw) return "-";
@@ -831,7 +852,9 @@ type ActivePcWorker = {
   photo_url?: string | null;
   locationName: string;
   status: "IN" | "BREAK" | string;
+  clockedInAt?: string | null;
   breakStartedAt?: string | null;
+  externalIds?: string[];
 };
 
 function formatPcBreakTimer(startedAt: string, now: number) {
@@ -1394,6 +1417,21 @@ export function AppointmentsBrowser({
   }
 
   const [view, setView] = useState<ViewMode>(initialView);
+  const [layoutMode, setLayoutMode] = useState<"table" | "board">("board");
+  const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
+  const [boardStaffLoading, setBoardStaffLoading] = useState(false);
+  const [boardStaffError, setBoardStaffError] = useState("");
+  const [boardNow, setBoardNow] = useState(Date.now());
+  const [draggedBoardBookingId, setDraggedBoardBookingId] = useState<string | null>(null);
+  const [boardDropTargetId, setBoardDropTargetId] = useState<string | null>(null);
+  const [boardWorkerOrder, setBoardWorkerOrder] = useState<string[]>([]);
+  const [draggedBoardWorkerId, setDraggedBoardWorkerId] = useState<string | null>(null);
+  const [boardWorkerDropTarget, setBoardWorkerDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
+  const [boardStatusMenu, setBoardStatusMenu] = useState<{
+    bookingId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [salon, setSalon] = useState<SalonFilter>(initialSalon);
   const [anchorDate, setAnchorDate] = useState(
     () => dateFromLocalKey(initialAnchorDate) || new Date(),
@@ -1444,6 +1482,62 @@ export function AppointmentsBrowser({
       to: today,
     };
   });
+
+  useEffect(() => {
+    if (layoutMode !== "board") return;
+    let active = true;
+
+    async function loadBoardStaff() {
+      setBoardStaffLoading(true);
+      setBoardStaffError("");
+      try {
+        const response = await fetch("/api/appointments/pc/active-staff?salone=buenos-aires", {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error || "Impossibile recuperare il personale timbrato.");
+        if (active) setBoardActiveStaff(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (active) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale timbrato.");
+      } finally {
+        if (active) setBoardStaffLoading(false);
+      }
+    }
+
+    void loadBoardStaff();
+    const interval = window.setInterval(loadBoardStaff, 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [layoutMode]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("appointments_board_worker_order");
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) setBoardWorkerOrder(parsed.filter((id) => typeof id === "string"));
+    } catch {
+      setBoardWorkerOrder([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!boardWorkerOrder.length) return;
+    try {
+      window.localStorage.setItem("appointments_board_worker_order", JSON.stringify(boardWorkerOrder));
+    } catch {
+      // The board remains usable when local storage is unavailable.
+    }
+  }, [boardWorkerOrder]);
+
+  useEffect(() => {
+    if (layoutMode !== "board") return;
+    setBoardNow(Date.now());
+    const interval = window.setInterval(() => setBoardNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [layoutMode]);
 
   function rangeForView(nextView: ViewMode, date: Date) {
     const start = new Date(date);
@@ -1743,6 +1837,35 @@ export function AppointmentsBrowser({
   useEffect(() => {
     clientControlFormRef.current = clientControlForm;
   }, [clientControlForm]);
+
+  useEffect(() => {
+    if (!clientControlForm.bookingId || !clientControlEmployees.length) return;
+    const booking = initialBookings.find(
+      (item) => item.id === clientControlForm.bookingId,
+    );
+    if (!booking) return;
+    const bookingStaffIds = matchEmployeeIdsForBooking(
+      booking,
+      clientControlEmployees,
+    );
+    if (!bookingStaffIds.length) return;
+
+    setClientControlForm((current) => {
+      if (current.bookingId !== booking.id) return current;
+      const alreadySynchronized =
+        current.staffIds.length === bookingStaffIds.length &&
+        current.staffIds.every((id) => bookingStaffIds.includes(id));
+      if (alreadySynchronized) return current;
+      const synchronizedForm = { ...current, staffIds: bookingStaffIds };
+      clientControlFormRef.current = synchronizedForm;
+      return synchronizedForm;
+    });
+  }, [
+    clientControlEmployees,
+    clientControlForm.bookingId,
+    initialBookings,
+    teamByBooking,
+  ]);
 
   useEffect(() => () => {
     if (clientControlAutoSaveTimerRef.current) {
@@ -2490,6 +2613,7 @@ export function AppointmentsBrowser({
           employees,
         )
       : [];
+    const bookingStaffIds = matchEmployeeIdsForBooking(booking, employees);
 
     setClientControlForm((current) => {
       if (current.bookingId !== booking.id) return current;
@@ -2498,11 +2622,13 @@ export function AppointmentsBrowser({
           ...current,
           staffIds: preferredEmployeeId
             ? [preferredEmployeeId]
+            : bookingStaffIds.length
+            ? bookingStaffIds
             : storedStaffIds.length
             ? storedStaffIds
             : current.staffIds.length
             ? current.staffIds
-            : matchEmployeeIdsForBooking(booking, employees),
+            : [],
           secondShopifyOrder: String(existingAnswers.second_shopify_order || existingAnswers.secondShopifyOrder || ""),
           paid: existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid] !== undefined && existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid] !== null
             ? String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.paid])
@@ -2524,9 +2650,9 @@ export function AppointmentsBrowser({
         ...current,
         staffIds: preferredEmployeeId
           ? [preferredEmployeeId]
-          : current.staffIds.length
-          ? current.staffIds
-          : matchEmployeeIdsForBooking(booking, employees),
+          : bookingStaffIds.length
+          ? bookingStaffIds
+          : current.staffIds,
         customNoteText:
           current.customNoteText || bookingNotes?.shopifyNote || "",
       };
@@ -3258,6 +3384,14 @@ export function AppointmentsBrowser({
     const previousStatus = booking
       ? getBookingStatus(booking)
       : statusByBooking[bookingId];
+    if (previousStatus === "COMPLETATO" && nextStatus !== "COMPLETATO") {
+      showPushToast(
+        "Stato bloccato",
+        "Un appuntamento completato non può più essere modificato.",
+        "error",
+      );
+      return;
+    }
     const previousTiming = statusTimingByBooking[bookingId] || {};
     const transitionAt = new Date();
     const optimisticTiming = { ...previousTiming };
@@ -3370,6 +3504,10 @@ export function AppointmentsBrowser({
     signedBy?: string,
   ) {
     const previousTeam = getBookingTeam(booking);
+    const previousClientControlStaffIds =
+      clientControlFormRef.current.bookingId === booking.id
+        ? [...clientControlFormRef.current.staffIds]
+        : null;
     const nextTeam = corsoTeamOptions.filter((option) =>
       teammateIds.includes(option.id),
     );
@@ -3387,6 +3525,14 @@ export function AppointmentsBrowser({
     }
 
     setTeamByBooking((current) => ({ ...current, [booking.id]: nextTeam }));
+    if (previousClientControlStaffIds) {
+      const nextClientControlForm = {
+        ...clientControlFormRef.current,
+        staffIds: nextTeam.map((teammate) => teammate.id),
+      };
+      clientControlFormRef.current = nextClientControlForm;
+      setClientControlForm(nextClientControlForm);
+    }
     setSavingTeamId(booking.id);
 
     try {
@@ -3398,6 +3544,7 @@ export function AppointmentsBrowser({
           orderName: booking.bookingStr,
           teammateIds,
           teammates: nextTeam,
+          sourceTeammates: previousTeam,
           signedBy,
         }),
       });
@@ -3426,6 +3573,17 @@ export function AppointmentsBrowser({
         ...current,
         [booking.id]: previousTeam,
       }));
+      if (
+        previousClientControlStaffIds &&
+        clientControlFormRef.current.bookingId === booking.id
+      ) {
+        const restoredClientControlForm = {
+          ...clientControlFormRef.current,
+          staffIds: previousClientControlStaffIds,
+        };
+        clientControlFormRef.current = restoredClientControlForm;
+        setClientControlForm(restoredClientControlForm);
+      }
       showPushToast(
         "Modifica non salvata",
         error instanceof Error
@@ -3454,6 +3612,37 @@ export function AppointmentsBrowser({
     );
     if (!saved) return;
     await openClientControlForBooking(booking, teammate);
+  }
+
+  async function moveBoardBooking(bookingId: string, teammateId: string) {
+    if (!bookingId || !teammateId || teammateId === "unassigned") return;
+    const booking = initialBookings.find((item) => item.id === bookingId);
+    if (!booking) return;
+    if (isPC && !pcActiveWorker) {
+      setPcScreenLocked(true);
+      return;
+    }
+
+    await executeTeamChange(
+      booking,
+      [teammateId],
+      isPC ? pcActiveWorker?.name : undefined,
+    );
+  }
+
+  function reorderBoardWorker(workerId: string, targetId: string, position: "before" | "after") {
+    if (!workerId || !targetId || workerId === targetId || workerId === "unassigned" || targetId === "unassigned") return;
+    setBoardWorkerOrder((current) => {
+      const visibleIds = appointmentBoardColumns
+        .map((column) => column.id)
+        .filter((id) => id !== "unassigned");
+      const base = [...current.filter((id) => visibleIds.includes(id)), ...visibleIds.filter((id) => !current.includes(id))]
+        .filter((id, index, items) => items.indexOf(id) === index && id !== workerId);
+      const targetIndex = base.indexOf(targetId);
+      if (targetIndex < 0) return current;
+      base.splice(targetIndex + (position === "after" ? 1 : 0), 0, workerId);
+      return base;
+    });
   }
 
   useEffect(() => {
@@ -3544,6 +3733,99 @@ export function AppointmentsBrowser({
   );
 
   const visibleRecentBookings = recentBookings.slice(0, visibleCount);
+
+  const appointmentBoardColumns = useMemo(() => {
+    const orderIndex = new Map(boardWorkerOrder.map((id, index) => [id, index]));
+    const workers = boardActiveStaff
+      .filter((worker) => worker.status === "IN" || worker.status === "BREAK")
+      .map((worker) => ({
+        id: worker.id,
+        name: worker.name,
+        photoUrl: worker.photo_url || null,
+        status: worker.status,
+        clockedInAt: worker.clockedInAt || null,
+        breakStartedAt: worker.breakStartedAt || null,
+        externalIds: Array.isArray(worker.externalIds) ? worker.externalIds : [],
+      }))
+      .sort((left, right) => {
+        const leftOrder = orderIndex.get(left.id);
+        const rightOrder = orderIndex.get(right.id);
+        if (leftOrder !== undefined || rightOrder !== undefined) {
+          if (leftOrder === undefined) return 1;
+          if (rightOrder === undefined) return -1;
+          return leftOrder - rightOrder;
+        }
+        return left.name.localeCompare(right.name, "it");
+      });
+    const workersById = new Map(workers.map((worker) => [worker.id, worker]));
+    const workersByExternalId = new Map(
+      workers.flatMap((worker) =>
+        worker.externalIds.map((externalId) => [externalId, worker] as const),
+      ),
+    );
+    const bookingsByWorker = new Map<string, AppointmentRecord[]>(
+      workers.map((worker) => [worker.id, []]),
+    );
+    const unassignedBookings: AppointmentRecord[] = [];
+
+    for (const booking of filteredBookings) {
+      const belongsToCorso = booking.inferredSalon === "buenos-aires";
+      const assignedWorkerIds = new Set<string>();
+
+      for (const teammate of getBookingTeam(booking)) {
+        const worker =
+          workersById.get(teammate.id) ||
+          workersByExternalId.get(teammate.id) ||
+          workers.find((candidate) =>
+            staffNamesReferToSamePerson(candidate.name, teammate.name),
+          );
+        if (!worker || assignedWorkerIds.has(worker.id)) continue;
+        assignedWorkerIds.add(worker.id);
+        bookingsByWorker.get(worker.id)?.push(booking);
+      }
+
+      if (assignedWorkerIds.size === 0 && belongsToCorso) unassignedBookings.push(booking);
+    }
+
+    const durationHours = (bookings: AppointmentRecord[]) => bookings.reduce((sum, booking) => {
+      const start = new Date(booking.startDate).getTime();
+      const end = new Date(booking.endDate || "").getTime();
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return sum;
+      return sum + Math.min(24, (end - start) / 3600000);
+    }, 0);
+    const sortBookings = (bookings: AppointmentRecord[]) => [...bookings].sort(
+      (left, right) => new Date(left.startDate).getTime() - new Date(right.startDate).getTime(),
+    );
+
+    const columns = workers.map((worker) => {
+      const bookings = sortBookings(bookingsByWorker.get(worker.id) || []);
+      return {
+        ...worker,
+        bookings,
+        hours: durationHours(bookings),
+      };
+    });
+
+    if (unassignedBookings.length) {
+      const bookings = sortBookings(unassignedBookings);
+      columns.push({
+        id: "unassigned",
+        name: "Non assegnati",
+        photoUrl: null,
+        status: "IN",
+        clockedInAt: null,
+        breakStartedAt: null,
+        externalIds: [],
+        bookings,
+        hours: durationHours(bookings),
+      });
+    }
+
+    return columns;
+  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, teamByBooking]);
+  const boardBookingCount = new Set(
+    appointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
+  ).size;
 
   const detailEntries = useMemo(() => {
     if (!selectedBooking?.extraDetails?.length) {
@@ -5362,6 +5644,27 @@ export function AppointmentsBrowser({
                     ) : null}
                   </div>
 
+                  <div className="inline-flex rounded-xl border border-[#E7D9E0] bg-[#F1E8ED] p-1 shadow-inner" role="group" aria-label="Vista appuntamenti">
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode("board")}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition sm:px-4 ${
+                        layoutMode === "board" ? "bg-white text-[#9E3262] shadow-sm" : "text-black/45 hover:text-black/70"
+                      }`}
+                    >
+                      <LayoutGrid className="size-4" /> Board
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode("table")}
+                      className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-wider transition sm:px-4 ${
+                        layoutMode === "table" ? "bg-white text-[#9E3262] shadow-sm" : "text-black/45 hover:text-black/70"
+                      }`}
+                    >
+                      <List className="size-4" /> Tabella
+                    </button>
+                  </div>
+
                   {!isPC && currentUser?.role && pcLinkManagerRoles.has(currentUser.role) && (
                     <button
                       type="button"
@@ -5704,6 +6007,222 @@ export function AppointmentsBrowser({
             </div>
           </section>
 
+          {layoutMode === "board" ? (
+            <section className="overflow-hidden rounded-xl border border-[#DFE2E7] bg-white shadow-[0_2px_8px_rgba(33,43,54,0.10)]">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EBEDF0] bg-white px-4 py-4 sm:px-5">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · Salone Corso</p>
+                  <div>
+                    <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#172B4D]">Board</h2>
+                    <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">Personale timbrato e schede ordinate per orario</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center -space-x-2">
+                    {appointmentBoardColumns.filter((column) => column.id !== "unassigned").slice(0, 5).map((column) => (
+                      <span key={column.id} className="rounded-full border-2 border-white bg-white">
+                        <Avatar name={column.name} photoUrl={column.photoUrl} size="size-7" />
+                      </span>
+                    ))}
+                    {appointmentBoardColumns.filter((column) => column.id !== "unassigned").length > 5 ? (
+                      <span className="grid size-7 place-items-center rounded-full border-2 border-white bg-[#E9ECF2] text-[9px] font-black text-[#505F79]">
+                        +{appointmentBoardColumns.filter((column) => column.id !== "unassigned").length - 5}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold text-[#505F79]">
+                    <UsersRound className="size-3.5" /> {boardBookingCount} schede
+                  </span>
+                </div>
+              </div>
+
+              {appointmentBoardColumns.length ? (
+                <div className="overflow-x-auto bg-white p-3 sm:p-4">
+                  <div className="flex min-h-[520px] min-w-max items-stretch gap-3">
+                    {appointmentBoardColumns.map((column) => (
+                      <article
+                        key={column.id}
+                        data-board-worker-id={column.id}
+                        onDragOver={(event) => {
+                          if (draggedBoardWorkerId && column.id !== "unassigned" && draggedBoardWorkerId !== column.id) {
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            const bounds = event.currentTarget.getBoundingClientRect();
+                            setBoardWorkerDropTarget({
+                              id: column.id,
+                              position: event.clientX >= bounds.left + bounds.width / 2 ? "after" : "before",
+                            });
+                            return;
+                          }
+                          if (column.id === "unassigned" || !draggedBoardBookingId) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setBoardDropTargetId(column.id);
+                        }}
+                        onDragLeave={(event) => {
+                          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                          setBoardDropTargetId((current) => current === column.id ? null : current);
+                          setBoardWorkerDropTarget((current) => current?.id === column.id ? null : current);
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          if (draggedBoardWorkerId && boardWorkerDropTarget?.id === column.id) {
+                            reorderBoardWorker(draggedBoardWorkerId, column.id, boardWorkerDropTarget.position);
+                            setDraggedBoardWorkerId(null);
+                            setBoardWorkerDropTarget(null);
+                            return;
+                          }
+                          const bookingId = event.dataTransfer.getData("text/plain") || draggedBoardBookingId || "";
+                          setBoardDropTargetId(null);
+                          setDraggedBoardBookingId(null);
+                          if (column.id !== "unassigned") void moveBoardBooking(bookingId, column.id);
+                        }}
+                        className={`flex w-[270px] shrink-0 flex-col rounded-lg p-2 transition ${
+                          boardDropTargetId === column.id
+                            ? "bg-[#E9F2FF] ring-2 ring-[#4C9AFF] ring-offset-2"
+                            : boardWorkerDropTarget?.id === column.id
+                              ? boardWorkerDropTarget.position === "before"
+                                ? "bg-[#F4F5F7] shadow-[-5px_0_0_#4C9AFF]"
+                                : "bg-[#F4F5F7] shadow-[5px_0_0_#4C9AFF]"
+                              : "bg-[#F4F5F7]"
+                        }`}
+                      >
+                        <header
+                          draggable={column.id !== "unassigned"}
+                          onDragStart={(event) => {
+                            if (column.id === "unassigned") return;
+                            event.stopPropagation();
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("application/x-paradise-worker", column.id);
+                            setDraggedBoardWorkerId(column.id);
+                            setDraggedBoardBookingId(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedBoardWorkerId(null);
+                            setBoardWorkerDropTarget(null);
+                          }}
+                          className={`px-1 pb-3 pt-1 ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          title={column.id !== "unassigned" ? "Tieni premuto e trascina per riordinare" : undefined}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={column.name} photoUrl={column.photoUrl} size="size-8" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="truncate text-[11px] font-black uppercase tracking-wide text-[#42526E]">{column.name}</p>
+                                <span className="text-[10px] font-bold text-[#6B778C]">{column.bookings.length}</span>
+                              </div>
+                              <p className={`mt-0.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : "text-emerald-600"}`}>
+                                {column.id === "unassigned" ? "Da assegnare" : column.status === "BREAK" ? "In pausa" : "Attivo"}
+                              </p>
+                              {column.id !== "unassigned" && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
+                                <p className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B778C]">
+                                  Tempo trascorso {formatPcBreakTimer((column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) as string, boardNow)}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-[#7A869A]">
+                            <span>{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
+                            <span>{column.bookings.length} schede</span>
+                          </div>
+                        </header>
+
+                        <div className="flex-1 space-y-2">
+                          {column.bookings.length ? column.bookings.map((booking) => {
+                            const status = getBookingStatus(booking);
+                            return (
+                              <button
+                                key={booking.id}
+                                type="button"
+                                draggable={savingTeamId !== booking.id}
+                                onDragStart={(event) => {
+                                  event.dataTransfer.effectAllowed = "move";
+                                  event.dataTransfer.setData("text/plain", booking.id);
+                                  setDraggedBoardBookingId(booking.id);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedBoardBookingId(null);
+                                  setBoardDropTargetId(null);
+                                }}
+                                onClick={() => void openClientControlForBooking(booking)}
+                                onContextMenu={(event) => {
+                                  if (booking.isCanceled) return;
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  if (status === "COMPLETATO") {
+                                    showPushToast(
+                                      "Stato bloccato",
+                                      "Un appuntamento completato non può più essere modificato.",
+                                      "error",
+                                    );
+                                    return;
+                                  }
+                                  setBoardStatusMenu({
+                                    bookingId: booking.id,
+                                    x: Math.min(event.clientX, window.innerWidth - 240),
+                                    y: Math.min(event.clientY, window.innerHeight - 390),
+                                  });
+                                }}
+                                className={`w-full cursor-grab rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition active:cursor-grabbing hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
+                                  !booking.isCanceled && status === "COMPLETATO"
+                                    ? "border-[#A9D8B8] bg-[#EAF7EE]"
+                                    : !booking.isCanceled && status === "IN_ATTESA"
+                                      ? "border-[#E8CE78] bg-[#FFF4CC]"
+                                    : "border-[#DFE1E6] bg-white"
+                                } ${
+                                  draggedBoardBookingId === booking.id ? "scale-[0.98] opacity-45" : ""
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#5E6C84]">{formatDate(booking.startDate)}</p>
+                                    <p className="mt-0.5 text-xs font-black tabular-nums text-[#172B4D]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
+                                  </div>
+                                  <span className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                                    {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                                  </span>
+                                </div>
+                                <p className="mt-2.5 truncate text-xs font-black text-[#172B4D]">{booking.customerName}</p>
+                                <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-[#5E6C84]">{booking.serviceTitle}</p>
+                                <div className="mt-2.5 flex items-center justify-between border-t border-[#EBECF0] pt-2 text-[8px] font-black uppercase tracking-wider text-[#7A869A]">
+                                  <span>{formatDuration(booking.startDate, booking.endDate)}</span>
+                                  <span>{getSalonLabel(booking.inferredSalon)}</span>
+                                </div>
+                              </button>
+                            );
+                          }) : (
+                            <div className="grid min-h-32 place-items-center rounded-[5px] border border-dashed border-[#C1C7D0] bg-white/40 px-4 text-center">
+                              <div>
+                                <CalendarDays className="mx-auto size-5 text-black/20" />
+                                <p className="mt-2 text-[10px] font-black uppercase tracking-wider text-black/35">Nessun appuntamento</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : boardStaffLoading ? (
+                <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
+                  <div>
+                    <Loader2 className="mx-auto size-7 animate-spin text-[#A93469]" />
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale timbrato del Salone Corso...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
+                  <div>
+                    <UsersRound className="mx-auto size-7 text-[#CDA7B9]" />
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente timbrato al Salone Corso</p>
+                    <p className="mt-1 text-xs font-semibold text-black/40">{boardStaffError || "La Board mostrerà il personale dopo la timbratura di entrata."}</p>
+                  </div>
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {layoutMode === "table" ? (
           <section className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]">
             <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#E6D9DF] bg-[#F8F2F5] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#765866] xl:grid">
               <span>Appuntamento</span>
@@ -5915,7 +6434,56 @@ export function AppointmentsBrowser({
               </div>
             ) : null}
           </section>
+          ) : null}
         </main>
+
+        {boardStatusMenu ? (
+          <div
+            className="fixed inset-0 z-[190]"
+            onClick={() => setBoardStatusMenu(null)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setBoardStatusMenu(null);
+            }}
+          >
+            <div
+              className="fixed w-56 overflow-hidden rounded-2xl border border-[#E3D9DE] bg-white p-2 shadow-[0_20px_55px_rgba(52,35,43,0.24)]"
+              style={{
+                left: Math.max(8, boardStatusMenu.x),
+                top: Math.max(8, boardStatusMenu.y),
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="px-3 pb-2 pt-1 text-[9px] font-black uppercase tracking-[0.18em] text-black/40">
+                Cambia stato
+              </p>
+              <div className="space-y-1">
+                {appointmentStatusOptions.map((option) => {
+                  const booking = initialBookings.find(
+                    (item) => item.id === boardStatusMenu.bookingId,
+                  );
+                  const selected = booking
+                    ? getBookingStatus(booking) === option.value
+                    : false;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        handleStatusChange(boardStatusMenu.bookingId, option.value);
+                        setBoardStatusMenu(null);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-black transition hover:brightness-[0.98] ${appointmentStatusClasses[option.value]}`}
+                    >
+                      <span>{option.label}</span>
+                      {selected ? <Check className="size-4" strokeWidth={3} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {selectedBooking ? (
           <div className="fixed inset-0 z-50 flex justify-end bg-black/45 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
-import { Bell, CalendarDays, LogOut, Moon, Sun, UserRound } from "lucide-react";
+import { Bell, CalendarDays, FileText, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { NotificationsPopover } from "@/components/notifications-popover";
 
@@ -157,6 +157,12 @@ export function TopControls({
               <CalendarDays className="size-4" />
               {userId === "PC_CASSA" ? "Cambia profilo" : "Turni"}
             </Link>
+            {userId !== "PC_CASSA" ? (
+              <Link href="/documents" className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-black/75 transition hover:bg-paradise-softPink/60 dark:text-white/75 dark:hover:bg-white/10">
+                <FileText className="size-4" />
+                Documenti
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={handleLogout}
