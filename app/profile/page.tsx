@@ -15,6 +15,7 @@ import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashbo
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { attendanceActualMinutes } from "@/lib/scheduled-attendance";
+import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
 
 export const dynamic = "force-dynamic";
 
@@ -288,7 +289,7 @@ export default async function ProfilePage() {
         }}
         unreadNotifications={unreadNotifications}
         shiftWeeks={shiftWeeks}
-        holidayRequests={holidayRequests.map((request) => ({
+        holidayRequests={holidayRequests.filter((request) => !isAutomaticLateReason(request.reason)).map((request) => ({
           id: request.id,
           type: request.type as "FERIE" | "PERMESSO" | "MALATTIA",
           startDate: request.start_date.toISOString(),
