@@ -127,20 +127,38 @@ function romeWallClockMilliseconds() {
 
 function workedTimeState(logs: ShiftAttendance[], now: number) {
   let workedMilliseconds = 0;
+  let breakMilliseconds = 0;
   let activeSince: number | null = null;
+  let pauseSince: number | null = null;
   const ordered = [...logs].sort((left, right) => left.minutes - right.minutes);
 
   for (const log of ordered) {
     const timestamp = log.minutes * 60 * 1000;
     if (!Number.isFinite(timestamp)) continue;
-    if ((log.type === "ENTRATA" || log.type === "RIENTRO") && activeSince === null) activeSince = timestamp;
-    if ((log.type === "PAUSA" || log.type === "USCITA") && activeSince !== null) {
+    if (log.type === "ENTRATA" || log.type === "RIENTRO") {
+      if (pauseSince !== null) breakMilliseconds += Math.max(0, timestamp - pauseSince);
+      pauseSince = null;
+      if (activeSince === null) activeSince = timestamp;
+    }
+    if (log.type === "PAUSA") {
+      if (activeSince !== null) {
+        workedMilliseconds += Math.max(0, timestamp - activeSince);
+        activeSince = null;
+      }
+      pauseSince = timestamp;
+    }
+    if (log.type === "USCITA") {
+      if (pauseSince !== null) breakMilliseconds += Math.max(0, timestamp - pauseSince);
+      pauseSince = null;
+      if (activeSince !== null) {
       workedMilliseconds += Math.max(0, timestamp - activeSince);
       activeSince = null;
+      }
     }
   }
 
   if (activeSince !== null) workedMilliseconds += Math.max(0, now - activeSince);
+  if (pauseSince !== null) breakMilliseconds += Math.max(0, now - pauseSince);
   const latest = ordered.at(-1) || null;
   const status = activeSince !== null
     ? "WORKING"
@@ -149,7 +167,7 @@ function workedTimeState(logs: ShiftAttendance[], now: number) {
       : latest?.type === "USCITA"
         ? "FINISHED"
         : "NOT_CLOCKED";
-  return { workedMilliseconds, status, latest, firstEntry: ordered.find((log) => log.type === "ENTRATA") || null };
+  return { workedMilliseconds, breakMilliseconds, status, latest, firstEntry: ordered.find((log) => log.type === "ENTRATA") || null };
 }
 
 function elapsedLabel(milliseconds: number) {
@@ -177,6 +195,7 @@ export function ClientProfile({
   const [visibleShiftWeekIndex, setVisibleShiftWeekIndex] = useState(0);
   const [selectedShiftDate, setSelectedShiftDate] = useState(() => shiftWeeks[0]?.days.find((day) => day.isToday)?.dateKey || shiftWeeks[0]?.days[0]?.dateKey || "");
   const [visibleHolidayRequests, setVisibleHolidayRequests] = useState(holidayRequests);
+  const [showAllHolidayRequests, setShowAllHolidayRequests] = useState(false);
   const [holidayFormOpen, setHolidayFormOpen] = useState(false);
   const [holidaySaving, setHolidaySaving] = useState(false);
   const [holidayMessage, setHolidayMessage] = useState("");
@@ -539,8 +558,8 @@ export function ClientProfile({
                   <p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">
                     {todayWorkState.status === "WORKING" ? "Attualmente al lavoro" : todayWorkState.status === "BREAK" ? "Pausa in corso" : todayWorkState.status === "FINISHED" ? "Turno terminato" : "Non ancora timbrato"}
                   </p>
-                  <p className="mt-1 text-3xl font-black tabular-nums tracking-tight text-neutral-900">{elapsedLabel(todayWorkState.workedMilliseconds)}</p>
-                  <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400">Tempo effettivamente lavorato oggi</p>
+                  <p className="mt-1 text-3xl font-black tabular-nums tracking-tight text-neutral-900">{elapsedLabel(todayWorkState.status === "BREAK" ? todayWorkState.breakMilliseconds : todayWorkState.workedMilliseconds)}</p>
+                  <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400">{todayWorkState.status === "BREAK" ? "Tempo trascorso in pausa" : "Tempo effettivamente lavorato oggi"}</p>
                 </div>
               </div>
                 <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Turno di oggi</p><p className="mt-2 text-sm font-black text-neutral-900">{todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} – ${todayShift.endTime}` : "Non programmato"}</p></div>
@@ -623,7 +642,7 @@ export function ClientProfile({
 
             {visibleHolidayRequests.length ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {visibleHolidayRequests.map((request) => {
+                {(showAllHolidayRequests ? visibleHolidayRequests : visibleHolidayRequests.slice(0, 3)).map((request) => {
                   const status = holidayStatus(request.status);
                   return (
                     <article key={request.id} className="profile-glass-inset rounded-[20px] border border-neutral-200 bg-neutral-50 p-5 text-left">
@@ -648,6 +667,14 @@ export function ClientProfile({
                 <p className="mt-1 text-[11px] font-medium text-neutral-400">Ferie, permessi e malattie appariranno qui appena vengono inseriti.</p>
               </div>
             )}
+            {visibleHolidayRequests.length > 3 ? (
+              <div className="flex justify-center border-t border-neutral-100 pt-4">
+                <button type="button" onClick={() => setShowAllHolidayRequests((current) => !current)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-5 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white">
+                  {showAllHolidayRequests ? "Mostra meno" : `Vedi altre (${visibleHolidayRequests.length - 3})`}
+                  <ChevronRight className={cn("size-3.5 transition-transform", showAllHolidayRequests && "rotate-90")} />
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
