@@ -27,7 +27,7 @@ type HistoryEvent = {
 };
 
 function requestStatusLabel(status: string, reason?: string | null) {
-  if (isAutomaticLateReason(reason)) return status === "APPROVED" ? "PRESA VISIONE" : "DA CONFERMARE";
+  if (isAutomaticLateReason(reason)) return status === "APPROVED" ? "RITARDO" : "DA CONFERMARE";
   if (status === "APPROVED") return "APPROVATA";
   if (status === "REJECTED") return "RIFIUTATA";
   if (status === "FLAGGED") return "SEGNALATA";
@@ -35,7 +35,7 @@ function requestStatusLabel(status: string, reason?: string | null) {
 }
 
 function requestTypeLabel(type: string, reason: string | null) {
-  if (isAutomaticLateReason(reason)) return "Ritardo rilevato automaticamente";
+  if (isAutomaticLateReason(reason)) return "Ritardo";
   if (type === "FERIE") return "Richiesta ferie";
   if (type === "MALATTIA") return "Richiesta malattia";
   if (type === "PERMESSO") return "Richiesta permesso";
@@ -181,10 +181,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       events.push({
         id: `request-approved-${request.id}`,
         occurredAt: request.approved_at.toISOString(),
-        type: automaticLate ? "Ritardo preso in visione" : request.type === "MALATTIA" ? request.medical_code ? "Malattia giustificata" : "Malattia non giustificata" : `${requestTypeLabel(request.type, request.reason)} approvata`,
-        status: automaticLate ? "PRESA VISIONE" : request.type === "MALATTIA" ? request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA" : "APPROVATA",
+        type: automaticLate ? "Ritardo" : request.type === "MALATTIA" ? request.medical_code ? "Malattia giustificata" : "Malattia non giustificata" : `${requestTypeLabel(request.type, request.reason)} approvata`,
+        status: automaticLate ? "RITARDO" : request.type === "MALATTIA" ? request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA" : "APPROVATA",
         note: automaticLate
-          ? `${request.approver?.name ? `Presa visione da ${request.approver.name}. ` : ""}${request.admin_note ? `Comunicazione: ${request.admin_note}` : "Nessuna comunicazione aggiuntiva."}`.trim()
+          ? request.admin_note ? `Comunicazione: ${request.admin_note}` : ""
           : `${request.approver?.name ? `Approvata da ${request.approver.name}. ` : ""}${request.medical_code ? `Protocollo medico: ${request.medical_code}.` : request.type === "MALATTIA" ? "Codice Certificato INPS assente." : request.admin_note || ""}`.trim(),
       });
     } else if (request.type === "MALATTIA" && request.medical_code) {
