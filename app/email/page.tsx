@@ -53,6 +53,7 @@ export default async function EmailPage({
       edgeToEdgeMain
       hideDesktopControls
       hideDesktopSidebar
+      hideAdminAssistant
     >
       <InternalEmailComposer
         currentUserId={sender.id}
