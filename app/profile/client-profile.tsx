@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { 
-  ArrowLeft, 
   User, 
   Mail, 
   CalendarDays, 
@@ -11,15 +10,16 @@ import {
   Briefcase, 
   ShieldAlert, 
   MapPin, 
+  ChevronLeft,
   ChevronRight, 
   FileText, 
   LockKeyhole, 
-  Camera, 
   Download,
-  X,
   FileCheck,
-  Award,
-  Clock
+  Clock,
+  LogIn,
+  LogOut,
+  Coffee
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
@@ -63,11 +63,25 @@ type ClientProfileProps = {
     totalEarnedPoints: number;
   };
   unreadNotifications: number;
-  clientPhotos: Array<{
-    id: string;
-    orderNumber: string;
-    url: string;
-    date: string;
+  shiftWeeks: Array<{
+    key: string;
+    label: string;
+    rangeLabel: string;
+    days: Array<{
+      dateKey: string;
+      dayName: string;
+      dayNumber: string;
+      monthName: string;
+      fullDateLabel: string;
+      isToday: boolean;
+      shiftName: string;
+      startTime: string | null;
+      endTime: string | null;
+      note: string | null;
+      categoryColor: string | null;
+      categoryTextColor: string | null;
+      attendance: Array<{ type: string; time: string }>;
+    }>;
   }>;
   documentsList?: Array<{
     id: string;
@@ -87,14 +101,15 @@ export function ClientProfile({
   stats,
   pointsStats,
   unreadNotifications,
-  clientPhotos,
+  shiftWeeks,
   documentsList = [],
   settingsNode
 }: ClientProfileProps) {
   const [userPhoto, setUserPhoto] = useState(user.photoUrl);
   const [activeTab, setActiveTab] = useState<"points" | "info" | "security">("points");
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  const [visibleShiftWeekIndex, setVisibleShiftWeekIndex] = useState(0);
+  const [selectedShiftDate, setSelectedShiftDate] = useState(() => shiftWeeks[0]?.days.find((day) => day.isToday)?.dateKey || shiftWeeks[0]?.days[0]?.dateKey || "");
 
   useEffect(() => {
     setUserPhoto(user.photoUrl);
@@ -124,6 +139,23 @@ export function ClientProfile({
 
   const workerPercent = Math.min(100, Math.round((schedeCount / (workerGoal || 1)) * 100));
   const salonPercent = Math.min(100, Math.round((salonSchedeCount / (salonGoal || 1)) * 100));
+  const visibleShiftWeek = shiftWeeks[visibleShiftWeekIndex] || shiftWeeks[0];
+  const selectedShift = visibleShiftWeek?.days.find((day) => day.dateKey === selectedShiftDate) || visibleShiftWeek?.days[0];
+
+  const changeShiftWeek = (nextIndex: number) => {
+    const nextWeek = shiftWeeks[nextIndex];
+    if (!nextWeek) return;
+    setVisibleShiftWeekIndex(nextIndex);
+    setSelectedShiftDate(nextWeek.days.find((day) => day.isToday)?.dateKey || nextWeek.days[0]?.dateKey || "");
+  };
+
+  const attendanceLabel = (type: string) => {
+    if (type === "ENTRATA") return "Entrata";
+    if (type === "PAUSA") return "Inizio pausa";
+    if (type === "RIENTRO") return "Rientro";
+    if (type === "USCITA") return "Uscita";
+    return type;
+  };
 
   const isEmployee = user.role === "DIPENDENTE";
 
@@ -320,48 +352,69 @@ export function ClientProfile({
             </div>
           </div>
 
-          {/* 📸 GALLERY FEED (INSTAGRAM STYLE LUXURY) */}
-          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6">
-            <div className="border-b border-neutral-100 pb-5 text-left">
-              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">GALLERIA IMMAGINI</span>
-              <h2 className="text-xl font-serif font-light text-neutral-900 uppercase mt-1">
-                Lavori Eseguiti Cliente
-              </h2>
-              <p className="text-xs text-neutral-400 mt-1 font-medium">
-                I tuoi servizi registrati con documentazione fotografica frontale.
-              </p>
+          {/* WEEKLY PERSONAL SHIFTS */}
+          <div className="profile-glass-section space-y-6 rounded-[28px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-8">
+            <div className="flex flex-col gap-4 border-b border-neutral-100 pb-5 text-left sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">I MIEI TURNI</span>
+                <h2 className="mt-1 text-xl font-serif font-light uppercase text-neutral-900">Calendario settimanale</h2>
+                <p className="mt-1 text-xs font-medium text-neutral-400">Seleziona un giorno per vedere orario e timbrature.</p>
+              </div>
+              <Link href="/my-shifts" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white">
+                Calendario completo <ChevronRight className="size-3.5" />
+              </Link>
             </div>
 
-            {clientPhotos.length > 0 ? (
-              <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 md:gap-4">
-                {clientPhotos.map((photo, index) => (
-                  <div
-                    key={photo.id}
-                    onClick={() => setSelectedPhotoIndex(index)}
-                    className="aspect-square relative overflow-hidden rounded-xl bg-neutral-50 group cursor-pointer border border-neutral-200 hover:scale-[1.01] transition-all duration-300"
-                  >
-                    <img
-                      src={photo.url}
-                      alt={`Lavoro ${photo.orderNumber}`}
-                      className="size-full object-cover select-none pointer-events-none"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-neutral-955/40 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-neutral-300">ORDINE</span>
-                      <span className="text-sm font-semibold tracking-wider">#{photo.orderNumber}</span>
+            {visibleShiftWeek ? (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <button type="button" onClick={() => changeShiftWeek(visibleShiftWeekIndex - 1)} disabled={visibleShiftWeekIndex === 0} className="grid size-11 place-items-center rounded-full border border-neutral-200 text-neutral-700 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-25" aria-label="Settimana precedente"><ChevronLeft className="size-4" /></button>
+                  <div className="text-center"><p className="text-xs font-black uppercase tracking-wider text-neutral-900">{visibleShiftWeek.label}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{visibleShiftWeek.rangeLabel}</p></div>
+                  <button type="button" onClick={() => changeShiftWeek(visibleShiftWeekIndex + 1)} disabled={visibleShiftWeekIndex >= shiftWeeks.length - 1} className="grid size-11 place-items-center rounded-full border border-neutral-200 text-neutral-700 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-25" aria-label="Settimana successiva"><ChevronRight className="size-4" /></button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                  {visibleShiftWeek.days.map((day) => {
+                    const selected = selectedShift?.dateKey === day.dateKey;
+                    const hasShift = Boolean(day.startTime && day.endTime);
+                    return (
+                      <button key={day.dateKey} type="button" onClick={() => setSelectedShiftDate(day.dateKey)} aria-pressed={selected} className={cn("relative min-h-28 rounded-2xl border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900", selected ? "border-neutral-900 bg-neutral-900 text-white shadow-lg" : "border-neutral-200 bg-neutral-50 text-neutral-900 hover:-translate-y-0.5 hover:bg-white hover:shadow-md")}>
+                        {day.isToday ? <span className={cn("absolute right-2 top-2 size-2 rounded-full", selected ? "bg-white" : "bg-neutral-900")} aria-label="Oggi" /> : null}
+                        <p className={cn("text-[9px] font-black uppercase tracking-[0.18em]", selected ? "text-white/55" : "text-neutral-400")}>{day.dayName}</p>
+                        <p className="mt-1 text-2xl font-serif">{day.dayNumber}</p>
+                        <p className={cn("mt-3 line-clamp-2 text-[10px] font-black uppercase leading-4", selected ? "text-white/80" : hasShift ? "text-neutral-700" : "text-neutral-400")}>{day.shiftName}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedShift ? (
+                  <div className="grid gap-4 rounded-[22px] border border-neutral-200 bg-neutral-50 p-5 text-left lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,1.25fr)]">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">{selectedShift.fullDateLabel}</p>
+                      <div className="mt-3 flex items-start gap-3">
+                        <span className="mt-0.5 size-3 shrink-0 rounded-full border border-black/10" style={{ backgroundColor: selectedShift.categoryColor || "#d4d4d4" }} />
+                        <div><h3 className="text-base font-black text-neutral-900">{selectedShift.shiftName}</h3><p className="mt-1 text-sm font-bold text-neutral-600">{selectedShift.startTime && selectedShift.endTime ? `${selectedShift.startTime} – ${selectedShift.endTime}` : "Nessun orario programmato"}</p>{selectedShift.note ? <p className="mt-2 text-xs text-neutral-500">{selectedShift.note}</p> : null}</div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-neutral-200 pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                      <div className="flex items-center gap-2"><Clock className="size-4 text-neutral-500" /><p className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-500">Timbrature</p></div>
+                      {selectedShift.attendance.length ? (
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {selectedShift.attendance.map((entry, index) => (
+                            <div key={`${entry.type}-${entry.time}-${index}`} className="rounded-xl border border-neutral-200 bg-white p-3">
+                              <div className="flex items-center gap-2 text-neutral-400">{entry.type === "ENTRATA" || entry.type === "RIENTRO" ? <LogIn className="size-3.5" /> : entry.type === "PAUSA" ? <Coffee className="size-3.5" /> : <LogOut className="size-3.5" />}<span className="text-[8px] font-black uppercase tracking-wider">{attendanceLabel(entry.type)}</span></div>
+                              <p className="mt-2 text-base font-black tabular-nums text-neutral-900">{entry.time}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : <p className="mt-3 rounded-xl border border-dashed border-neutral-200 bg-white p-4 text-xs font-semibold text-neutral-400">Nessuna timbratura registrata per questo giorno.</p>}
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-12 flex flex-col items-center justify-center text-center border border-dashed border-neutral-200 rounded-2xl bg-neutral-50 p-6">
-                <Camera size={24} className="text-neutral-400 mb-2" />
-                <p className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Nessun lavoro registrato</p>
-                <p className="text-[11px] text-neutral-400 mt-1 max-w-xs">
-                  Carica le foto prima/dopo durante la compilazione degli ordini cliente.
-                </p>
-              </div>
-            )}
+                ) : null}
+              </>
+            ) : <p className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 p-6 text-center text-xs font-bold text-neutral-400">Turni non disponibili.</p>}
           </div>
         </div>
       )}
@@ -504,96 +557,6 @@ export function ClientProfile({
             <div className="pt-6 border-t border-neutral-100 flex justify-end">
               <LogoutButton className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase tracking-[0.2em] px-8 py-3.5 rounded-xl transition duration-200 text-center active:scale-98" />
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 🖼️ INSTAGRAM POST LIGHTBOX MODAL */}
-      {selectedPhotoIndex !== null && clientPhotos[selectedPhotoIndex] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 md:p-6 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-4xl bg-white rounded-[24px] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
-            
-            {/* Close Button */}
-            <button
-              onClick={() => setSelectedPhotoIndex(null)}
-              className="absolute top-4 right-4 z-10 size-9 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition active:scale-95"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Left/Right Navigation Arrows */}
-            {clientPhotos.length > 1 && (
-              <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedPhotoIndex((prev) => (prev !== null ? (prev - 1 + clientPhotos.length) % clientPhotos.length : null));
-                  }}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 z-10 size-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition active:scale-95"
-                >
-                  <ArrowLeft size={18} />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedPhotoIndex((prev) => (prev !== null ? (prev + 1) % clientPhotos.length : null));
-                  }}
-                  className="absolute right-16 md:right-4 top-1/2 -translate-y-1/2 z-10 size-10 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition active:scale-95"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </>
-            )}
-
-            {/* Image container */}
-            <div className="flex-1 bg-neutral-950 flex items-center justify-center min-h-[300px] md:min-h-0 aspect-square md:aspect-auto">
-              <img
-                src={clientPhotos[selectedPhotoIndex].url}
-                alt={`Ordine ${clientPhotos[selectedPhotoIndex].orderNumber}`}
-                className="max-h-[50vh] md:max-h-[80vh] w-auto object-contain"
-              />
-            </div>
-
-            {/* Details panel */}
-            <div className="w-full md:w-[320px] shrink-0 p-6 flex flex-col justify-between bg-white text-left">
-              <div className="space-y-5">
-                {/* Author Info */}
-                <div className="flex items-center gap-3 pb-4 border-b border-neutral-100">
-                  <div className="size-9 rounded-full overflow-hidden border border-neutral-200 bg-neutral-100 flex items-center justify-center text-xs font-bold text-neutral-800">
-                    {userPhoto ? (
-                      <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="size-full object-cover" />
-                    ) : (
-                      user.name.slice(0, 2).toUpperCase()
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs font-black uppercase text-neutral-900 leading-tight">{user.name}</p>
-                    <p className="text-[8px] font-bold text-neutral-400 uppercase tracking-widest">{isEmployee ? "Collaboratore" : user.role}</p>
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="space-y-4 pt-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-neutral-400 uppercase tracking-wider text-[9px]">Ordine Cliente</span>
-                    <span className="font-bold text-neutral-800 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded text-[10px]">#{clientPhotos[selectedPhotoIndex].orderNumber}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-neutral-400 uppercase tracking-wider text-[9px]">Data Caricamento</span>
-                    <span className="font-medium text-neutral-600 flex items-center gap-1">
-                      <Clock size={12} className="opacity-75" />
-                      {new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(clientPhotos[selectedPhotoIndex].date))}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom message */}
-              <div className="mt-8 pt-4 border-t border-neutral-100 text-[8px] text-center text-neutral-400 font-bold uppercase tracking-[0.25em]">
-                Lavoro eseguito in salone
-              </div>
-            </div>
-
           </div>
         </div>
       )}
