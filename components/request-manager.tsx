@@ -578,7 +578,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
   const [decisionDrafts, setDecisionDrafts] = useState<Record<string, string>>({});
   const [activeFilter, setActiveFilter] = useState<ActiveRequestFilter>(initialActionRequest ? requestFilterForRecord(initialActionRequest) : "JUSTIFY");
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(initialActionRequest?.id ?? null);
-  const employeeView = role === "DIPENDENTE";
+  const employeeView = role === "DIPENDENTE" || role === "RESPONSABILE";
   const canApprove = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canCreateForWorkers = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const orderedRequests = requests
@@ -1016,7 +1016,7 @@ export function RequestManager({ initialRequests, role, workers }: { initialRequ
               <RequestDetailPanel
                 request={selectedRequest}
                 canApprove={canApprove}
-                canFlag={role === "RESPONSABILE"}
+                canFlag={false}
                 canAcknowledge={employeeView}
                 saving={saving}
                 medicalDraft={medicalDrafts[selectedRequest.id] ?? ""}

@@ -13,13 +13,16 @@ import {
   ChevronLeft,
   ChevronRight, 
   FileText, 
-  LockKeyhole, 
   Download,
   FileCheck,
   Clock,
   LogIn,
   LogOut,
-  Coffee
+  Coffee,
+  CalendarCheck2,
+  Plus,
+  Send,
+  X,
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
@@ -80,8 +83,21 @@ type ClientProfileProps = {
       note: string | null;
       categoryColor: string | null;
       categoryTextColor: string | null;
-      attendance: Array<{ type: string; time: string }>;
+      attendance: Array<{ type: string; time: string; timestamp: string; minutes: number }>;
     }>;
+  }>;
+  holidayRequests: Array<{
+    id: string;
+    type: "FERIE" | "PERMESSO" | "MALATTIA";
+    startDate: string;
+    endDate: string;
+    startTime: string | null;
+    endTime: string | null;
+    status: "PENDING" | "APPROVED" | "REJECTED" | "FLAGGED";
+    reason: string | null;
+    adminNote: string | null;
+    medicalCode: string | null;
+    createdAt: string;
   }>;
   documentsList?: Array<{
     id: string;
@@ -95,6 +111,55 @@ type ClientProfileProps = {
   settingsNode: React.ReactNode;
 };
 
+type ShiftAttendance = { type: string; time: string; timestamp: string; minutes: number };
+
+function romeWallClockMilliseconds() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value || 0);
+  return ((read("hour") * 60 + read("minute")) * 60 + read("second")) * 1000;
+}
+
+function workedTimeState(logs: ShiftAttendance[], now: number) {
+  let workedMilliseconds = 0;
+  let activeSince: number | null = null;
+  const ordered = [...logs].sort((left, right) => left.minutes - right.minutes);
+
+  for (const log of ordered) {
+    const timestamp = log.minutes * 60 * 1000;
+    if (!Number.isFinite(timestamp)) continue;
+    if ((log.type === "ENTRATA" || log.type === "RIENTRO") && activeSince === null) activeSince = timestamp;
+    if ((log.type === "PAUSA" || log.type === "USCITA") && activeSince !== null) {
+      workedMilliseconds += Math.max(0, timestamp - activeSince);
+      activeSince = null;
+    }
+  }
+
+  if (activeSince !== null) workedMilliseconds += Math.max(0, now - activeSince);
+  const latest = ordered.at(-1) || null;
+  const status = activeSince !== null
+    ? "WORKING"
+    : latest?.type === "PAUSA"
+      ? "BREAK"
+      : latest?.type === "USCITA"
+        ? "FINISHED"
+        : "NOT_CLOCKED";
+  return { workedMilliseconds, status, latest, firstEntry: ordered.find((log) => log.type === "ENTRATA") || null };
+}
+
+function elapsedLabel(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function ClientProfile({
   user,
   colleagues,
@@ -102,6 +167,7 @@ export function ClientProfile({
   pointsStats,
   unreadNotifications,
   shiftWeeks,
+  holidayRequests,
   documentsList = [],
   settingsNode
 }: ClientProfileProps) {
@@ -110,6 +176,14 @@ export function ClientProfile({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [visibleShiftWeekIndex, setVisibleShiftWeekIndex] = useState(0);
   const [selectedShiftDate, setSelectedShiftDate] = useState(() => shiftWeeks[0]?.days.find((day) => day.isToday)?.dateKey || shiftWeeks[0]?.days[0]?.dateKey || "");
+  const [visibleHolidayRequests, setVisibleHolidayRequests] = useState(holidayRequests);
+  const [holidayFormOpen, setHolidayFormOpen] = useState(false);
+  const [holidaySaving, setHolidaySaving] = useState(false);
+  const [holidayMessage, setHolidayMessage] = useState("");
+  const [holidayForm, setHolidayForm] = useState(() => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    return { type: "FERIE" as "FERIE" | "PERMESSO" | "MALATTIA", startDate: today, endDate: today, startTime: "", endTime: "", reason: "", medicalCode: "" };
+  });
 
   useEffect(() => {
     setUserPhoto(user.photoUrl);
@@ -141,6 +215,17 @@ export function ClientProfile({
   const salonPercent = Math.min(100, Math.round((salonSchedeCount / (salonGoal || 1)) * 100));
   const visibleShiftWeek = shiftWeeks[visibleShiftWeekIndex] || shiftWeeks[0];
   const selectedShift = visibleShiftWeek?.days.find((day) => day.dateKey === selectedShiftDate) || visibleShiftWeek?.days[0];
+  const todayShift = shiftWeeks.flatMap((week) => week.days).find((day) => day.isToday);
+  const [workedTimerNow, setWorkedTimerNow] = useState(0);
+  const todayWorkState = workedTimeState(todayShift?.attendance || [], workedTimerNow);
+
+  useEffect(() => {
+    setWorkedTimerNow(romeWallClockMilliseconds());
+    const latestType = todayShift?.attendance.at(-1)?.type;
+    if (latestType !== "ENTRATA" && latestType !== "RIENTRO") return;
+    const timer = window.setInterval(() => setWorkedTimerNow(romeWallClockMilliseconds()), 1000);
+    return () => window.clearInterval(timer);
+  }, [todayShift?.attendance]);
 
   const changeShiftWeek = (nextIndex: number) => {
     const nextWeek = shiftWeeks[nextIndex];
@@ -157,6 +242,79 @@ export function ClientProfile({
     return type;
   };
 
+  const holidayStatus = (status: ClientProfileProps["holidayRequests"][number]["status"]) => {
+    if (status === "APPROVED") return { label: "Approvata", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    if (status === "REJECTED") return { label: "Rifiutata", className: "border-red-200 bg-red-50 text-red-700" };
+    if (status === "FLAGGED") return { label: "Da verificare", className: "border-amber-200 bg-amber-50 text-amber-700" };
+    return { label: "In attesa", className: "border-neutral-300 bg-neutral-50 text-neutral-700" };
+  };
+
+  const holidayDate = (value: string) => new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
+
+  const submitHolidayRequest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!holidayForm.startDate || !holidayForm.endDate || holidayForm.endDate < holidayForm.startDate) {
+      setHolidayMessage("Controlla le date inserite.");
+      return;
+    }
+    if ((holidayForm.startTime || holidayForm.endTime) && (!holidayForm.startTime || !holidayForm.endTime)) {
+      setHolidayMessage("Inserisci sia l’ora iniziale sia quella finale.");
+      return;
+    }
+    if (holidayForm.startDate === holidayForm.endDate && holidayForm.startTime && holidayForm.endTime <= holidayForm.startTime) {
+      setHolidayMessage("L’orario finale deve essere dopo quello iniziale.");
+      return;
+    }
+
+    setHolidaySaving(true);
+    setHolidayMessage("");
+    try {
+      const response = await fetch("/api/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: holidayForm.type,
+          startDate: holidayForm.startDate,
+          endDate: holidayForm.endDate,
+          startTime: holidayForm.type === "PERMESSO" ? holidayForm.startTime || undefined : undefined,
+          endTime: holidayForm.type === "PERMESSO" ? holidayForm.endTime || undefined : undefined,
+          reason: holidayForm.reason.trim() || undefined,
+          medicalCode: holidayForm.type === "MALATTIA" ? holidayForm.medicalCode.trim() || undefined : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Richiesta non inviata.");
+
+      const saved = data.leaveRequest ?? data;
+      setVisibleHolidayRequests((current) => [{
+        id: saved.id,
+        type: saved.type,
+        startDate: saved.start_date,
+        endDate: saved.end_date,
+        startTime: saved.start_time ?? null,
+        endTime: saved.end_time ?? null,
+        status: saved.status,
+        reason: saved.reason ?? null,
+        adminNote: saved.admin_note ?? null,
+        medicalCode: saved.medical_code ?? null,
+        createdAt: saved.created_at,
+      }, ...current]);
+      setHolidayFormOpen(false);
+      setHolidayMessage("Richiesta inviata correttamente.");
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+      setHolidayForm({ type: "FERIE", startDate: today, endDate: today, startTime: "", endTime: "", reason: "", medicalCode: "" });
+    } catch (error) {
+      setHolidayMessage(error instanceof Error ? error.message : "Richiesta non inviata.");
+    } finally {
+      setHolidaySaving(false);
+    }
+  };
+
   const isEmployee = user.role === "DIPENDENTE";
 
   const details = [
@@ -170,16 +328,16 @@ export function ClientProfile({
   ];
 
   return (
-    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-5 overflow-hidden px-3 pb-16 pt-[calc(env(safe-area-inset-top)+80px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:space-y-8 sm:px-6 sm:pb-20 lg:px-10 xl:pt-24">
+    <div className="profile-liquid-page relative isolate min-h-dvh w-full space-y-4 overflow-hidden px-3 pb-16 pt-[calc(env(safe-area-inset-top)+72px)] font-sans text-neutral-900 antialiased selection:bg-neutral-200 sm:px-6 sm:pb-20 lg:px-8 xl:pt-20">
       
       {/* 🖤 DIOR ESTHETIQUE HERO CONTAINER */}
-      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none space-y-6 rounded-[28px] border border-white/55 bg-white/75 p-5 shadow-[0_24px_80px_rgba(44,24,15,0.18)] backdrop-blur-2xl sm:space-y-8 md:rounded-[36px] md:p-10">
-        <div className="flex flex-col items-center justify-between gap-5 md:flex-row md:items-start md:gap-8">
+      <div className="profile-identity-glass profile-glass-hero mx-auto max-w-none rounded-[22px] border border-white/55 bg-white/75 p-4 shadow-[0_18px_55px_rgba(44,24,15,0.12)] backdrop-blur-2xl sm:p-5 md:p-6">
+        <div className="flex flex-col items-center justify-between gap-5 md:flex-row md:gap-8">
           
           {/* Left Side: Avatar & Name */}
-          <div className="flex flex-col items-center gap-4 text-center md:flex-row md:gap-6 md:text-left">
+          <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left md:gap-5">
             <div className="relative group shrink-0">
-              <div className="relative flex size-24 items-center justify-center overflow-hidden rounded-[26px] border border-white/70 bg-white/40 text-3xl font-serif text-neutral-800 shadow-[0_16px_40px_rgba(35,18,10,0.16)] sm:size-28 md:size-36 md:rounded-[38px] md:text-4xl">
+              <div className="relative flex size-20 items-center justify-center overflow-hidden rounded-[18px] border border-white/70 bg-white/40 text-2xl font-serif text-neutral-800 shadow-[0_12px_30px_rgba(35,18,10,0.12)] sm:size-24 md:text-3xl">
                 {userPhoto ? (
                   <img src={resolveDrivePhotoUrl(userPhoto)} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
@@ -188,8 +346,8 @@ export function ClientProfile({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                 <span className="text-[9px] font-black uppercase tracking-[0.25em] text-neutral-500 bg-neutral-100 border border-neutral-200/60 px-3 py-1 rounded-full">
                   {isEmployee ? "Collaboratore" : user.role.replace("_", " ")}
                 </span>
@@ -199,7 +357,7 @@ export function ClientProfile({
                 </span>
               </div>
 
-              <h1 className="break-words text-2xl font-serif font-light uppercase tracking-wide text-neutral-900 sm:text-3xl md:text-4xl">
+              <h1 className="break-words text-2xl font-serif font-light text-neutral-900 sm:text-3xl">
                 {user.name}
               </h1>
 
@@ -210,22 +368,24 @@ export function ClientProfile({
           </div>
 
           {/* Right Side: Luxury Points Display */}
-          <Link href="/points" className="flex flex-col items-center md:items-end justify-center gap-1 border-t md:border-t-0 pt-6 md:pt-0 w-full md:w-auto shrink-0 md:pl-8 border-neutral-100 group">
-            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400 group-hover:text-neutral-600 transition">SALDO PUNTI PREMIUM</span>
-            <span className="text-4xl md:text-5xl font-serif font-light text-neutral-900 mt-1 group-hover:underline decoration-neutral-300">
+          <Link href="/points" className="group w-full shrink-0 border-t border-neutral-100 pt-5 md:w-72 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+            <span className="text-[9px] font-black uppercase tracking-[0.24em] text-neutral-400 transition group-hover:text-neutral-600">PUNTI PREMIUM</span>
+            <span className="mt-1 block text-3xl font-serif font-light text-neutral-900 decoration-neutral-300 group-hover:underline">
               {availablePoints} <span className="text-xs font-sans font-bold tracking-[0.2em] text-neutral-500 uppercase ml-1">Punti</span>
             </span>
-            <div className="text-[10px] font-bold text-neutral-400 tracking-wider uppercase mt-1 flex items-center gap-1 group-hover:text-neutral-600 transition">
-              <span>Disponibili per il riscatto</span>
-              <span className="underline font-black text-[9px] tracking-wide ml-1">DETTAGLIO</span>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-neutral-200"><div className="h-full rounded-full bg-[#b98080]" style={{ width: `${Math.min(100, availablePoints * 10)}%` }} /></div>
+              <span className="text-[9px] font-black text-neutral-500">{availablePoints} / 10</span>
             </div>
+            <p className="mt-2 text-[9px] font-bold uppercase tracking-wider text-neutral-400">{Math.max(0, 10 - availablePoints)} punti al prossimo premio</p>
           </Link>
         </div>
+      </div>
 
         {/* Premium Underlined Navigation Tabs (Dior Style) */}
-        <div className="flex items-center gap-5 overflow-x-auto border-b border-neutral-200 pb-px sm:gap-8">
+        <div className="profile-glass-section flex items-center gap-5 overflow-x-auto rounded-[18px] border border-neutral-200 bg-white px-4 pb-px sm:gap-8 sm:px-5">
           {[
-            { id: "points", label: "Punti & Traguardi" },
+            { id: "points", label: "PARADISE" },
             { id: "info", label: "Informazioni & Documenti" },
             { id: "security", label: "Impostazioni & Sicurezza" }
           ].map((tab) => {
@@ -246,18 +406,17 @@ export function ClientProfile({
             );
           })}
         </div>
-      </div>
 
       {/* 🔴 TAB 1: PUNTI & TRAGUARDI */}
       {activeTab === "points" && (
-        <div className="space-y-5 animate-in fade-in duration-200 sm:space-y-8">
+        <div className="flex flex-col gap-4 animate-in fade-in duration-200">
           
           {/* Target Progress Section */}
-          <div className="profile-glass-section border border-neutral-200 bg-white p-5 sm:p-8 rounded-[28px] shadow-2xs space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-neutral-100">
+          <div className="profile-glass-section order-3 space-y-5 rounded-[22px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-6">
+            <div className="flex flex-col justify-between gap-4 border-b border-neutral-100 pb-4 md:flex-row md:items-center">
               <div className="space-y-1.5 text-left">
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">OBIETTIVI MENSILI</span>
-                <h2 className="text-xl font-serif font-light text-neutral-900 uppercase">
+                <h2 className="text-lg font-serif font-light text-neutral-900 uppercase">
                   Andamento & Premi
                 </h2>
               </div>
@@ -270,10 +429,10 @@ export function ClientProfile({
             </div>
 
             {/* Target Progress Cards */}
-            <div className={cn("grid gap-4 md:gap-8", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
+            <div className={cn("grid gap-4", isEmployee ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
               
               {/* OBIETTIVO PERSONALE */}
-              <div className="profile-glass-inset p-5 sm:p-6 bg-neutral-50 border border-neutral-200 rounded-[22px] space-y-4 text-left">
+              <div className="profile-glass-inset space-y-3 rounded-[16px] border border-neutral-200 bg-neutral-50 p-4 text-left">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div className="space-y-0.5">
                     <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">DIPENDENTE</span>
@@ -304,7 +463,7 @@ export function ClientProfile({
 
               {/* OBIETTIVO SALONE - ONLY visible for non-employees (e.g. admins) */}
               {!isEmployee && (
-                <div className="profile-glass-inset p-5 sm:p-6 bg-neutral-50 border border-neutral-200 rounded-[22px] space-y-4 text-left">
+                <div className="profile-glass-inset space-y-3 rounded-[16px] border border-neutral-200 bg-neutral-50 p-4 text-left">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 block">STRUTTURA</span>
@@ -336,7 +495,7 @@ export function ClientProfile({
             </div>
 
             {/* Redeem Action Row */}
-            <div className="pt-6 border-t border-neutral-100 flex justify-end">
+            <div className="flex justify-end border-t border-neutral-100 pt-4">
               {availablePoints >= 10 ? (
                 <Link
                   href="/requests"
@@ -353,11 +512,11 @@ export function ClientProfile({
           </div>
 
           {/* WEEKLY PERSONAL SHIFTS */}
-          <div className="profile-glass-section space-y-6 rounded-[28px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-8">
-            <div className="flex flex-col gap-4 border-b border-neutral-100 pb-5 text-left sm:flex-row sm:items-end sm:justify-between">
+          <div className="profile-glass-section order-1 flex flex-col gap-5 rounded-[22px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-6">
+            <div className="order-2 flex flex-col gap-4 border-b border-neutral-100 pb-4 text-left sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">I MIEI TURNI</span>
-                <h2 className="mt-1 text-xl font-serif font-light uppercase text-neutral-900">Calendario settimanale</h2>
+                <h2 className="mt-1 text-lg font-serif font-light uppercase text-neutral-900">Calendario settimanale</h2>
                 <p className="mt-1 text-xs font-medium text-neutral-400">Seleziona un giorno per vedere orario e timbrature.</p>
               </div>
               <Link href="/my-shifts" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white">
@@ -365,8 +524,33 @@ export function ClientProfile({
               </Link>
             </div>
 
+            <div className="order-1 space-y-3">
+              <div className="text-left">
+                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-neutral-400">La tua giornata</p>
+                <p className="mt-1 text-sm font-serif text-neutral-900">{todayShift?.fullDateLabel || "Oggi"}</p>
+              </div>
+              <div className="grid overflow-hidden rounded-[18px] border border-neutral-200 bg-neutral-50 lg:grid-cols-[1.35fr_0.8fr_0.65fr_1fr] lg:divide-x lg:divide-neutral-200">
+              <div className="flex min-w-0 items-center gap-4 p-4">
+                <span className="relative grid size-12 shrink-0 place-items-center rounded-full border-[5px] border-emerald-100 bg-white text-neutral-900 shadow-sm">
+                  <Clock className="size-4" />
+                  {todayWorkState.status === "WORKING" ? <span className="absolute -right-1 -top-1 size-3 rounded-full bg-emerald-500 ring-2 ring-white" /> : null}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-neutral-500">
+                    {todayWorkState.status === "WORKING" ? "Attualmente al lavoro" : todayWorkState.status === "BREAK" ? "Pausa in corso" : todayWorkState.status === "FINISHED" ? "Turno terminato" : "Non ancora timbrato"}
+                  </p>
+                  <p className="mt-1 text-3xl font-black tabular-nums tracking-tight text-neutral-900">{elapsedLabel(todayWorkState.workedMilliseconds)}</p>
+                  <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400">Tempo effettivamente lavorato oggi</p>
+                </div>
+              </div>
+                <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Turno di oggi</p><p className="mt-2 text-sm font-black text-neutral-900">{todayShift?.startTime && todayShift?.endTime ? `${todayShift.startTime} – ${todayShift.endTime}` : "Non programmato"}</p></div>
+                <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Entrata</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.firstEntry?.time || "--:--"}</p></div>
+                <div className="border-t border-neutral-200 p-4 lg:border-t-0"><p className="text-[8px] font-black uppercase tracking-wider text-neutral-400">Ultima timbratura</p><p className="mt-2 text-sm font-black tabular-nums text-neutral-900">{todayWorkState.latest ? `${attendanceLabel(todayWorkState.latest.type)} · ${todayWorkState.latest.time}` : "Nessuna"}</p></div>
+              </div>
+            </div>
+
             {visibleShiftWeek ? (
-              <>
+              <div className="order-3 space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <button type="button" onClick={() => changeShiftWeek(visibleShiftWeekIndex - 1)} disabled={visibleShiftWeekIndex === 0} className="grid size-11 place-items-center rounded-full border border-neutral-200 text-neutral-700 transition hover:bg-neutral-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-25" aria-label="Settimana precedente"><ChevronLeft className="size-4" /></button>
                   <div className="text-center"><p className="text-xs font-black uppercase tracking-wider text-neutral-900">{visibleShiftWeek.label}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400">{visibleShiftWeek.rangeLabel}</p></div>
@@ -413,11 +597,122 @@ export function ClientProfile({
                     </div>
                   </div>
                 ) : null}
-              </>
+              </div>
             ) : <p className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 p-6 text-center text-xs font-bold text-neutral-400">Turni non disponibili.</p>}
+          </div>
+
+          {/* PERSONAL HOLIDAYS */}
+          <div className="profile-glass-section order-2 space-y-5 rounded-[22px] border border-neutral-200 bg-white p-5 shadow-2xs sm:p-6">
+            <div className="flex flex-col gap-4 border-b border-neutral-100 pb-5 text-left sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-neutral-400">LE MIE RICHIESTE</span>
+                <h2 className="mt-1 text-lg font-serif font-light uppercase text-neutral-900">Ferie, permessi e malattia</h2>
+                <p className="mt-1 text-xs font-medium text-neutral-400">Invia una richiesta e controllane date e stato.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => { setHolidayFormOpen(true); setHolidayMessage(""); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-neutral-700">
+                  <Plus className="size-3.5" /> Nuova richiesta
+                </button>
+                <Link href="/requests" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 text-[10px] font-black uppercase tracking-wider text-neutral-700 transition hover:bg-neutral-900 hover:text-white">
+                  Tutte le richieste <ChevronRight className="size-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {holidayMessage ? <p role="status" className={cn("rounded-xl border px-4 py-3 text-xs font-bold", holidayMessage.includes("correttamente") ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700")}>{holidayMessage}</p> : null}
+
+            {visibleHolidayRequests.length ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {visibleHolidayRequests.map((request) => {
+                  const status = holidayStatus(request.status);
+                  return (
+                    <article key={request.id} className="profile-glass-inset rounded-[20px] border border-neutral-200 bg-neutral-50 p-5 text-left">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-neutral-900 text-white"><CalendarCheck2 className="size-4" /></span>
+                        <span className={cn("rounded-full border px-2.5 py-1 text-[8px] font-black uppercase tracking-wider", status.className)}>{status.label}</span>
+                      </div>
+                      <p className="mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-neutral-400">{request.type === "FERIE" ? "Ferie" : request.type === "PERMESSO" ? "Permesso" : "Malattia"}</p>
+                      <p className="mt-1 text-base font-black text-neutral-900">{holidayDate(request.startDate)} – {holidayDate(request.endDate)}</p>
+                      {request.startTime && request.endTime ? <p className="mt-1 text-xs font-bold text-neutral-500">Orario: {request.startTime} – {request.endTime}</p> : <p className="mt-1 text-xs font-bold text-neutral-500">Giornata intera</p>}
+                      {request.reason ? <p className="mt-4 border-t border-neutral-200 pt-3 text-xs text-neutral-500">{request.reason}</p> : null}
+                      {request.type === "MALATTIA" && request.medicalCode ? <p className="mt-2 text-[10px] font-bold text-neutral-600">Protocollo: {request.medicalCode}</p> : null}
+                      {request.adminNote ? <p className="mt-2 text-[10px] font-bold text-neutral-600">Nota: {request.adminNote}</p> : null}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-neutral-200 bg-neutral-50 p-8 text-center">
+                <CalendarCheck2 className="mx-auto size-6 text-neutral-300" />
+                <p className="mt-3 text-xs font-black uppercase tracking-wider text-neutral-700">Nessuna richiesta registrata</p>
+                <p className="mt-1 text-[11px] font-medium text-neutral-400">Ferie, permessi e malattie appariranno qui appena vengono inseriti.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {holidayFormOpen ? (
+        <div className="fixed inset-0 z-[120] grid place-items-center overflow-y-auto bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="holiday-request-title" onMouseDown={(event) => { if (event.target === event.currentTarget && !holidaySaving) setHolidayFormOpen(false); }}>
+          <form onSubmit={submitHolidayRequest} className="my-auto w-full max-w-lg rounded-[26px] border border-white/15 bg-neutral-950 p-5 text-white shadow-[0_30px_100px_rgba(0,0,0,0.55)] sm:p-7">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-5">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-white/45">Nuova richiesta</p>
+                <h2 id="holiday-request-title" className="mt-1 text-2xl font-serif uppercase">Nuova richiesta</h2>
+                <p className="mt-1 text-xs font-medium text-white/55">La richiesta verrà inviata direttamente all’amministrazione.</p>
+              </div>
+              <button type="button" onClick={() => setHolidayFormOpen(false)} disabled={holidaySaving} className="grid size-11 shrink-0 place-items-center rounded-full border border-white/15 text-white/70 transition hover:bg-white hover:text-black disabled:opacity-40" aria-label="Chiudi richiesta ferie"><X className="size-4" /></button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Tipo di richiesta</span>
+                <select value={holidayForm.type} onChange={(event) => setHolidayForm((current) => ({ ...current, type: event.target.value as typeof current.type, startTime: "", endTime: "", medicalCode: "" }))} className="min-h-12 w-full rounded-xl border border-white/15 bg-neutral-900 px-3 text-sm font-bold text-white outline-none transition focus:border-white/50">
+                  <option value="FERIE">Ferie</option>
+                  <option value="PERMESSO">Permesso</option>
+                  <option value="MALATTIA">Malattia</option>
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Dal</span>
+                <input required type="date" value={holidayForm.startDate} onChange={(event) => setHolidayForm((current) => ({ ...current, startDate: event.target.value, endDate: current.endDate < event.target.value ? event.target.value : current.endDate }))} className="min-h-12 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-bold text-white outline-none transition focus:border-white/50" />
+              </label>
+              <label className="space-y-2">
+                <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Al</span>
+                <input required type="date" min={holidayForm.startDate} value={holidayForm.endDate} onChange={(event) => setHolidayForm((current) => ({ ...current, endDate: event.target.value }))} className="min-h-12 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-bold text-white outline-none transition focus:border-white/50" />
+              </label>
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Motivo o nota (facoltativo)</span>
+                <textarea rows={3} maxLength={500} value={holidayForm.reason} onChange={(event) => setHolidayForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Scrivi una nota per l’amministrazione..." className="w-full resize-none rounded-xl border border-white/15 bg-white/10 px-3 py-3 text-sm font-medium text-white outline-none placeholder:text-white/30 focus:border-white/50" />
+              </label>
+              {holidayForm.type === "PERMESSO" ? (
+                <>
+                  <label className="space-y-2">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Ora inizio (facoltativa)</span>
+                    <input type="time" value={holidayForm.startTime} onChange={(event) => setHolidayForm((current) => ({ ...current, startTime: event.target.value }))} className="min-h-12 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-bold text-white outline-none transition focus:border-white/50" />
+                  </label>
+                  <label className="space-y-2">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Ora fine (facoltativa)</span>
+                    <input type="time" value={holidayForm.endTime} onChange={(event) => setHolidayForm((current) => ({ ...current, endTime: event.target.value }))} className="min-h-12 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-bold text-white outline-none transition focus:border-white/50" />
+                  </label>
+                </>
+              ) : null}
+              {holidayForm.type === "MALATTIA" ? (
+                <label className="space-y-2 sm:col-span-2">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-white/55">Numero protocollo medico</span>
+                  <input value={holidayForm.medicalCode} onChange={(event) => setHolidayForm((current) => ({ ...current, medicalCode: event.target.value }))} placeholder="Inserisci il numero di protocollo" className="min-h-12 w-full rounded-xl border border-white/15 bg-white/10 px-3 text-sm font-bold text-white outline-none placeholder:text-white/30 focus:border-white/50" />
+                  <p className="text-[10px] font-medium text-white/40">Se non è ancora disponibile, la malattia resterà da giustificare.</p>
+                </label>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setHolidayFormOpen(false)} disabled={holidaySaving} className="min-h-12 rounded-xl border border-white/15 px-5 text-[10px] font-black uppercase tracking-wider text-white/70 transition hover:bg-white/10 disabled:opacity-40">Annulla</button>
+              <button type="submit" disabled={holidaySaving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-[10px] font-black uppercase tracking-wider text-neutral-950 transition hover:bg-neutral-200 disabled:cursor-wait disabled:opacity-60"><Send className="size-3.5" />{holidaySaving ? "Invio..." : "Invia richiesta"}</button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       {/* 👤 TAB 2: INFORMAZIONI PERSONALI & DOCUMENTI PROPRI */}
       {activeTab === "info" && (

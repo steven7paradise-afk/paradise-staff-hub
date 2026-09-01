@@ -224,14 +224,15 @@
   background-color: rgba(38, 35, 45, 0.72) !important;
 }
 
-/* Profilo: immagine capelli originale e gerarchia Liquid Glass adattiva. */
+/* Profilo: fondo uniforme senza immagine o stacchi orizzontali. */
 .profile-liquid-page {
   isolation: isolate;
-  background:
-    radial-gradient(ellipse 72% 46% at 0% 0%, color-mix(in srgb, var(--primary) 34%, transparent), transparent 72%),
-    radial-gradient(ellipse 62% 48% at 100% 6%, rgba(198, 158, 124, 0.42), transparent 72%),
-    radial-gradient(ellipse 74% 48% at 48% 100%, color-mix(in srgb, var(--secondary) 42%, transparent), transparent 72%),
-    linear-gradient(145deg, #f8e9ef 0%, #ead9ce 46%, #d7bea8 100%);
+  background: #ffffff;
+}
+
+.app-content-surface:has(.profile-liquid-page),
+.app-content-surface:has(.profile-liquid-page) .app-liquid-canvas {
+  background: #ffffff !important;
 }
 
 .profile-liquid-page > :not([class*="fixed"]) {
@@ -283,11 +284,12 @@
 }
 
 .dark .app-content-surface .profile-liquid-page {
-  background:
-    radial-gradient(ellipse 72% 46% at 0% 0%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 72%),
-    radial-gradient(ellipse 62% 48% at 100% 6%, rgba(162, 119, 84, 0.22), transparent 72%),
-    radial-gradient(ellipse 74% 48% at 48% 100%, color-mix(in srgb, var(--gradient) 14%, transparent), transparent 72%),
-    linear-gradient(145deg, #211c20 0%, #1a1719 48%, #121114 100%) !important;
+  background: #191719 !important;
+}
+
+.dark .app-content-surface:has(.profile-liquid-page),
+.dark .app-content-surface:has(.profile-liquid-page) .app-liquid-canvas {
+  background: #191719 !important;
 }
 
 .dark .app-content-surface .profile-liquid-page :is([class~="bg-white"], [class~="bg-white/75"]) {
@@ -337,10 +339,7 @@
 
 @media (max-width: 767px) {
   .profile-liquid-page {
-    background:
-      radial-gradient(circle at 10% 2%, color-mix(in srgb, var(--primary) 36%, transparent), transparent 30rem),
-      radial-gradient(circle at 100% 24rem, rgba(199, 159, 126, 0.32), transparent 34rem),
-      linear-gradient(165deg, #f8e8ef 0%, #ebdcd3 42%, #ddc6b2 100%);
+    background: #ffffff;
   }
 
   .profile-liquid-page .profile-glass-hero,
@@ -356,10 +355,7 @@
   }
 
   .dark .app-content-surface .profile-liquid-page {
-    background:
-      radial-gradient(circle at 10% 2%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 30rem),
-      radial-gradient(circle at 100% 24rem, rgba(157, 111, 80, 0.18), transparent 34rem),
-      linear-gradient(165deg, #231d21 0%, #191619 52%, #121114 100%) !important;
+    background: #191719 !important;
   }
 }
 

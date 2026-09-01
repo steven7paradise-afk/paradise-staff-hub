@@ -105,10 +105,13 @@ export function DashboardRedesignClient({
   const [communicationsOpen, setCommunicationsOpen] = useState(false);
   const [activeComms, setActiveComms] = useState(unreadCommunications);
   const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  // Il primo render deve essere identico tra server e browser. Il tempo live
+  // parte soltanto dopo l'hydration, evitando differenze di un secondo.
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => setActiveComms(unreadCommunications), [unreadCommunications]);
   useEffect(() => {
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -144,8 +147,8 @@ export function DashboardRedesignClient({
       : last?.type === "ENTRATA" || last?.type === "RIENTRO"
         ? "TURNO"
         : "FUORI";
-    if (status === "TURNO" && entryAt !== null) workedMs += now - entryAt;
-    if (status === "PAUSA" && pauseAt !== null) breakMs += now - pauseAt;
+    if (now !== null && status === "TURNO" && entryAt !== null) workedMs += now - entryAt;
+    if (now !== null && status === "PAUSA" && pauseAt !== null) breakMs += now - pauseAt;
     return { status, workedSeconds: Math.max(0, Math.floor(workedMs / 1000)), breakSeconds: Math.max(0, Math.floor(breakMs / 1000)) };
   }, [recentLogs, now]);
 

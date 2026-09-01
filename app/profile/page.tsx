@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
+import { attendanceActualMinutes } from "@/lib/scheduled-attendance";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,7 @@ export default async function ProfilePage() {
     allEmployees,
     weeklySchedules,
     weeklyAttendanceLogs,
+    holidayRequests,
   ] = await Promise.all([
     prisma.scheduleEntry.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, include: { category: true } }),
     prisma.attendanceLog.findMany({ where: { user_id: user.id, date: { gte: monthStart, lt: monthEnd } }, select: { date: true, type: true, timestamp: true, note: true }, orderBy: { timestamp: "asc" } }),
@@ -104,8 +106,25 @@ export default async function ProfilePage() {
     }),
     prisma.attendanceLog.findMany({
       where: { user_id: user.id, date: { gte: currentWeekStart, lt: twoWeekEnd } },
-      select: { date: true, type: true, time: true, timestamp: true },
+      select: { date: true, type: true, time: true, timestamp: true, note: true },
       orderBy: { timestamp: "asc" },
+    }),
+    prisma.leaveRequest.findMany({
+      where: { user_id: user.id, type: { in: ["FERIE", "PERMESSO", "MALATTIA"] } },
+      select: {
+        id: true,
+        type: true,
+        start_date: true,
+        end_date: true,
+        start_time: true,
+        end_time: true,
+        status: true,
+        reason: true,
+        admin_note: true,
+        medical_code: true,
+        created_at: true,
+      },
+      orderBy: [{ start_date: "desc" }, { created_at: "desc" }],
     }),
   ]);
   
@@ -190,10 +209,15 @@ export default async function ProfilePage() {
       const endTime = schedule?.end_time || schedule?.category.end_time || null;
       const attendance = weeklyAttendanceLogs
         .filter((log) => log.date.toISOString().slice(0, 10) === dateKey)
-        .map((log) => ({
-          type: log.type,
-          time: log.time ? log.time.slice(0, 5) : new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(log.timestamp),
-        }));
+        .map((log) => {
+          const minutes = attendanceActualMinutes(log);
+          return {
+            type: log.type,
+            time: `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`,
+            timestamp: log.timestamp.toISOString(),
+            minutes,
+          };
+        });
       return {
         dateKey,
         dayName: new Intl.DateTimeFormat("it-IT", { weekday: "short", timeZone: "UTC" }).format(date),
@@ -264,6 +288,19 @@ export default async function ProfilePage() {
         }}
         unreadNotifications={unreadNotifications}
         shiftWeeks={shiftWeeks}
+        holidayRequests={holidayRequests.map((request) => ({
+          id: request.id,
+          type: request.type as "FERIE" | "PERMESSO" | "MALATTIA",
+          startDate: request.start_date.toISOString(),
+          endDate: request.end_date.toISOString(),
+          startTime: request.start_time,
+          endTime: request.end_time,
+          status: request.status,
+          reason: request.reason,
+          adminNote: request.admin_note,
+          medicalCode: request.medical_code,
+          createdAt: request.created_at.toISOString(),
+        }))}
         settingsNode={
           <ProfileSettings
             photoUrl={user.photo_url}
