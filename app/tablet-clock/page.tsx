@@ -42,6 +42,13 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Tablet Clock | Paradise",
     description: "Tablet clock-in and appointment manager interface.",
     manifest: "/tablet-clock-manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/tablet-clock-icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/tablet-clock-icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: "/tablet-clock-icon-180.png", sizes: "180x180", type: "image/png" }],
+    },
     appleWebApp: {
       capable: true,
       title: "Paradise Clock",

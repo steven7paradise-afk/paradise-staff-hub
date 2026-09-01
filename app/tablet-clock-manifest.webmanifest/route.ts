@@ -11,21 +11,27 @@ export function GET() {
     start_url: "/tablet-clock",
     scope: "/",
     display: "standalone",
-    background_color: "#FFFFFF",
-    theme_color: "#FFA8DD",
+    background_color: "#050505",
+    theme_color: "#050505",
     orientation: "landscape",
     icons: [
       {
-        src: "/icon-192.png",
+        src: "/tablet-clock-icon-192.png",
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icon-512.png",
+        src: "/tablet-clock-icon-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
+      },
+      {
+        src: "/tablet-clock-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
   });
