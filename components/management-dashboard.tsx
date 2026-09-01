@@ -476,13 +476,18 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                 </div>
 
                 <div className="min-w-0 rounded-[24px] border border-white/10 bg-white/[0.045] p-4 sm:p-5">
-                  <div className="flex items-center gap-2"><LineChart className="size-5 text-[#f080b7]" /><h3 className="font-black">Attività giornaliera</h3><span className="ml-auto text-[10px] font-bold uppercase text-white/45">Passa il mouse sui giorni</span></div>
+                  <div className="flex flex-wrap items-center gap-2"><LineChart className="size-5 text-[#f080b7]" /><h3 className="font-black">Attività giornaliera</h3><span className="ml-auto text-[10px] font-bold uppercase text-white/45">Numero grande: schede · piccolo: giorno</span></div>
                   <div className="mt-5 overflow-x-auto pb-2">
                     <div className="min-w-[1580px] space-y-4 pb-2">
                       {selectedWorker.months.map((month) => {
                         const max = Math.max(1, ...month.days.map((day) => day.controls));
                         return <div key={month.key} className="grid grid-cols-[120px_repeat(31,44px)] items-center gap-1.5">
-                          <div className="pr-3"><p className="truncate text-xs font-black capitalize">{month.label}</p><p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p></div>
+                          <div className="sticky left-0 z-10 self-stretch bg-[#151e2c] pr-3 shadow-[12px_0_18px_-14px_rgba(0,0,0,0.95)]">
+                            <div className="flex h-full flex-col justify-center">
+                              <p className="truncate text-xs font-black capitalize">{month.label}</p>
+                              <p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p>
+                            </div>
+                          </div>
                           {month.days.map((day) => (
                             <div key={day.day} className="relative">
                               <button
@@ -503,9 +508,16 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                                   setDayTooltip({ x: rect.left + rect.width / 2, y: rect.top - 10, month, day });
                                 }}
                                 onBlur={() => setDayTooltip(null)}
-                                className={`grid size-11 place-items-end rounded-[9px] border pb-1 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f8b0d0] ${!day.valid ? "border-transparent bg-transparent text-transparent" : selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day ? "border-white bg-[#f080b7] text-white shadow-[0_0_0_3px_rgba(240,128,183,0.25)]" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.08] bg-white/[0.055] text-white/45 hover:bg-white/10"}`}
+                                className={`relative grid size-11 place-items-center rounded-[9px] border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f8b0d0] ${!day.valid ? "border-transparent bg-transparent text-transparent" : selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day ? "border-white bg-[#f080b7] text-white shadow-[0_0_0_3px_rgba(240,128,183,0.25)]" : day.controls ? "border-[#f080b7]/30 bg-[#f080b7] text-white hover:brightness-110" : "border-white/[0.08] bg-white/[0.055] text-white/45 hover:bg-white/10"}`}
                                 style={day.valid && day.controls && !(selectedAnalyticsDay?.monthKey === month.key && selectedAnalyticsDay.day === day.day) ? { opacity: 0.42 + day.controls / max * 0.58 } : undefined}
-                              ><span>{day.day}</span></button>
+                              >
+                                {day.valid ? (
+                                  <>
+                                    <strong className={`text-sm font-black tabular-nums ${day.controls ? "text-white" : "text-white/25"}`}>{day.controls}</strong>
+                                    <span className="absolute bottom-0.5 right-1 text-[8px] font-semibold tabular-nums opacity-65">{day.day}</span>
+                                  </>
+                                ) : null}
+                              </button>
                             </div>
                           ))}
                         </div>;
