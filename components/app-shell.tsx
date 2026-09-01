@@ -336,12 +336,6 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
       });
     });
 
-    flatList.forEach(item => {
-      if (!addedHrefs.has(item.href)) {
-        ordered.push(item);
-      }
-    });
-
     return ordered;
   };
 

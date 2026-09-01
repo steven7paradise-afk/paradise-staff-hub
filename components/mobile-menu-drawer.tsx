@@ -54,22 +54,13 @@ export function MobileMenuDrawer({
 
   const getRenderSections = () => {
     if (sidebarConfig && sidebarConfig.length > 0) {
-      const renderedHrefs = new Set<string>();
       const configured = sidebarConfig.map((sec) => {
         const sectionItems = filteredItems
-          .filter((item) => {
-            const match = sec.routes.includes(item.href);
-            if (match) renderedHrefs.add(item.href);
-            return match;
-          })
+          .filter((item) => sec.routes.includes(item.href))
           .sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
         return { id: sec.id, title: sec.title, items: sectionItems };
       });
-      const unassigned = filteredItems.filter((item) => !renderedHrefs.has(item.href));
-      return [
-        ...configured.filter((sec) => sec.items.length > 0),
-        ...(unassigned.length ? [{ id: "fallback-unassigned", title: "Altre pagine", items: unassigned }] : []),
-      ];
+      return configured.filter((section) => section.items.length > 0);
     }
 
     const grouped: Record<string, typeof filteredItems> = {};

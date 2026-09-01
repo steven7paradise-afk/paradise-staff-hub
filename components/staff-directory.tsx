@@ -2184,18 +2184,18 @@ export function StaffDirectory({
             aria-modal="true"
             aria-labelledby="contract-renewal-popup-title"
             aria-describedby="contract-renewal-popup-description"
-            className="relative w-full max-w-6xl overflow-hidden border-y-[10px] border-black bg-white text-black shadow-[0_30px_100px_rgba(0,0,0,0.45)]"
+            className="relative w-full max-w-6xl overflow-hidden border-y-[10px] border-[#F080B7] bg-[linear-gradient(145deg,#211923_0%,#120f16_55%,#271624_100%)] text-white shadow-[0_30px_100px_rgba(0,0,0,0.60)]"
           >
             <div className="max-h-[88vh] overflow-y-auto px-6 py-7 sm:px-12 sm:py-10 lg:px-16">
               <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-lg font-black tracking-[0.36em] sm:text-2xl">PARADISE</p>
-                  <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#D96B94]">Avviso contratti</p>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-[#F4A4CA]">Avviso contratti</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => dismissContractReminder(currentContractReminder)}
-                  className="min-h-11 self-start px-2 text-sm font-semibold underline underline-offset-4 transition hover:text-[#B83D7F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                  className="min-h-11 self-start px-2 text-sm font-semibold text-white/75 underline underline-offset-4 transition hover:text-[#F4A4CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F080B7]"
                 >
                   Prosegui senza decidere
                 </button>
@@ -2205,8 +2205,8 @@ export function StaffDirectory({
                 <span className={cn(
                   "grid size-14 place-items-center rounded-full border",
                   currentContractReminder.daysLeft <= 0
-                    ? "border-red-200 bg-red-50 text-red-700"
-                    : "border-amber-200 bg-amber-50 text-amber-700",
+                    ? "border-red-400/40 bg-red-500/15 text-red-200"
+                    : "border-amber-300/40 bg-amber-400/15 text-amber-200",
                 )}>
                   <AlertTriangle className="size-6" aria-hidden="true" />
                 </span>
@@ -2218,15 +2218,15 @@ export function StaffDirectory({
                         ? "Il contratto scade oggi"
                         : "Contratto in scadenza"}
                   </h2>
-                  <p id="contract-renewal-popup-description" className="mt-3 max-w-3xl text-sm font-medium leading-6 text-black/65 sm:text-base">
-                    Indica se il contratto di <strong className="text-black">{currentContractReminder.employee.name}</strong> verrà rinnovato. Se il contratto è già scaduto, questo avviso ricomparirà a ogni ingresso nella pagina Staff finché non sarà dichiarato il rinnovo.
+                  <p id="contract-renewal-popup-description" className="mt-3 max-w-3xl text-sm font-medium leading-6 text-white/65 sm:text-base">
+                    Indica se il contratto di <strong className="text-white">{currentContractReminder.employee.name}</strong> verrà rinnovato. Se il contratto è già scaduto, questo avviso ricomparirà a ogni ingresso nella pagina Staff finché non sarà dichiarato il rinnovo.
                   </p>
-                  <div className="mt-6 grid gap-3 border-y border-black/10 py-5 sm:grid-cols-3">
-                    <div><p className="text-[9px] font-black uppercase tracking-wider text-black/40">Dipendente</p><p className="mt-1 font-black">{currentContractReminder.employee.name}</p></div>
-                    <div><p className="text-[9px] font-black uppercase tracking-wider text-black/40">Sede</p><p className="mt-1 font-black">{currentContractReminder.employee.location}</p></div>
-                    <div><p className="text-[9px] font-black uppercase tracking-wider text-black/40">Scadenza</p><p className="mt-1 font-black">{formatContractDate(currentContractReminder.contractEnd)}</p></div>
+                  <div className="mt-6 grid gap-3 border-y border-white/10 py-5 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Dipendente</p><p className="mt-1 font-black text-white">{currentContractReminder.employee.name}</p></div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Sede</p><p className="mt-1 font-black text-white">{currentContractReminder.employee.location}</p></div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4"><p className="text-[9px] font-black uppercase tracking-wider text-white/40">Scadenza</p><p className="mt-1 font-black text-white">{formatContractDate(currentContractReminder.contractEnd)}</p></div>
                   </div>
-                  <p className={cn("mt-4 text-sm font-black", currentContractReminder.daysLeft <= 0 ? "text-red-700" : "text-[#B83D7F]") }>
+                  <p className={cn("mt-4 text-sm font-black", currentContractReminder.daysLeft <= 0 ? "text-red-300" : "text-[#F4A4CA]") }>
                     {currentContractReminder.daysLeft < 0
                       ? `Scaduto da ${Math.abs(currentContractReminder.daysLeft)} ${Math.abs(currentContractReminder.daysLeft) === 1 ? "giorno" : "giorni"}`
                       : currentContractReminder.daysLeft === 0
@@ -2238,14 +2238,14 @@ export function StaffDirectory({
                 </div>
               </div>
 
-              {contractDecisionError ? <p className="mt-5 border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700" role="alert">{contractDecisionError}</p> : null}
+              {contractDecisionError ? <p className="mt-5 border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-bold text-red-200" role="alert">{contractDecisionError}</p> : null}
 
               <div className="mt-8 flex flex-col justify-end gap-3 sm:flex-row">
                 <button
                   type="button"
                   disabled={contractDecisionEmployeeId === currentContractReminder.employee.id}
                   onClick={() => void saveContractRenewalDecision("NON_RINNOVATO")}
-                  className="min-h-14 border border-black bg-white px-6 text-sm font-black uppercase tracking-wide transition hover:bg-black/5 disabled:cursor-wait disabled:opacity-50"
+                  className="min-h-14 border border-white/30 bg-white/[0.07] px-6 text-sm font-black uppercase tracking-wide text-white transition hover:border-[#F080B7] hover:bg-[#F080B7]/15 disabled:cursor-wait disabled:opacity-50"
                 >
                   Non verrà rinnovato
                 </button>
@@ -2253,7 +2253,7 @@ export function StaffDirectory({
                   type="button"
                   disabled={contractDecisionEmployeeId === currentContractReminder.employee.id}
                   onClick={() => void saveContractRenewalDecision("RINNOVATO")}
-                  className="min-h-14 bg-black px-8 text-sm font-black uppercase tracking-wide text-white transition hover:bg-[#D96B94] disabled:cursor-wait disabled:opacity-50"
+                  className="min-h-14 bg-[#F080B7] px-8 text-sm font-black uppercase tracking-wide text-[#21121A] shadow-[0_10px_30px_rgba(240,128,183,0.28)] transition hover:bg-[#F5A7CD] disabled:cursor-wait disabled:opacity-50"
                 >
                   {contractDecisionEmployeeId === currentContractReminder.employee.id ? "Salvataggio..." : "Verrà rinnovato"}
                 </button>

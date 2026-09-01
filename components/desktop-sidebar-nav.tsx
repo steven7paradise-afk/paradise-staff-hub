@@ -61,14 +61,9 @@ export function DesktopSidebarNav({
   // Group items by Section or Config Folders
   const getRenderSections = () => {
     if (sidebarConfig && Array.isArray(sidebarConfig) && sidebarConfig.length > 0) {
-      const renderedHrefs = new Set<string>();
       const sectionsToRender = sidebarConfig.map((sec) => {
         const matchedItems = filteredItems
-          .filter((item) => {
-            const match = sec.routes.includes(item.href);
-            if (match) renderedHrefs.add(item.href);
-            return match;
-          })
+          .filter((item) => sec.routes.includes(item.href))
           .sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
 
         return {
@@ -78,14 +73,7 @@ export function DesktopSidebarNav({
         };
       });
 
-      const unassignedItems = filteredItems.filter((item) => !renderedHrefs.has(item.href));
-
-      return [
-        ...sectionsToRender.filter((s) => s.items.length > 0),
-        ...(unassignedItems.length > 0
-          ? [{ id: "fallback-unassigned", title: "Altre Pagine", items: unassignedItems }]
-          : []),
-      ];
+      return sectionsToRender.filter((section) => section.items.length > 0);
     }
 
     // Default grouping by item.section
