@@ -929,12 +929,12 @@ export async function syncCowlendarConsultations(bookings: any[]) {
     });
 
     const existingEvents = existingEventsRes.data.items || [];
-    const syncedBookingIds = new Set<string>();
+    const existingEventsByBookingId = new Map<string, (typeof existingEvents)[number]>();
     const existingEventKeys = new Set<string>();
 
     for (const event of existingEvents) {
       const bookingId = cowlendarIdFromConsultationDescription(event.description);
-      if (bookingId) syncedBookingIds.add(bookingId);
+      if (bookingId) existingEventsByBookingId.set(bookingId, event);
 
       const key = consultationEventDedupeKey({
         summary: event.summary,
@@ -945,14 +945,43 @@ export async function syncCowlendarConsultations(bookings: any[]) {
       if (key) existingEventKeys.add(key);
     }
 
-    let syncedCount = 0;
+    let insertedCount = 0;
+    let updatedCount = 0;
 
     for (const { booking, event } of consultationEvents) {
       const bookingId = String(booking.id);
       const eventKey = consultationEventDedupeKey(event);
-      if (syncedBookingIds.has(bookingId) || (eventKey && existingEventKeys.has(eventKey))) {
+      const existingEvent = existingEventsByBookingId.get(bookingId);
+
+      if (existingEvent?.id) {
+        const existingEventKey = consultationEventDedupeKey({
+          summary: existingEvent.summary,
+          description: existingEvent.description,
+          start: existingEvent.start,
+          end: existingEvent.end,
+        });
+
+        if (existingEventKey === eventKey) continue;
+
+        await calendar.events.update({
+          calendarId,
+          eventId: existingEvent.id,
+          requestBody: {
+            summary: event.summary,
+            description: event.description,
+            start: { dateTime: event.startDate, timeZone: "Europe/Rome" },
+            end: { dateTime: event.endDate, timeZone: "Europe/Rome" },
+          },
+          sendUpdates: "none",
+        });
+
+        if (existingEventKey) existingEventKeys.delete(existingEventKey);
+        if (eventKey) existingEventKeys.add(eventKey);
+        updatedCount++;
         continue;
       }
+
+      if (eventKey && existingEventKeys.has(eventKey)) continue;
 
       await calendar.events.insert({
         calendarId,
@@ -964,12 +993,12 @@ export async function syncCowlendarConsultations(bookings: any[]) {
         },
       });
 
-      syncedBookingIds.add(bookingId);
+      existingEventsByBookingId.set(bookingId, { id: null } as (typeof existingEvents)[number]);
       if (eventKey) existingEventKeys.add(eventKey);
-      syncedCount++;
+      insertedCount++;
     }
 
-    return { success: true, syncedCount };
+    return { success: true, syncedCount: insertedCount + updatedCount, insertedCount, updatedCount };
   } catch (error: any) {
     console.error("Failed to sync Cowlendar consultations:", error);
     const message = String(error?.message || error || "Errore Google Calendar");

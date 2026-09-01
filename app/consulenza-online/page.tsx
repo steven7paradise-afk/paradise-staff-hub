@@ -135,25 +135,17 @@ export default async function ConsulenzaOnlinePage() {
         });
       }
 
-      const existingCowlendarIds = new Set(events.map((event) => cowlendarIdFromConsultationDescription(event.description)).filter(Boolean));
-      const existingKeys = new Set(events.map(consultationEventDedupeKey).filter(Boolean));
-      const directCowlendarEvents = [];
+      // CowCalendar is the source of truth for booking date and time. Google
+      // Calendar can still contain the previous slot for a rescheduled booking,
+      // so replace every tracked Google event with the current CowCalendar one.
+      const currentCowlendarIds = new Set(consultations.map((booking) => String(booking.id)));
+      const calendarEventsWithoutCurrentBookings = events.filter((event) => {
+        const bookingId = cowlendarIdFromConsultationDescription(event.description);
+        return !bookingId || !currentCowlendarIds.has(bookingId);
+      });
+      const directCowlendarEvents = consultations.map(cowlendarBookingToConsultationEvent);
 
-      for (const booking of consultations) {
-        const event = cowlendarBookingToConsultationEvent(booking);
-        const bookingId = String(booking.id);
-        const eventKey = consultationEventDedupeKey(event);
-
-        if (existingCowlendarIds.has(bookingId) || (eventKey && existingKeys.has(eventKey))) {
-          continue;
-        }
-
-        existingCowlendarIds.add(bookingId);
-        if (eventKey) existingKeys.add(eventKey);
-        directCowlendarEvents.push(event);
-      }
-
-      events = uniqueConsultationEvents([...events, ...directCowlendarEvents])
+      events = uniqueConsultationEvents([...directCowlendarEvents, ...calendarEventsWithoutCurrentBookings])
         .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     } catch (error: any) {
       console.error("Failed to sync Cowlendar consultations from consulenza-online:", error);
