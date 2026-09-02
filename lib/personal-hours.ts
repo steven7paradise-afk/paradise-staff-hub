@@ -97,7 +97,7 @@ export function monthlyPersonalHours(year: number, month: number, schedules: Sch
       firstPause: clock.firstPause,
       lastReturn: clock.lastReturn,
       lastExit: clock.lastExit,
-      note: storeClosed ? "Ferie" : record?.note ?? "",
+      note: record?.note ?? (storeClosed ? "Chiusura salone · ore pagate secondo il planning." : ""),
     };
   });
 }

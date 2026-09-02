@@ -54,8 +54,7 @@ function approvedPaidHours(
   const planned = schedule ? plannedNetHours(schedule.category, plannedStart, plannedEnd) : 0;
   const fallbackDay = planned > 0 ? planned : 8;
 
-  // A salon closure is recorded as holiday leave, but it must never add paid
-  // hours automatically to the monthly total.
+  // A salon closure must never add hours automatically to the monthly total.
   if (flags.storeClosed) return { hours: 0, kind: "CHIUSURA_NEGOZIO", partial: false };
   if (leave?.type === "FERIE" || flags.holiday) return { hours: fallbackDay, kind: "FERIE", partial: false };
   if (leave?.type === "PERMESSO" || flags.permission) {
@@ -81,9 +80,9 @@ function isWorkCategory(category: { code: string; name: string }) {
     name.includes("permesso") ||
     name.includes("malattia") ||
     name.includes("assenza") ||
-    name.includes("non lavora")
-    || code === "CHIUSO" || code.startsWith("CHIUSO0")
-    || name.includes("chiuso") || name.includes("chiusura salone")
+    name.includes("non lavora") ||
+    code === "CHIUSO" || code.startsWith("CHIUSO0") ||
+    name.includes("chiuso") || name.includes("chiusura salone")
   ) {
     return false;
   }
@@ -202,7 +201,7 @@ export async function GET(request: NextRequest) {
       if (isWorkCategory(schedule.category)) {
         scheduledHours = plannedNetHours(schedule.category, plannedStart, plannedEnd);
       } else {
-        defaultNote = categoryFlags(schedule.category).storeClosed ? "Ferie" : schedule.category.name;
+        defaultNote = schedule.category.name;
       }
     }
 
@@ -222,7 +221,7 @@ export async function GET(request: NextRequest) {
       workedHours: automaticHours,
       paidAbsenceHours: paidAbsence.hours,
       paidAbsenceKind: paidAbsence.kind,
-      note: paidAbsence.kind === "CHIUSURA_NEGOZIO" ? "Ferie" : record?.note ?? defaultNote,
+      note: record?.note ?? defaultNote,
       paidBreak,
       manualOverride: record?.manual_override ?? false,
       scheduledHours,

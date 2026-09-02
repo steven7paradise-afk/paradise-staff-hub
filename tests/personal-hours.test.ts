@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { monthlyPersonalHours } from "../lib/personal-hours";
 
-test("la chiusura salone resta a zero ore e usa la nota Ferie", () => {
+test("la chiusura salone resta a zero ore senza cambiare la nota", () => {
   const date = new Date("2026-09-02T00:00:00.000Z");
   const result = monthlyPersonalHours(
     2026,
@@ -19,5 +19,5 @@ test("la chiusura salone resta a zero ore e usa la nota Ferie", () => {
 
   const closedDay = result.find((day) => day.date.toISOString().slice(0, 10) === "2026-09-02");
   assert.equal(closedDay?.workedHours, 0);
-  assert.equal(closedDay?.note, "Ferie");
+  assert.equal(closedDay?.note, "Vecchia nota");
 });
