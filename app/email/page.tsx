@@ -22,6 +22,7 @@ export default async function EmailPage({
     select: {
       id: true,
       name: true,
+      email: true,
       role: true,
       sede_id: true,
       location: { select: { name: true } },
@@ -58,6 +59,7 @@ export default async function EmailPage({
       <InternalEmailComposer
         currentUserId={sender.id}
         currentUserName={sender.name}
+        currentUserEmail={sender.email}
         focusMessageId={params.message || null}
         restrictedToLocation={null}
         recipients={recipients.map((recipient) => ({
