@@ -1409,9 +1409,9 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                             <p className="text-[9px] font-black uppercase tracking-wider text-black/35">Confronto totale giornata</p>
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold">
                               <span>Atteso Shopify: <strong>{formatMoney(movement.expectedShopifyCash ?? 0)}</strong></span>
-                              <span>Dichiarato: <strong>{formatMoney(movement.declaredCashForDay ?? 0)}</strong></span>
+                              <span>Chiusura registrata: <strong>{formatMoney(movement.declaredCashForDay ?? 0)}</strong></span>
                               <span className={Math.abs((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0)) <= 0.009 ? "text-emerald-700" : "text-amber-700"}>
-                                Differenza: <strong>{formatMoney((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0))}</strong>
+                                Scostamento chiusura/Shopify: <strong>{formatMoney((movement.declaredCashForDay ?? 0) - (movement.expectedShopifyCash ?? 0))}</strong>
                               </span>
                             </div>
                             {movementFilter === "discrepancies" ? (

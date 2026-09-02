@@ -83,11 +83,11 @@ export async function POST(request: NextRequest) {
   const closingTime = before19 ? "Chiusura anticipata confermata prima delle 19:00." : "Chiusura effettuata dopo le 19:00.";
   const notes = [
     "Chiusura giornaliera automatica Contanti.",
-    `Schede completate oggi: ${summary.completedControlCount}.`,
-    `Contanti collegati alle schede completate, rilevati da Shopify: ${formatEuro(summary.controlShopifyCash)}.`,
-    `Importo dichiarato nelle stesse schede: ${formatEuro(summary.controlDeclaredCash)}.`,
+    `Controlli Cliente collegati oggi: ${summary.completedControlCount}.`,
+    `Contanti associati ai Controlli Cliente, rilevati da Shopify: ${formatEuro(summary.controlShopifyCash)}.`,
+    `Importo dichiarato negli stessi Controlli Cliente: ${formatEuro(summary.controlDeclaredCash)}.`,
     `Contanti Shopify: ${formatEuro(summary.shopifyCash)}.`,
-    `Schede mancanti o incomplete: ${summary.missingControlCount}, per ${formatEuro(summary.missingControlCash)}.`,
+    `Ordini senza Controllo Cliente: ${summary.missingControlCount}, per ${formatEuro(summary.missingControlCash)}.`,
     `Differenza sui controlli lavoratore presenti: ${formatEuro(summary.difference)}.`,
     closingTime,
   ].join(" ");

@@ -1386,9 +1386,9 @@ export function StaffFormsViewer({
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-[24px] border border-emerald-300/20 bg-emerald-300/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Schede Contanti completate oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Controlli Cliente collegati oggi</p>
                       <p className="mt-3 text-3xl font-black">{dailyCloseSummary.completedControlCount}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">Solo pagamenti contanti riconosciuti da Shopify</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Abbinati a Shopify tramite il codice ordine</p>
                     </div>
                     <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Contanti prelevati oggi</p>
@@ -1398,13 +1398,13 @@ export function StaffFormsViewer({
                     <div className="rounded-[24px] border border-[#A1B5FD]/25 bg-[#A1B5FD]/10 p-5">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Contanti con scheda trovata</p>
                       <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlShopifyCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "ordine collegato" : "ordini collegati"}, comprese le schede da completare</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "ordine collegato" : "ordini collegati"}; le note non cambiano l’abbinamento</p>
                     </div>
                   </div>
 
                   {dailyCloseSummary.completedControlRows?.length ? (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Schede incluse nella chiusura Contanti</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Controlli Cliente trovati in Shopify</p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {dailyCloseSummary.completedControlRows.slice(0, 8).map((row) => (
                           <div key={row.responseId} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
@@ -1413,7 +1413,7 @@ export function StaffFormsViewer({
                           </div>
                         ))}
                       </div>
-                      {dailyCloseSummary.completedControlRows.length > 8 ? <p className="mt-3 text-[10px] font-bold text-white/35">Altre {dailyCloseSummary.completedControlRows.length - 8} schede completate.</p> : null}
+                      {dailyCloseSummary.completedControlRows.length > 8 ? <p className="mt-3 text-[10px] font-bold text-white/35">Altri {dailyCloseSummary.completedControlRows.length - 8} Controlli Cliente collegati.</p> : null}
                     </div>
                   ) : null}
 
@@ -1421,8 +1421,8 @@ export function StaffFormsViewer({
                     <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">Schede Contanti mancanti</p>
-                          <p className="mt-1 text-xs font-semibold text-amber-100/60">Questi ordini Shopify non hanno ancora una scheda completata.</p>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">Controlli Cliente mancanti</p>
+                          <p className="mt-1 text-xs font-semibold text-amber-100/60">Questi ordini Shopify non hanno alcun Controllo Cliente collegato. Le note incomplete non vengono conteggiate come scheda mancante.</p>
                         </div>
                         <span className="rounded-full bg-amber-200 px-3 py-1.5 text-[10px] font-black uppercase text-amber-950">{dailyCloseSummary.missingControlCount} · {formatEuro(dailyCloseSummary.missingControlCash)}</span>
                       </div>
@@ -1434,14 +1434,14 @@ export function StaffFormsViewer({
                                 <p className="truncate text-xs font-black text-white">{row.clientName === "Cliente Shopify" ? "Cliente da identificare" : row.clientName}</p>
                                 <p className="mt-1 truncate text-[10px] font-semibold text-white/45">Ordine {row.order.startsWith("#") ? row.order : `#${row.order}`} · {formatEuro(row.amount)}</p>
                               </div>
-                              <span className={cn("shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase", row.state === "INCOMPLETA" ? "bg-orange-200 text-orange-950" : "bg-red-200 text-red-950")}>{row.state === "INCOMPLETA" ? "Da completare" : "Non inserita"}</span>
+                              <span className="shrink-0 rounded-full bg-red-200 px-2 py-1 text-[9px] font-black uppercase text-red-950">Non inserito</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>Tutte le schede Contanti risultano completate.</p></div>
+                    <div className="flex items-center gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>Tutti gli ordini Contanti Shopify hanno un Controllo Cliente collegato.</p></div>
                   )}
 
                   <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>

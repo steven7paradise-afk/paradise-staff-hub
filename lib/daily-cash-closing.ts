@@ -86,8 +86,11 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
           && String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").trim().toLowerCase() !== "bozza",
       };
     });
-  const allCompletedControlRows = todayControlRows
-    .filter((row) => row.completed)
+  // For cash reconciliation the relevant evidence is that the worker created
+  // a Controllo Cliente linked to the Shopify order. Notes and the internal
+  // draft/completed flag are a separate managerial responsibility and must
+  // not make the same client appear as missing from the cash comparison.
+  const linkedControlCandidates = todayControlRows
     .map((row) => ({
       responseId: row.responseId,
       clientName: row.clientName,
@@ -163,10 +166,10 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     };
   }).filter((row) => row.shopifyAmount != null);
   const shopifyCashOrderKeys = new Set(shopifyRowsByOrder.keys());
-  const completedControlRows = allCompletedControlRows.filter((row) => (
+  const linkedControlRows = linkedControlCandidates.filter((row) => (
     shopifyOrderMatchKeys(row.order).some((key) => shopifyCashOrderKeys.has(key))
   ));
-  const completedControlOrderKeys = new Set(completedControlRows.flatMap((row) => shopifyOrderMatchKeys(row.order)));
+  const linkedControlOrderKeys = new Set(linkedControlRows.flatMap((row) => shopifyOrderMatchKeys(row.order)));
   const declaredOrderKeys = new Set(controlRows.flatMap((row) => shopifyOrderMatchKeys(row.order)));
   const shopifyRows = Array.from(shopifyRowsByOrder.values()).map((row) => ({
     ...row,
@@ -175,27 +178,22 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     ))?.declaredAmount ?? null,
   }));
   const missingControlRows = shopifyRows
-    .filter((row) => !shopifyOrderMatchKeys(row.orderName).some((key) => completedControlOrderKeys.has(key)))
+    .filter((row) => !shopifyOrderMatchKeys(row.orderName).some((key) => linkedControlOrderKeys.has(key)))
     .map((row) => {
-      const startedToday = todayControlRows.find((control) => (
-        shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
-      ));
-      const linkedControl = controlRows.find((control) => (
-        shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
-      ));
-      const startedControl = startedToday || linkedControl;
       return {
         orderId: row.orderId,
         order: row.orderName || row.orderId,
-        clientName: startedControl?.clientName || row.clientName,
+        clientName: row.clientName,
         amount: row.amount,
-        state: startedControl ? "INCOMPLETA" as const : "MANCANTE" as const,
-        controlResponseId: startedControl?.responseId || null,
+        state: "MANCANTE" as const,
+        controlResponseId: null,
       };
     });
   const shopifyOnlyRows = shopifyRows.filter((row) => !declaredOrderKeys.has(cleanOrder(row.orderName)));
   const controlDeclaredCash = roundMoney(controlRows.reduce((sum, row) => sum + row.declaredAmount, 0));
-  const controlShopifyCash = roundMoney(controlRows.reduce((sum, row) => sum + (row.shopifyAmount || 0), 0));
+  const controlShopifyCash = roundMoney(shopifyRows
+    .filter((row) => shopifyOrderMatchKeys(row.orderName).some((key) => linkedControlOrderKeys.has(key)))
+    .reduce((sum, row) => sum + row.amount, 0));
   const shopifyCash = roundMoney(shopify.cash);
   const matchedControlDifference = roundMoney(controlRows.reduce((sum, row) => (
     row.shopifyOrderTotal == null ? sum : sum + row.declaredAmount - row.shopifyOrderTotal
@@ -210,8 +208,8 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     shopifyCash,
     difference: matchedControlDifference,
     controlCount: controlRows.length,
-    completedControlCount: completedControlRows.length,
-    completedControlRows,
+    completedControlCount: linkedControlRows.length,
+    completedControlRows: linkedControlRows,
     missingControlCount: missingControlRows.length,
     missingControlCash: roundMoney(missingControlRows.reduce((sum, row) => sum + row.amount, 0)),
     missingControlRows,

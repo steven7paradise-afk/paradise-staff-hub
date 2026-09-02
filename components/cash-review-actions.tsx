@@ -77,7 +77,7 @@ export function CashReviewActions({
       : status === "ERRORE"
         ? `${reviewerName} ha controllato la chiusura giornaliera e ha segnalato un errore.`
         : `${reviewerName} ha iniziato il controllo della chiusura giornaliera.`
-    : "Nessun controllo firmato ancora.";
+    : "Nessuna verifica del responsabile ancora.";
   const history = Array.isArray(initialReview?.review_events) ? initialReview.review_events.slice(-3).reverse() : [];
 
   if (!isEditing) {
