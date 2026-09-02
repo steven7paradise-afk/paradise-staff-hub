@@ -159,6 +159,7 @@ export const authConfig = {
           pathname.startsWith("/api/client-control") ||
           pathname.startsWith("/api/orders") ||
           pathname.startsWith("/api/service-forms") ||
+          pathname.startsWith("/api/remote-control") ||
           pathname.startsWith("/api/shopify-order-lookup") ||
           pathname.startsWith("/api/vat-lookup") ||
           pathname.startsWith("/api/drive-image") ||

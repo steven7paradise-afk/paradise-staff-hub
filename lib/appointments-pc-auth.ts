@@ -86,7 +86,7 @@ export async function activatePC(code: string, ip: string | null): Promise<{ acc
   };
 }
 
-export async function checkPCAuthorization(cookieToken: string | undefined): Promise<{ name: string; locationId: string; isPC: boolean } | null> {
+export async function checkPCAuthorization(cookieToken: string | undefined): Promise<{ code: string; name: string; locationId: string; isPC: boolean } | null> {
   if (!cookieToken) return null;
 
   const accessTokenHash = hashToken(cookieToken);
@@ -101,6 +101,7 @@ export async function checkPCAuthorization(cookieToken: string | undefined): Pro
   if (!found) return null;
 
   return {
+    code: found.code,
     name: found.name,
     locationId: found.locationId,
     isPC: true,

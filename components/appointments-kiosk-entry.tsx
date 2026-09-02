@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Loader2, LockKeyhole, X } from "lucide-react";
 import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
+import { RemoteControlBridge } from "@/components/remote-control-bridge";
 
 type ActiveWorker = {
   id: string;
@@ -111,6 +112,7 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
 
   return (
     <main className="relative h-dvh max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
+      <RemoteControlBridge pcMode />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex h-full flex-col items-center px-5 py-8 md:px-10 lg:px-14">

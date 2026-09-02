@@ -206,26 +206,34 @@ export function DesktopSidebarNav({
         </div>
       </nav>
 
-      <Link
-        href="/profile"
-        title={`${userName} - ${roleLabel}`}
-        className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-3 border-t border-white/10 px-2 pt-4 text-[color:var(--sidebar-text)] transition hover:opacity-80"
-      >
-        <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10">
-          {userPhoto ? (
-            <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
-          ) : (
-            <span className="grid size-full place-items-center text-[11px] font-black">
-              {userName.slice(0, 2).toUpperCase()}
-            </span>
-          )}
-          <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />
-        </span>
-        <span className="sidebar-label min-w-0 text-left">
-          <span className="block truncate text-xs font-black">{userName}</span>
-          <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
-        </span>
-      </Link>
+      <div className="sidebar-profile mx-1 mt-2 flex shrink-0 items-center gap-2 border-t border-white/10 px-2 pt-4 text-[color:var(--sidebar-text)]">
+        <Link href="/profile" title={`${userName} - ${roleLabel}`} className="flex min-w-0 flex-1 items-center gap-3 transition hover:opacity-80">
+          <span className="relative size-9 shrink-0 overflow-hidden rounded-full border border-white/15 bg-white/10">
+            {userPhoto ? (
+              <img src={resolveDrivePhotoUrl(userPhoto)} alt={userName} className="size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center text-[11px] font-black">
+                {userName.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+            <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[color:var(--user-sidebar-color,var(--sidebar))] bg-emerald-400" />
+          </span>
+          <span className="sidebar-label min-w-0 text-left">
+            <span className="block truncate text-xs font-black">{userName}</span>
+            <span className="sidebar-role mt-0.5 block truncate text-[9px] font-bold uppercase tracking-[0.15em] opacity-50">{roleLabel}</span>
+          </span>
+        </Link>
+        {["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? (
+          <Link
+            href="/remote"
+            title="Controlla da remoto un PC del salone"
+            className="sidebar-label inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 text-[9px] font-black uppercase tracking-[0.12em] transition hover:bg-white/20"
+          >
+            <DynamicIcon name="MonitorCog" className="size-3.5" />
+            Remoto
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }

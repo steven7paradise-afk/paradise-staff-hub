@@ -49,7 +49,8 @@ import {
   Share2,
   ReceiptText,
   RotateCcw,
-  Video
+  Video,
+  MonitorCog
 } from "lucide-react";
 
 const iconMap = {
@@ -100,7 +101,8 @@ const iconMap = {
   Share2,
   ReceiptText,
   RotateCcw,
-  Video
+  Video,
+  MonitorCog
 } as const;
 
 export type IconName = keyof typeof iconMap;

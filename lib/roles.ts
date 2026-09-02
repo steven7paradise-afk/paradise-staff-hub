@@ -39,6 +39,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
+  "/remote": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/consulenza-online": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/cash": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/invoices": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -244,6 +245,9 @@ export function canAccess(pathname: string, role?: Role, mansione?: string, acce
 
   if (pathname === "/") return true;
   if (isApiRoute(pathname)) return true;
+  if (pathname === "/remote" || pathname.startsWith("/remote/")) {
+    return ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role);
+  }
   if (role === "ZERO") return Boolean(matchRoute(pathname));
 
   const matchedRoute = matchRoute(pathname);
