@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 const PCS_KEY = "appointments_authorized_pcs";
 const SESSIONS_KEY = "appointments_remote_sessions";
+const PRESENCE_KEY = "appointments_remote_presence";
 const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 type PointerState = { x: number; y: number; revision: number };
@@ -37,6 +38,8 @@ type RemoteSession = {
   updatedAt: string;
   expiresAt: string;
 };
+
+type PresenceMap = Record<string, string>;
 
 function sessionsFrom(value: unknown): Record<string, RemoteSession> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -68,21 +71,37 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 401 });
   }
 
-  const [pcsSetting, sessionsSetting] = await Promise.all([
+  const [pcsSetting, sessionsSetting, presenceSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: PCS_KEY } }),
     prisma.setting.findUnique({ where: { key: SESSIONS_KEY } }),
+    prisma.setting.findUnique({ where: { key: PRESENCE_KEY } }),
   ]);
   const pcs = pcsFrom(pcsSetting?.value);
   const sessions = sessionsFrom(sessionsSetting?.value);
+  const presence = presenceSetting?.value && typeof presenceSetting.value === "object" && !Array.isArray(presenceSetting.value)
+    ? presenceSetting.value as PresenceMap
+    : {};
 
   if (isAdmin) {
     const locations = await prisma.location.findMany({ select: { id: true, name: true } });
     const locationNames = new Map(locations.map((item) => [item.id, item.name]));
+    const candidates = pcs.filter((pc) => pc.activatedAt && !pc.archivedAt && pc.accessTokenHash && !/tablet|test/i.test(pc.name));
+    const selectedByLocation = new Map<string, AuthorizedPC>();
+    for (const pc of candidates) {
+      const current = selectedByLocation.get(pc.locationId);
+      const pcOnline = Date.now() - Date.parse(presence[pc.code] || "") < 35_000;
+      const currentOnline = current ? Date.now() - Date.parse(presence[current.code] || "") < 35_000 : false;
+      const pcTime = Date.parse(pc.activatedAt || pc.createdAt);
+      const currentTime = current ? Date.parse(current.activatedAt || current.createdAt) : 0;
+      if (!current || (pcOnline && !currentOnline) || (pcOnline === currentOnline && pcTime > currentTime)) {
+        selectedByLocation.set(pc.locationId, pc);
+      }
+    }
     return NextResponse.json({
-      targets: pcs
-        .filter((pc) => pc.activatedAt && !pc.archivedAt && pc.accessTokenHash)
+      targets: Array.from(selectedByLocation.values())
         .map((pc) => {
           const locationName = locationNames.get(pc.locationId) || pc.name;
+          const online = Date.now() - Date.parse(presence[pc.code] || "") < 35_000;
           return {
             id: pc.code,
             name: pc.name,
@@ -90,6 +109,7 @@ export async function GET(request: NextRequest) {
             locationName,
             salone: appointmentSalonSlugFromName(locationName) || "buenos-aires",
             active: activeSession(sessions[pc.code]),
+            online,
             controllerName: activeSession(sessions[pc.code]) ? sessions[pc.code].controllerName : null,
           };
         }),
@@ -97,6 +117,15 @@ export async function GET(request: NextRequest) {
   }
 
   const remote = sessions[pcAuth!.code];
+  const lastSeen = Date.parse(presence[pcAuth!.code] || "");
+  if (!Number.isFinite(lastSeen) || Date.now() - lastSeen > 10_000) {
+    presence[pcAuth!.code] = new Date().toISOString();
+    await prisma.setting.upsert({
+      where: { key: PRESENCE_KEY },
+      update: { value: presence as any },
+      create: { key: PRESENCE_KEY, value: presence as any },
+    }).catch(() => null);
+  }
   const response = NextResponse.json({
     session: activeSession(remote) ? remote : null,
     target: { name: pcAuth!.name, locationId: pcAuth!.locationId },
@@ -188,6 +217,14 @@ export async function POST(request: NextRequest) {
         }
       : (previous as RemoteSession & { scroll?: ScrollState | null })?.scroll || null;
 
+    if (action === "start") {
+      for (const [code, item] of Object.entries(sessions)) {
+        const otherPc = pcsFrom(pcsSetting?.value).find((candidate) => candidate.code === code);
+        if (code !== targetCode && otherPc?.locationId === pc.locationId && item.controllerId === session.user.id) {
+          sessions[code] = { ...item, active: false, updatedAt: now.toISOString(), expiresAt: now.toISOString() };
+        }
+      }
+    }
     sessions[targetCode] = {
       targetCode,
       active: true,

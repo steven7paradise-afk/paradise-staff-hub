@@ -11,6 +11,7 @@ type Target = {
   locationName: string;
   salone: string;
   active: boolean;
+  online: boolean;
   controllerName: string | null;
 };
 
@@ -27,14 +28,20 @@ export function RemoteControlSetup() {
   const target = useMemo(() => targets.find((item) => item.id === selectedTargetId) || null, [targets, selectedTargetId]);
 
   useEffect(() => {
-    fetch("/api/remote-control", { cache: "no-store" })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error || "Impossibile caricare i PC.");
-        setTargets(Array.isArray(data.targets) ? data.targets : []);
-      })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Impossibile caricare i PC."))
-      .finally(() => setLoading(false));
+    let active = true;
+    const loadTargets = () => {
+      fetch("/api/remote-control", { cache: "no-store" })
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data?.error || "Impossibile caricare i PC.");
+          if (active) setTargets(Array.isArray(data.targets) ? data.targets : []);
+        })
+        .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : "Impossibile caricare i PC."); })
+        .finally(() => { if (active) setLoading(false); });
+    };
+    loadTargets();
+    const interval = window.setInterval(loadTargets, 5_000);
+    return () => { active = false; window.clearInterval(interval); };
   }, []);
 
   useEffect(() => {
@@ -110,11 +117,12 @@ export function RemoteControlSetup() {
                 <button key={item.id} type="button" onClick={() => setSelectedTargetId(item.id)} className={`rounded-2xl border p-5 text-left transition ${selected ? "border-[#C23976] bg-[#FFF2F7] ring-2 ring-[#C23976]/15" : "border-neutral-200 bg-neutral-50 hover:border-neutral-300"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <Monitor className="size-6 text-neutral-900" />
-                    {selected ? <CheckCircle2 className="size-5 text-[#C23976]" /> : <span className={`size-2.5 rounded-full ${item.active ? "bg-amber-400" : "bg-emerald-400"}`} />}
+                    {selected ? <CheckCircle2 className="size-5 text-[#C23976]" /> : <span className={`size-2.5 rounded-full ${item.online ? "bg-emerald-400" : "bg-neutral-300"}`} />}
                   </div>
                   <p className="mt-4 text-base font-black text-neutral-950">{item.name}</p>
                   <p className="mt-1 text-xs font-bold text-neutral-500">{item.locationName}</p>
-                  {item.active ? <p className="mt-3 text-[10px] font-black uppercase tracking-wider text-amber-700">Sessione: {item.controllerName}</p> : null}
+                  <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-neutral-400"}`}>{item.online ? "Online · pronto" : "Non collegato"}</p>
+                  {item.active ? <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-amber-700">Controllato da {item.controllerName}</p> : null}
                 </button>
               );
             })}
