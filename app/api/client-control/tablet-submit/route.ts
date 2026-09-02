@@ -35,6 +35,10 @@ function sameSalon(a?: string | null, b?: string | null) {
   return normalize(a) === normalize(b);
 }
 
+function isFranci(value?: string | null) {
+  return String(value || "").trim().toLocaleLowerCase("it") === "franci";
+}
+
 type AuditValueKind = "text" | "money" | "boolean" | "list";
 
 function normalizedAuditValue(value: unknown, kind: AuditValueKind) {
@@ -186,7 +190,10 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: staffIds },
         active: true,
-        role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+        OR: [
+          { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+          { name: { equals: "Franci", mode: "insensitive" } },
+        ],
       },
       select: {
         id: true,
@@ -197,7 +204,9 @@ export async function POST(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    staffForSalon = selectedStaff.filter((employee) => sameSalon(employee.location?.name, location.name));
+    staffForSalon = selectedStaff.filter((employee) =>
+      sameSalon(employee.location?.name, location.name) || isFranci(employee.name)
+    );
     if (!isDraft && staffForSalon.length === 0) {
       return NextResponse.json({ error: "Nessun collaboratore attivo per questa sede." }, { status: 400 });
     }
@@ -207,14 +216,17 @@ export async function POST(request: NextRequest) {
   const activeSalonStaff = await prisma.user.findMany({
     where: {
       active: true,
-      role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+      OR: [
+        { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+        { name: { equals: "Franci", mode: "insensitive" } },
+      ],
     },
     select: { name: true, location: { select: { name: true } } },
   });
   const shopifyStaffNames = formatShopifyStaffNames(
     staffNames,
     activeSalonStaff
-      .filter((employee) => sameSalon(employee.location?.name, location.name))
+      .filter((employee) => sameSalon(employee.location?.name, location.name) || isFranci(employee.name))
       .map((employee) => employee.name),
   );
 
