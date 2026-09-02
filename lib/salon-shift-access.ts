@@ -13,6 +13,7 @@ const SHIFT_PROTECTED_API_PREFIXES = [
   "/api/client-control/analytics",
   "/api/client-control/polish-note",
   "/api/client-control/tablet-submit",
+  "/api/cash/daily-close",
   "/api/orders/pickup",
   "/api/shopify-order-lookup",
 ] as const;
