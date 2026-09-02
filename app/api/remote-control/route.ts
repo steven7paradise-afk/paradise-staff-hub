@@ -20,6 +20,7 @@ const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 type PointerState = { x: number; y: number; revision: number };
 type InputState = { selector: string; value: string; revision: number };
 type ClickState = { x: number; y: number; revision: number };
+type ScrollState = { x: number; y: number; revision: number };
 type RemoteSession = {
   targetCode: string;
   active: boolean;
@@ -31,6 +32,7 @@ type RemoteSession = {
   pointer: PointerState | null;
   input: InputState | null;
   click: ClickState | null;
+  scroll: ScrollState | null;
   revision: number;
   updatedAt: string;
   expiresAt: string;
@@ -178,6 +180,13 @@ export async function POST(request: NextRequest) {
           revision: ((previous as RemoteSession & { click?: ClickState | null })?.click?.revision || 0) + 1,
         }
       : (previous as RemoteSession & { click?: ClickState | null })?.click || null;
+    const scroll = body?.scroll && Number.isFinite(body.scroll.x) && Number.isFinite(body.scroll.y)
+      ? {
+          x: Math.max(0, Math.min(1, Number(body.scroll.x))),
+          y: Math.max(0, Math.min(1, Number(body.scroll.y))),
+          revision: ((previous as RemoteSession & { scroll?: ScrollState | null })?.scroll?.revision || 0) + 1,
+        }
+      : (previous as RemoteSession & { scroll?: ScrollState | null })?.scroll || null;
 
     sessions[targetCode] = {
       targetCode,
@@ -190,6 +199,7 @@ export async function POST(request: NextRequest) {
       pointer,
       input,
       click,
+      scroll,
       revision: (previous?.revision || 0) + 1,
       updatedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),

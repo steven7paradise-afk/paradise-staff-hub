@@ -11,6 +11,7 @@ type RemoteSession = {
   pointer: { x: number; y: number; revision: number } | null;
   input: { selector: string; value: string; revision: number } | null;
   click: { x: number; y: number; revision: number } | null;
+  scroll: { x: number; y: number; revision: number } | null;
 };
 
 function selectorFor(element: Element) {
@@ -40,6 +41,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   const [controllerTarget, setControllerTarget] = useState("");
   const lastInputRevision = useRef(0);
   const lastPath = useRef("");
+  const lastScrollRevision = useRef(0);
 
   useEffect(() => {
     if (!pcMode) return;
@@ -53,6 +55,13 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         if (cancelled) return;
         setPcSession(remote);
         if (!remote) return;
+
+        if (remote.scroll && remote.scroll.revision > lastScrollRevision.current) {
+          lastScrollRevision.current = remote.scroll.revision;
+          const maxX = Math.max(0, document.documentElement.scrollWidth - window.innerWidth);
+          const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+          window.scrollTo({ left: remote.scroll.x * maxX, top: remote.scroll.y * maxY, behavior: "smooth" });
+        }
 
         if (remote.input && remote.input.revision > lastInputRevision.current) {
           lastInputRevision.current = remote.input.revision;
@@ -94,6 +103,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     if (!targetCode) return;
     setControllerTarget(targetCode);
     let lastPointerSent = 0;
+    let lastScrollSent = 0;
 
     const send = (payload: Record<string, unknown>) => {
       void fetch("/api/remote-control", {
@@ -116,6 +126,14 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       if (!field || !["INPUT", "TEXTAREA"].includes(field.tagName) || field.type === "password" || field.type === "file") return;
       send({ input: { selector: selectorFor(field), value: field.value } });
     };
+    const onScroll = () => {
+      const now = Date.now();
+      if (now - lastScrollSent < 250) return;
+      lastScrollSent = now;
+      const maxX = Math.max(1, document.documentElement.scrollWidth - window.innerWidth);
+      const maxY = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      send({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
+    };
     const onClick = (event: MouseEvent) => {
       send({ click: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
       const anchor = (event.target as Element | null)?.closest("a[href]") as HTMLAnchorElement | null;
@@ -129,10 +147,12 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     window.addEventListener("pointermove", onPointer, { passive: true });
     document.addEventListener("input", onInput, true);
     document.addEventListener("click", onClick, true);
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("input", onInput, true);
       document.removeEventListener("click", onClick, true);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [pcMode]);
 
