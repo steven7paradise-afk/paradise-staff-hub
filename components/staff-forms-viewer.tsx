@@ -150,6 +150,16 @@ type AutomaticDailyCloseSummary = {
     result: string;
     completedAt: string;
   }>;
+  missingControlCount: number;
+  missingControlCash: number;
+  missingControlRows: Array<{
+    orderId: string;
+    order: string;
+    clientName: string;
+    amount: number;
+    state: "INCOMPLETA" | "MANCANTE";
+    controlResponseId: string | null;
+  }>;
   shopifyOrders: number;
   alreadyClosed: boolean;
   existing?: { id: string; signedAt: string; signedBy: string } | null;
@@ -1386,9 +1396,9 @@ export function StaffFormsViewer({
                       <p className="mt-2 text-xs font-bold text-white/40">Rilevati automaticamente da Shopify</p>
                     </div>
                     <div className="rounded-[24px] border border-[#A1B5FD]/25 bg-[#A1B5FD]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Contanti collegati alle schede</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Contanti con scheda trovata</p>
                       <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlShopifyCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "ordine contanti riconosciuto" : "ordini contanti riconosciuti"} da Shopify</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "ordine collegato" : "ordini collegati"}, comprese le schede da completare</p>
                     </div>
                   </div>
 
@@ -1406,6 +1416,33 @@ export function StaffFormsViewer({
                       {dailyCloseSummary.completedControlRows.length > 8 ? <p className="mt-3 text-[10px] font-bold text-white/35">Altre {dailyCloseSummary.completedControlRows.length - 8} schede completate.</p> : null}
                     </div>
                   ) : null}
+
+                  {dailyCloseSummary.missingControlRows?.length ? (
+                    <div className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">Schede Contanti mancanti</p>
+                          <p className="mt-1 text-xs font-semibold text-amber-100/60">Questi ordini Shopify non hanno ancora una scheda completata.</p>
+                        </div>
+                        <span className="rounded-full bg-amber-200 px-3 py-1.5 text-[10px] font-black uppercase text-amber-950">{dailyCloseSummary.missingControlCount} · {formatEuro(dailyCloseSummary.missingControlCash)}</span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {dailyCloseSummary.missingControlRows.map((row) => (
+                          <div key={`${row.orderId}-${row.controlResponseId || "missing"}`} className="rounded-xl border border-amber-200/20 bg-black/15 px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-black text-white">{row.clientName === "Cliente Shopify" ? "Cliente da identificare" : row.clientName}</p>
+                                <p className="mt-1 truncate text-[10px] font-semibold text-white/45">Ordine {row.order.startsWith("#") ? row.order : `#${row.order}`} · {formatEuro(row.amount)}</p>
+                              </div>
+                              <span className={cn("shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase", row.state === "INCOMPLETA" ? "bg-orange-200 text-orange-950" : "bg-red-200 text-red-950")}>{row.state === "INCOMPLETA" ? "Da completare" : "Non inserita"}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>Tutte le schede Contanti risultano completate.</p></div>
+                  )}
 
                   <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>
                     <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Confronto importi delle schede collegate</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p><p className="mt-1 text-[10px] font-semibold text-white/40">Il tipo di pagamento è sempre quello rilevato da Shopify.</p></div>

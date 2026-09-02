@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     `Contanti collegati alle schede completate, rilevati da Shopify: ${formatEuro(summary.controlShopifyCash)}.`,
     `Importo dichiarato nelle stesse schede: ${formatEuro(summary.controlDeclaredCash)}.`,
     `Contanti Shopify: ${formatEuro(summary.shopifyCash)}.`,
+    `Schede mancanti o incomplete: ${summary.missingControlCount}, per ${formatEuro(summary.missingControlCash)}.`,
     `Differenza sui controlli lavoratore presenti: ${formatEuro(summary.difference)}.`,
     closingTime,
   ].join(" ");

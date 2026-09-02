@@ -73,12 +73,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
         orderBy: { updated_at: "desc" },
       })
     : [];
-  const allCompletedControlRows = rawCompletedControls
-    .filter((response) => {
-      const answers = response.answers as Record<string, unknown>;
-      return answers.client_control_is_draft !== true
-        && String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").trim().toLowerCase() !== "bozza";
-    })
+  const todayControlRows = rawCompletedControls
     .map((response) => {
       const answers = response.answers as Record<string, unknown>;
       return {
@@ -87,8 +82,19 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
         order: String(answers.second_shopify_order || answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim(),
         result: String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "Completato").trim() || "Completato",
         completedAt: response.updated_at.toISOString(),
+        completed: answers.client_control_is_draft !== true
+          && String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").trim().toLowerCase() !== "bozza",
       };
     });
+  const allCompletedControlRows = todayControlRows
+    .filter((row) => row.completed)
+    .map((row) => ({
+      responseId: row.responseId,
+      clientName: row.clientName,
+      order: row.order,
+      result: row.result,
+      completedAt: row.completedAt,
+    }));
 
   const declarations = new Map<string, {
     responseId: string;
@@ -147,6 +153,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   const completedControlRows = allCompletedControlRows.filter((row) => (
     shopifyOrderMatchKeys(row.order).some((key) => shopifyCashOrderKeys.has(key))
   ));
+  const completedControlOrderKeys = new Set(completedControlRows.flatMap((row) => shopifyOrderMatchKeys(row.order)));
   const declaredOrderKeys = new Set(controlRows.flatMap((row) => shopifyOrderMatchKeys(row.order)));
   const shopifyRows = Array.from(shopifyRowsByOrder.values()).map((row) => ({
     ...row,
@@ -154,6 +161,25 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
       shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
     ))?.declaredAmount ?? null,
   }));
+  const missingControlRows = shopifyRows
+    .filter((row) => !shopifyOrderMatchKeys(row.orderName).some((key) => completedControlOrderKeys.has(key)))
+    .map((row) => {
+      const startedToday = todayControlRows.find((control) => (
+        shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
+      ));
+      const linkedControl = controlRows.find((control) => (
+        shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
+      ));
+      const startedControl = startedToday || linkedControl;
+      return {
+        orderId: row.orderId,
+        order: row.orderName || row.orderId,
+        clientName: startedControl?.clientName || row.clientName,
+        amount: row.amount,
+        state: startedControl ? "INCOMPLETA" as const : "MANCANTE" as const,
+        controlResponseId: startedControl?.responseId || null,
+      };
+    });
   const shopifyOnlyRows = shopifyRows.filter((row) => !declaredOrderKeys.has(cleanOrder(row.orderName)));
   const controlDeclaredCash = roundMoney(controlRows.reduce((sum, row) => sum + row.declaredAmount, 0));
   const controlShopifyCash = roundMoney(controlRows.reduce((sum, row) => sum + (row.shopifyAmount || 0), 0));
@@ -173,6 +199,9 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     controlCount: controlRows.length,
     completedControlCount: completedControlRows.length,
     completedControlRows,
+    missingControlCount: missingControlRows.length,
+    missingControlCash: roundMoney(missingControlRows.reduce((sum, row) => sum + row.amount, 0)),
+    missingControlRows,
     shopifyOrders: shopifyRows.length,
     transactions: shopify.transactions,
     controlRows,
