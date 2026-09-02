@@ -1,6 +1,6 @@
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { prisma } from "@/lib/prisma";
-import { getShopifyDailyRevenue, getShopifyPaymentRegister, shopifyOrderMatchKeys } from "@/lib/shopify-payment-register";
+import { getShopifyDailyRevenue, getShopifyOrderClientNames, getShopifyPaymentRegister, shopifyOrderMatchKeys } from "@/lib/shopify-payment-register";
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -116,6 +116,13 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     });
   }
 
+  const shopifyClientNames = await getShopifyOrderClientNames(shopify.payments.map((payment) => payment.orderId));
+  const shopifyOrderTotals = new Map<string, number>();
+  for (const payment of shopify.payments) {
+    const key = cleanOrder(payment.orderName) || payment.orderId;
+    shopifyOrderTotals.set(key, roundMoney((shopifyOrderTotals.get(key) || 0) + payment.amount));
+  }
+
   const shopifyRowsByOrder = new Map<string, {
     orderId: string;
     orderName: string;
@@ -134,7 +141,10 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     shopifyRowsByOrder.set(key, {
       orderId: payment.orderId,
       orderName: payment.orderName,
-      clientName: payment.clientName || "Cliente Shopify",
+      clientName: shopifyClientNames.get(cleanOrder(payment.orderName))
+        || shopifyClientNames.get(payment.orderId.match(/(\d+)$/)?.[1] || "")
+        || payment.clientName
+        || "Cliente Shopify",
       amount: roundMoney(payment.amount),
       processedAt: payment.processedAt,
     });
@@ -147,6 +157,9 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     return {
       ...declaration,
       shopifyAmount: shopifyRow?.amount ?? null,
+      shopifyOrderTotal: shopifyOrderMatchKeys(declaration.order)
+        .map((key) => shopifyOrderTotals.get(key))
+        .find((amount) => amount != null) ?? null,
     };
   }).filter((row) => row.shopifyAmount != null);
   const shopifyCashOrderKeys = new Set(shopifyRowsByOrder.keys());
@@ -185,7 +198,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   const controlShopifyCash = roundMoney(controlRows.reduce((sum, row) => sum + (row.shopifyAmount || 0), 0));
   const shopifyCash = roundMoney(shopify.cash);
   const matchedControlDifference = roundMoney(controlRows.reduce((sum, row) => (
-    row.shopifyAmount == null ? sum : sum + row.declaredAmount - row.shopifyAmount
+    row.shopifyOrderTotal == null ? sum : sum + row.declaredAmount - row.shopifyOrderTotal
   ), 0));
 
   return {

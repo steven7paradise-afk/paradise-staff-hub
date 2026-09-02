@@ -1445,7 +1445,7 @@ export function StaffFormsViewer({
                   )}
 
                   <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>
-                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Confronto importi delle schede collegate</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p><p className="mt-1 text-[10px] font-semibold text-white/40">Il tipo di pagamento è sempre quello rilevato da Shopify.</p></div>
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Confronto importi delle schede collegate</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p><p className="mt-1 text-[10px] font-semibold text-white/40">Confronta il totale dichiarato con il totale dell’ordine. Nella chiusura entrano soltanto i Contanti Shopify.</p></div>
                     <span className={cn("rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider", Math.abs(dailyCloseSummary.difference) < 0.01 ? "bg-emerald-300 text-emerald-950" : "bg-amber-200 text-amber-950")}>{Math.abs(dailyCloseSummary.difference) < 0.01 ? "Coincide" : "Da verificare"}</span>
                   </div>
 
