@@ -521,8 +521,13 @@ function staffNamesReferToSamePerson(
   workerName?: string | null,
   assignedName?: string | null,
 ) {
-  const worker = normalizeSearchValue(workerName).split(" ").filter(Boolean);
-  const assigned = normalizeSearchValue(assignedName).split(" ").filter(Boolean);
+  const normalizedWorker = normalizeSearchValue(workerName);
+  const normalizedAssigned = normalizeSearchValue(assignedName);
+  // Cowlendar uses the public teammate name, while the internal app keeps the
+  // shorter staff profile name requested by the team.
+  if (normalizedWorker === "franci" && normalizedAssigned === "francesca paradise") return true;
+  const worker = normalizedWorker.split(" ").filter(Boolean);
+  const assigned = normalizedAssigned.split(" ").filter(Boolean);
   if (!worker.length || !assigned.length) return false;
   if (worker.join(" ") === assigned.join(" ")) return true;
   if (worker[0] !== assigned[0] || assigned.length < 2 || worker.length < 2) {
