@@ -132,6 +132,20 @@ type CashOrderRow = {
   controlDeclaredAmount?: number | null;
 };
 
+type AutomaticDailyCloseSummary = {
+  available: boolean;
+  date: string;
+  locationName: string;
+  before19: boolean;
+  controlDeclaredCash: number;
+  shopifyCash: number;
+  difference: number;
+  controlCount: number;
+  shopifyOrders: number;
+  alreadyClosed: boolean;
+  existing?: { id: string; signedAt: string; signedBy: string } | null;
+};
+
 function formatEuro(value: number | null | undefined) {
   if (value === null || value === undefined) return "Non indicato";
   return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
@@ -264,6 +278,11 @@ export function StaffFormsViewer({
     { id: "cash-order-1", order: "", amount: "" },
   ]);
   const [activeCashCustomerIndex, setActiveCashCustomerIndex] = useState(0);
+  const [dailyCloseOpen, setDailyCloseOpen] = useState(false);
+  const [dailyCloseLoading, setDailyCloseLoading] = useState(false);
+  const [dailyCloseSubmitting, setDailyCloseSubmitting] = useState(false);
+  const [dailyCloseSummary, setDailyCloseSummary] = useState<AutomaticDailyCloseSummary | null>(null);
+  const [dailyCloseMessage, setDailyCloseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const handleSelectCustomer = (cust: any) => {
     setAnswers((prev) => ({
@@ -852,6 +871,51 @@ export function StaffFormsViewer({
     setCustomerSearchQuery("");
   };
 
+  const openDailyClosing = async () => {
+    setDailyCloseOpen(true);
+    setDailyCloseLoading(true);
+    setDailyCloseSummary(null);
+    setDailyCloseMessage(null);
+    try {
+      const response = await fetch("/api/cash/daily-close", { cache: "no-store" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data) throw new Error(data?.error || "Riepilogo chiusura non disponibile.");
+      setDailyCloseSummary(data);
+    } catch (error) {
+      setDailyCloseMessage({ type: "error", text: error instanceof Error ? error.message : "Riepilogo chiusura non disponibile." });
+    } finally {
+      setDailyCloseLoading(false);
+    }
+  };
+
+  const completeDailyClosing = async () => {
+    if (!dailyCloseSummary || dailyCloseSubmitting || dailyCloseSummary.alreadyClosed) return;
+    const confirmEarly = dailyCloseSummary.before19;
+    if (confirmEarly && !window.confirm("Sono meno delle 19:00. Sei sicuro di voler effettuare adesso la chiusura giornaliera?")) return;
+
+    setDailyCloseSubmitting(true);
+    setDailyCloseMessage(null);
+    try {
+      const response = await fetch("/api/cash/daily-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmEarly }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile registrare la chiusura giornaliera.");
+      setDailyCloseSummary((current) => current ? {
+        ...current,
+        alreadyClosed: true,
+        existing: { id: data.closing.id, signedAt: data.closing.signed_at, signedBy: data.closing.signature_name },
+      } : current);
+      setDailyCloseMessage({ type: "success", text: "Chiusura giornaliera Cashmatic registrata correttamente, senza PIN." });
+    } catch (error) {
+      setDailyCloseMessage({ type: "error", text: error instanceof Error ? error.message : "Impossibile registrare la chiusura giornaliera." });
+    } finally {
+      setDailyCloseSubmitting(false);
+    }
+  };
+
   React.useEffect(() => {
     if (!isCashClosingForm || !selectedForm) {
       setCashSummary(null);
@@ -1089,29 +1153,21 @@ export function StaffFormsViewer({
             </div>
             <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">Cassa & Moduli</h1>
             <p className="mt-2 text-xs font-semibold text-white/45">Interfaccia touch-friendly per la gestione rapida del salone.</p>
+            {cashClosingForm && (
+              <button
+                type="button"
+                onClick={() => void openDailyClosing()}
+                className="mt-5 inline-flex min-h-14 items-center gap-3 rounded-2xl border border-[#A1B5FD]/30 bg-gradient-to-r from-[#A1B5FD] to-[#d8e1ff] px-5 text-sm font-black text-[#172554] shadow-[0_14px_40px_rgba(161,181,253,0.22)] transition hover:-translate-y-0.5 active:scale-[0.98]"
+              >
+                <span className="grid size-9 place-items-center rounded-xl bg-[#172554]/15"><Calculator className="size-5" /></span>
+                Chiusura giornaliera
+              </button>
+            )}
           </div>
         </div>
 
         {/* Unified POS Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-          {/* Card: Chiusura Cassa */}
-          {cashClosingForm && (
-            <button
-              type="button"
-              onClick={() => handleOpenForm(cashClosingForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#A1B5FD]/30"
-              style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.15)" }}
-            >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <Calculator className="size-6 text-white" />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#3b4b8c] opacity-80">CASSA</p>
-                <h2 className="mt-1 text-xl font-black text-[#111827] leading-tight">Chiusura Cassa</h2>
-              </div>
-            </button>
-          )}
-
           {/* Card: Nuovo Ordine */}
           {orderForm && (
             <button
@@ -1283,6 +1339,69 @@ export function StaffFormsViewer({
           })}
         </div>
       </div>
+
+      {dailyCloseOpen && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md sm:p-6">
+          <section className="max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-[32px] border border-white/10 bg-[#101014] text-white shadow-[0_36px_140px_rgba(0,0,0,.5)]">
+            <header className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-5 sm:px-7">
+              <div className="flex items-start gap-3">
+                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#A1B5FD]/15 text-[#BCC9FF]"><Calculator className="size-6" /></span>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BCC9FF]">Cashmatic</p>
+                  <h2 className="mt-1 text-2xl font-black">Chiusura giornaliera</h2>
+                  <p className="mt-1 text-sm font-semibold text-white/45">Importi automatici di oggi, senza conteggio manuale e senza PIN.</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/55 transition hover:bg-white/10 hover:text-white" aria-label="Chiudi"><X className="size-5" /></button>
+            </header>
+
+            <div className="space-y-5 p-5 sm:p-7">
+              {dailyCloseLoading ? (
+                <div className="grid min-h-64 place-items-center"><div className="text-center"><Loader2 className="mx-auto size-8 animate-spin text-[#BCC9FF]" /><p className="mt-4 text-sm font-bold text-white/50">Lettura Controlli Cliente e Shopify…</p></div></div>
+              ) : dailyCloseSummary ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Sede</p><p className="mt-1 text-sm font-black">{dailyCloseSummary.locationName}</p></div>
+                    <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Giorno corrente</p><p className="mt-1 text-sm font-black">{new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeZone: "Europe/Rome" }).format(new Date(`${dailyCloseSummary.date}T12:00:00Z`))}</p></div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Dichiarato nei Controlli Cliente</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlDeclaredCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "controllo Cashmatic" : "controlli Cashmatic"}</p>
+                    </div>
+                    <div className="rounded-[24px] border border-[#A1B5FD]/25 bg-[#A1B5FD]/10 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Registrato da Shopify</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.shopifyOrders} {dailyCloseSummary.shopifyOrders === 1 ? "ordine Cashmatic" : "ordini Cashmatic"}</p>
+                    </div>
+                  </div>
+
+                  <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Differenza dichiarato − Shopify</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p></div>
+                    <span className={cn("rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider", Math.abs(dailyCloseSummary.difference) < 0.01 ? "bg-emerald-300 text-emerald-950" : "bg-amber-200 text-amber-950")}>{Math.abs(dailyCloseSummary.difference) < 0.01 ? "Coincide" : "Da verificare"}</span>
+                  </div>
+
+                  {dailyCloseSummary.before19 && !dailyCloseSummary.alreadyClosed ? (
+                    <div className="flex gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm font-semibold leading-5 text-amber-100"><Clock className="mt-0.5 size-5 shrink-0" /><p>Sono meno delle 19:00. Prima di registrare la chiusura verrà chiesta una conferma della chiusura anticipata.</p></div>
+                  ) : null}
+                  {dailyCloseSummary.alreadyClosed ? (
+                    <div className="flex gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>La chiusura di oggi è già stata effettuata{dailyCloseSummary.existing?.signedBy ? ` da ${dailyCloseSummary.existing.signedBy}` : ""}. Non è possibile crearne una seconda.</p></div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {dailyCloseMessage ? <div className={cn("rounded-2xl border p-4 text-sm font-bold", dailyCloseMessage.type === "success" ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100" : "border-red-300/25 bg-red-300/10 text-red-100")}>{dailyCloseMessage.text}</div> : null}
+            </div>
+
+            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-white/[0.025] px-5 py-4 sm:px-7">
+              <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="min-h-12 rounded-2xl border border-white/10 px-5 text-sm font-black text-white/65 transition hover:bg-white/5">Chiudi</button>
+              <button type="button" onClick={() => void completeDailyClosing()} disabled={dailyCloseLoading || dailyCloseSubmitting || !dailyCloseSummary?.available || dailyCloseSummary?.alreadyClosed} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#A1B5FD] px-6 text-sm font-black text-[#172554] transition hover:bg-[#BCC9FF] disabled:cursor-not-allowed disabled:opacity-40">{dailyCloseSubmitting ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}{dailyCloseSubmitting ? "Registrazione…" : "Conferma chiusura"}</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {/* PICKUP MODAL */}
       {showPickupModal && (

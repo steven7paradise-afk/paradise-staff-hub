@@ -8,7 +8,6 @@ export const CASH_CLOSING_FIELD_IDS = {
   withdrawn: "cash_withdrawn",
   fund: "cash_fund",
   notes: "cash_notes",
-  pin: "cash_signature_pin",
 } as const;
 
 export const CASH_CLOSING_FORM_FIELDS = [
@@ -39,13 +38,6 @@ export const CASH_CLOSING_FORM_FIELDS = [
     type: "textarea",
     required: false,
     description: "Utilizza questo spazio per segnalare eventuali discrepanze, errori o problemi.",
-  },
-  {
-    id: CASH_CLOSING_FIELD_IDS.pin,
-    label: "PIN PERSONALE",
-    type: "pin",
-    required: true,
-    description: "Inserisci il tuo PIN personale per firmare la chiusura cassa.",
   },
 ];
 
@@ -83,7 +75,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
       where: { id: existing.id },
       data: {
         category: CASH_CLOSING_FORM_CATEGORY,
-        description: "Dichiara gli ordini ricevuti in contanti, controlla il riferimento Shopify, indica il fondo cassa e firma con il PIN personale.",
+        description: "Chiusura automatica Cashmatic con confronto tra Controllo Cliente e Shopify.",
         icon: existing.icon || "Calculator",
         active: true,
         allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
@@ -96,7 +88,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
   return prisma.serviceForm.create({
     data: {
       name: CASH_CLOSING_FORM_NAME,
-      description: "Registra i contanti dichiarati manualmente, verifica il riferimento teorico Shopify, indica il fondo cassa e firma la chiusura con il PIN personale.",
+      description: "Chiusura automatica Cashmatic con confronto tra Controllo Cliente e Shopify.",
       category: CASH_CLOSING_FORM_CATEGORY,
       icon: "Calculator",
       active: true,

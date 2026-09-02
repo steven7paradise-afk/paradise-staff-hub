@@ -4,7 +4,6 @@ import { uploadFileToGoogleDrive } from "@/lib/google-drive";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
 import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
-import { isPinValidForUser, identifyWorkerByPin } from "@/lib/pin";
 import { getOperationalUser } from "@/lib/operational-session";
 import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
 import { isServiceFormFieldVisible } from "@/lib/service-form-visibility";
@@ -173,44 +172,18 @@ export async function POST(request: NextRequest) {
       : null;
 
     if (isCashClosing) {
-      const pinField = fields.find((field) => field.type === "pin" || field.id === CASH_CLOSING_FIELD_IDS.pin || field.label.toUpperCase().includes("PIN"));
-      const pinValue = pinField ? String(answersObj[pinField.id] ?? "").trim() : "";
-
-      if (!/^\d{4,6}$/.test(pinValue)) {
-        return NextResponse.json({ error: "Inserisci un PIN personale valido per firmare la chiusura cassa." }, { status: 401 });
-      }
-
-      let signingUser: { id: string; name: string; role: string; pin_hash?: string | null; pin_lookup?: string | null } | null = null;
-
-      if (sessionUser.id !== "PC_CASSA") {
-        signingUser = await prisma.user.findUnique({
-          where: { id: sessionUser.id },
-          select: { id: true, name: true, role: true, pin_hash: true, pin_lookup: true },
-        });
-      }
-
-      const found = await identifyWorkerByPin(pinValue, sessionUser.sedeId || "");
-      if (found) {
-        signingUser = { id: found.id, name: found.name, role: found.role };
-      } else if (signingUser?.pin_hash) {
-        const isValid = await isPinValidForUser(signingUser.id, pinValue, signingUser.pin_hash, signingUser.pin_lookup);
-        if (!isValid) signingUser = null;
-      } else {
-        signingUser = null;
-      }
-
+      const signingUser = await prisma.user.findUnique({
+        where: { id: dbUserId },
+        select: { id: true, name: true, role: true },
+      });
       if (!signingUser) {
-        return NextResponse.json({ error: "PIN personale non valido per firmare la chiusura cassa." }, { status: 401 });
+        return NextResponse.json({ error: "Lavoratore non disponibile per registrare la chiusura cassa." }, { status: 400 });
       }
 
       const fundValue = Number(String(answersObj[CASH_CLOSING_FIELD_IDS.fund] ?? "").replace(",", "."));
       const notesValue = String(answersObj[CASH_CLOSING_FIELD_IDS.notes] ?? "").trim();
       if (Number.isFinite(fundValue) && Math.abs(fundValue - 50) > 0.009 && !notesValue) {
         return NextResponse.json({ error: "Il fondo cassa e diverso da € 50,00: inserisci una nota di giustificazione." }, { status: 400 });
-      }
-
-      if (pinField) {
-        delete answersObj[pinField.id];
       }
 
       if (!location || !sessionUser.sedeId) {

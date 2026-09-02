@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { StaffFormsViewer } from "@/components/staff-forms-viewer";
 import { auth } from "@/lib/auth";
@@ -10,11 +10,10 @@ import { checkPCAuthorization, appointmentsPcCookieName, appointmentsPcWorkerCoo
 import type { Role } from "@/lib/roles";
 import { requireServicePageAccess } from "@/lib/service-page-access";
 import { ensureOrderForm } from "@/lib/order-form";
-import { ensureCashClosingForm, isCashClosingFormName } from "@/lib/cash-closing-form";
+import { ensureCashClosingForm } from "@/lib/cash-closing-form";
 import { ensureClientControlForm } from "@/lib/client-control-form";
 import { ensureItalianInvoiceForm } from "@/lib/italian-invoice-form";
 import { ensureRefundForm } from "@/lib/refund-form";
-import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import {
   normalizeServiceFormsVisibility,
   SERVICE_FORMS_VISIBILITY_KEY,
@@ -107,12 +106,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
 
   const locationId = sessionUser.sedeId;
 
-  const headerStore = await headers();
-  const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
-  const tabletDevice = requestedDevice
-    ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore))
-    : null;
-  const isVerifiedTabletDevice = Boolean(tabletDevice);
   const isManagementRole = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
 
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
@@ -146,11 +139,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     const allowedRoles = form.allowed_roles as string[] | null;
     const allowedLocations = form.allowed_location_ids as string[] | null;
     const isCandidacy = form.name.toUpperCase().includes("CANDIDATURA");
-    const isCashClosing = isCashClosingFormName(form.name, form.category);
-
-    if (isCashClosing && !isManagementRole && !isVerifiedTabletDevice) {
-      return false;
-    }
 
     if (!isManagementRole && !isCurrentUserInShift && offShiftHiddenIds.has(form.id)) {
       return false;

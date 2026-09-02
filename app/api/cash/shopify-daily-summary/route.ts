@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
-import { getShopifyDailyRevenue, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
-
-function cleanOrder(value: string) {
-  return value.replace(/^#/, "").trim().toLowerCase();
-}
+import { automaticDailyCashSummary } from "@/lib/daily-cash-closing";
 
 export async function GET(request: NextRequest) {
   const user = await getOperationalUser(request);
@@ -17,18 +13,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Data non valida" }, { status: 400 });
   }
 
-  const monthStart = new Date(`${date.slice(0, 7)}-01T00:00:00Z`);
-  const monthEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
-  const [shopify, controls] = await Promise.all([
-    getShopifyDailyRevenue(date),
-    getShopifyPaymentRegister({
-      start: monthStart,
-      end: monthEnd,
-      locationId: user.sedeId || null,
-    }),
-  ]);
+  const summary = await automaticDailyCashSummary(date, user.sedeId);
 
-  if (!shopify.available) {
+  if (!summary.available) {
     return NextResponse.json({
       available: false,
       date,
@@ -42,61 +29,24 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const controlsByOrder = new Map<string, typeof controls>();
-  for (const control of controls) {
-    const key = cleanOrder(control.order);
-    if (!key) continue;
-    controlsByOrder.set(key, [...(controlsByOrder.get(key) || []), control]);
-  }
-
-  const groupedCash = new Map<string, {
-    orderId: string;
-    orderName: string;
-    clientName: string;
-    amount: number;
-    processedAt: string;
-    controlResponseId: string | null;
-    controlClientName: string | null;
-    controlDeclaredAmount: number | null;
-  }>();
-
-  for (const payment of shopify.payments) {
-    if (payment.provider !== "CONTANTI" && payment.provider !== "CASHMATIC") continue;
-    const current = groupedCash.get(payment.orderId);
-    if (current) {
-      current.amount += payment.amount;
-      continue;
-    }
-    const orderControls = controlsByOrder.get(cleanOrder(payment.orderName)) || [];
-    const control = orderControls.find((item) => item.method === "CONTANTI") || orderControls[0];
-    groupedCash.set(payment.orderId, {
-      orderId: payment.orderId,
-      orderName: payment.orderName,
-      clientName: control?.clientName || payment.clientName || "Cliente Shopify",
-      amount: payment.amount,
-      processedAt: payment.processedAt,
-      controlResponseId: control?.responseId || null,
-      controlClientName: control?.clientName || null,
-      controlDeclaredAmount: control ? control.declaredAmount : null,
-    });
-  }
-
-  const rows = Array.from(groupedCash.values())
-    .map((row) => ({
-      ...row,
-      method: "Contanti",
-    }))
-    .sort((a, b) => new Date(b.processedAt).getTime() - new Date(a.processedAt).getTime());
+  const rows = summary.shopifyRows.map((row) => ({
+    ...row,
+    method: "Cashmatic",
+    controlResponseId: summary.controlRows.find((control) => control.order.replace(/^#/, "").trim().toLowerCase() === row.orderName.replace(/^#/, "").trim().toLowerCase())?.responseId ?? null,
+    controlClientName: summary.controlRows.find((control) => control.order.replace(/^#/, "").trim().toLowerCase() === row.orderName.replace(/^#/, "").trim().toLowerCase())?.clientName ?? null,
+  }));
 
   return NextResponse.json({
     available: true,
     date,
-    total: shopify.cash,
+    total: summary.shopifyCash,
     card: 0,
-    cash: shopify.cash,
+    cash: summary.shopifyCash,
     other: 0,
     orders: rows.length,
-    transactions: shopify.transactions,
+    transactions: summary.transactions,
+    controlDeclaredCash: summary.controlDeclaredCash,
+    difference: summary.difference,
     rows,
   }, {
     headers: { "Cache-Control": "no-store" },
