@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   const requestedFolder = request.nextUrl.searchParams.get("folder") || "inbox";
   const folder = folders.has(requestedFolder) ? requestedFolder : "inbox";
   const [inboxCount, importantCount, draftsCount, trashCount, rows] = await Promise.all([
-    prisma.internalEmailRecipient.count({ where: { recipient_id: sender.id, deleted: false, archived: false, email: { status: "SENT" } } }),
+    prisma.internalEmailRecipient.count({ where: { recipient_id: sender.id, read_at: null, deleted: false, archived: false, email: { status: "SENT" } } }),
     prisma.internalEmailRecipient.count({ where: { recipient_id: sender.id, deleted: false, starred: true, email: { status: "SENT" } } }),
     prisma.internalEmail.count({ where: { sender_id: sender.id, status: "DRAFT", sender_deleted: false } }),
     prisma.internalEmailRecipient.count({ where: { recipient_id: sender.id, deleted: true, email: { status: "SENT" } } }),

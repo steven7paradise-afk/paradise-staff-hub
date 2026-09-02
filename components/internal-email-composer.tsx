@@ -68,6 +68,12 @@ function emailPlainText(value: string) {
   return value.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(?:p|div|blockquote|li)>/gi, "\n").replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#(?:0*39|x0*27);/gi, "'").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 function hasEmailContent(value: string) { return emailPlainText(value).length > 0; }
+function emailPreview(value: string) {
+  const characters = Array.from(emailPlainText(value).replace(/\s+/g, " ").trim());
+  if (!characters.length) return "Nessun testo";
+  if (characters.length <= 100) return characters.join("");
+  return `${characters.slice(0, 99).join("").trimEnd()}…`;
+}
 
 export function InternalEmailComposer({ currentUserId, currentUserName, currentUserEmail, recipients, restrictedToLocation, focusMessageId }: Props) {
   const [folder, setFolder] = useState<Folder>("inbox");
@@ -165,6 +171,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     setSelectedId(message.id); setCompose(false);
     if (!message.read && folder !== "sent" && folder !== "drafts") {
       setMessages((current) => current.map((item) => item.id === message.id ? { ...item, read: true } : item));
+      if (!message.archived && !message.deleted) setCounts((current) => ({ ...current, inbox: Math.max(0, current.inbox - 1) }));
       await fetch("/api/internal-email", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emailId: message.id, action: "read" }) });
     }
   }
@@ -278,7 +285,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
             {loading ? <div className="grid h-48 place-items-center"><Loader2 className="size-6 animate-spin text-[#B43A70]" /></div> : visibleMessages.length ? visibleMessages.map((message) => {
               const active = selectedId === message.id && !compose; const outgoing = folder === "sent" || folder === "drafts"; const contact = outgoing ? message.recipients[0] : message.sender; const senderName = outgoing ? message.recipients.map((recipient) => recipient.name).join(", ") || "Bozza" : message.sender.name; const contactPhoto = personPhoto(contact);
               return <button key={message.id} type="button" onClick={() => folder === "drafts" ? newMessage({ recipientIds: message.draftRecipientIds, subject: message.subject, body: message.body, draftId: message.id, attachments: message.attachments }) : void selectMessage(message)} className={`w-full border-b border-[#F0E8EC] px-5 py-4 text-left transition ${active ? "bg-[#FFF0F7]" : "bg-white hover:bg-[#FFFAFC]"}`}>
-                <div className="flex items-start gap-3"><span className={`mt-4 size-2 shrink-0 rounded-full ${message.read ? "bg-transparent" : "bg-[#F49BC4]"}`} />{contactPhoto ? <img src={contactPhoto} alt={contact?.name || "Profilo"} className="size-11 shrink-0 rounded-full object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-[10px] font-black text-[#8E315D]">{initials(contact?.name || "P")}</span>}<span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className={`min-w-0 flex-1 truncate text-[15px] ${message.read ? "font-bold text-[#493A42]" : "font-black text-[#211A1E]"}`}>{senderName}</span><span className="shrink-0 text-xs font-medium text-black/40">{formatMailDate(message.updatedAt || message.createdAt)}</span><span className="text-lg leading-none text-black/25 lg:hidden">›</span></span><span className="mt-0.5 block truncate text-[13px] font-bold text-[#352930]">{message.subject}</span><span className="mt-0.5 block line-clamp-2 text-[13px] font-medium leading-[18px] text-black/42">{emailPlainText(message.body) || "Nessun testo"}</span><span className="mt-1.5 flex gap-2">{message.starred ? <Star className="size-3.5 fill-amber-400 text-amber-400" /> : null}{message.attachments.length ? <Paperclip className="size-3.5 text-[#B43A70]" /> : null}</span></span></div>
+                <div className="flex items-start gap-3"><span className={`mt-4 size-2 shrink-0 rounded-full ${message.read ? "bg-transparent" : "bg-[#F49BC4]"}`} />{contactPhoto ? <img src={contactPhoto} alt={contact?.name || "Profilo"} className="size-11 shrink-0 rounded-full object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-[10px] font-black text-[#8E315D]">{initials(contact?.name || "P")}</span>}<span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className={`min-w-0 flex-1 truncate text-[15px] ${message.read ? "font-bold text-[#493A42]" : "font-black text-[#211A1E]"}`}>{senderName}</span><span className="shrink-0 text-xs font-medium text-black/40">{formatMailDate(message.updatedAt || message.createdAt)}</span><span className="text-lg leading-none text-black/25 lg:hidden">›</span></span><span className="mt-0.5 block truncate text-[13px] font-bold text-[#352930]">{message.subject}</span><span className="mt-0.5 block line-clamp-2 text-[13px] font-medium leading-[18px] text-black/42">{emailPreview(message.body)}</span><span className="mt-1.5 flex gap-2">{message.starred ? <Star className="size-3.5 fill-amber-400 text-amber-400" /> : null}{message.attachments.length ? <Paperclip className="size-3.5 text-[#B43A70]" /> : null}</span></span></div>
               </button>;
             }) : <div className="grid h-60 place-items-center px-8 text-center"><div><MailOpen className="mx-auto size-8 text-black/15" /><p className="mt-3 text-sm font-black text-black/40">Nessuna email</p></div></div>}
           </div>
