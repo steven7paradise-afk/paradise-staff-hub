@@ -4,9 +4,12 @@ import { prisma } from "@/lib/prisma";
 import {
   appointmentsPcCookieName,
   appointmentsPcWorkerCookieName,
+  appointmentsRemoteTargetCookieName,
+  appointmentsRemoteWorkerCookieName,
   checkPCAuthorization,
 } from "@/lib/appointments-pc-auth";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
+import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
 
 export type OperationalUser = {
   id: string;
@@ -62,6 +65,23 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
       sedeId: pcAuth.locationId,
       isPC: true,
     };
+  }
+
+  const remoteTarget = request.cookies.get(appointmentsRemoteTargetCookieName)?.value || "";
+  const remoteWorkerId = request.cookies.get(appointmentsRemoteWorkerCookieName)?.value || "";
+  const isAdmin = Boolean(session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
+  if (isAdmin && remoteTarget && remoteWorkerId) {
+    const worker = await resolveRemoteControllerWorker(session!.user.id, remoteTarget, remoteWorkerId);
+    if (worker) {
+      return {
+        id: worker.id,
+        name: worker.name,
+        email: worker.email,
+        role: worker.role,
+        sedeId: worker.sede_id,
+        isPC: true,
+      };
+    }
   }
 
   if (!session?.user?.id) return null;

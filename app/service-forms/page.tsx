@@ -18,6 +18,7 @@ import {
   normalizeServiceFormsVisibility,
   SERVICE_FORMS_VISIBILITY_KEY,
 } from "@/lib/service-form-visibility";
+import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +28,11 @@ function isInternalFotoOrderForm(form?: { name?: string | null; category?: strin
   return name === "FOTO ORDINI" || (category === "FOTO" && name.includes("FOTO"));
 }
 
-export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string }> }) {
+export default async function ServiceFormsPage(props: { searchParams: Promise<{ fillId?: string; fill?: string; remoteTarget?: string }> }) {
   const searchParams = await props.searchParams;
   const fillId = searchParams.fillId;
   const fill = searchParams.fill;
+  const remoteTarget = typeof searchParams.remoteTarget === "string" ? searchParams.remoteTarget.trim() : "";
   const session = await auth();
   let sessionUser = session?.user;
   let isPC = false;
@@ -73,6 +75,28 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
           pcDisplayUser = { name: selectedWorker.name, photo_url: selectedWorker.photo_url };
         }
       }
+  }
+
+  const isAdminRemoteController = Boolean(
+    !pcAuth &&
+    remoteTarget &&
+    session?.user?.id &&
+    ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  if (isAdminRemoteController) {
+    const remoteWorker = await resolveRemoteControllerWorker(session!.user.id, remoteTarget);
+    if (remoteWorker) {
+      isPC = true;
+      pcLocationId = remoteWorker.sede_id || "";
+      sessionUser = {
+        id: remoteWorker.id,
+        name: remoteWorker.name,
+        email: remoteWorker.email,
+        role: remoteWorker.role,
+        sedeId: remoteWorker.sede_id,
+      } as any;
+      pcDisplayUser = { name: remoteWorker.name, photo_url: remoteWorker.photo_url };
+    }
   }
 
   if (!sessionUser) redirect("/login");
@@ -278,7 +302,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   });
 
   return (
-    <AppShell title="Forms" role={role} hideHeader pcMode={isPC} pcDisplayUser={pcDisplayUser}>
+    <AppShell
+      title="Forms"
+      role={role}
+      hideHeader
+      pcMode={isPC}
+      remoteController={isAdminRemoteController}
+      pcDisplayUser={pcDisplayUser}
+      pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/buenos-aires?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
+    >
       <StaffFormsViewer 
         forms={serializedForms} 
         employees={serializedEmployees} 

@@ -5,6 +5,9 @@ import {
   appointmentsPcCookieName,
   appointmentsPcWorkerCookieMaxAgeSeconds,
   appointmentsPcWorkerCookieName,
+  appointmentsRemoteCookieMaxAgeSeconds,
+  appointmentsRemoteTargetCookieName,
+  appointmentsRemoteWorkerCookieName,
   checkPCAuthorization,
   reconnectPC,
   type AuthorizedPC,
@@ -286,5 +289,20 @@ export async function POST(request: NextRequest) {
     update: { value: sessions as any },
     create: { key: SESSIONS_KEY, value: sessions as any },
   });
-  return NextResponse.json({ success: true, session: sessions[targetCode] });
+  const response = NextResponse.json({ success: true, session: sessions[targetCode] });
+  if (action === "stop") {
+    response.cookies.set({ name: appointmentsRemoteTargetCookieName, value: "", path: "/", maxAge: 0 });
+    response.cookies.set({ name: appointmentsRemoteWorkerCookieName, value: "", path: "/", maxAge: 0 });
+  } else if (sessions[targetCode]?.workerId) {
+    const cookieOptions = {
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: appointmentsRemoteCookieMaxAgeSeconds,
+    };
+    response.cookies.set({ name: appointmentsRemoteTargetCookieName, value: targetCode, ...cookieOptions });
+    response.cookies.set({ name: appointmentsRemoteWorkerCookieName, value: sessions[targetCode].workerId!, ...cookieOptions });
+  }
+  return response;
 }
