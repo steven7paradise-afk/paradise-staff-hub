@@ -16,8 +16,7 @@ import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { getShopifyDailyRevenue, getShopifyOrderClientNames, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
-import { PaymentControlButton } from "./payment-control-button";
+import { getShopifyDailyRevenue, getShopifyOrderClientNames, getShopifyPaymentRegister, shopifyOrderMatchKeys } from "@/lib/shopify-payment-register";
 import { ShopifyPaymentsLiveRefresh } from "./live-refresh";
 
 export const dynamic = "force-dynamic";
@@ -163,12 +162,14 @@ export default async function ShopifyPaymentsPage(props: {
     : new Map<string, string>();
   const controlsByOrder = new Map<string, typeof rows>();
   for (const control of rows) {
-    const key = cleanOrderCode(control.order);
-    if (!key) continue;
-    controlsByOrder.set(key, [...(controlsByOrder.get(key) || []), control]);
+    for (const key of shopifyOrderMatchKeys(control.order)) {
+      controlsByOrder.set(key, [...(controlsByOrder.get(key) || []), control]);
+    }
   }
   const reconciledRows = clientPayments.map((payment) => {
-    const controls = controlsByOrder.get(cleanOrderCode(payment.orderName)) || [];
+    const controls = shopifyOrderMatchKeys(payment.orderName)
+      .flatMap((key) => controlsByOrder.get(key) || [])
+      .filter((control, index, list) => list.findIndex((item) => item.id === control.id) === index);
     const control = controls[0] || null;
     const declaredAmount = control ? control.declaredAmount : 0;
     const amountMatches = Boolean(control) && Math.abs(declaredAmount - payment.amount) < 0.01;
@@ -179,7 +180,7 @@ export default async function ShopifyPaymentsPage(props: {
       declaredNormalized.includes(methodLabel(payment.methods[index] || payment.methods[0] || "").toLowerCase())
     ));
     const state = !control
-      ? "WAITING"
+      ? "AUTOMATIC"
       : amountMatches && methodMatches
         ? "CONFIRMED"
         : "MISMATCH";
@@ -199,7 +200,7 @@ export default async function ShopifyPaymentsPage(props: {
   });
   const providerCounts = liveDailyRevenue.payments.reduce((counts, payment) => counts.set(payment.provider, (counts.get(payment.provider) || 0) + 1), new Map<string, number>());
   const visibleReconciledRows = reconciledRows.filter((payment) => {
-    const matchesStatus = status === "TUTTI" || (status === "DA_CONTROLLARE" ? payment.state !== "CONFIRMED" : payment.state === "CONFIRMED");
+    const matchesStatus = status === "TUTTI" || (status === "DA_CONTROLLARE" ? payment.state === "MISMATCH" : payment.state !== "MISMATCH");
     const matchesProvider = provider === "TUTTI" || payment.providers.includes(provider);
     const matchesMethod = method === "TUTTI" || payment.methods.includes(method);
     const searchable = `${payment.clientName} ${payment.orderName} ${payment.control?.clientName || ""}`.toLowerCase();
@@ -213,16 +214,8 @@ export default async function ShopifyPaymentsPage(props: {
   const todayCashTotal = todayVerifiedRows
     .filter((payment) => payment.method === "CONTANTI")
     .reduce((total, payment) => total + payment.amount, 0);
-  const scopedRows = dateFilter
-    ? rows.filter((payment) => romeDateKey(payment.createdAt) === dateFilter)
-    : rows;
-  const pendingPayments = scopedRows
-    .filter((payment) => payment.order && (
-      !payment.verified
-    ))
-    .map((payment) => ({ id: payment.responseId, order: payment.order }));
-  const verifiedCount = reconciledRows.filter((payment) => payment.state === "CONFIRMED").length;
-  const pendingCount = reconciledRows.filter((payment) => payment.state !== "CONFIRMED").length;
+  const verifiedCount = reconciledRows.filter((payment) => payment.state !== "MISMATCH").length;
+  const pendingCount = reconciledRows.filter((payment) => payment.state === "MISMATCH").length;
   const uniqueDeclaredTotal = (source: typeof rows) => Array.from(
     // The same Shopify order can have repeated or split control records. It
     // must contribute once to the declared total, never once per response.
@@ -230,8 +223,8 @@ export default async function ShopifyPaymentsPage(props: {
   ).reduce((total, payment) => total + payment.declaredAmount, 0);
   const declaredDayTotal = uniqueDeclaredTotal(rows.filter((payment) => romeDateKey(payment.createdAt) === todayKey));
   const declaredMonthTotal = uniqueDeclaredTotal(rows);
-  const dailyDifference = (liveDailyRevenue.available ? liveDailyRevenue.total : todayRevenueTotal) - declaredDayTotal;
-  const dailyIssues = reconciledRows.filter((payment) => payment.state !== "CONFIRMED");
+  const workerControlCount = reconciledRows.filter((payment) => Boolean(payment.control)).length;
+  const dailyIssues = reconciledRows.filter((payment) => payment.state === "MISMATCH");
 
   const pageSize = 40;
   const totalPages = Math.max(1, Math.ceil(visibleReconciledRows.length / pageSize));
@@ -288,8 +281,8 @@ export default async function ShopifyPaymentsPage(props: {
       <div className="shopify-payments-page space-y-5">
         <section className="relative -mx-4 overflow-hidden bg-[#0D0C12] px-5 py-8 text-white sm:mx-0 sm:rounded-[28px] sm:px-8">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(167,71,88,0.34),transparent_34%),linear-gradient(135deg,#0D0C12,#15192A)]" />
-          <div className="relative flex flex-col gap-7 xl:flex-row xl:items-start xl:justify-between">
-            <div>
+          <div className="relative grid gap-7">
+            <div className="max-w-4xl">
               <Link href={`/cash?month=${selectedMonth}`} className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-white/60 hover:text-white">
                 <ArrowLeft className="size-4" />
                 Torna alla cassa
@@ -300,10 +293,10 @@ export default async function ShopifyPaymentsPage(props: {
               </div>
               <h1 className="mt-4 text-3xl font-black sm:text-5xl">Controllo pagamenti</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
-                Confronta gli incassi effettivi Shopify con quanto dichiarato dai lavoratori. Il registro serve al controllo e non somma nuovamente gli importi alla cassa.
+                Acquisisce automaticamente gli incassi Shopify tramite codice ordine. Quando è presente anche il Controllo Cliente, confronta la registrazione del lavoratore senza duplicare gli importi in cassa.
               </p>
             </div>
-            <div className="w-full space-y-4 xl:max-w-[690px]">
+            <div className="w-full space-y-4">
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">{dateFilter ? "Giorno selezionato" : "Oggi"} · {todayLabel}</p>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -318,7 +311,7 @@ export default async function ShopifyPaymentsPage(props: {
                   <div className="rounded-2xl border border-violet-300/30 bg-violet-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Dichiarato lavoratori {dayCardSuffix}</p><ClipboardList className="size-4 text-violet-200" /></div>
                     <p className="mt-2 text-2xl font-black">{formatMoney(declaredDayTotal)}</p>
-                    <p className={`mt-1 text-[10px] font-bold ${Math.abs(dailyDifference) < 0.01 ? "text-emerald-300" : "text-amber-300"}`}>Differenza {formatMoney(dailyDifference)}</p>
+                    <p className="mt-1 text-[10px] font-bold text-emerald-300">{workerControlCount} controlli lavoratore registrati</p>
                   </div>
                   <div className="rounded-2xl border border-sky-300/30 bg-sky-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta / POS Shopify</p><CreditCard className="size-4 text-sky-300" /></div>
@@ -349,10 +342,7 @@ export default async function ShopifyPaymentsPage(props: {
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {dailyIssues.slice(0, 6).map((payment) => {
-                        const isMissing = payment.state === "WAITING";
-                        const issueLabel = isMissing
-                          ? "Manca dichiarazione"
-                          : !payment.amountMatches
+                        const issueLabel = !payment.amountMatches
                             ? "Importo diverso"
                             : "Metodo diverso";
                         return (
@@ -361,7 +351,7 @@ export default async function ShopifyPaymentsPage(props: {
                             href={shopifyAdminOrderUrl(payment.orderId)}
                             target="_blank"
                             rel="noreferrer"
-                            className={`rounded-xl border p-3 transition hover:-translate-y-0.5 ${isMissing ? "border-amber-300/30 bg-amber-200/10" : !payment.amountMatches ? "border-rose-300/30 bg-rose-300/10" : "border-sky-300/30 bg-sky-300/10"}`}
+                            className={`rounded-xl border p-3 transition hover:-translate-y-0.5 ${!payment.amountMatches ? "border-rose-300/30 bg-rose-300/10" : "border-sky-300/30 bg-sky-300/10"}`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
@@ -372,9 +362,9 @@ export default async function ShopifyPaymentsPage(props: {
                             </div>
                             <div className="mt-2 flex items-end justify-between gap-3">
                               <p className="text-sm font-black">Shopify {formatMoney(payment.amount)}</p>
-                              <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${isMissing ? "bg-amber-300 text-black" : !payment.amountMatches ? "bg-rose-300 text-rose-950" : "bg-sky-300 text-sky-950"}`}>{issueLabel}</span>
+                              <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${!payment.amountMatches ? "bg-rose-300 text-rose-950" : "bg-sky-300 text-sky-950"}`}>{issueLabel}</span>
                             </div>
-                            {!isMissing ? <p className="mt-1 text-[10px] font-bold text-white/50">Dichiarato {formatMoney(payment.declaredAmount)}</p> : null}
+                            <p className="mt-1 text-[10px] font-bold text-white/50">Dichiarato {formatMoney(payment.declaredAmount)}</p>
                           </a>
                         );
                       })}
@@ -383,7 +373,7 @@ export default async function ShopifyPaymentsPage(props: {
                   </div>
                 ) : (
                   <div className="mt-3 flex items-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3 text-xs font-black text-emerald-200">
-                    <CheckCircle2 className="size-4" /> Tutti i pagamenti del giorno coincidono con le dichiarazioni.
+                    <CheckCircle2 className="size-4" /> Pagamenti acquisiti automaticamente. I controlli lavoratore presenti coincidono.
                   </div>
                 )}
               </div>
@@ -413,16 +403,12 @@ export default async function ShopifyPaymentsPage(props: {
           <div className="relative mt-5 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.14em]">Controllo automatico Shopify</p>
-              <p className="mt-1 text-xs text-white/45">Verifica gli ordini {dateFilter ? "del giorno selezionato" : "del mese"} ancora senza metodo confermato.</p>
+              <p className="mt-1 text-xs text-white/45">I pagamenti con codice ordine vengono acquisiti direttamente da Shopify, senza attese.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {pendingPayments.length > 0 ? (
-                <PaymentControlButton payments={pendingPayments} />
-              ) : (
-                <span className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 px-5 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
-                  <ShieldCheck className="size-4" /> Controllo automatico attivo
-                </span>
-              )}
+              <span className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 px-5 text-xs font-black uppercase tracking-[0.12em] text-emerald-200">
+                <ShieldCheck className="size-4" /> Controllo automatico attivo
+              </span>
             </div>
           </div>
         </section>
@@ -520,7 +506,7 @@ export default async function ShopifyPaymentsPage(props: {
               <p className={`text-[10px] font-black uppercase tracking-[0.16em] ${status === "DA_CONTROLLARE" ? "text-amber-700" : "text-emerald-700"}`}>
                 {status === "DA_CONTROLLARE" ? "Coda di controllo" : status === "VERIFICATI" ? "Registro confermato" : "Riconciliazione completa"}
               </p>
-              <h2 className="mt-1 text-xl font-black">{status === "DA_CONTROLLARE" ? "Ordini in attesa o differenti" : status === "VERIFICATI" ? "Pagamenti verificati" : "Shopify e Controllo Cliente"}</h2>
+              <h2 className="mt-1 text-xl font-black">{status === "DA_CONTROLLARE" ? "Solo differenze reali" : status === "VERIFICATI" ? "Pagamenti verificati" : "Shopify e Controllo Cliente"}</h2>
             </div>
               <span className={`rounded-full px-3 py-2 text-xs font-black ${status === "DA_CONTROLLARE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
               {visibleReconciledRows.length}
@@ -530,14 +516,14 @@ export default async function ShopifyPaymentsPage(props: {
             <span>Data</span>
             <span>Cliente e ordine</span>
             <span>Atteso da Shopify</span>
-            <span>Dichiarato dal salone</span>
+            <span>Controllo Cliente / automatico</span>
             <span className="text-right">Esito</span>
           </div>
           {visibleRows.length ? (
             <div className="divide-y divide-black/5">
               {visibleRows.map((payment) => {
-                const isWaiting = payment.state === "WAITING";
                 const isConfirmed = payment.state === "CONFIRMED";
+                const isAutomatic = payment.state === "AUTOMATIC";
                 return (
                   <article key={payment.orderId} className="grid gap-4 px-5 py-5 md:grid-cols-[100px_minmax(180px,1.25fr)_minmax(170px,1fr)_minmax(170px,1fr)_150px] md:items-center md:gap-4">
                     <div>
@@ -555,7 +541,7 @@ export default async function ShopifyPaymentsPage(props: {
                           <ClipboardList className="size-3.5" /> Vedi dettagli
                         </Link>
                       </div> : null}
-                      {!isConfirmed ? (
+                      {payment.state === "MISMATCH" ? (
                         <a
                           href={shopifyAdminOrderUrl(payment.orderId)}
                           target="_blank"
@@ -571,8 +557,18 @@ export default async function ShopifyPaymentsPage(props: {
                       <p className="mt-1 text-xs font-black text-[#873647]">{payment.providers.map(providerLabel).join(" + ")}</p>
                       <p className="mt-1 truncate text-[10px] font-semibold text-black/35">{payment.gateways.map(gatewayLabel).join(" · ")}</p>
                     </div>
-                    <div className={`rounded-2xl p-3 ${isWaiting ? "bg-amber-50" : payment.amountMatches && payment.methodMatches ? "bg-emerald-50" : "bg-rose-50"}`}><p className="text-sm font-black">{isWaiting ? "Controllo non ricevuto" : payment.control?.clientName}</p><p className="mt-1 text-xs font-black">{isWaiting ? "—" : formatMoney(payment.declaredAmount)}</p><p className="mt-1 text-[10px] font-semibold text-black/45">{payment.declaredMethodText}</p></div>
-                    <div className="md:text-right"><span className={`inline-flex min-h-9 items-center rounded-full px-3 text-[10px] font-black uppercase ${isConfirmed ? "bg-emerald-100 text-emerald-800" : isWaiting ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"}`}>{isConfirmed ? "Verificato" : isWaiting ? "In attesa" : "Differenza"}</span>{!isWaiting && !isConfirmed ? <p className="mt-2 text-[9px] font-bold leading-4 text-rose-700">{!payment.amountMatches ? "Importo diverso" : ""}{!payment.amountMatches && !payment.methodMatches ? " · " : ""}{!payment.methodMatches ? "Metodo diverso" : ""}</p> : null}</div>
+                    <div className={`rounded-2xl p-3 ${isAutomatic || isConfirmed ? "bg-emerald-50" : "bg-rose-50"}`}>
+                      <p className="text-sm font-black">{isAutomatic ? "Acquisito automaticamente" : payment.control?.clientName}</p>
+                      <p className="mt-1 text-xs font-black">{isAutomatic ? formatMoney(payment.amount) : formatMoney(payment.declaredAmount)}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-black/45">{isAutomatic ? "Da Shopify tramite codice ordine" : `Controllo Cliente · ${payment.declaredMethodText}`}</p>
+                    </div>
+                    <div className="flex flex-col items-start gap-2 md:items-end">
+                      <span className="inline-flex min-h-8 items-center rounded-full bg-emerald-100 px-3 text-[9px] font-black uppercase text-emerald-800">Controllo automatico</span>
+                      {payment.control ? (
+                        <span className={`inline-flex min-h-8 items-center rounded-full px-3 text-[9px] font-black uppercase ${isConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{isConfirmed ? "Controllo lavoratore" : "Differenza lavoratore"}</span>
+                      ) : null}
+                      {payment.state === "MISMATCH" ? <p className="text-[9px] font-bold leading-4 text-rose-700">{!payment.amountMatches ? "Importo diverso" : ""}{!payment.amountMatches && !payment.methodMatches ? " · " : ""}{!payment.methodMatches ? "Metodo diverso" : ""}</p> : null}
+                    </div>
                   </article>
                 );
               })}

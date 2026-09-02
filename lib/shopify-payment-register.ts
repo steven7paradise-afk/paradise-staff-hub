@@ -43,6 +43,21 @@ export type ShopifyDailyRevenue = {
 
 export type ShopifyRevenuePayment = ShopifyDailyRevenue["payments"][number];
 
+/**
+ * Returns stable lookup keys for an order reference. Staff forms sometimes
+ * store only the number and sometimes a label, URL or multiple references.
+ */
+export function shopifyOrderMatchKeys(value: unknown) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return [];
+
+  const keys = new Set<string>([raw.replace(/^#/, "")]);
+  for (const match of raw.matchAll(/#?(\d{4,})/g)) {
+    keys.add(match[1]);
+  }
+  return [...keys].filter(Boolean);
+}
+
 export async function getShopifyOrderClientNames(orderIds: string[]) {
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
