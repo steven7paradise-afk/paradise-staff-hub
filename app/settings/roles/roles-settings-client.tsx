@@ -37,6 +37,7 @@ const ROLES: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZIN
 
 const ROUTE_META: Record<string, RouteMeta> = {
   "/dashboard": { name: "Dashboard", description: "Bacheca principale, avvisi e riepilogo operativo.", group: "Base" },
+  "/hub": { name: "Magazzino Paradise", description: "Accesso al portale Magazzino Paradise integrato.", group: "Planning & Saloni" },
   "/my-shifts": { name: "I miei turni", description: "Turni personali e orari assegnati.", group: "Base" },
   "/tasks": { name: "Task", description: "Compiti assegnati, commenti, foto e file.", group: "Base" },
   "/shift-reports": { name: "Report di turno", description: "Report giornalieri, timeline clienti e approvazione Store Manager.", group: "Gestione Staff" },

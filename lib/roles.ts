@@ -17,6 +17,7 @@ export const roleLabels: Record<Role, string> = {
 
 export const routePermissions: Record<string, Role[]> = {
   "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/hub": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shift-reports": ["RESPONSABILE"],
@@ -83,6 +84,8 @@ export function defaultEditRolesForPath(pathname: string): Role[] {
 
 const legacyAccessRouteMap: Record<string, string> = {
   dashboard: "/dashboard",
+  hub: "/hub",
+  "paradise hub": "/hub",
   "i miei turni": "/my-shifts",
   turni: "/my-shifts",
   task: "/tasks",

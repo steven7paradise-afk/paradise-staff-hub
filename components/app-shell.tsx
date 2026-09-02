@@ -38,6 +38,7 @@ function getContrastYIQ(hexcolor: string) {
 const nav = [
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
+  { href: "/hub", label: "Magazzino Paradise", iconName: "PanelsTopLeft", roles: routePermissions["/hub"], section: "Generale" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/shift-reports", label: "Report di turno", iconName: "ClipboardCheck", roles: ["RESPONSABILE"], section: "Gestione Staff" },
