@@ -507,6 +507,11 @@ export default async function ShopifyPaymentsPage(props: {
                 {status === "DA_CONTROLLARE" ? "Coda di controllo" : status === "VERIFICATI" ? "Registro confermato" : "Riconciliazione completa"}
               </p>
               <h2 className="mt-1 text-xl font-black">{status === "DA_CONTROLLARE" ? "Solo differenze reali" : status === "VERIFICATI" ? "Pagamenti verificati" : "Shopify e Controllo Cliente"}</h2>
+              <div className="mt-3 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-[0.08em]">
+                <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-emerald-800">Verde · Controllo Cliente inserito</span>
+                <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800">Giallo · Controllo Cliente mancante</span>
+                <span className="rounded-full bg-sky-100 px-3 py-1.5 text-sky-800">Azzurro · Pagamento in contanti</span>
+              </div>
             </div>
               <span className={`rounded-full px-3 py-2 text-xs font-black ${status === "DA_CONTROLLARE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
               {visibleReconciledRows.length}
@@ -524,8 +529,21 @@ export default async function ShopifyPaymentsPage(props: {
               {visibleRows.map((payment) => {
                 const isConfirmed = payment.state === "CONFIRMED";
                 const isAutomatic = payment.state === "AUTOMATIC";
+                const hasClientControl = Boolean(payment.control);
+                const isCashPayment = payment.methods.includes("CONTANTI")
+                  || payment.methods.includes("CASHMATIC")
+                  || payment.providers.includes("CONTANTI")
+                  || payment.providers.includes("CASHMATIC")
+                  || payment.gateways.some((gateway) => /cashmatic|selfpay|inpay|contanti|cash/i.test(gateway));
                 return (
-                  <article key={payment.orderId} className="grid gap-4 px-5 py-5 md:grid-cols-[100px_minmax(180px,1.25fr)_minmax(170px,1fr)_minmax(170px,1fr)_150px] md:items-center md:gap-4">
+                  <article
+                    key={payment.orderId}
+                    className={`grid gap-4 border-l-4 px-5 py-5 md:grid-cols-[100px_minmax(180px,1.25fr)_minmax(170px,1fr)_minmax(170px,1fr)_150px] md:items-center md:gap-4 ${
+                      hasClientControl
+                        ? "border-l-emerald-400 bg-emerald-50/70"
+                        : "border-l-amber-400 bg-amber-50/70"
+                    }`}
+                  >
                     <div>
                       <p className="text-sm font-black">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "short" }).format(new Date(payment.processedAt))}</p>
                       <p className="mt-1 text-xs font-semibold text-black/40">{new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" }).format(new Date(payment.processedAt))}</p>
@@ -552,21 +570,25 @@ export default async function ShopifyPaymentsPage(props: {
                         </a>
                       ) : null}
                     </div>
-                    <div className="rounded-2xl bg-[#F7F8FA] p-3">
-                      <p className="text-base font-black">{formatMoney(payment.amount)}</p>
+                    <div className={`rounded-2xl border p-3 ${isCashPayment ? "border-sky-200 bg-sky-50" : "border-black/[0.04] bg-[#F7F8FA]"}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-base font-black">{formatMoney(payment.amount)}</p>
+                        {isCashPayment ? <span className="rounded-full bg-sky-200 px-2.5 py-1 text-[9px] font-black uppercase text-sky-900">Contanti</span> : null}
+                      </div>
                       <p className="mt-1 text-xs font-black text-[#873647]">{payment.providers.map(providerLabel).join(" + ")}</p>
                       <p className="mt-1 truncate text-[10px] font-semibold text-black/35">{payment.gateways.map(gatewayLabel).join(" · ")}</p>
                     </div>
-                    <div className={`rounded-2xl p-3 ${isAutomatic || isConfirmed ? "bg-emerald-50" : "bg-rose-50"}`}>
-                      <p className="text-sm font-black">{isAutomatic ? "Acquisito automaticamente" : payment.control?.clientName}</p>
-                      <p className="mt-1 text-xs font-black">{isAutomatic ? formatMoney(payment.amount) : formatMoney(payment.declaredAmount)}</p>
-                      <p className="mt-1 text-[10px] font-semibold text-black/45">{isAutomatic ? "Da Shopify tramite codice ordine" : `Controllo Cliente · ${payment.declaredMethodText}`}</p>
+                    <div className={`rounded-2xl border p-3 ${isAutomatic ? "border-amber-200 bg-amber-100/70" : isConfirmed ? "border-emerald-200 bg-emerald-100/70" : "border-rose-200 bg-rose-50"}`}>
+                      <p className="text-sm font-black">{isAutomatic ? "Controllo Cliente mancante" : payment.control?.clientName}</p>
+                      <p className="mt-1 text-xs font-black">{isAutomatic ? "—" : formatMoney(payment.declaredAmount)}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-black/45">{isAutomatic ? "Pagamento presente in Shopify" : `Controllo Cliente · ${payment.declaredMethodText}`}</p>
                     </div>
                     <div className="flex flex-col items-start gap-2 md:items-end">
                       <span className="inline-flex min-h-8 items-center rounded-full bg-emerald-100 px-3 text-[9px] font-black uppercase text-emerald-800">Controllo automatico</span>
                       {payment.control ? (
                         <span className={`inline-flex min-h-8 items-center rounded-full px-3 text-[9px] font-black uppercase ${isConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{isConfirmed ? "Controllo lavoratore" : "Differenza lavoratore"}</span>
-                      ) : null}
+                      ) : <span className="inline-flex min-h-8 items-center rounded-full bg-amber-100 px-3 text-[9px] font-black uppercase text-amber-800">Da inserire</span>}
+                      {isCashPayment ? <span className="inline-flex min-h-8 items-center rounded-full bg-sky-100 px-3 text-[9px] font-black uppercase text-sky-800">Contanti</span> : null}
                       {payment.state === "MISMATCH" ? <p className="text-[9px] font-bold leading-4 text-rose-700">{!payment.amountMatches ? "Importo diverso" : ""}{!payment.amountMatches && !payment.methodMatches ? " · " : ""}{!payment.methodMatches ? "Metodo diverso" : ""}</p> : null}
                     </div>
                   </article>
