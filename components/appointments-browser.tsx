@@ -3577,7 +3577,10 @@ export function AppointmentsBrowser({
       teammateIds.includes(option.id),
     );
 
-    if (booking.inferredSalon !== "buenos-aires") {
+    if (
+      booking.inferredSalon !== "buenos-aires" &&
+      !nextTeam.some((teammate) => normalizeSearchValue(teammate.name) === "franci")
+    ) {
       alert(
         "Il team si puo modificare solo per gli appuntamenti del salone Corso.",
       );

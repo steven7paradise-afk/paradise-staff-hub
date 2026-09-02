@@ -37,6 +37,13 @@ function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: s
   const normalizedTeamName = normalizeName(teamName);
   if (!normalizedTeamName) return null;
 
+  // Cowlendar espone Francesca con il nome pubblico "Francesca Paradise",
+  // mentre il suo profilo operativo interno si chiama "Franci".
+  if (normalizedTeamName === "francesca paradise") {
+    const franci = users.find((user) => normalizeName(user.name) === "franci");
+    if (franci) return franci;
+  }
+
   const exact = users.find((user) => normalizeName(user.name) === normalizedTeamName);
   if (exact) return exact;
 
@@ -378,7 +385,9 @@ export default async function AppointmentsPage({
   const safeBookings = Array.isArray(bookings) ? bookings : [];
   const safeServices = Array.isArray(services) ? services : [];
 
-  const corsoUsers = localUsers.filter((user) => isCorsoLocation(user.location?.name));
+  const corsoUsers = localUsers.filter((user) =>
+    isCorsoLocation(user.location?.name) || normalizeName(user.name) === "franci"
+  );
   const pcDisplayUser = (isPC || isAdminRemoteController) && kioskWorkerName
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
     : null;

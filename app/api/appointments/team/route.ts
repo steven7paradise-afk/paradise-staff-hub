@@ -45,6 +45,10 @@ function isBuenosAiresLocation(value?: string | null) {
   return normalized.includes("buenos") || normalized.includes("corso");
 }
 
+function isFranci(value?: string | null) {
+  return String(value || "").trim().toLocaleLowerCase("it") === "franci";
+}
+
 export async function POST(request: NextRequest) {
   const operationalUser = await getOperationalUser(request);
   const isAuthorized = Boolean(operationalUser?.id);
@@ -100,7 +104,7 @@ export async function POST(request: NextRequest) {
     });
     const usersById = new Map(
       activeUsers
-        .filter((user) => isBuenosAiresLocation(user.location?.name))
+        .filter((user) => isBuenosAiresLocation(user.location?.name) || isFranci(user.name))
         .map((user) => [user.id, user]),
     );
     const teammates = requestedIds.flatMap((id) => {
@@ -121,13 +125,19 @@ export async function POST(request: NextRequest) {
     const storedUpdatedBy = signedBy ? `${signedBy} (Cassa: ${sessionUserName})` : updatedBy;
     const teammateNames = teammates.map((teammate) => teammate.name).join(", ");
     const salonRoster = await prisma.user.findMany({
-      where: { active: true, role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+      where: {
+        active: true,
+        OR: [
+          { role: { notIn: ["ZERO", "SUPER_ADMIN"] } },
+          { name: { equals: "Franci", mode: "insensitive" } },
+        ],
+      },
       select: { name: true, location: { select: { name: true } } },
     });
     const shopifyTeammateNames = formatShopifyStaffNames(
       teammates.map((teammate) => teammate.name),
       salonRoster
-        .filter((user) => isBuenosAiresLocation(user.location?.name))
+        .filter((user) => isBuenosAiresLocation(user.location?.name) || isFranci(user.name))
         .map((user) => user.name),
     ).join(", ");
 
