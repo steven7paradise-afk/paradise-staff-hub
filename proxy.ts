@@ -16,7 +16,8 @@ export const proxy = auth((request) => {
       pathname === "/api/service-forms/submit" ||
       pathname.startsWith("/api/service-forms/responses/");
     const isCashClosingReferenceApi =
-      pathname === "/api/cash/shopify-daily-summary";
+      pathname === "/api/cash/shopify-daily-summary" ||
+      pathname === "/api/cash/daily-close";
     const isOperationalOrdersApi =
       pathname.startsWith("/api/orders/") &&
       !pathname.startsWith("/api/orders/import");

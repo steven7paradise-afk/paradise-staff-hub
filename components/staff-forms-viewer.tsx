@@ -141,6 +141,14 @@ type AutomaticDailyCloseSummary = {
   shopifyCash: number;
   difference: number;
   controlCount: number;
+  completedControlCount: number;
+  completedControlRows: Array<{
+    responseId: string;
+    clientName: string;
+    order: string;
+    result: string;
+    completedAt: string;
+  }>;
   shopifyOrders: number;
   alreadyClosed: boolean;
   existing?: { id: string; signedAt: string; signedBy: string } | null;
@@ -1365,21 +1373,41 @@ export function StaffFormsViewer({
                     <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Giorno corrente</p><p className="mt-1 text-sm font-black">{new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeZone: "Europe/Rome" }).format(new Date(`${dailyCloseSummary.date}T12:00:00Z`))}</p></div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[24px] border border-emerald-300/20 bg-emerald-300/10 p-5">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Schede completate oggi</p>
+                      <p className="mt-3 text-3xl font-black">{dailyCloseSummary.completedControlCount}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Controlli Cliente completati nella sede</p>
+                    </div>
                     <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Dichiarato nei Controlli Cliente</p>
-                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlDeclaredCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "controllo Cashmatic" : "controlli Cashmatic"}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Cash prelevato oggi</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Rilevato automaticamente da Cashmatic / Shopify</p>
                     </div>
                     <div className="rounded-[24px] border border-[#A1B5FD]/25 bg-[#A1B5FD]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Registrato da Shopify</p>
-                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.shopifyOrders} {dailyCloseSummary.shopifyOrders === 1 ? "ordine Cashmatic" : "ordini Cashmatic"}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Controlli lavoratore Cash</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlDeclaredCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "controllo registrato" : "controlli registrati"}</p>
                     </div>
                   </div>
 
+                  {dailyCloseSummary.completedControlRows?.length ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Schede incluse nella chiusura</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {dailyCloseSummary.completedControlRows.slice(0, 8).map((row) => (
+                          <div key={row.responseId} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                            <p className="truncate text-xs font-black text-white">{row.clientName}</p>
+                            <p className="mt-1 truncate text-[10px] font-semibold text-white/40">{row.order ? `Ordine ${row.order.startsWith("#") ? row.order : `#${row.order}`}` : row.result}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {dailyCloseSummary.completedControlRows.length > 8 ? <p className="mt-3 text-[10px] font-bold text-white/35">Altre {dailyCloseSummary.completedControlRows.length - 8} schede completate.</p> : null}
+                    </div>
+                  ) : null}
+
                   <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>
-                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Differenza dichiarato − Shopify</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Differenza sui controlli lavoratore presenti</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p></div>
                     <span className={cn("rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider", Math.abs(dailyCloseSummary.difference) < 0.01 ? "bg-emerald-300 text-emerald-950" : "bg-amber-200 text-amber-950")}>{Math.abs(dailyCloseSummary.difference) < 0.01 ? "Coincide" : "Da verificare"}</span>
                   </div>
 

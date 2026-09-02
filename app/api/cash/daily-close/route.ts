@@ -83,9 +83,10 @@ export async function POST(request: NextRequest) {
   const closingTime = before19 ? "Chiusura anticipata confermata prima delle 19:00." : "Chiusura effettuata dopo le 19:00.";
   const notes = [
     "Chiusura giornaliera automatica Cashmatic.",
+    `Schede completate oggi: ${summary.completedControlCount}.`,
     `Controllo Cliente dichiarato: ${formatEuro(summary.controlDeclaredCash)}.`,
     `Shopify Cashmatic: ${formatEuro(summary.shopifyCash)}.`,
-    `Differenza: ${formatEuro(summary.difference)}.`,
+    `Differenza sui controlli lavoratore presenti: ${formatEuro(summary.difference)}.`,
     closingTime,
   ].join(" ");
   const signatureName = context.operationalUser.name || signer.name;
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
         user_id: signer.id,
         location_id: context.location.id,
         date: context.accountingDate,
-        withdrawn: summary.controlDeclaredCash,
+        withdrawn: summary.shopifyCash,
         fund: 0,
         cash_orders: summary.cashOrders as unknown as Prisma.InputJsonValue,
         notes,

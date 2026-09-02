@@ -1,3 +1,5 @@
+import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
+import { prisma } from "@/lib/prisma";
 import { getShopifyDailyRevenue, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
 
 function roundMoney(value: number) {
@@ -50,10 +52,48 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   const endKey = nextDateKey(dateKey);
   const start = new Date(`${dateKey}T00:00:00${romeOffset(dateKey)}`);
   const end = new Date(`${endKey}T00:00:00${romeOffset(endKey)}`);
-  const [shopify, controls] = await Promise.all([
+  const [shopify, controls, clientControlForms] = await Promise.all([
     getShopifyDailyRevenue(dateKey),
     getShopifyPaymentRegister({ start, end, locationId }),
+    prisma.serviceForm.findMany({
+      where: { active: true },
+      select: { id: true, name: true, category: true },
+    }),
   ]);
+
+  const clientControlFormIds = clientControlForms
+    .filter((form) => isClientControlFormName(form.name, form.category))
+    .map((form) => form.id);
+  const rawCompletedControls = clientControlFormIds.length
+    ? await prisma.serviceFormResponse.findMany({
+        where: {
+          form_id: { in: clientControlFormIds },
+          user_location_id: locationId,
+          OR: [
+            { created_at: { gte: start, lt: end } },
+            { updated_at: { gte: start, lt: end } },
+          ],
+        },
+        select: { id: true, answers: true, created_at: true, updated_at: true },
+        orderBy: { updated_at: "desc" },
+      })
+    : [];
+  const completedControlRows = rawCompletedControls
+    .filter((response) => {
+      const answers = response.answers as Record<string, unknown>;
+      return answers.client_control_is_draft !== true
+        && String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "").trim().toLowerCase() !== "bozza";
+    })
+    .map((response) => {
+      const answers = response.answers as Record<string, unknown>;
+      return {
+        responseId: response.id,
+        clientName: String(answers[CLIENT_CONTROL_FIELD_IDS.clientName] || "Cliente").trim() || "Cliente",
+        order: String(answers.second_shopify_order || answers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || "").trim(),
+        result: String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "Completato").trim() || "Completato",
+        completedAt: response.updated_at.toISOString(),
+      };
+    });
 
   const declarations = new Map<string, {
     responseId: string;
@@ -115,6 +155,9 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   const shopifyOnlyRows = shopifyRows.filter((row) => !declaredOrderKeys.has(cleanOrder(row.orderName)));
   const controlDeclaredCash = roundMoney(controlRows.reduce((sum, row) => sum + row.declaredAmount, 0));
   const shopifyCash = roundMoney(shopify.cash);
+  const matchedControlDifference = roundMoney(controlRows.reduce((sum, row) => (
+    row.shopifyAmount == null ? sum : sum + row.declaredAmount - row.shopifyAmount
+  ), 0));
 
   return {
     available: shopify.available,
@@ -122,20 +165,22 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     before19: isBeforeDailyClosingTime(),
     controlDeclaredCash,
     shopifyCash,
-    difference: roundMoney(controlDeclaredCash - shopifyCash),
+    difference: matchedControlDifference,
     controlCount: controlRows.length,
+    completedControlCount: completedControlRows.length,
+    completedControlRows,
     shopifyOrders: shopifyRows.length,
     transactions: shopify.transactions,
     controlRows,
     shopifyRows,
     shopifyOnlyRows,
-    cashOrders: controlRows.map((row) => ({
-      order: row.order || `Controllo ${row.responseId}`,
-      amount: row.declaredAmount,
-      clientName: row.clientName,
-      declaredMethod: row.declaredMethod,
-      controlResponseId: row.responseId,
-      shopifyAmount: row.shopifyAmount,
+    cashOrders: shopifyRows.map((row) => ({
+      order: row.orderName || row.orderId,
+      amount: row.amount,
+      clientName: controlRows.find((control) => cleanOrder(control.order) === cleanOrder(row.orderName))?.clientName || row.clientName,
+      declaredMethod: "Cashmatic · rilevato automaticamente da Shopify",
+      controlResponseId: controlRows.find((control) => cleanOrder(control.order) === cleanOrder(row.orderName))?.responseId || null,
+      shopifyAmount: row.amount,
     })),
   };
 }
