@@ -1292,6 +1292,7 @@ export function AppointmentsBrowser({
   navigationBasePath,
   pageTitle = "Appuntamenti",
   pageSubtitle = "Clienti, arrivi e servizi in un’unica vista operativa",
+  canManageParadiseNotes = false,
 }: {
   initialBookings: AppointmentRecord[];
   corsoTeamOptions: TeamOption[];
@@ -1308,6 +1309,7 @@ export function AppointmentsBrowser({
   navigationBasePath?: string;
   pageTitle?: string;
   pageSubtitle?: string;
+  canManageParadiseNotes?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -3330,7 +3332,6 @@ export function AppointmentsBrowser({
       if (res.ok) {
         const comment = await res.json();
         setDbComments((current) => [...current, comment]);
-        setParadiseNotes((current) => ({ ...current, [bookingId]: comment.message || messageText }));
         setNewCommentText("");
         setShopifyNote((current) => {
           const author = comment.user_name ?? "Staff";
@@ -3357,10 +3358,7 @@ export function AppointmentsBrowser({
     : null;
 
   function openQuickNote(booking: AppointmentRecord) {
-    if (isPC && !pcActiveWorker) {
-      setPcScreenLocked(true);
-      return;
-    }
+    if (!canManageParadiseNotes) return;
     setQuickNoteBookingId(booking.id);
     setQuickNoteText(paradiseNotes[booking.id] || booking.paradiseNote || "");
   }
@@ -3370,25 +3368,23 @@ export function AppointmentsBrowser({
     const savedText = quickNoteText.trim();
     setSubmittingComment(true);
     try {
-      const response = await fetch("/api/appointments/comments", {
+      const response = await fetch("/api/appointments/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderName: quickNoteBooking.bookingStr || null,
           bookingId: quickNoteBooking.id,
-          message: savedText,
-          signedBy: isPC ? pcActiveWorker?.name : undefined,
+          text: savedText,
         }),
       });
       if (!response.ok) throw new Error("Nota non salvata");
-      const comment = await response.json();
-      setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: comment.message || savedText }));
+      const note = await response.json();
+      setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: note.text || savedText }));
       setQuickNoteBookingId(null);
       setQuickNoteText("");
-      showPushToast("Nota salvata", "La nota Paradise è visibile sulla scheda.");
+      showPushToast("Nota salvata", "La nota dell’ufficio è visibile sulla scheda.");
     } catch (error) {
       console.error("Failed to save quick appointment note", error);
-      showPushToast("Nota non salvata", "Impossibile salvare la nota Paradise.", "error");
+      showPushToast("Nota non salvata", "Impossibile salvare la nota dell’ufficio.", "error");
     } finally {
       setSubmittingComment(false);
     }
@@ -6506,24 +6502,31 @@ export function AppointmentsBrowser({
                                 </div>
                                 <p className="mt-2.5 truncate text-xs font-black text-[#172B4D]">{booking.customerName}</p>
                                 <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-[#5E6C84]">{booking.serviceTitle}</p>
-                                <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
-                                  {paradiseNote ? (
-                                    <button
-                                      type="button"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        openQuickNote(booking);
-                                      }}
-                                      className="w-full rounded-lg bg-[#FFF7E6] p-2 text-left transition hover:bg-[#FFF0C2]"
-                                    >
-                                      <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
-                                        <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" /> Nota Paradise</span>
-                                        <Pencil className="size-3" />
-                                      </span>
-                                      <span className="mt-1 block line-clamp-2 text-[9px] font-semibold leading-snug text-[#59451C]">{paradiseNote}</span>
-                                    </button>
-                                  ) : (
+                                {paradiseNote || canManageParadiseNotes ? (
+                                  <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
+                                    {paradiseNote ? (
+                                      canManageParadiseNotes ? (
+                                        <button
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            openQuickNote(booking);
+                                          }}
+                                          className="w-full rounded-lg bg-[#FFF7E6] p-2 text-left transition hover:bg-[#FFF0C2]"
+                                        >
+                                          <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
+                                            <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" /> Nota ufficio</span>
+                                            <Pencil className="size-3" />
+                                          </span>
+                                          <span className="mt-1 block line-clamp-2 text-[9px] font-semibold leading-snug text-[#59451C]">{paradiseNote}</span>
+                                        </button>
+                                      ) : (
+                                        <div className="w-full rounded-lg bg-[#FFF7E6] p-2 text-left">
+                                          <span className="block line-clamp-2 text-[9px] font-semibold leading-snug text-[#59451C]">{paradiseNote}</span>
+                                        </div>
+                                      )
+                                    ) : (
                                     <button
                                       type="button"
                                       onClick={(event) => {
@@ -6535,8 +6538,9 @@ export function AppointmentsBrowser({
                                     >
                                       <MessageSquare className="size-3" /> Aggiungi nota
                                     </button>
-                                  )}
-                                </div>
+                                    )}
+                                  </div>
+                                ) : null}
                               </div>
                             );
                           }) : (
@@ -6871,7 +6875,7 @@ export function AppointmentsBrowser({
             >
               <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-[#FFF9EB] px-5 py-4">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9A6700]">Nota Paradise</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9A6700]">Nota ufficio</p>
                   <h3 className="mt-1 truncate text-xl font-black text-[#172B4D]">{quickNoteBooking.customerName}</h3>
                   <p className="mt-1 text-xs font-semibold text-[#6B778C]">{formatTime(quickNoteBooking.startDate)} – {formatTime(quickNoteBooking.endDate)}</p>
                 </div>
@@ -6889,7 +6893,7 @@ export function AppointmentsBrowser({
                 </button>
               </div>
               <div className="p-5">
-                <label className="text-[10px] font-black uppercase tracking-[0.14em] text-black/45" htmlFor="quick-appointment-note">Nota appuntamento</label>
+                <label className="text-[10px] font-black uppercase tracking-[0.14em] text-black/45" htmlFor="quick-appointment-note">Testo della nota</label>
                 <textarea
                   id="quick-appointment-note"
                   autoFocus

@@ -409,7 +409,7 @@ export default async function AppointmentsPage({
 
   const corsoTeamOptions = [...cowlendarTeamOptionsByName.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 
-  const [shopifyOrderNames, statusSetting, botUpdateSetting, teamOverrideSetting, rawSheetStatusOverrides] = await Promise.all([
+  const [shopifyOrderNames, statusSetting, botUpdateSetting, teamOverrideSetting, rawSheetStatusOverrides, officeNoteSettings] = await Promise.all([
     getShopifyOrderNamesBulk(safeBookings.map((b: any) => b.order_id).filter(Boolean)).catch(() => new Map<string, string>()),
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_bot_updates" } }).catch(() => null),
@@ -432,26 +432,20 @@ export default async function AppointmentsPage({
         null,
       startDate: booking.start_date,
     }))).catch(() => ({})),
+    prisma.setting.findMany({
+      where: { key: { startsWith: "appointment_office_note:" } },
+      select: { key: true, value: true },
+    }).catch(() => []),
   ]);
 
-  const appointmentCommentKeys = safeBookings.flatMap((booking) => [
-    String(booking.id),
-    String(booking.booking_str || ""),
-    shopifyOrderNames.get(String(booking.order_id || "")) || "",
-  ]).filter(Boolean);
-  const appointmentComments = appointmentCommentKeys.length
-    ? await prisma.shopifyOrderComment.findMany({
-        where: { order_name: { in: appointmentCommentKeys } },
-        orderBy: { created_at: "desc" },
-        select: { order_name: true, message: true },
-      }).catch(() => [])
-    : [];
-
-  const latestAppointmentNotes = new Map<string, string>();
-  for (const comment of appointmentComments) {
-    if (!latestAppointmentNotes.has(comment.order_name)) {
-      latestAppointmentNotes.set(comment.order_name, comment.message);
-    }
+  const officeNotes = new Map<string, string>();
+  for (const setting of officeNoteSettings) {
+    const bookingId = setting.key.slice("appointment_office_note:".length);
+    const value = setting.value;
+    const text = value && typeof value === "object" && !Array.isArray(value) && "text" in value
+      ? String((value as { text?: unknown }).text || "").trim()
+      : "";
+    if (bookingId && text) officeNotes.set(bookingId, text);
   }
 
   const statusOverrides =
@@ -631,10 +625,7 @@ export default async function AppointmentsPage({
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
         notesText: notesText || null,
-        paradiseNote: latestAppointmentNotes.get(shopifyOrderNames.get(String(booking.order_id || "")) || "")
-          || latestAppointmentNotes.get(String(booking.booking_str || ""))
-          || latestAppointmentNotes.get(String(booking.id))
-          || null,
+        paradiseNote: officeNotes.get(String(booking.id)) || null,
         extraDetails,
       };
     })
@@ -673,6 +664,7 @@ export default async function AppointmentsPage({
         navigationBasePath={navigationBasePath}
         pageTitle={pageTitle}
         pageSubtitle={pageSubtitle}
+        canManageParadiseNotes={!isPC && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)}
       />
     </AppShell>
   );

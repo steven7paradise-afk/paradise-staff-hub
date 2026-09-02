@@ -90,10 +90,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Dati incompleti" }, { status: 400 });
     }
 
-    // The Cowlendar booking id is stable even when an order is renamed or the
-    // Shopify lookup is temporarily unavailable. Keep Shopify only as a sync
-    // target and use the booking as the canonical note owner.
-    const key = bookingId || orderName;
+    const key = orderName || bookingId;
     const authorName = signedBy ? signedBy : sessionUserName;
     
     const comment = await prisma.shopifyOrderComment.create({
