@@ -306,6 +306,8 @@ export default async function AppointmentsPage({
   const appointmentRange = resolveAppointmentsRange(resolvedSearchParams);
   const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
   const kioskWorkerName = typeof resolvedSearchParams?.worker === "string" ? resolvedSearchParams.worker.trim() : "";
+  const remoteTarget = typeof resolvedSearchParams?.remoteTarget === "string" ? resolvedSearchParams.remoteTarget.trim() : "";
+  const isAdminRemoteController = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
 
   const role = sessionUser.role as Role;
 
@@ -376,7 +378,7 @@ export default async function AppointmentsPage({
   const safeServices = Array.isArray(services) ? services : [];
 
   const corsoUsers = localUsers.filter((user) => isCorsoLocation(user.location?.name));
-  const pcDisplayUser = isPC && kioskWorkerName
+  const pcDisplayUser = (isPC || isAdminRemoteController) && kioskWorkerName
     ? localUsers.find((user) => normalizeName(user.name) === normalizeName(kioskWorkerName)) || null
     : null;
 

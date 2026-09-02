@@ -20,7 +20,7 @@ const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 type PointerState = { x: number; y: number; revision: number };
 type InputState = { selector: string; value: string; revision: number };
-type ClickState = { x: number; y: number; revision: number };
+type ClickState = { x: number; y: number; selector?: string; revision: number };
 type ScrollState = { x: number; y: number; revision: number };
 type RemoteSession = {
   targetCode: string;
@@ -211,6 +211,7 @@ export async function POST(request: NextRequest) {
       ? {
           x: Math.max(0, Math.min(1, Number(body.click.x))),
           y: Math.max(0, Math.min(1, Number(body.click.y))),
+          selector: typeof body.click.selector === "string" ? body.click.selector.slice(0, 500) : undefined,
           revision: ((previous as RemoteSession & { click?: ClickState | null })?.click?.revision || 0) + 1,
         }
       : (previous as RemoteSession & { click?: ClickState | null })?.click || null;
@@ -238,10 +239,10 @@ export async function POST(request: NextRequest) {
       workerId,
       pathname: cleanPath(body?.pathname ?? previous?.pathname),
       search: typeof body?.search === "string" ? body.search.slice(0, 1000) : previous?.search || "",
-      pointer,
-      input,
-      click,
-      scroll,
+      pointer: action === "start" ? null : pointer,
+      input: action === "start" ? null : input,
+      click: action === "start" ? null : click,
+      scroll: action === "start" ? null : scroll,
       revision: (previous?.revision || 0) + 1,
       updatedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),

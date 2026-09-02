@@ -92,7 +92,7 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
       setSelectingWorkerId(worker.id);
       setError("");
       try {
-        const search = `?salone=${encodeURIComponent(salone)}&remoteTarget=${encodeURIComponent(remoteTarget)}`;
+        const search = `?salone=${encodeURIComponent(salone)}&worker=${encodeURIComponent(worker.name)}&remoteTarget=${encodeURIComponent(remoteTarget)}`;
         const response = await fetch("/api/remote-control", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -181,6 +181,7 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
                 <button
                   key={worker.id}
                   type="button"
+                  data-remote-worker-choice={remoteTarget ? "true" : undefined}
                   onClick={() => {
                     if (remoteTarget) {
                       void enter(worker);

@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { MousePointer2, Radio, X } from "lucide-react";
 
 type RemoteSession = {
+  targetCode: string;
   controllerName: string;
   workerId: string | null;
   pathname: string;
   search: string;
   pointer: { x: number; y: number; revision: number } | null;
   input: { selector: string; value: string; revision: number } | null;
-  click: { x: number; y: number; revision: number } | null;
+  click: { x: number; y: number; selector?: string; revision: number } | null;
   scroll: { x: number; y: number; revision: number } | null;
 };
 
@@ -40,6 +41,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   const [pcSession, setPcSession] = useState<RemoteSession | null>(null);
   const [controllerTarget, setControllerTarget] = useState("");
   const lastInputRevision = useRef(0);
+  const lastClickRevision = useRef(0);
   const lastPath = useRef("");
   const lastScrollRevision = useRef(0);
   const stopping = useRef(false);
@@ -56,6 +58,23 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         if (cancelled) return;
         setPcSession(remote);
         if (!remote) return;
+
+        const clickStorageKey = `paradise-remote-click:${remote.targetCode}`;
+        const storedClickRevision = Number(window.sessionStorage.getItem(clickStorageKey) || 0);
+        const appliedClickRevision = Math.max(lastClickRevision.current, Number.isFinite(storedClickRevision) ? storedClickRevision : 0);
+        if (remote.click && remote.click.revision > appliedClickRevision) {
+          lastClickRevision.current = remote.click.revision;
+          window.sessionStorage.setItem(clickStorageKey, String(remote.click.revision));
+          const selected = remote.click.selector
+            ? document.querySelector(remote.click.selector) as HTMLElement | null
+            : null;
+          const fallback = document.elementFromPoint(
+            remote.click.x * window.innerWidth,
+            remote.click.y * window.innerHeight,
+          ) as HTMLElement | null;
+          const clickable = selected || fallback?.closest<HTMLElement>("button,a,[role='button'],label,input,textarea,select") || fallback;
+          if (clickable && !clickable.closest("[data-remote-stop]")) clickable.click();
+        }
 
         if (remote.scroll && remote.scroll.revision > lastScrollRevision.current) {
           lastScrollRevision.current = remote.scroll.revision;
@@ -137,9 +156,11 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       send({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
     };
     const onClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest("[data-remote-stop]")) return;
-      send({ click: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
-      const anchor = (event.target as Element | null)?.closest("a[href]") as HTMLAnchorElement | null;
+      const target = event.target as Element | null;
+      if (target?.closest("[data-remote-stop],[data-remote-worker-choice]")) return;
+      const actionable = target?.closest("button,a,[role='button'],label,input,textarea,select") || target;
+      send({ click: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight), selector: actionable ? selectorFor(actionable) : "" } });
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target === "_blank" || anchor.origin !== window.location.origin) return;
       const next = new URL(anchor.href);
       if (!["/appointments", "/service-forms", "/orders", "/client-control"].some((path) => next.pathname === path || next.pathname.startsWith(`${path}/`))) return;

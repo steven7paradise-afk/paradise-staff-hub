@@ -224,7 +224,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     unreadNotificationsPromise,
     requestActionsPromise,
   ]);
-  const displayUser = isPcCassa && pcDisplayUser ? pcDisplayUser : currentUser;
+  const displayUser = pcDisplayUser ?? currentUser;
   const isFormerEmployee = currentUser?.employee_status === FORMER_EMPLOYEE_STATUS;
   if (isFormerEmployee && formerEmployeeAccessDates(currentUser.workforce_data, currentUser.last_edited_at).until.getTime() < Date.now()) {
     redirect("/login?documentAccessExpired=1");
