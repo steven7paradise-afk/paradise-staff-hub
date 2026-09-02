@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Banknote,
   CheckCircle2,
   ClipboardList,
   CreditCard,
@@ -128,6 +129,10 @@ export default async function ShopifyPaymentsPage(props: {
           methods: [...new Set([...current.methods, payment.method])],
           providers: [...new Set([...current.providers, payment.provider])],
           gateways: [...new Set([...current.gateways, payment.gateway].filter(Boolean))],
+          providerAmounts: {
+            ...current.providerAmounts,
+            [payment.provider]: (current.providerAmounts[payment.provider] || 0) + payment.amount,
+          },
         }
       : {
           orderId: payment.orderId,
@@ -137,6 +142,7 @@ export default async function ShopifyPaymentsPage(props: {
           methods: [payment.method],
           providers: [payment.provider],
           gateways: payment.gateway ? [payment.gateway] : [],
+          providerAmounts: { [payment.provider]: payment.amount },
           processedAt: payment.processedAt,
         });
     return groups;
@@ -148,6 +154,7 @@ export default async function ShopifyPaymentsPage(props: {
     methods: string[];
     providers: string[];
     gateways: string[];
+    providerAmounts: Record<string, number>;
     processedAt: string;
   }>()).values());
   const shopifyClientNames = clientPayments.length
@@ -284,7 +291,7 @@ export default async function ShopifyPaymentsPage(props: {
             <div className="w-full space-y-4">
               <div>
                 <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#F7DFA7]">{dateFilter ? "Giorno selezionato" : "Oggi"} · {todayLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <div className="rounded-2xl border border-[#F0A1AF]/40 bg-[#F0A1AF]/15 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Ricavato Shopify {dayCardSuffix}</p>
@@ -299,10 +306,14 @@ export default async function ShopifyPaymentsPage(props: {
                     <p className="mt-1 text-[10px] font-bold text-emerald-300">{workerControlCount} controlli lavoratore registrati</p>
                   </div>
                   <div className="rounded-2xl border border-sky-300/30 bg-sky-300/10 px-5 py-4">
-                    <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta / POS Shopify</p><CreditCard className="size-4 text-sky-300" /></div>
+                    <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Carta / POS dichiarato Shopify</p><CreditCard className="size-4 text-sky-300" /></div>
                     <p className="mt-2 text-2xl font-black">{formatMoney(liveDailyRevenue.available ? liveDailyRevenue.card : todayCardTotal)}</p>
-                    <p className="mt-1 text-[10px] font-bold text-white/40">Contanti {formatMoney(liveDailyRevenue.available ? liveDailyRevenue.cash : todayCashTotal)}</p>
                     {liveDailyRevenue.available && liveDailyRevenue.unclassified > 0 ? <p className="mt-1 text-[10px] font-bold text-amber-300">Da classificare {formatMoney(liveDailyRevenue.unclassified)}</p> : null}
+                  </div>
+                  <div className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3"><p className="text-[10px] font-black uppercase tracking-[0.15em] text-white/60">Contanti dichiarati Shopify</p><Banknote className="size-4 text-cyan-300" /></div>
+                    <p className="mt-2 text-2xl font-black">{formatMoney(liveDailyRevenue.available ? liveDailyRevenue.cash : todayCashTotal)}</p>
+                    <p className="mt-1 text-[10px] font-bold text-white/40">Separati da carta e POS</p>
                   </div>
                   <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
@@ -560,6 +571,16 @@ export default async function ShopifyPaymentsPage(props: {
                       </div>
                       <p className="mt-1 text-xs font-black text-[#873647]">{payment.providers.map(providerLabel).join(" + ")}</p>
                       <p className="mt-1 truncate text-[10px] font-semibold text-black/35">{payment.gateways.map(gatewayLabel).join(" · ")}</p>
+                      {Object.keys(payment.providerAmounts).length > 1 ? (
+                        <div className="mt-2 space-y-1 border-t border-black/10 pt-2">
+                          {Object.entries(payment.providerAmounts).map(([paymentProvider, amount]) => (
+                            <div key={paymentProvider} className="flex items-center justify-between gap-3 text-[10px] font-black">
+                              <span className={paymentProvider === "CONTANTI" || paymentProvider === "CASHMATIC" ? "text-sky-800" : "text-black/55"}>{providerLabel(paymentProvider)}</span>
+                              <span>{formatMoney(amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <div className={`rounded-2xl border p-3 ${isAutomatic ? "border-amber-200 bg-amber-100/70" : isConfirmed ? "border-emerald-200 bg-emerald-100/70" : "border-rose-200 bg-rose-50"}`}>
                       <p className="text-sm font-black">{isAutomatic ? "Controllo Cliente mancante" : payment.control?.clientName}</p>
