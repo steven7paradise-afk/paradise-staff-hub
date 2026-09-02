@@ -165,37 +165,32 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     });
   }
 
+  const automaticLateRequestsByDay = new Map<string, (typeof requests)[number]>();
   for (const request of requests) {
+    const automaticLate = isAutomaticLateReason(request.reason);
+    if (automaticLate) {
+      const dayKey = request.start_date.toISOString().slice(0, 10);
+      if (!automaticLateRequestsByDay.has(dayKey)) automaticLateRequestsByDay.set(dayKey, request);
+      continue;
+    }
     const range = request.start_date.toISOString().slice(0, 10) === request.end_date.toISOString().slice(0, 10)
       ? request.start_date.toLocaleDateString("it-IT")
       : `${request.start_date.toLocaleDateString("it-IT")} – ${request.end_date.toLocaleDateString("it-IT")}`;
+    const approvedAt = request.status === "APPROVED" ? request.approved_at : null;
+    const approved = Boolean(approvedAt);
+    const sicknessType = request.type === "MALATTIA"
+      ? request.medical_code ? "Malattia giustificata" : approved ? "Malattia non giustificata" : requestTypeLabel(request.type, request.reason)
+      : null;
+    const approvalNote = approved
+      ? `${request.approver?.name ? `Approvata da ${request.approver.name}. ` : ""}${request.medical_code ? `Protocollo medico: ${request.medical_code}.` : request.type === "MALATTIA" ? "Codice Certificato INPS assente." : request.admin_note || ""}`.trim()
+      : request.medical_code ? `Protocollo medico: ${request.medical_code}.` : "";
     events.push({
       id: `request-${request.id}`,
-      occurredAt: request.created_at.toISOString(),
-      type: requestTypeLabel(request.type, request.reason),
-      status: requestStatusLabel(request.status, request.reason),
-      note: `${range}${request.start_time && request.end_time ? ` · ${request.start_time}–${request.end_time}` : ""}${request.reason ? ` · ${request.reason}` : ""}`,
+      occurredAt: (approvedAt || request.created_at).toISOString(),
+      type: sicknessType || (approved ? `${requestTypeLabel(request.type, request.reason)} approvata` : requestTypeLabel(request.type, request.reason)),
+      status: sicknessType && approved ? request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA" : requestStatusLabel(request.status, request.reason),
+      note: [`${range}${request.start_time && request.end_time ? ` · ${request.start_time}–${request.end_time}` : ""}${request.reason ? ` · ${request.reason}` : ""}`, approvalNote].filter(Boolean).join(" · "),
     });
-    if (request.status === "APPROVED" && request.approved_at) {
-      const automaticLate = isAutomaticLateReason(request.reason);
-      events.push({
-        id: `request-approved-${request.id}`,
-        occurredAt: request.approved_at.toISOString(),
-        type: automaticLate ? "Ritardo" : request.type === "MALATTIA" ? request.medical_code ? "Malattia giustificata" : "Malattia non giustificata" : `${requestTypeLabel(request.type, request.reason)} approvata`,
-        status: automaticLate ? "RITARDO" : request.type === "MALATTIA" ? request.medical_code ? "GIUSTIFICATA" : "NON GIUSTIFICATA" : "APPROVATA",
-        note: automaticLate
-          ? request.admin_note ? `Comunicazione: ${request.admin_note}` : ""
-          : `${request.approver?.name ? `Approvata da ${request.approver.name}. ` : ""}${request.medical_code ? `Protocollo medico: ${request.medical_code}.` : request.type === "MALATTIA" ? "Codice Certificato INPS assente." : request.admin_note || ""}`.trim(),
-      });
-    } else if (request.type === "MALATTIA" && request.medical_code) {
-      events.push({
-        id: `sickness-justified-${request.id}`,
-        occurredAt: request.created_at.toISOString(),
-        type: "Malattia giustificata",
-        status: "GIUSTIFICATA",
-        note: `Protocollo medico: ${request.medical_code}.`,
-      });
-    }
   }
 
   const entryLogs = attendanceLogs.filter((log) => log.type === "ENTRATA");
@@ -244,6 +239,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   }
   const now = new Date();
   const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(now);
+  const representedLateDays = new Set<string>();
   for (const schedule of schedules) {
     if (isRestSchedule(schedule.category.name, schedule.category.code)) continue;
     if (isClosedSchedule(schedule.category.name, schedule.category.code)) continue;
@@ -268,6 +264,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       const actualMinutes = romeMinutesForInstant(entry.timestamp);
       const delay = Math.max(0, actualMinutes - entryPolicy.deadlineMinutes);
       if (delay > 0) {
+        const lateRequest = automaticLateRequestsByDay.get(dayKey);
         const expectedEnd = expectedShiftEndTime({
           plannedStart,
           plannedEnd,
@@ -278,9 +275,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
           id: `late-entry-${entry.id}`,
           occurredAt: entry.timestamp.toISOString(),
           type: "Entrata in ritardo",
-          status: "RITARDO",
-          note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? `; ingresso flessibile fino alle 10:00 con ${ABSENCE_GRACE_MINUTES} minuti di tolleranza` : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Entrata ${entry.time || `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`} · +${delay} minuti oltre il limite${entryPolicy.officeFlexible && expectedEnd ? ` · uscita prevista ${expectedEnd}` : ""}.`,
+          status: lateRequest ? requestStatusLabel(lateRequest.status, lateRequest.reason) : "RITARDO",
+          note: [`Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? `; ingresso flessibile fino alle 10:00 con ${ABSENCE_GRACE_MINUTES} minuti di tolleranza` : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Entrata ${entry.time || `${String(Math.floor(actualMinutes / 60)).padStart(2, "0")}:${String(actualMinutes % 60).padStart(2, "0")}`} · +${delay} minuti oltre il limite${entryPolicy.officeFlexible && expectedEnd ? ` · uscita prevista ${expectedEnd}` : ""}.`, lateRequest?.admin_note ? `Comunicazione: ${lateRequest.admin_note}` : ""].filter(Boolean).join(" "),
         });
+        representedLateDays.add(dayKey);
       }
       continue;
     }
@@ -295,6 +293,18 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         note: `Turno previsto ${plannedStart}–${plannedEnd || "--:--"}${entryPolicy.officeFlexible ? `; ingresso flessibile fino alle 10:00 con ${ABSENCE_GRACE_MINUTES} minuti di tolleranza` : `; tolleranza ${ABSENCE_GRACE_MINUTES} minuti`}. Nessuna entrata registrata.`,
       });
     }
+  }
+
+  for (const [dayKey, request] of automaticLateRequestsByDay) {
+    if (representedLateDays.has(dayKey)) continue;
+    const detail = request.reason?.replace(/^RITARDO AUTOMATICO —\s*/i, "").trim() || "Ritardo registrato automaticamente.";
+    events.push({
+      id: `request-${request.id}`,
+      occurredAt: (request.approved_at || request.created_at).toISOString(),
+      type: "Ritardo",
+      status: requestStatusLabel(request.status, request.reason),
+      note: [detail, request.admin_note ? `Comunicazione: ${request.admin_note}` : ""].filter(Boolean).join(" · "),
+    });
   }
 
   events.sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
