@@ -45,135 +45,135 @@ enum RequestStatus {
 }
 
 model User {
-  id                String           @id @default(cuid())
-  name              String
-  email             String           @unique
-  password_hash     String
-  role              UserRole         @default(DIPENDENTE)
-  sede_id           String?
-  pin_hash          String?
-  pin_lookup        String?          @unique
-  birth_date        DateTime?
-  fiscal_code       String?
-  contract_start    DateTime?
-  contract_end      DateTime?
-  photo_url         String?
-  cover_url         String?
-  whatsapp_phone    String?
-  mansione          String?
-  google_calendar_sync Boolean          @default(false)
+  id                   String    @id @default(cuid())
+  name                 String
+  email                String    @unique
+  password_hash        String
+  role                 UserRole  @default(DIPENDENTE)
+  sede_id              String?
+  pin_hash             String?
+  pin_lookup           String?   @unique
+  birth_date           DateTime?
+  fiscal_code          String?
+  contract_start       DateTime?
+  contract_end         DateTime?
+  photo_url            String?
+  cover_url            String?
+  whatsapp_phone       String?
+  mansione             String?
+  google_calendar_sync Boolean   @default(false)
   google_calendar_id   String?
-  active            Boolean          @default(true)
-  created_at        DateTime         @default(now())
-  employee_status   String           @default("Attivo")
-  manager_id        String?
-  access_list       Json?
-  hr_notes          String?
-  workforce_data    Json?
-  candidate_id      String?
-  header_color      String?
-  sidebar_color     String?
-  iban              String?
-  contract_history  Json?
-  last_edited_by_id String?
-  last_edited_at    DateTime?
-  
-  manager           User?            @relation("UserManager", fields: [manager_id], references: [id])
-  subordinates      User[]           @relation("UserManager")
-  
-  last_edited_by    User?            @relation("UserLastEditedBy", fields: [last_edited_by_id], references: [id])
-  edited_users      User[]           @relation("UserLastEditedBy")
-  
-  location          Location?        @relation(fields: [sede_id], references: [id])
-  attendance_logs   AttendanceLog[]
-  leave_requests    LeaveRequest[]   @relation("UserLeaveRequests")
-  approvals         LeaveRequest[]   @relation("LeaveApprover")
-  shipments_packed  ShopifyShipment[] @relation("ShipmentPacker")
-  documents         Document[]       @relation("UserDocuments")
-  uploadedDocuments Document[]       @relation("DocumentUploader")
-  notifications     Notification[]
-  sent_internal_emails InternalEmail[] @relation("InternalEmailSender")
-  received_internal_emails InternalEmailRecipient[] @relation("InternalEmailRecipientUser")
-  schedule_entries  ScheduleEntry[]
-  schedule_overrides ScheduleWorkerOverride[]
-  assigned_tasks    StaffTask[]      @relation("AssignedTasks")
-  created_tasks     StaffTask[]      @relation("CreatedTasks")
-  task_comments     StaffTaskComment[]
-  work_hour_records WorkHourRecord[]
-  created_service_forms ServiceForm[] @relation("CreatedServiceForms")
-  service_form_responses ServiceFormResponse[]
-  cash_closings    CashClosing[]
-  cash_vault_withdrawals CashVaultWithdrawal[]
-  cash_month_closings CashMonthClose[]
-  social_posts      SocialPost[]     @relation("CreatedSocialPosts")
-  social_post_comments SocialPostComment[]
-  assistant_action_logs AssistantActionLog[]
-  assistant_memories AssistantMemory[]
-  shift_reports_responsible ShiftReport[] @relation("ShiftReportResponsible")
-  shift_reports_approved ShiftReport[] @relation("ShiftReportApprover")
-  shift_report_revisions ShiftReportRevision[]
+  active               Boolean   @default(true)
+  created_at           DateTime  @default(now())
+  employee_status      String    @default("Attivo")
+  manager_id           String?
+  access_list          Json?
+  hr_notes             String?
+  workforce_data       Json?
+  candidate_id         String?
+  header_color         String?
+  sidebar_color        String?
+  iban                 String?
+  contract_history     Json?
+  last_edited_by_id    String?
+  last_edited_at       DateTime?
+
+  manager      User?  @relation("UserManager", fields: [manager_id], references: [id])
+  subordinates User[] @relation("UserManager")
+
+  last_edited_by User?  @relation("UserLastEditedBy", fields: [last_edited_by_id], references: [id])
+  edited_users   User[] @relation("UserLastEditedBy")
+
+  location                  Location?                @relation(fields: [sede_id], references: [id])
+  attendance_logs           AttendanceLog[]
+  leave_requests            LeaveRequest[]           @relation("UserLeaveRequests")
+  approvals                 LeaveRequest[]           @relation("LeaveApprover")
+  shipments_packed          ShopifyShipment[]        @relation("ShipmentPacker")
+  documents                 Document[]               @relation("UserDocuments")
+  uploadedDocuments         Document[]               @relation("DocumentUploader")
+  notifications             Notification[]
+  sent_internal_emails      InternalEmail[]          @relation("InternalEmailSender")
+  received_internal_emails  InternalEmailRecipient[] @relation("InternalEmailRecipientUser")
+  schedule_entries          ScheduleEntry[]
+  schedule_overrides        ScheduleWorkerOverride[]
+  assigned_tasks            StaffTask[]              @relation("AssignedTasks")
+  created_tasks             StaffTask[]              @relation("CreatedTasks")
+  task_comments             StaffTaskComment[]
+  work_hour_records         WorkHourRecord[]
+  created_service_forms     ServiceForm[]            @relation("CreatedServiceForms")
+  service_form_responses    ServiceFormResponse[]
+  cash_closings             CashClosing[]
+  cash_vault_withdrawals    CashVaultWithdrawal[]
+  cash_month_closings       CashMonthClose[]
+  social_posts              SocialPost[]             @relation("CreatedSocialPosts")
+  social_post_comments      SocialPostComment[]
+  assistant_action_logs     AssistantActionLog[]
+  assistant_memories        AssistantMemory[]
+  shift_reports_responsible ShiftReport[]            @relation("ShiftReportResponsible")
+  shift_reports_approved    ShiftReport[]            @relation("ShiftReportApprover")
+  shift_report_revisions    ShiftReportRevision[]
 
   @@map("users")
 }
 
 model Location {
-  id               String          @id @default(cuid())
-  name             String
-  address          String?
-  phone            String?
-  opening_time     String?
-  closing_time     String?
-  active           Boolean         @default(true)
-  users            User[]
-  devices          Device[]
-  attendance_logs  AttendanceLog[]
-  schedule_entries ScheduleEntry[]
-  schedule_categories ScheduleCategory[]
-  schedule_overrides ScheduleWorkerOverride[]
-  staff_tasks        StaffTask[]
+  id                     String                   @id @default(cuid())
+  name                   String
+  address                String?
+  phone                  String?
+  opening_time           String?
+  closing_time           String?
+  active                 Boolean                  @default(true)
+  users                  User[]
+  devices                Device[]
+  attendance_logs        AttendanceLog[]
+  schedule_entries       ScheduleEntry[]
+  schedule_categories    ScheduleCategory[]
+  schedule_overrides     ScheduleWorkerOverride[]
+  staff_tasks            StaffTask[]
   service_form_responses ServiceFormResponse[]
-  cash_closings      CashClosing[]
+  cash_closings          CashClosing[]
   cash_vault_withdrawals CashVaultWithdrawal[]
-  shift_reports       ShiftReport[]
+  shift_reports          ShiftReport[]
 
   @@map("locations")
 }
 
 model ScheduleCategory {
-  id         String          @id @default(cuid())
-  name       String
-  code       String
-  location_id String?
-  color      String
-  text_color String          @default("#1F1F1F")
-  start_time String?
-  end_time   String?
-  editable_time Boolean        @default(false)
-  paid_hours Float?
-  active     Boolean         @default(true)
-  created_at DateTime        @default(now())
-  entries    ScheduleEntry[]
-  location   Location?       @relation(fields: [location_id], references: [id])
+  id            String          @id @default(cuid())
+  name          String
+  code          String
+  location_id   String?
+  color         String
+  text_color    String          @default("#1F1F1F")
+  start_time    String?
+  end_time      String?
+  editable_time Boolean         @default(false)
+  paid_hours    Float?
+  active        Boolean         @default(true)
+  created_at    DateTime        @default(now())
+  entries       ScheduleEntry[]
+  location      Location?       @relation(fields: [location_id], references: [id])
 
   @@unique([code, location_id])
   @@map("schedule_categories")
 }
 
 model ScheduleEntry {
-  id          String           @id @default(cuid())
-  user_id     String
-  location_id String?
-  category_id String
-  date        DateTime
-  start_time  String?
-  end_time    String?
+  id                       String           @id @default(cuid())
+  user_id                  String
+  location_id              String?
+  category_id              String
+  date                     DateTime
+  start_time               String?
+  end_time                 String?
   google_calendar_event_id String?
-  note        String?
-  created_at  DateTime         @default(now())
-  updated_at  DateTime         @updatedAt
-  user        User             @relation(fields: [user_id], references: [id])
-  location    Location?        @relation(fields: [location_id], references: [id])
-  category    ScheduleCategory @relation(fields: [category_id], references: [id])
+  note                     String?
+  created_at               DateTime         @default(now())
+  updated_at               DateTime         @updatedAt
+  user                     User             @relation(fields: [user_id], references: [id])
+  location                 Location?        @relation(fields: [location_id], references: [id])
+  category                 ScheduleCategory @relation(fields: [category_id], references: [id])
 
   @@unique([user_id, date])
   @@index([date])
@@ -196,36 +196,36 @@ model ScheduleWorkerOverride {
 }
 
 model StaffTask {
-  id             String    @id @default(cuid())
-  title          String
-  description    String
-  status         String    @default("NEW")
-  priority       String    @default("MEDIA")
-  category       String    @default("Operativa")
-  checklist      Json?
-  attachment_name String?
-  attachment_url String?
-  photo_url      String?
-  link_url       String?
-  notes          String?
-  timer_seconds  Int       @default(0)
-  completion_note String?
+  id               String             @id @default(cuid())
+  title            String
+  description      String
+  status           String             @default("NEW")
+  priority         String             @default("MEDIA")
+  category         String             @default("Operativa")
+  checklist        Json?
+  attachment_name  String?
+  attachment_url   String?
+  photo_url        String?
+  link_url         String?
+  notes            String?
+  timer_seconds    Int                @default(0)
+  completion_note  String?
   completion_files Json?
   completion_links Json?
-  evaluation String?
-  evaluated_by_id String?
-  evaluated_at DateTime?
-  location_id    String
-  created_by_id  String
-  due_date       DateTime?
-  started_at     DateTime?
-  completed_at   DateTime?
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
-  location       Location  @relation(fields: [location_id], references: [id])
-  assignees      User[]    @relation("AssignedTasks")
-  created_by     User      @relation("CreatedTasks", fields: [created_by_id], references: [id])
-  comments       StaffTaskComment[]
+  evaluation       String?
+  evaluated_by_id  String?
+  evaluated_at     DateTime?
+  location_id      String
+  created_by_id    String
+  due_date         DateTime?
+  started_at       DateTime?
+  completed_at     DateTime?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
+  location         Location           @relation(fields: [location_id], references: [id])
+  assignees        User[]             @relation("AssignedTasks")
+  created_by       User               @relation("CreatedTasks", fields: [created_by_id], references: [id])
+  comments         StaffTaskComment[]
 
   @@index([location_id])
   @@index([status])
@@ -308,45 +308,45 @@ model AttendanceLog {
 }
 
 model LeaveRequest {
-  id          String        @id @default(cuid())
-  user_id     String
-  type        LeaveType
-  start_date  DateTime
-  end_date    DateTime
-  start_time  String?
-  end_time    String?
-  reason      String?
-  status      RequestStatus @default(PENDING)
-  approved_by String?
-  approved_at DateTime?
-  admin_note  String?
-  employee_response String?
-  employee_viewed_at DateTime?
+  id                       String        @id @default(cuid())
+  user_id                  String
+  type                     LeaveType
+  start_date               DateTime
+  end_date                 DateTime
+  start_time               String?
+  end_time                 String?
+  reason                   String?
+  status                   RequestStatus @default(PENDING)
+  approved_by              String?
+  approved_at              DateTime?
+  admin_note               String?
+  employee_response        String?
+  employee_viewed_at       DateTime?
   employee_acknowledged_at DateTime?
   google_calendar_event_id String?
-  created_at  DateTime      @default(now())
-  medical_code String?
-  sickness_unjustified Boolean @default(false)
-  user        User          @relation("UserLeaveRequests", fields: [user_id], references: [id])
-  approver    User?         @relation("LeaveApprover", fields: [approved_by], references: [id])
+  created_at               DateTime      @default(now())
+  medical_code             String?
+  sickness_unjustified     Boolean       @default(false)
+  user                     User          @relation("UserLeaveRequests", fields: [user_id], references: [id])
+  approver                 User?         @relation("LeaveApprover", fields: [approved_by], references: [id])
 
   @@map("leave_requests")
 }
 
 model Document {
-  id          String   @id @default(cuid())
-  user_id     String
-  title       String
-  file_url    String
-  storage_path String?
-  type        String
-  month       Int?
-  year        Int?
+  id            String    @id @default(cuid())
+  user_id       String
+  title         String
+  file_url      String
+  storage_path  String?
+  type          String
+  month         Int?
+  year          Int?
   document_date DateTime?
-  uploaded_by String
-  created_at  DateTime @default(now())
-  user        User     @relation("UserDocuments", fields: [user_id], references: [id])
-  uploader    User     @relation("DocumentUploader", fields: [uploaded_by], references: [id])
+  uploaded_by   String
+  created_at    DateTime  @default(now())
+  user          User      @relation("UserDocuments", fields: [user_id], references: [id])
+  uploader      User      @relation("DocumentUploader", fields: [uploaded_by], references: [id])
 
   @@map("documents")
 }
@@ -367,34 +367,37 @@ model Notification {
 }
 
 model InternalEmail {
-  id          String   @id @default(cuid())
-  sender_id   String
-  subject     String
-  body        String
-  status      String   @default("SENT")
+  id                  String                   @id @default(cuid())
+  sender_id           String
+  thread_id           String                   @default(cuid())
+  reply_to_id         String?
+  subject             String
+  body                String
+  status              String                   @default("SENT")
   draft_recipient_ids Json?
-  attachments Json?
-  sender_deleted Boolean @default(false)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
-  sender      User     @relation("InternalEmailSender", fields: [sender_id], references: [id])
-  recipients InternalEmailRecipient[]
+  attachments         Json?
+  sender_deleted      Boolean                  @default(false)
+  created_at          DateTime                 @default(now())
+  updated_at          DateTime                 @updatedAt
+  sender              User                     @relation("InternalEmailSender", fields: [sender_id], references: [id])
+  recipients          InternalEmailRecipient[]
 
   @@index([sender_id, created_at])
+  @@index([thread_id, created_at])
   @@map("internal_emails")
 }
 
 model InternalEmailRecipient {
-  id           String    @id @default(cuid())
+  id           String        @id @default(cuid())
   email_id     String
   recipient_id String
   read_at      DateTime?
-  starred      Boolean   @default(false)
-  archived     Boolean   @default(false)
-  deleted      Boolean   @default(false)
-  created_at   DateTime  @default(now())
+  starred      Boolean       @default(false)
+  archived     Boolean       @default(false)
+  deleted      Boolean       @default(false)
+  created_at   DateTime      @default(now())
   email        InternalEmail @relation(fields: [email_id], references: [id], onDelete: Cascade)
-  recipient    User      @relation("InternalEmailRecipientUser", fields: [recipient_id], references: [id])
+  recipient    User          @relation("InternalEmailRecipientUser", fields: [recipient_id], references: [id])
 
   @@unique([email_id, recipient_id])
   @@index([recipient_id, created_at])
@@ -402,21 +405,21 @@ model InternalEmailRecipient {
 }
 
 model ShopifyPaymentReview {
-  id                 String   @id @default(cuid())
-  order_id           String   @unique
-  order_name         String
-  client_name        String
-  amount             Float
-  methods            Json?
-  response_id        String?
-  status             String   @default("REQUESTED")
-  requested_by_id    String
-  requested_by_name  String?
-  requested_at       DateTime @default(now())
-  confirmed_by_id    String?
-  confirmed_by_name  String?
-  confirmed_at       DateTime?
-  updated_at         DateTime @updatedAt
+  id                String    @id @default(cuid())
+  order_id          String    @unique
+  order_name        String
+  client_name       String
+  amount            Float
+  methods           Json?
+  response_id       String?
+  status            String    @default("REQUESTED")
+  requested_by_id   String
+  requested_by_name String?
+  requested_at      DateTime  @default(now())
+  confirmed_by_id   String?
+  confirmed_by_name String?
+  confirmed_at      DateTime?
+  updated_at        DateTime  @updatedAt
 
   @@index([status, requested_at])
   @@map("shopify_payment_reviews")
@@ -472,23 +475,23 @@ model ServiceFormResponse {
 }
 
 model ShiftReport {
-  id                 String   @id @default(cuid())
-  date               DateTime
-  location_id        String
-  responsible_id     String
-  status             String   @default("DRAFT")
-  report_data        Json
-  automatic_data     Json
-  manager_notes      String?
-  submitted_at       DateTime?
-  approved_by_id     String?
-  approved_at        DateTime?
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
-  location           Location @relation(fields: [location_id], references: [id])
-  responsible        User     @relation("ShiftReportResponsible", fields: [responsible_id], references: [id])
-  approved_by        User?    @relation("ShiftReportApprover", fields: [approved_by_id], references: [id])
-  revisions          ShiftReportRevision[]
+  id             String                @id @default(cuid())
+  date           DateTime
+  location_id    String
+  responsible_id String
+  status         String                @default("DRAFT")
+  report_data    Json
+  automatic_data Json
+  manager_notes  String?
+  submitted_at   DateTime?
+  approved_by_id String?
+  approved_at    DateTime?
+  created_at     DateTime              @default(now())
+  updated_at     DateTime              @updatedAt
+  location       Location              @relation(fields: [location_id], references: [id])
+  responsible    User                  @relation("ShiftReportResponsible", fields: [responsible_id], references: [id])
+  approved_by    User?                 @relation("ShiftReportApprover", fields: [approved_by_id], references: [id])
+  revisions      ShiftReportRevision[]
 
   @@unique([date, location_id])
   @@index([status, date])
@@ -497,16 +500,16 @@ model ShiftReport {
 }
 
 model ShiftReportRevision {
-  id          String      @id @default(cuid())
-  report_id   String
-  actor_id    String
-  action      String
-  status      String
-  snapshot    Json
-  note        String?
-  created_at  DateTime    @default(now())
-  report      ShiftReport @relation(fields: [report_id], references: [id], onDelete: Cascade)
-  actor       User        @relation(fields: [actor_id], references: [id])
+  id         String      @id @default(cuid())
+  report_id  String
+  actor_id   String
+  action     String
+  status     String
+  snapshot   Json
+  note       String?
+  created_at DateTime    @default(now())
+  report     ShiftReport @relation(fields: [report_id], references: [id], onDelete: Cascade)
+  actor      User        @relation(fields: [actor_id], references: [id])
 
   @@index([report_id, created_at])
   @@map("shift_report_revisions")
@@ -593,17 +596,17 @@ model Setting {
 }
 
 model AssistantActionLog {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   user_id      String
   action       String
   target_type  String?
   target_id    String?
   summary      String
   payload      Json
-  status       String   @default("PENDING")
-  created_at   DateTime @default(now())
+  status       String    @default("PENDING")
+  created_at   DateTime  @default(now())
   confirmed_at DateTime?
-  user         User     @relation(fields: [user_id], references: [id])
+  user         User      @relation(fields: [user_id], references: [id])
 
   @@index([user_id, created_at])
   @@index([status, created_at])
@@ -628,35 +631,35 @@ model AssistantMemory {
 }
 
 model BrandingSetting {
-  id               String  @id @default(cuid())
-  primary_color    String  @default("#FFA8DD")
-  secondary_color  String  @default("#FFD6EA")
-  background_color String  @default("#F7E9EF")
-  sidebar_color    String  @default("#FFFFFF")
-  button_color     String  @default("#FFA8DD")
-  card_color       String  @default("#FFFFFF")
-  text_color       String  @default("#1F1F1F")
-  gradient_color   String  @default("#E8C98B")
-  dark_background_color String @default("#121114")
-  dark_sidebar_color    String @default("#1B1A1F")
-  dark_card_color       String @default("#201F24")
-  dark_text_color       String @default("#F8F3F6")
-  dark_button_color     String @default("#F4A3C4")
-  sidebar_text_color    String @default("#1F1F1F")
-  sidebar_icon_color    String @default("#1F1F1F")
-  dark_sidebar_text_color String @default("#F8F3F6")
-  dark_sidebar_icon_color String @default("#F8F3F6")
-  sidebar_gradient_mid_color String @default("#07101F")
-  glass_enabled Boolean @default(true)
-  glass_opacity Int @default(72)
-  glass_blur Int @default(24)
-  glass_saturation Int @default(140)
-  glass_border_opacity Int @default(16)
-  sidebar_active_bg_color String @default("#FFFFFF")
-  sidebar_active_text_color String @default("#FFFFFF")
-  sidebar_active_icon_color String @default("#FFFFFF")
-  sidebar_font_family String @default("Manrope")
-  logo_url         String?
+  id                         String  @id @default(cuid())
+  primary_color              String  @default("#FFA8DD")
+  secondary_color            String  @default("#FFD6EA")
+  background_color           String  @default("#F7E9EF")
+  sidebar_color              String  @default("#FFFFFF")
+  button_color               String  @default("#FFA8DD")
+  card_color                 String  @default("#FFFFFF")
+  text_color                 String  @default("#1F1F1F")
+  gradient_color             String  @default("#E8C98B")
+  dark_background_color      String  @default("#121114")
+  dark_sidebar_color         String  @default("#1B1A1F")
+  dark_card_color            String  @default("#201F24")
+  dark_text_color            String  @default("#F8F3F6")
+  dark_button_color          String  @default("#F4A3C4")
+  sidebar_text_color         String  @default("#1F1F1F")
+  sidebar_icon_color         String  @default("#1F1F1F")
+  dark_sidebar_text_color    String  @default("#F8F3F6")
+  dark_sidebar_icon_color    String  @default("#F8F3F6")
+  sidebar_gradient_mid_color String  @default("#07101F")
+  glass_enabled              Boolean @default(true)
+  glass_opacity              Int     @default(72)
+  glass_blur                 Int     @default(24)
+  glass_saturation           Int     @default(140)
+  glass_border_opacity       Int     @default(16)
+  sidebar_active_bg_color    String  @default("#FFFFFF")
+  sidebar_active_text_color  String  @default("#FFFFFF")
+  sidebar_active_icon_color  String  @default("#FFFFFF")
+  sidebar_font_family        String  @default("Manrope")
+  logo_url                   String?
 
   @@map("branding_settings")
 }
@@ -683,8 +686,8 @@ model GoogleSheetSetting {
 }
 
 model Candidate {
-  id                 String    @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Step 1: Base Info
   first_name         String
   last_name          String
@@ -700,20 +703,20 @@ model Candidate {
   instagram_url      String?
   initial_notes      String?
   status             String    @default("Nuova candidatura")
-  
+
   // Step 2: Videochiamata
-  video_done               Boolean   @default(false)
-  video_date               DateTime?
-  video_interviewer_id     String?
-  video_impression         Int?
-  video_like               String?
-  video_has_experience     String?
-  video_prev_work          String?
-  video_communication      String?
-  video_motivation         String?
-  video_notes              String?
-  video_score              Int?
-  
+  video_done           Boolean   @default(false)
+  video_date           DateTime?
+  video_interviewer_id String?
+  video_impression     Int?
+  video_like           String?
+  video_has_experience String?
+  video_prev_work      String?
+  video_communication  String?
+  video_motivation     String?
+  video_notes          String?
+  video_score          Int?
+
   // Step 3: Colloquio in sede
   interview_done           Boolean   @default(false)
   interview_date           DateTime?
@@ -728,51 +731,51 @@ model Candidate {
   interview_practical_test Boolean?
   interview_notes          String?
   interview_score          Int?
-  
+
   // Step 5: Giudizio finale & hiring status
-  final_judgment           String?
-  employee_created         Boolean   @default(false)
-  created_user_id          String?
-  
+  final_judgment   String?
+  employee_created Boolean @default(false)
+  created_user_id  String?
+
   video_calendar_event_id     String?
   interview_calendar_event_id String?
-  
-  created_at               DateTime  @default(now())
-  updated_at               DateTime  @updatedAt
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@map("candidates")
 }
 
 model SocialPost {
-  id                         String              @id @default(cuid())
-  title                      String
-  description                String?
-  scheduled_at               DateTime
-  platform                   String              // Memorizzato come stringa separata da virgole, es: "INSTAGRAM,TIKTOK"
-  status                     String              @default("DRAFT") // "DRAFT", "PLANNED", "PUBLISHED"
-  cover_url                  String?             
-  video_url                  String?             
-  notes                      String?
-  brand                      String              @default("PARADISE") // "PARADISE" (Paradise Beauty) o "FRANCESCA" (Francesca)
-  google_calendar_event_id   String?
-  comments                   SocialPostComment[]
-  created_by_id              String
-  created_by                 User                @relation("CreatedSocialPosts", fields: [created_by_id], references: [id])
-  created_at                 DateTime            @default(now())
-  updated_at                 DateTime            @updatedAt
+  id                       String              @id @default(cuid())
+  title                    String
+  description              String?
+  scheduled_at             DateTime
+  platform                 String // Memorizzato come stringa separata da virgole, es: "INSTAGRAM,TIKTOK"
+  status                   String              @default("DRAFT") // "DRAFT", "PLANNED", "PUBLISHED"
+  cover_url                String?
+  video_url                String?
+  notes                    String?
+  brand                    String              @default("PARADISE") // "PARADISE" (Paradise Beauty) o "FRANCESCA" (Francesca)
+  google_calendar_event_id String?
+  comments                 SocialPostComment[]
+  created_by_id            String
+  created_by               User                @relation("CreatedSocialPosts", fields: [created_by_id], references: [id])
+  created_at               DateTime            @default(now())
+  updated_at               DateTime            @updatedAt
 
   @@map("social_posts")
 }
 
 model SocialPostComment {
-  id            String      @id @default(cuid())
-  post_id       String
-  user_id       String
-  message       String
-  created_at    DateTime    @default(now())
-  updated_at    DateTime    @updatedAt
-  post          SocialPost  @relation(fields: [post_id], references: [id], onDelete: Cascade)
-  user          User        @relation(fields: [user_id], references: [id])
+  id         String     @id @default(cuid())
+  post_id    String
+  user_id    String
+  message    String
+  created_at DateTime   @default(now())
+  updated_at DateTime   @updatedAt
+  post       SocialPost @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [user_id], references: [id])
 
   @@map("social_post_comments")
 }
@@ -804,8 +807,8 @@ model ShopifyShipment {
   customer_name     String?
   shipping_address  Json?
   status            String   @default("UNFULFILLED") // UNFULFILLED | PACKING | READY | SHIPPED
-  verified_barcodes Json?    // Scanned barcodes/SKUs
-  photo_url         String?  // Google Drive photo URL
+  verified_barcodes Json? // Scanned barcodes/SKUs
+  photo_url         String? // Google Drive photo URL
   notes             String?
   tracking_number   String?
   courier           String?
@@ -813,7 +816,7 @@ model ShopifyShipment {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  packed_by         User?    @relation("ShipmentPacker", fields: [packed_by_user_id], references: [id])
+  packed_by User? @relation("ShipmentPacker", fields: [packed_by_user_id], references: [id])
 
   @@index([status])
   @@index([order_name])

@@ -39,7 +39,7 @@ import {
 export type InternalEmailRecipient = { id: string; name: string; email: string; role: string; mansione: string | null; locationName: string | null; photoUrl: string | null };
 type Attachment = { id: string; name: string; previewUrl: string; webViewLink?: string | null; mimeType?: string | null };
 type MailPerson = { id: string; name: string; email: string; photo_url?: string | null };
-type InternalMessage = { id: string; recipientRecordId: string | null; subject: string; body: string; status: string; createdAt: string; updatedAt: string; sender: MailPerson; recipients: MailPerson[]; draftRecipientIds: string[]; attachments: Attachment[]; read: boolean; starred: boolean; archived: boolean; deleted: boolean };
+type InternalMessage = { id: string; threadId: string; replyToId: string | null; recipientRecordId: string | null; subject: string; body: string; status: string; createdAt: string; updatedAt: string; sender: MailPerson; recipients: MailPerson[]; draftRecipientIds: string[]; attachments: Attachment[]; read: boolean; starred: boolean; archived: boolean; deleted: boolean };
 type Folder = "inbox" | "important" | "sent" | "drafts" | "archived" | "trash";
 type Counts = { inbox: number; important: number; drafts: number; trash: number };
 type Props = { currentUserId: string; currentUserName: string; currentUserEmail: string; recipients: InternalEmailRecipient[]; restrictedToLocation: string | null; focusMessageId?: string | null };
@@ -78,6 +78,7 @@ function emailPreview(value: string) {
 export function InternalEmailComposer({ currentUserId, currentUserName, currentUserEmail, recipients, restrictedToLocation, focusMessageId }: Props) {
   const [folder, setFolder] = useState<Folder>("inbox");
   const [messages, setMessages] = useState<InternalMessage[]>([]);
+  const [threadMessages, setThreadMessages] = useState<InternalMessage[]>([]);
   const [counts, setCounts] = useState<Counts>({ inbox: 0, important: 0, drafts: 0, trash: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(focusMessageId || null);
   const [search, setSearch] = useState("");
@@ -91,6 +92,9 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
   const [editorSession, setEditorSession] = useState({ key: 0, html: "" });
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [composeReplyToId, setComposeReplyToId] = useState<string | null>(null);
+  const [composeReturnFolder, setComposeReturnFolder] = useState<Folder>("inbox");
+  const [composeReturnSelectedId, setComposeReturnSelectedId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -118,6 +122,17 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     finally { setLoading(false); }
   }, [folder, selectedId]);
 
+  const loadThread = useCallback(async (threadId: string) => {
+    try {
+      const response = await fetch(`/api/internal-email?threadId=${encodeURIComponent(threadId)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "Impossibile caricare la conversazione.");
+      setThreadMessages(Array.isArray(data.messages) ? data.messages : []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Impossibile caricare la conversazione.");
+    }
+  }, []);
+
   useEffect(() => { void loadFolder(folder, focusMessageId); }, [folder]);
   useEffect(() => {
     if (!recipientPicker) return;
@@ -136,22 +151,29 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     if (composeCloseTimerRef.current !== null) window.clearTimeout(composeCloseTimerRef.current);
   }, []);
   const selectedMessage = messages.find((message) => message.id === selectedId) || null;
+  useEffect(() => {
+    setThreadMessages([]);
+    if (selectedMessage?.threadId) void loadThread(selectedMessage.threadId);
+  }, [loadThread, selectedMessage?.threadId]);
   const visibleMessages = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("it");
-    if (!query) return messages;
+    const seenThreads = new Set<string>();
     return messages.filter((message) => {
       if (readFilter === "read" && !message.read) return false;
       if (readFilter === "unread" && message.read) return false;
-      return !query || `${message.sender.name} ${message.subject} ${emailPlainText(message.body)} ${message.recipients.map((recipient) => recipient.name).join(" ")}`.toLocaleLowerCase("it").includes(query);
+      if (query && !`${message.sender.name} ${message.subject} ${emailPlainText(message.body)} ${message.recipients.map((recipient) => recipient.name).join(" ")}`.toLocaleLowerCase("it").includes(query)) return false;
+      if (seenThreads.has(message.threadId)) return false;
+      seenThreads.add(message.threadId);
+      return true;
     });
   }, [messages, readFilter, search]);
   const selectedRecipients = recipients.filter((recipient) => selectedRecipientIds.has(recipient.id));
 
-  function resetComposer() { setSelectedRecipientIds(new Set()); setSubject(""); setBody(""); setAttachments([]); setDraftId(null); setError(""); }
-  function newMessage(options?: { recipientIds?: string[]; subject?: string; body?: string; draftId?: string | null; attachments?: Attachment[] }) {
+  function resetComposer() { setSelectedRecipientIds(new Set()); setSubject(""); setBody(""); setAttachments([]); setDraftId(null); setComposeReplyToId(null); setComposeReturnSelectedId(null); setError(""); }
+  function newMessage(options?: { recipientIds?: string[]; subject?: string; body?: string; draftId?: string | null; attachments?: Attachment[]; replyToId?: string | null; returnFolder?: Folder; returnSelectedId?: string | null }) {
     if (composeCloseTimerRef.current !== null) { window.clearTimeout(composeCloseTimerRef.current); composeCloseTimerRef.current = null; }
     const nextBody = options?.body || "";
-    setSelectedRecipientIds(new Set(options?.recipientIds || [])); setSubject(options?.subject || ""); setBody(nextBody); setEditorSession((current) => ({ key: current.key + 1, html: editorHtml(nextBody) })); setDraftId(options?.draftId || null); setAttachments(options?.attachments || []); setComposeDragging(false); setComposeDragY(0); composeDragYRef.current = 0; setCompose(true); setRecipientPicker(false); setError(""); setNotice("");
+    setSelectedRecipientIds(new Set(options?.recipientIds || [])); setSubject(options?.subject || ""); setBody(nextBody); setEditorSession((current) => ({ key: current.key + 1, html: editorHtml(nextBody) })); setDraftId(options?.draftId || null); setAttachments(options?.attachments || []); setComposeReplyToId(options?.replyToId || null); setComposeReturnFolder(options?.returnFolder || folder); setComposeReturnSelectedId(options?.returnSelectedId || null); setComposeDragging(false); setComposeDragY(0); composeDragYRef.current = 0; setCompose(true); setRecipientPicker(false); setError(""); setNotice("");
   }
   function closeComposer() { if (composeCloseTimerRef.current !== null) window.clearTimeout(composeCloseTimerRef.current); composeCloseTimerRef.current = null; setCompose(false); setComposeDragging(false); setComposeDragY(0); composeDragYRef.current = 0; resetComposer(); }
   function startComposeDrag(event: ReactPointerEvent<HTMLButtonElement>) { if (event.pointerType === "mouse" && event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); composeDragStartRef.current = event.clientY; composeDragYRef.current = 0; setComposeDragging(true); }
@@ -163,7 +185,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     const ids = all
       ? Array.from(new Set([message.sender.id, ...message.recipients.map((recipient) => recipient.id)])).filter((id) => id !== currentUserId)
       : isOwnMessage ? message.recipients.map((recipient) => recipient.id) : [message.sender.id];
-    newMessage({ recipientIds: ids, subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`, body: quote(message) });
+    newMessage({ recipientIds: ids, subject: message.subject.startsWith("Re:") ? message.subject : `Re: ${message.subject}`, replyToId: message.id, returnFolder: folder, returnSelectedId: message.id });
   }
   function forward(message: InternalMessage) { newMessage({ subject: message.subject.startsWith("Inoltra:") ? message.subject : `Inoltra: ${message.subject}`, body: quote(message), attachments: message.attachments }); }
 
@@ -188,12 +210,16 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     if (mode === "send" && (!selectedRecipientIds.size || !subject.trim() || !hasEmailContent(body))) { setError("Seleziona i destinatari e inserisci oggetto e messaggio."); return; }
     setSending(true); setError("");
     try {
-      const response = await fetch("/api/internal-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, format: "html", draftId, recipientIds: [...selectedRecipientIds], subject, message: body, attachments }) });
+      const returnFolder = composeReturnFolder;
+      const returnSelectedId = composeReturnSelectedId;
+      const isReply = Boolean(composeReplyToId && returnSelectedId);
+      const response = await fetch("/api/internal-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, format: "html", draftId, replyToId: composeReplyToId, recipientIds: [...selectedRecipientIds], subject, message: body, attachments }) });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Operazione non riuscita.");
       if (mode === "draft") { setDraftId(data.draftId); setNotice("Bozza salvata correttamente"); setFolder("drafts"); setCompose(false); }
+      else if (isReply) { resetComposer(); setNotice(`Risposta inviata a ${Number(data?.sent || selectedRecipientIds.size)} destinatari`); setCompose(false); setFolder(returnFolder); setSelectedId(returnSelectedId); await loadFolder(returnFolder, returnSelectedId); if (data?.threadId) await loadThread(data.threadId); }
       else { resetComposer(); setNotice(`Email inviata a ${Number(data?.sent || selectedRecipientIds.size)} destinatari`); setCompose(false); setFolder("sent"); }
-      await loadFolder(mode === "draft" ? "drafts" : "sent");
+      if (mode === "draft" || !isReply) await loadFolder(mode === "draft" ? "drafts" : "sent");
     } catch (sendError) { setError(sendError instanceof Error ? sendError.message : "Operazione non riuscita."); }
     finally { setSending(false); }
   }
@@ -284,7 +310,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
           <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:[scrollbar-width:auto]">
             {loading ? <div className="grid h-48 place-items-center"><Loader2 className="size-6 animate-spin text-[#B43A70]" /></div> : visibleMessages.length ? visibleMessages.map((message) => {
               const active = selectedId === message.id && !compose; const outgoing = folder === "sent" || folder === "drafts"; const contact = outgoing ? message.recipients[0] : message.sender; const senderName = outgoing ? message.recipients.map((recipient) => recipient.name).join(", ") || "Bozza" : message.sender.name; const contactPhoto = personPhoto(contact);
-              return <button key={message.id} type="button" onClick={() => folder === "drafts" ? newMessage({ recipientIds: message.draftRecipientIds, subject: message.subject, body: message.body, draftId: message.id, attachments: message.attachments }) : void selectMessage(message)} className={`w-full border-b border-[#F0E8EC] px-5 py-4 text-left transition ${active ? "bg-[#FFF0F7]" : "bg-white hover:bg-[#FFFAFC]"}`}>
+              return <button key={message.id} type="button" onClick={() => folder === "drafts" ? newMessage({ recipientIds: message.draftRecipientIds, subject: message.subject, body: message.body, draftId: message.id, attachments: message.attachments, replyToId: message.replyToId, returnFolder: "inbox", returnSelectedId: message.replyToId }) : void selectMessage(message)} className={`w-full border-b border-[#F0E8EC] px-5 py-4 text-left transition ${active ? "bg-[#FFF0F7]" : "bg-white hover:bg-[#FFFAFC]"}`}>
                 <div className="flex items-start gap-3"><span className={`mt-4 size-2 shrink-0 rounded-full ${message.read ? "bg-transparent" : "bg-[#F49BC4]"}`} />{contactPhoto ? <img src={contactPhoto} alt={contact?.name || "Profilo"} className="size-11 shrink-0 rounded-full object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-[10px] font-black text-[#8E315D]">{initials(contact?.name || "P")}</span>}<span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className={`min-w-0 flex-1 truncate text-[15px] ${message.read ? "font-bold text-[#493A42]" : "font-black text-[#211A1E]"}`}>{senderName}</span><span className="shrink-0 text-xs font-medium text-black/40">{formatMailDate(message.updatedAt || message.createdAt)}</span><span className="text-lg leading-none text-black/25 lg:hidden">›</span></span><span className="mt-0.5 block truncate text-[13px] font-bold text-[#352930]">{message.subject}</span><span className="mt-0.5 block line-clamp-2 text-[13px] font-medium leading-[18px] text-black/42">{emailPreview(message.body)}</span><span className="mt-1.5 flex gap-2">{message.starred ? <Star className="size-3.5 fill-amber-400 text-amber-400" /> : null}{message.attachments.length ? <Paperclip className="size-3.5 text-[#B43A70]" /> : null}</span></span></div>
               </button>;
             }) : <div className="grid h-60 place-items-center px-8 text-center"><div><MailOpen className="mx-auto size-8 text-black/15" /><p className="mt-3 text-sm font-black text-black/40">Nessuna email</p></div></div>}
@@ -297,9 +323,9 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
             <div className="email-compose-enter h-full">
             <div className="flex h-full flex-col bg-[#FFFDFE] lg:bg-white" style={{ transform: `translate3d(0,${composeDragY}px,0)`, transition: composeDragging ? "none" : "transform 230ms cubic-bezier(.22,.86,.3,1)" }}>
               <div className="relative flex shrink-0 items-center justify-between px-5 pb-3 pt-[calc(env(safe-area-inset-top)+16px)] lg:hidden"><button type="button" onPointerDown={startComposeDrag} onPointerMove={moveComposeDrag} onPointerUp={endComposeDrag} onPointerCancel={endComposeDrag} className="absolute left-1/2 top-1 h-8 w-20 -translate-x-1/2 touch-none cursor-grab active:cursor-grabbing" aria-label="Trascina verso il basso per chiudere"><span className="absolute left-1/2 top-2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-black/20" /></button><button type="button" onClick={closeComposer} className="grid size-12 place-items-center rounded-full border border-black/10 bg-white/80 text-black shadow-[0_8px_24px_rgba(32,24,28,.08)] backdrop-blur-xl" aria-label="Chiudi"><X className="size-7" /></button><button type="button" onClick={() => void saveOrSend("send")} disabled={sending || !selectedRecipientIds.size || !subject.trim() || !hasEmailContent(body)} className="grid size-12 place-items-center rounded-full border border-black/10 bg-white/80 text-[#B43A70] shadow-[0_8px_24px_rgba(32,24,28,.08)] backdrop-blur-xl disabled:text-black/22" aria-label="Invia email">{sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-7" />}</button></div>
-              <div className="hidden items-center justify-between border-b border-[#EEE4E8] px-6 py-5 lg:flex"><div><p className="text-[9px] font-black uppercase tracking-[.2em] text-[#B43A70]">Composizione</p><h3 className="mt-1 text-2xl font-black text-[#211A1E]">Nuova email</h3></div><button type="button" onClick={closeComposer} className="grid size-10 place-items-center rounded-full bg-black/5"><X className="size-5" /></button></div>
+              <div className="hidden items-center justify-between border-b border-[#EEE4E8] px-6 py-5 lg:flex"><div><p className="text-[9px] font-black uppercase tracking-[.2em] text-[#B43A70]">Composizione</p><h3 className="mt-1 text-2xl font-black text-[#211A1E]">{composeReplyToId ? "Rispondi" : "Nuova email"}</h3></div><button type="button" onClick={closeComposer} className="grid size-10 place-items-center rounded-full bg-black/5"><X className="size-5" /></button></div>
               <div className="flex-1 overflow-y-auto px-5 pb-8 pt-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:p-6 lg:[scrollbar-width:auto]">
-                <h3 className="mb-12 text-[42px] font-black leading-none tracking-[-.045em] text-black lg:hidden">Nuovo messaggio</h3>
+                <h3 className="mb-12 text-[42px] font-black leading-none tracking-[-.045em] text-black lg:hidden">{composeReplyToId ? "Rispondi" : "Nuovo messaggio"}</h3>
                 <div className="relative">
                   <button type="button" onClick={() => setRecipientPicker((value) => !value)} className="flex min-h-16 w-full flex-wrap items-center gap-2 border-b border-black/[.08] bg-transparent px-0 text-left lg:min-h-12 lg:rounded-2xl lg:border lg:border-[#E8DCE2] lg:bg-[#FFFBFD] lg:px-3">
                     <span className="text-xl font-medium text-black/38 lg:text-xs lg:font-black">A:</span>{selectedRecipients.length ? selectedRecipients.map((recipient) => <span key={recipient.id} className="inline-flex items-center gap-1.5 rounded-full bg-[#F8DCE9] py-1 pl-1 pr-2.5 text-[10px] font-black text-[#94305E]">{personPhoto(recipient) ? <img src={personPhoto(recipient)} alt="" className="size-5 rounded-full object-cover" /> : <span className="grid size-5 place-items-center rounded-full bg-white/70 text-[8px]">{initials(recipient.name)}</span>}{recipient.name}</span>) : <span className="text-lg font-medium text-black/28 lg:text-sm lg:font-semibold">Seleziona destinatari</span>}
@@ -355,9 +381,15 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
                   {folder === "trash" ? <button type="button" onClick={() => void mailAction("restore")} className="mail-action"><Archive className="size-4" /> Ripristina</button> : <><button type="button" onClick={() => void mailAction("archive")} className="mail-action"><Archive className="size-4" /> Archivia</button><button type="button" onClick={() => void mailAction(folder === "sent" ? "delete-sent" : "delete")} className="mail-action text-red-600"><Trash2 className="size-4" /> Elimina</button></>}
                 </div>
               </div>
-              <article className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+24px)] sm:p-7">{(() => { const outgoing = selectedMessage.sender.id === currentUserId; const contact = outgoing ? selectedMessage.recipients[0] : selectedMessage.sender; const photo = personPhoto(contact); return <div className="flex items-start gap-4">{photo ? <img src={photo} alt={contact?.name || "Profilo"} className="size-12 shrink-0 rounded-full object-cover" /> : <div className="grid size-12 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-sm font-black text-[#8E315D]">{initials(contact?.name || "P")}</div>}<div className="min-w-0 flex-1"><h1 className="font-serif text-2xl font-semibold text-[#211A1E] sm:text-3xl">{selectedMessage.subject}</h1><div className="mt-4 text-xs text-black/45"><strong className="block text-sm leading-5 text-[#30252A]">{outgoing ? `A: ${selectedMessage.recipients.map((recipient) => recipient.name).join(", ")}` : selectedMessage.sender.name}</strong><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><span className="break-all">{outgoing ? selectedMessage.recipients.map((recipient) => recipient.email).join(", ") : `<${selectedMessage.sender.email}>`}</span><span aria-hidden="true">·</span><span>{new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedMessage.createdAt))}</span></div></div><p className="mt-2 block text-[11px] font-semibold text-black/35">Da: {selectedMessage.sender.name}</p></div></div>; })()}
-                {isRichEmailBody(selectedMessage.body) ? <div className="email-rich-content mt-8 break-words text-[15px] font-medium leading-7 text-[#493D43]" dangerouslySetInnerHTML={{ __html: selectedMessage.body }} /> : <div className="mt-8 whitespace-pre-wrap break-words text-[15px] font-medium leading-7 text-[#493D43]">{selectedMessage.body}</div>}
-                {selectedMessage.attachments.length ? <div className="mt-8 border-t border-[#EEE3E8] pt-5"><p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-black/40"><Paperclip className="size-4" /> Immagini allegate</p><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{selectedMessage.attachments.map((attachment) => <a key={attachment.id} href={attachment.webViewLink || attachment.previewUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-2xl border border-[#E8DCE2]"><img src={attachment.previewUrl} alt={attachment.name} className="h-32 w-full object-cover" /><p className="truncate p-2 text-[10px] font-bold">{attachment.name}</p></a>)}</div></div> : null}
+              <article className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+24px)] sm:p-7">
+                <h1 className="mb-6 font-serif text-2xl font-semibold text-[#211A1E] sm:text-3xl">{selectedMessage.subject.replace(/^Re:\s*/i, "")}</h1>
+                <div className="space-y-4">
+                  {(threadMessages.length ? threadMessages : [selectedMessage]).map((threadMessage) => { const outgoing = threadMessage.sender.id === currentUserId; const photo = personPhoto(threadMessage.sender); return <section key={threadMessage.id} className={`rounded-3xl border p-4 sm:p-5 ${outgoing ? "border-[#EACFDC] bg-[#FFF4F9]" : "border-[#EEE3E8] bg-white"}`}>
+                    <div className="flex items-start gap-3">{photo ? <img src={photo} alt={threadMessage.sender.name} className="size-10 shrink-0 rounded-full object-cover" /> : <div className="grid size-10 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-xs font-black text-[#8E315D]">{initials(threadMessage.sender.name || "P")}</div>}<div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm text-[#30252A]">{threadMessage.sender.name}</strong><span className="text-[11px] font-semibold text-black/38">{new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(threadMessage.createdAt))}</span></div><p className="mt-1 break-all text-[11px] font-medium text-black/40">A: {threadMessage.recipients.map((recipient) => recipient.name).join(", ")}</p></div></div>
+                    {isRichEmailBody(threadMessage.body) ? <div className="email-rich-content mt-5 break-words text-[15px] font-medium leading-7 text-[#493D43]" dangerouslySetInnerHTML={{ __html: threadMessage.body }} /> : <div className="mt-5 whitespace-pre-wrap break-words text-[15px] font-medium leading-7 text-[#493D43]">{threadMessage.body}</div>}
+                    {threadMessage.attachments.length ? <div className="mt-6 border-t border-[#EEE3E8] pt-4"><p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-black/40"><Paperclip className="size-4" /> Immagini allegate</p><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{threadMessage.attachments.map((attachment) => <a key={attachment.id} href={attachment.webViewLink || attachment.previewUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-2xl border border-[#E8DCE2]"><img src={attachment.previewUrl} alt={attachment.name} className="h-32 w-full object-cover" /><p className="truncate p-2 text-[10px] font-bold">{attachment.name}</p></a>)}</div></div> : null}
+                  </section>; })}
+                </div>
               </article>
             </div>
           ) : <div className="hidden h-full place-items-center text-center lg:grid"><div><Mail className="mx-auto size-10 text-black/12" /><p className="mt-4 text-sm font-black text-black/35">Seleziona un messaggio oppure crea una nuova email</p></div></div>}

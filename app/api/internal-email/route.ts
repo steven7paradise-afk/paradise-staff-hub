@@ -37,9 +37,53 @@ async function currentSender() {
   return prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, name: true, role: true, sede_id: true } });
 }
 
+function serializeEmail(email: any, recipientRow: any = null) {
+  return {
+    id: email.id,
+    threadId: email.thread_id || email.id,
+    replyToId: email.reply_to_id || null,
+    recipientRecordId: recipientRow?.id || null,
+    subject: email.subject,
+    body: isRichEmailHtml(email.body) ? sanitizeInternalEmailHtml(email.body) : email.body,
+    status: email.status,
+    createdAt: email.created_at.toISOString(),
+    updatedAt: email.updated_at.toISOString(),
+    sender: email.sender,
+    recipients: email.recipients.map((recipient: any) => recipient.recipient),
+    draftRecipientIds: Array.isArray(email.draft_recipient_ids) ? email.draft_recipient_ids : [],
+    attachments: validAttachments(email.attachments),
+    read: recipientRow ? Boolean(recipientRow.read_at) : true,
+    starred: recipientRow ? recipientRow.starred : false,
+    archived: recipientRow ? recipientRow.archived : false,
+    deleted: recipientRow ? recipientRow.deleted : email.sender_deleted,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const sender = await currentSender();
   if (!sender || !allowedRoles.has(sender.role)) return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
+  const requestedThreadId = request.nextUrl.searchParams.get("threadId");
+  if (requestedThreadId) {
+    const threadRows = await prisma.internalEmail.findMany({
+      where: {
+        thread_id: requestedThreadId,
+        status: "SENT",
+        OR: [
+          { sender_id: sender.id, sender_deleted: false },
+          { recipients: { some: { recipient_id: sender.id, deleted: false } } },
+        ],
+      },
+      include: {
+        sender: { select: { id: true, name: true, email: true, photo_url: true } },
+        recipients: { include: { recipient: { select: { id: true, name: true, email: true, photo_url: true } } } },
+      },
+      orderBy: { created_at: "asc" },
+      take: 200,
+    });
+    return NextResponse.json({
+      messages: threadRows.map((email) => serializeEmail(email, email.recipients.find((recipient) => recipient.recipient_id === sender.id) || null)),
+    });
+  }
   const requestedFolder = request.nextUrl.searchParams.get("folder") || "inbox";
   const folder = folders.has(requestedFolder) ? requestedFolder : "inbox";
   const [inboxCount, importantCount, draftsCount, trashCount, rows] = await Promise.all([
@@ -54,7 +98,7 @@ export async function GET(request: NextRequest) {
   const messages = rows.map((row: any) => {
     const email = row.email || row;
     const recipientRow = row.email ? row : null;
-    return { id: email.id, recipientRecordId: recipientRow?.id || null, subject: email.subject, body: isRichEmailHtml(email.body) ? sanitizeInternalEmailHtml(email.body) : email.body, status: email.status, createdAt: email.created_at.toISOString(), updatedAt: email.updated_at.toISOString(), sender: email.sender, recipients: email.recipients.map((recipient: any) => recipient.recipient), draftRecipientIds: Array.isArray(email.draft_recipient_ids) ? email.draft_recipient_ids : [], attachments: validAttachments(email.attachments), read: recipientRow ? Boolean(recipientRow.read_at) : true, starred: recipientRow ? recipientRow.starred : false, archived: recipientRow ? recipientRow.archived : false, deleted: recipientRow ? recipientRow.deleted : email.sender_deleted };
+    return serializeEmail(email, recipientRow);
   });
   return NextResponse.json({ messages, counts: { inbox: inboxCount, important: importantCount, drafts: draftsCount, trash: trashCount } });
 }
@@ -66,6 +110,7 @@ export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => null);
   const mode = payload?.mode === "draft" ? "draft" : "send";
   const draftId = typeof payload?.draftId === "string" ? payload.draftId : null;
+  const requestedReplyToId = typeof payload?.replyToId === "string" ? payload.replyToId : null;
   const recipientIds: string[] = Array.from(
     new Set<string>(
       (Array.isArray(payload?.recipientIds) ? payload.recipientIds : []).filter(
@@ -83,7 +128,26 @@ export async function POST(request: NextRequest) {
   if (subject.length > 160 || rawMessage.length > 30000 || internalEmailPlainText(message).length > 10000) return NextResponse.json({ error: "Il contenuto dell’email è troppo lungo." }, { status: 400 });
   const recipients = await prisma.user.findMany({ where: { id: { in: recipientIds }, active: true }, select: { id: true, name: true, email: true } });
   if (mode === "send" && !recipients.length) return NextResponse.json({ error: "Nessun destinatario autorizzato trovato." }, { status: 400 });
-  const data = { subject: subject || "Senza oggetto", body: message, draft_recipient_ids: recipientIds as Prisma.InputJsonValue, attachments: attachments as unknown as Prisma.InputJsonValue, status: mode === "draft" ? "DRAFT" : "SENT" };
+  const replyTarget = requestedReplyToId ? await prisma.internalEmail.findFirst({
+    where: {
+      id: requestedReplyToId,
+      status: "SENT",
+      OR: [
+        { sender_id: sender.id, sender_deleted: false },
+        { recipients: { some: { recipient_id: sender.id, deleted: false } } },
+      ],
+    },
+    select: { id: true, thread_id: true },
+  }) : null;
+  if (requestedReplyToId && !replyTarget) return NextResponse.json({ error: "La conversazione originale non è disponibile." }, { status: 400 });
+  const data = {
+    subject: subject || "Senza oggetto",
+    body: message,
+    draft_recipient_ids: recipientIds as Prisma.InputJsonValue,
+    attachments: attachments as unknown as Prisma.InputJsonValue,
+    status: mode === "draft" ? "DRAFT" : "SENT",
+    ...(replyTarget ? { thread_id: replyTarget.thread_id, reply_to_id: replyTarget.id } : {}),
+  };
   const email = await prisma.$transaction(async (tx) => {
     const existingDraft = draftId ? await tx.internalEmail.findFirst({ where: { id: draftId, sender_id: sender.id, status: "DRAFT" } }) : null;
     const saved = existingDraft ? await tx.internalEmail.update({ where: { id: existingDraft.id }, data }) : await tx.internalEmail.create({ data: { ...data, sender_id: sender.id } });
@@ -93,12 +157,12 @@ export async function POST(request: NextRequest) {
     }
     return saved;
   });
-  if (mode === "draft") return NextResponse.json({ draftId: email.id, saved: true });
+  if (mode === "draft") return NextResponse.json({ draftId: email.id, threadId: email.thread_id, saved: true });
   const outcomes = await Promise.all(recipients.map(async (recipient) => {
     try { const outcome = await sendEmail({ to: recipient.email, subject, html: internalEmailHtml(recipient.name, sender.name, subject, message, attachments) }); return outcome.skipped ? "skipped" : "sent"; }
     catch (error) { console.error("Internal email external delivery failed", { recipientId: recipient.id, error }); return "failed"; }
   }));
-  return NextResponse.json({ id: email.id, sent: recipients.length, externalSent: outcomes.filter((item) => item === "sent").length, externalSkipped: outcomes.filter((item) => item === "skipped").length, externalFailed: outcomes.filter((item) => item === "failed").length });
+  return NextResponse.json({ id: email.id, threadId: email.thread_id, sent: recipients.length, externalSent: outcomes.filter((item) => item === "sent").length, externalSkipped: outcomes.filter((item) => item === "skipped").length, externalFailed: outcomes.filter((item) => item === "failed").length });
   } catch (error) {
     console.error("Internal email save failed", error);
     return NextResponse.json({ error: "Impossibile salvare l’email. Riprova tra poco." }, { status: 500 });
