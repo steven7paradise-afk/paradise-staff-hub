@@ -1,14 +1,29 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { automaticDailyCashSummary, isBeforeDailyClosingTime, romeDateKey } from "@/lib/daily-cash-closing";
+import { auth } from "@/lib/auth";
 import { getOperationalUser } from "@/lib/operational-session";
 import { prisma } from "@/lib/prisma";
 
-async function dailyClosingContext(request: NextRequest) {
+const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
+
+async function dailyClosingContext(request: NextRequest, requestedDate?: string | null) {
   const operationalUser = await getOperationalUser(request);
   if (!operationalUser?.id || !operationalUser.sedeId) return null;
 
-  const date = romeDateKey();
+  const today = romeDateKey();
+  let date = today;
+  if (requestedDate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) return null;
+    const parsedDate = new Date(`${requestedDate}T00:00:00.000Z`);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== requestedDate) return null;
+    date = requestedDate;
+  }
+  if (date > today) return null;
+  if (date !== today) {
+    const session = await auth();
+    if (!session?.user?.id || !ADMIN_ROLES.has(session.user.role)) return null;
+  }
   const accountingDate = new Date(`${date}T00:00:00.000Z`);
   const nextDate = new Date(accountingDate);
   nextDate.setUTCDate(nextDate.getUTCDate() + 1);
@@ -25,7 +40,7 @@ async function dailyClosingContext(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const context = await dailyClosingContext(request);
+  const context = await dailyClosingContext(request, request.nextUrl.searchParams.get("date"));
   if (!context) return NextResponse.json({ error: "Sede non autorizzata." }, { status: 403 });
   const summary = await automaticDailyCashSummary(context.date, context.location.id);
   return NextResponse.json({
@@ -41,17 +56,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const context = await dailyClosingContext(request);
+  const body = await request.json().catch(() => null);
+  const context = await dailyClosingContext(request, typeof body?.date === "string" ? body.date : null);
   if (!context) return NextResponse.json({ error: "Sede non autorizzata." }, { status: 403 });
   if (context.existing) {
     return NextResponse.json({
-      error: `La chiusura di oggi è già stata effettuata da ${context.existing.signature_name || context.existing.user.name}.`,
+      error: `La chiusura del ${context.date} è già stata effettuata da ${context.existing.signature_name || context.existing.user.name}.`,
       alreadyClosed: true,
     }, { status: 409 });
   }
 
-  const body = await request.json().catch(() => null);
-  const before19 = isBeforeDailyClosingTime();
+  const before19 = context.date === romeDateKey() && isBeforeDailyClosingTime();
   if (before19 && body?.confirmEarly !== true) {
     return NextResponse.json({
       error: "Prima delle 19:00 è necessaria la conferma della chiusura anticipata.",
@@ -80,10 +95,14 @@ export async function POST(request: NextRequest) {
   if (!signer) return NextResponse.json({ error: "Nessun lavoratore attivo associato alla sede." }, { status: 400 });
 
   const formatEuro = (value: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
-  const closingTime = before19 ? "Chiusura anticipata confermata prima delle 19:00." : "Chiusura effettuata dopo le 19:00.";
+  const closingTime = context.date !== romeDateKey()
+    ? "Chiusura registrata successivamente da un amministratore."
+    : before19
+      ? "Chiusura anticipata confermata prima delle 19:00."
+      : "Chiusura effettuata dopo le 19:00.";
   const notes = [
     "Chiusura giornaliera automatica Contanti.",
-    `Controlli Cliente collegati oggi: ${summary.completedControlCount}.`,
+    `Controlli Cliente collegati: ${summary.completedControlCount}.`,
     `Contanti associati ai Controlli Cliente, rilevati da Shopify: ${formatEuro(summary.controlShopifyCash)}.`,
     `Importo dichiarato negli stessi Controlli Cliente: ${formatEuro(summary.controlDeclaredCash)}.`,
     `Contanti Shopify: ${formatEuro(summary.shopifyCash)}.`,
@@ -122,7 +141,7 @@ export async function POST(request: NextRequest) {
 
   if (result.duplicate || !result.closing) {
     return NextResponse.json({
-      error: `La chiusura di oggi è già stata effettuata da ${result.duplicate?.signature_name || result.duplicate?.user.name || "un altro operatore"}.`,
+      error: `La chiusura del ${context.date} è già stata effettuata da ${result.duplicate?.signature_name || result.duplicate?.user.name || "un altro operatore"}.`,
       alreadyClosed: true,
     }, { status: 409 });
   }

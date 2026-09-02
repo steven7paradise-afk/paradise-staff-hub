@@ -318,6 +318,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         currentUserId={sessionUser.id}
         currentUserName={pcDisplayUser?.name || sessionUser.name || "Dipendente"}
         currentUserRole={role}
+        canClosePastDays={Boolean(session?.user?.role && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role))}
         autoFillFormId={fillId}
         autoFillFormName={fill}
         pastCustomers={pastCustomers}

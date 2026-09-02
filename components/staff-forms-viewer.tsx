@@ -247,6 +247,7 @@ export function StaffFormsViewer({
   currentUserId,
   currentUserName,
   currentUserRole,
+  canClosePastDays = false,
   autoFillFormId,
   autoFillFormName,
   pastCustomers = [],
@@ -257,6 +258,7 @@ export function StaffFormsViewer({
   currentUserId: string;
   currentUserName: string;
   currentUserRole: string;
+  canClosePastDays?: boolean;
   autoFillFormId?: string;
   autoFillFormName?: string;
   pastCustomers?: Array<{
@@ -302,6 +304,7 @@ export function StaffFormsViewer({
   const [dailyCloseSubmitting, setDailyCloseSubmitting] = useState(false);
   const [dailyCloseSummary, setDailyCloseSummary] = useState<AutomaticDailyCloseSummary | null>(null);
   const [dailyCloseMessage, setDailyCloseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [dailyCloseDate, setDailyCloseDate] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date()));
 
   const handleSelectCustomer = (cust: any) => {
     setAnswers((prev) => ({
@@ -890,13 +893,13 @@ export function StaffFormsViewer({
     setCustomerSearchQuery("");
   };
 
-  const openDailyClosing = async () => {
+  const loadDailyClosing = async (date: string) => {
     setDailyCloseOpen(true);
     setDailyCloseLoading(true);
     setDailyCloseSummary(null);
     setDailyCloseMessage(null);
     try {
-      const response = await fetch("/api/cash/daily-close", { cache: "no-store" });
+      const response = await fetch(`/api/cash/daily-close?date=${encodeURIComponent(date)}`, { cache: "no-store" });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data) throw new Error(data?.error || "Riepilogo chiusura non disponibile.");
       setDailyCloseSummary(data);
@@ -905,6 +908,12 @@ export function StaffFormsViewer({
     } finally {
       setDailyCloseLoading(false);
     }
+  };
+
+  const openDailyClosing = async () => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
+    setDailyCloseDate(today);
+    await loadDailyClosing(today);
   };
 
   const completeDailyClosing = async () => {
@@ -918,7 +927,7 @@ export function StaffFormsViewer({
       const response = await fetch("/api/cash/daily-close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmEarly }),
+        body: JSON.stringify({ confirmEarly, date: dailyCloseDate }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile registrare la chiusura giornaliera.");
@@ -1368,30 +1377,51 @@ export function StaffFormsViewer({
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BCC9FF]">Contanti</p>
                   <h2 className="mt-1 text-2xl font-black">Chiusura giornaliera</h2>
-                  <p className="mt-1 text-sm font-semibold text-white/45">Importi automatici di oggi, senza conteggio manuale e senza PIN.</p>
+                  <p className="mt-1 text-sm font-semibold text-white/45">Importi automatici del giorno selezionato, senza conteggio manuale e senza PIN.</p>
                 </div>
               </div>
               <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/55 transition hover:bg-white/10 hover:text-white" aria-label="Chiudi"><X className="size-5" /></button>
             </header>
 
             <div className="space-y-5 p-5 sm:p-7">
+              {canClosePastDays ? (
+                <div className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-[#BCC9FF]/20 bg-[#A1B5FD]/10 p-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Data della chiusura</p>
+                    <p className="mt-1 text-xs font-semibold text-white/50">Come amministratore puoi registrare anche una giornata precedente.</p>
+                  </div>
+                  <input
+                    type="date"
+                    value={dailyCloseDate}
+                    max={new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date())}
+                    disabled={dailyCloseLoading || dailyCloseSubmitting}
+                    onChange={(event) => {
+                      const date = event.target.value;
+                      if (!date) return;
+                      setDailyCloseDate(date);
+                      void loadDailyClosing(date);
+                    }}
+                    className="min-h-11 rounded-xl border border-white/15 bg-[#17171d] px-3 text-sm font-black text-white outline-none transition focus:border-[#BCC9FF] disabled:opacity-50"
+                  />
+                </div>
+              ) : null}
               {dailyCloseLoading ? (
                 <div className="grid min-h-64 place-items-center"><div className="text-center"><Loader2 className="mx-auto size-8 animate-spin text-[#BCC9FF]" /><p className="mt-4 text-sm font-bold text-white/50">Lettura Controlli Cliente e Shopify…</p></div></div>
               ) : dailyCloseSummary ? (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                     <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Sede</p><p className="mt-1 text-sm font-black">{dailyCloseSummary.locationName}</p></div>
-                    <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">Giorno corrente</p><p className="mt-1 text-sm font-black">{new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeZone: "Europe/Rome" }).format(new Date(`${dailyCloseSummary.date}T12:00:00Z`))}</p></div>
+                    <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">{canClosePastDays ? "Giorno selezionato" : "Giorno corrente"}</p><p className="mt-1 text-sm font-black">{new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeZone: "Europe/Rome" }).format(new Date(`${dailyCloseSummary.date}T12:00:00Z`))}</p></div>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-[24px] border border-emerald-300/20 bg-emerald-300/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Controlli Cliente collegati oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Controlli Cliente collegati</p>
                       <p className="mt-3 text-3xl font-black">{dailyCloseSummary.completedControlCount}</p>
                       <p className="mt-2 text-xs font-bold text-white/40">Abbinati a Shopify tramite il codice ordine</p>
                     </div>
                     <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Contanti prelevati oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Contanti del giorno</p>
                       <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
                       <p className="mt-2 text-xs font-bold text-white/40">Rilevati automaticamente da Shopify</p>
                     </div>
@@ -1453,7 +1483,7 @@ export function StaffFormsViewer({
                     <div className="flex gap-3 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 text-sm font-semibold leading-5 text-amber-100"><Clock className="mt-0.5 size-5 shrink-0" /><p>Sono meno delle 19:00. Prima di registrare la chiusura verrà chiesta una conferma della chiusura anticipata.</p></div>
                   ) : null}
                   {dailyCloseSummary.alreadyClosed ? (
-                    <div className="flex gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>La chiusura di oggi è già stata effettuata{dailyCloseSummary.existing?.signedBy ? ` da ${dailyCloseSummary.existing.signedBy}` : ""}. Non è possibile crearne una seconda.</p></div>
+                    <div className="flex gap-3 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100"><CheckCircle2 className="size-5 shrink-0" /><p>La chiusura del giorno selezionato è già stata effettuata{dailyCloseSummary.existing?.signedBy ? ` da ${dailyCloseSummary.existing.signedBy}` : ""}. Non è possibile crearne una seconda.</p></div>
                   ) : null}
                 </>
               ) : null}

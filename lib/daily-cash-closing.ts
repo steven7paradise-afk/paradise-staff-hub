@@ -202,7 +202,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   return {
     available: shopify.available,
     date: dateKey,
-    before19: isBeforeDailyClosingTime(),
+    before19: dateKey === romeDateKey() && isBeforeDailyClosingTime(),
     controlDeclaredCash,
     controlShopifyCash,
     shopifyCash,
