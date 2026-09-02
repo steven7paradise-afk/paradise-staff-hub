@@ -388,9 +388,14 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     );
   }
   if (isPcCassa) {
-    sidebarItems = sidebarItems
-      .filter(item => item.href === "/appointments" || item.href === "/service-forms" || item.href === "/orders")
-      .map((item) => item.href === "/appointments" ? { ...item, href: "/appointments/buenos-aires", label: "Appuntamenti" } : item);
+    // Il PC Cassa deve avere sempre il proprio menu operativo. Non eredita il
+    // layout personalizzato dei dipendenti, che potrebbe non contenere queste
+    // pagine e lasciare quindi visibile una sidebar completamente vuota.
+    sidebarItems = [
+      { href: "/appointments/buenos-aires", label: "Appuntamenti", iconName: "CalendarDays", section: "", badge: undefined },
+      { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "", badge: undefined },
+      { href: "/orders", label: "Ordini", iconName: "ShoppingCart", section: "", badge: undefined },
+    ];
     effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms", "/orders"] }];
   }
   const aside = (
