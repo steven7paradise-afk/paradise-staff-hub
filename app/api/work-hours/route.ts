@@ -56,7 +56,8 @@ function approvedPaidHours(
 
   // A salon closure must never add hours automatically to the monthly total.
   if (flags.storeClosed) return { hours: 0, kind: "CHIUSURA_NEGOZIO", partial: false };
-  if (leave?.type === "FERIE" || flags.holiday) return { hours: fallbackDay, kind: "FERIE", partial: false };
+  // In Controllo ore, holidays are labelled but do not add worked or due hours.
+  if (leave?.type === "FERIE" || flags.holiday) return { hours: 0, kind: "FERIE", partial: false };
   if (leave?.type === "PERMESSO" || flags.permission) {
     const permissionDuration = categoryDuration(leave?.start_time ?? null, leave?.end_time ?? null);
     return permissionDuration > 0
@@ -217,7 +218,11 @@ export async function GET(request: NextRequest) {
       key,
       userId: key.split("-").slice(0, -3).join("-"),
       date: key.slice(-10),
-      hours: paidAbsence.kind === "CHIUSURA_NEGOZIO" ? 0 : record?.manual_override ? record.hours : recognizedAutomaticHours,
+      hours: paidAbsence.kind === "CHIUSURA_NEGOZIO" || paidAbsence.kind === "FERIE"
+        ? 0
+        : record?.manual_override
+          ? record.hours
+          : recognizedAutomaticHours,
       workedHours: automaticHours,
       paidAbsenceHours: paidAbsence.hours,
       paidAbsenceKind: paidAbsence.kind,
