@@ -9,6 +9,7 @@ import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 export const dynamic = "force-dynamic";
 
 const STAFF_ALIAS_SETTING_KEY = "appointment_staff_aliases";
+const ALWAYS_ACTIVE_STAFF_NAMES = new Set(["franci"]);
 
 type StaffAlias = {
   userId?: string;
@@ -83,13 +84,15 @@ export async function GET(request: NextRequest) {
     const clockedInWorkers = workers
       .map((worker) => {
         const state = deriveAttendanceState(worker.attendance_logs);
+        const alwaysActive = ALWAYS_ACTIVE_STAFF_NAMES.has(worker.name.trim().toLocaleLowerCase("it"));
         return {
           id: worker.id,
           name: worker.name,
           photo_url: worker.photo_url,
           sede_id: worker.sede_id,
           locationName: worker.location?.name ?? "",
-          status: state.status,
+          status: alwaysActive ? "IN" : state.status,
+          alwaysActive,
           clockedInAt: state.firstEntry
             ? new Date(state.firstEntry.timestamp).toISOString()
             : null,
@@ -101,7 +104,10 @@ export async function GET(request: NextRequest) {
             .map(([externalId]) => externalId),
         };
       })
-      .filter((w) => (w.status === "IN" || w.status === "BREAK") && (!locationId || w.sede_id === locationId));
+      .filter((worker) => worker.alwaysActive || (
+        (worker.status === "IN" || worker.status === "BREAK") &&
+        (!locationId || worker.sede_id === locationId)
+      ));
 
     clockedInWorkers.sort((a, b) => a.name.localeCompare(b.name, "it"));
 
