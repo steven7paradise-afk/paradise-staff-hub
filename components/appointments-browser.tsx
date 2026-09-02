@@ -279,6 +279,7 @@ type AppointmentRecord = {
   createdAt?: string | null;
   updatedAt?: string | null;
   notesText?: string | null;
+  paradiseNote?: string | null;
   extraDetails?: Array<{ label: string; value: string }>;
 };
 
@@ -1434,6 +1435,11 @@ export function AppointmentsBrowser({
     y: number;
     touch?: boolean;
   } | null>(null);
+  const [quickNoteBookingId, setQuickNoteBookingId] = useState<string | null>(null);
+  const [quickNoteText, setQuickNoteText] = useState("");
+  const [paradiseNotes, setParadiseNotes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])),
+  );
   const boardLongPressTimerRef = useRef<number | null>(null);
   const boardLongPressStartRef = useRef<{
     bookingId: string;
@@ -3324,6 +3330,7 @@ export function AppointmentsBrowser({
       if (res.ok) {
         const comment = await res.json();
         setDbComments((current) => [...current, comment]);
+        setParadiseNotes((current) => ({ ...current, [bookingId]: comment.message || messageText }));
         setNewCommentText("");
         setShopifyNote((current) => {
           const author = comment.user_name ?? "Staff";
@@ -3340,6 +3347,48 @@ export function AppointmentsBrowser({
     } catch (err) {
       console.error("Failed to post comment", err);
       showPushToast("Nota non salvata", "Impossibile salvare il commento.", "error");
+    } finally {
+      setSubmittingComment(false);
+    }
+  }
+
+  const quickNoteBooking = quickNoteBookingId
+    ? initialBookings.find((booking) => booking.id === quickNoteBookingId) || null
+    : null;
+
+  function openQuickNote(booking: AppointmentRecord) {
+    if (isPC && !pcActiveWorker) {
+      setPcScreenLocked(true);
+      return;
+    }
+    setQuickNoteBookingId(booking.id);
+    setQuickNoteText(paradiseNotes[booking.id] || booking.paradiseNote || "");
+  }
+
+  async function saveQuickNote() {
+    if (!quickNoteBooking || !quickNoteText.trim() || submittingComment) return;
+    const savedText = quickNoteText.trim();
+    setSubmittingComment(true);
+    try {
+      const response = await fetch("/api/appointments/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderName: quickNoteBooking.bookingStr || null,
+          bookingId: quickNoteBooking.id,
+          message: savedText,
+          signedBy: isPC ? pcActiveWorker?.name : undefined,
+        }),
+      });
+      if (!response.ok) throw new Error("Nota non salvata");
+      const comment = await response.json();
+      setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: comment.message || savedText }));
+      setQuickNoteBookingId(null);
+      setQuickNoteText("");
+      showPushToast("Nota salvata", "La nota Paradise è visibile sulla scheda.");
+    } catch (error) {
+      console.error("Failed to save quick appointment note", error);
+      showPushToast("Nota non salvata", "Impossibile salvare la nota Paradise.", "error");
     } finally {
       setSubmittingComment(false);
     }
@@ -6335,7 +6384,7 @@ export function AppointmentsBrowser({
                         <div className="flex-1 space-y-2">
                           {column.bookings.length ? column.bookings.map((booking) => {
                             const status = getBookingStatus(booking);
-                            const notePreview = getBookingNotePreview(booking);
+                            const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
                             return (
                               <div
                                 key={booking.id}
@@ -6457,14 +6506,37 @@ export function AppointmentsBrowser({
                                 </div>
                                 <p className="mt-2.5 truncate text-xs font-black text-[#172B4D]">{booking.customerName}</p>
                                 <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-[#5E6C84]">{booking.serviceTitle}</p>
-                                {notePreview ? (
-                                  <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
-                                    <p className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-[#7A869A]">
-                                      <MessageSquare className="size-3" /> Note Cowlendar
-                                    </p>
-                                    <p className="mt-1 line-clamp-2 text-[9px] font-semibold leading-snug text-[#42526E]">{notePreview}</p>
-                                  </div>
-                                ) : null}
+                                <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
+                                  {paradiseNote ? (
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        openQuickNote(booking);
+                                      }}
+                                      className="w-full rounded-lg bg-[#FFF7E6] p-2 text-left transition hover:bg-[#FFF0C2]"
+                                    >
+                                      <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
+                                        <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" /> Nota Paradise</span>
+                                        <Pencil className="size-3" />
+                                      </span>
+                                      <span className="mt-1 block line-clamp-2 text-[9px] font-semibold leading-snug text-[#59451C]">{paradiseNote}</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        openQuickNote(booking);
+                                      }}
+                                      className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
+                                    >
+                                      <MessageSquare className="size-3" /> Aggiungi nota
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             );
                           }) : (
@@ -6775,6 +6847,82 @@ export function AppointmentsBrowser({
                 })}
               </div>
             </div>
+          </div>
+        ) : null}
+
+        {quickNoteBooking ? (
+          <div className="fixed inset-0 z-[210] grid place-items-center bg-black/45 p-4 backdrop-blur-sm">
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              onClick={() => {
+                if (submittingComment) return;
+                setQuickNoteBookingId(null);
+                setQuickNoteText("");
+              }}
+              aria-label="Chiudi nota"
+            />
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveQuickNote();
+              }}
+              className="relative w-full max-w-lg overflow-hidden rounded-[26px] border border-[#E8D8CF] bg-white shadow-[0_28px_90px_rgba(35,25,29,0.28)]"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-black/5 bg-[#FFF9EB] px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9A6700]">Nota Paradise</p>
+                  <h3 className="mt-1 truncate text-xl font-black text-[#172B4D]">{quickNoteBooking.customerName}</h3>
+                  <p className="mt-1 text-xs font-semibold text-[#6B778C]">{formatTime(quickNoteBooking.startDate)} – {formatTime(quickNoteBooking.endDate)}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={submittingComment}
+                  onClick={() => {
+                    setQuickNoteBookingId(null);
+                    setQuickNoteText("");
+                  }}
+                  className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-black/50 shadow-sm transition hover:text-black disabled:opacity-50"
+                  aria-label="Chiudi"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="p-5">
+                <label className="text-[10px] font-black uppercase tracking-[0.14em] text-black/45" htmlFor="quick-appointment-note">Nota appuntamento</label>
+                <textarea
+                  id="quick-appointment-note"
+                  autoFocus
+                  rows={5}
+                  maxLength={1000}
+                  value={quickNoteText}
+                  onChange={(event) => setQuickNoteText(event.target.value)}
+                  placeholder="Esempio: 100 g, 2 fasce, preparare colore..."
+                  className="mt-2 w-full resize-none rounded-2xl border border-black/10 bg-[#FCFBFC] p-4 text-sm font-semibold leading-6 text-[#172B4D] outline-none transition focus:border-[#D6A535] focus:ring-4 focus:ring-[#F4C95D]/15"
+                />
+                <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={submittingComment}
+                    onClick={() => {
+                      setQuickNoteBookingId(null);
+                      setQuickNoteText("");
+                    }}
+                    className="min-h-11 rounded-xl border border-black/10 px-5 text-xs font-black text-black/55 transition hover:bg-black/5 disabled:opacity-50"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingComment || !quickNoteText.trim()}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#172B4D] px-5 text-xs font-black text-white transition hover:bg-[#0E1E35] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {submittingComment ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    Salva nota
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         ) : null}
 

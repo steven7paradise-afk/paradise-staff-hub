@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
 import { appendShopifyOrderNote, getShopifyOrderCowlendarText, getShopifyOrderNoteText, extractShopifyOrderCodes } from "@/lib/shopify";
-import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { getOperationalUser } from "@/lib/operational-session";
 
 export async function GET(request: NextRequest) {
@@ -93,7 +90,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Dati incompleti" }, { status: 400 });
     }
 
-    const key = orderName || bookingId;
+    // The Cowlendar booking id is stable even when an order is renamed or the
+    // Shopify lookup is temporarily unavailable. Keep Shopify only as a sync
+    // target and use the booking as the canonical note owner.
+    const key = bookingId || orderName;
     const authorName = signedBy ? signedBy : sessionUserName;
     
     const comment = await prisma.shopifyOrderComment.create({

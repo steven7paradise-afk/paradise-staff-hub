@@ -434,6 +434,26 @@ export default async function AppointmentsPage({
     }))).catch(() => ({})),
   ]);
 
+  const appointmentCommentKeys = safeBookings.flatMap((booking) => [
+    String(booking.id),
+    String(booking.booking_str || ""),
+    shopifyOrderNames.get(String(booking.order_id || "")) || "",
+  ]).filter(Boolean);
+  const appointmentComments = appointmentCommentKeys.length
+    ? await prisma.shopifyOrderComment.findMany({
+        where: { order_name: { in: appointmentCommentKeys } },
+        orderBy: { created_at: "desc" },
+        select: { order_name: true, message: true },
+      }).catch(() => [])
+    : [];
+
+  const latestAppointmentNotes = new Map<string, string>();
+  for (const comment of appointmentComments) {
+    if (!latestAppointmentNotes.has(comment.order_name)) {
+      latestAppointmentNotes.set(comment.order_name, comment.message);
+    }
+  }
+
   const statusOverrides =
     statusSetting?.value && typeof statusSetting.value === "object" && !Array.isArray(statusSetting.value)
       ? (statusSetting.value as Record<string, {
@@ -611,6 +631,10 @@ export default async function AppointmentsPage({
         createdAt: booking.created_at || null,
         updatedAt: booking.updated_at || null,
         notesText: notesText || null,
+        paradiseNote: latestAppointmentNotes.get(shopifyOrderNames.get(String(booking.order_id || "")) || "")
+          || latestAppointmentNotes.get(String(booking.booking_str || ""))
+          || latestAppointmentNotes.get(String(booking.id))
+          || null,
         extraDetails,
       };
     })
