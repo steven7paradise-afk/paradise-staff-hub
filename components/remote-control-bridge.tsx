@@ -51,7 +51,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     let cancelled = false;
     const poll = async () => {
       try {
-        const response = await fetch("/api/remote-control", { cache: "no-store" });
+        const response = await fetch("/api/remote-control?mode=pc", { cache: "no-store" });
         if (!response.ok) return;
         const data = await response.json();
         const remote = (data?.session || null) as RemoteSession | null;

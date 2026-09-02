@@ -65,6 +65,7 @@ function activeSession(session?: RemoteSession | null) {
 export async function GET(request: NextRequest) {
   const session = await auth();
   const isAdmin = Boolean(session?.user?.id && ADMIN_ROLES.has(session.user.role));
+  const pcModeRequested = request.nextUrl.searchParams.get("mode") === "pc";
   const cookieStore = await cookies();
   const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
 
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
     ? presenceSetting.value as PresenceMap
     : {};
 
-  if (isAdmin) {
+  if (isAdmin && !(pcModeRequested && pcAuth)) {
     const locations = await prisma.location.findMany({ select: { id: true, name: true } });
     const locationNames = new Map(locations.map((item) => [item.id, item.name]));
     const candidates = pcs.filter((pc) => pc.activatedAt && !pc.archivedAt && pc.accessTokenHash && !/test/i.test(pc.name));
@@ -100,6 +101,7 @@ export async function GET(request: NextRequest) {
       }
     }
     return NextResponse.json({
+      currentDeviceId: pcAuth?.code || null,
       targets: Array.from(selectedByDeviceName.values())
         .map((pc) => {
           const locationName = locationNames.get(pc.locationId) || pc.name;
