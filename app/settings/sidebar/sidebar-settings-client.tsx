@@ -26,8 +26,6 @@ const PAGE_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/my-shifts": "I miei turni",
   "/tasks": "Task",
-  "/shift-reports": "Report di turno",
-  "/shift-reports/admin": "Registro giornate Admin",
   "/employees": "Dipendenti",
   "/attendance": "Timbrature",
   "/work-hours": "Ore staff",
@@ -44,8 +42,6 @@ const PAGE_LABELS: Record<string, string> = {
   "/tables": "Tabelle",
   "/orders": "Ordini",
   "/ordine": "Scheda ordine diretta",
-  "/magazzino": "Magazzino",
-  "/foto": "Foto",
   "/points": "Punti",
   "/appointments": "Appuntamenti",
   "/consulenza-online": "Consulenza Online",
@@ -113,7 +109,7 @@ export function SidebarSettingsClient({
       ? initialLayout
       : [
           { id: "generale", title: "Generale", routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications", "/email"] },
-          { id: "planning", title: "Planning & Saloni", routes: ["/schedules", "/orders", "/magazzino", "/foto"] },
+          { id: "planning", title: "Planning & Saloni", routes: ["/schedules", "/orders"] },
           { id: "staff", title: "Gestione Staff", routes: ["/requests", "/documents", "/malattie"] },
           { id: "settings", title: "Impostazioni", routes: ["/profile", "/settings"] }
         ]

@@ -21,9 +21,9 @@ test("la matrice Zero resta completa", () => {
 
 test("la mansione aggiunge permessi senza nascondere quelli del ruolo", () => {
   const permissions = mergePermissionSets(
-    { view: ["/dashboard", "/shift-reports"], edit: ["/shift-reports"] },
+    { view: ["/dashboard", "/tasks"], edit: ["/tasks"] },
     { view: ["/notifications"], edit: [] },
   );
-  assert.deepEqual(permissions.view, ["/dashboard", "/shift-reports", "/notifications"]);
-  assert.deepEqual(permissions.edit, ["/shift-reports"]);
+  assert.deepEqual(permissions.view, ["/dashboard", "/tasks", "/notifications"]);
+  assert.deepEqual(permissions.edit, ["/tasks"]);
 });

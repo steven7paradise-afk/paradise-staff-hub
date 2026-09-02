@@ -20,8 +20,6 @@ export const routePermissions: Record<string, Role[]> = {
   "/hub": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tasks": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/shift-reports": ["RESPONSABILE"],
-  "/shift-reports/admin": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/employees": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/attendance": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/work-hours": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -39,8 +37,6 @@ export const routePermissions: Record<string, Role[]> = {
   "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
-  "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
-  "/foto": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/appointments": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/consulenza-online": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
@@ -72,8 +68,6 @@ export const routePermissions: Record<string, Role[]> = {
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
-  if (pathname === "/shift-reports") return ["ZERO", "RESPONSABILE"];
-  if (pathname === "/shift-reports/admin") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
@@ -89,9 +83,6 @@ const legacyAccessRouteMap: Record<string, string> = {
   "i miei turni": "/my-shifts",
   turni: "/my-shifts",
   task: "/tasks",
-  "report di turno": "/shift-reports",
-  "registro giornate": "/shift-reports",
-  "registro giornate admin": "/shift-reports/admin",
   documenti: "/documents",
   planning: "/schedules",
   schedules: "/schedules",
@@ -99,8 +90,6 @@ const legacyAccessRouteMap: Record<string, string> = {
   social: "/social-calendar",
   ordini: "/orders",
   orders: "/orders",
-  magazzino: "/magazzino",
-  foto: "/foto",
   appuntamenti: "/appointments",
   appointments: "/appointments",
   "consulenza online": "/consulenza-online",

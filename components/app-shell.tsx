@@ -41,8 +41,6 @@ const nav = [
   { href: "/hub", label: "Magazzino Paradise", iconName: "PanelsTopLeft", roles: routePermissions["/hub"], section: "Generale" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
-  { href: "/shift-reports", label: "Report di turno", iconName: "ClipboardCheck", roles: ["RESPONSABILE"], section: "Gestione Staff" },
-  { href: "/shift-reports/admin", label: "Registro giornate", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Gestione Staff" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 
   // Section: Planning & Saloni
@@ -51,8 +49,6 @@ const nav = [
   { href: "/locations", label: "Saloni", iconName: "Building2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/orders", label: "Ordini", iconName: "ShoppingCart", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/shipping", label: "Spedizioni", iconName: "Truck", roles: routePermissions["/shipping"], section: "Planning & Saloni" },
-  { href: "/magazzino", label: "Magazzino", iconName: "PackageSearch", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Planning & Saloni" },
-  { href: "/foto", label: "Foto", iconName: "Camera", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/appointments", label: "Appuntamenti", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/consulenza-online", label: "Consulenza Online", iconName: "Video", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/cash", label: "Cassa", iconName: "DollarSign", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },

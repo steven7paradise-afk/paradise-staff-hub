@@ -515,7 +515,6 @@ export function EmployeeManager({ initialEmployees, locations }: { initialEmploy
       { key: "invoices", label: "Fatture", val: "/invoices" },
       { key: "refunds", label: "Rimborsi", val: "/refunds" },
       { key: "tables", label: "Tabelle", val: "/tables" },
-      { key: "foto", label: "Foto", val: "/foto" },
     ];
 
     const copyPhotoUrl = () => {

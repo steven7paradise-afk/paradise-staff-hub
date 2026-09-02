@@ -266,7 +266,6 @@ const ACCESS_PRESETS = [
   "/invoices",
   "/refunds",
   "/tables",
-  "/foto",
 ];
 
 const ACCESS_LABELS: Record<string, string> = {
@@ -291,7 +290,6 @@ const ACCESS_LABELS: Record<string, string> = {
   "/invoices": "Fatture",
   "/refunds": "Rimborsi",
   "/tables": "Tabelle",
-  "/foto": "Foto",
 };
 
 const DEFAULT_MANSIONI = [
@@ -1316,7 +1314,6 @@ export function StaffDirectory({
       { key: "invoices", label: "Fatture", val: "/invoices" },
       { key: "refunds", label: "Rimborsi", val: "/refunds" },
       { key: "tables", label: "Tabelle", val: "/tables" },
-      { key: "foto", label: "Foto", val: "/foto" },
     ];
 
     const copyPhotoUrl = () => {
