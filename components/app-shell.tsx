@@ -143,11 +143,11 @@ function dedupeMenuItems<T extends { href: string }>(items: T[]) {
   });
 }
 
-export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
+export async function AppShell({ children, title, subtitle, role, hideHeader = false, hideMobileHeader = false, hidePageHeaderOnMobile = false, transparentMain = false, transparentMobileHeader = false, pcMode = false, pcDisplayUser = null, pcProfileChooserHrefOverride, remoteController = false, edgeToEdgeMain = false, hideDesktopControls = false, compactDarkSidebar = false, hideDesktopSidebar = false, hideAdminAssistant = false }: { children: React.ReactNode; title: string; subtitle?: string; role?: Role; hideHeader?: boolean; hideMobileHeader?: boolean; hidePageHeaderOnMobile?: boolean; transparentMain?: boolean; transparentMobileHeader?: boolean; pcMode?: boolean; pcDisplayUser?: { name: string; photo_url?: string | null } | null; pcProfileChooserHrefOverride?: string; remoteController?: boolean; edgeToEdgeMain?: boolean; hideDesktopControls?: boolean; compactDarkSidebar?: boolean; hideDesktopSidebar?: boolean; hideAdminAssistant?: boolean }) {
   const [session, branding] = await Promise.all([auth(), getBrandingTheme()]);
   const isPcCassa = pcMode;
   if (!session?.user?.id && !isPcCassa) redirect("/login");
-  const pcProfileChooserHref = "/appointments/buenos-aires?choose=1";
+  const pcProfileChooserHref = pcProfileChooserHrefOverride || "/appointments/buenos-aires?choose=1";
   const currentRole = (role ?? session?.user?.role ?? "DIPENDENTE") as Role;
 
   const settingsKeys = [
@@ -517,7 +517,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   return (
     <SidebarFrame
       aside={aside}
-      main={<>{main}<RemoteControlBridge pcMode={isPcCassa} />{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
+      main={<>{main}<RemoteControlBridge pcMode={isPcCassa && !remoteController} />{!isFormerEmployee ? <NotificationWatcher initialUnread={unreadNotifications} /> : null}{!hideAdminAssistant && !isPcCassa && !isFormerEmployee && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) ? <AdminAssistant /> : null}</>}
       mobileNav={mobileNav}
       style={{
         ...brandingCss(branding),

@@ -252,6 +252,10 @@ export default async function AppointmentsPage({
   pageSubtitle?: string;
 }) {
   const session = await auth();
+  const resolvedSearchParams = await searchParams;
+  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
+  const remoteTarget = typeof resolvedSearchParams?.remoteTarget === "string" ? resolvedSearchParams.remoteTarget.trim() : "";
+  const isAdminRemoteController = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
 
   let sessionUser = session?.user;
   let isPC = false;
@@ -272,13 +276,14 @@ export default async function AppointmentsPage({
     } as any;
   }
 
-  if (forcePcSalon && pcAuth) {
+  const forcedPcSalon = forcePcSalon || (isAdminRemoteController ? requestedSalon || "buenos-aires" : null);
+  if (forcedPcSalon && (pcAuth || isAdminRemoteController)) {
     const forcedLocation = await prisma.location.findFirst({
       where: {
         active: true,
-        OR: forcePcSalon === "buenos-aires"
+        OR: forcedPcSalon === "buenos-aires"
           ? [{ name: { contains: "Buenos", mode: "insensitive" } }, { name: { contains: "Corso", mode: "insensitive" } }]
-          : [{ name: { contains: forcePcSalon, mode: "insensitive" } }],
+          : [{ name: { contains: forcedPcSalon, mode: "insensitive" } }],
       },
       select: { id: true },
     });
@@ -298,16 +303,12 @@ export default async function AppointmentsPage({
 
   if (!sessionUser) redirect("/login");
 
-  const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "true";
   const requestedView = resolvedSearchParams?.view;
   const initialView = requestedView === "week" || requestedView === "month" ? requestedView : "day";
   const requestedFocus = parseLocalDateParam(resolvedSearchParams?.focus);
   const appointmentRange = resolveAppointmentsRange(resolvedSearchParams);
-  const requestedSalon = normalizeAppointmentSalonSlug(resolvedSearchParams?.salone || resolvedSearchParams?.salon);
   const kioskWorkerName = typeof resolvedSearchParams?.worker === "string" ? resolvedSearchParams.worker.trim() : "";
-  const remoteTarget = typeof resolvedSearchParams?.remoteTarget === "string" ? resolvedSearchParams.remoteTarget.trim() : "";
-  const isAdminRemoteController = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
 
   const role = sessionUser.role as Role;
 
@@ -641,6 +642,8 @@ export default async function AppointmentsPage({
       hideHeader
       pcMode={isPC}
       pcDisplayUser={pcDisplayUser ? { name: pcDisplayUser.name, photo_url: pcDisplayUser.photo_url } : kioskWorkerName ? { name: kioskWorkerName, photo_url: null } : null}
+      remoteController={isAdminRemoteController}
+      pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/${requestedSalon || "buenos-aires"}?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
     >
       {!hasCowlendarToken() ? (
         <div className="p-4 sm:p-6 lg:p-8">

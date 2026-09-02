@@ -30,6 +30,10 @@ export function RemoteControlSetup() {
 
   async function openDevice(target: Target) {
     if (starting) return;
+    if (!target.online) {
+      setError(`“${target.name}” non è collegato. Apri Paradise personale su quel dispositivo e attendi che qui compaia Online.`);
+      return;
+    }
     setStarting(target.id);
     setError("");
     try {
@@ -70,7 +74,7 @@ export function RemoteControlSetup() {
                 <div className="flex items-start justify-between gap-3"><Monitor className="size-6 text-neutral-900" />{starting === item.id ? <Loader2 className="size-5 animate-spin text-[#C23976]" /> : item.active ? <CheckCircle2 className="size-5 text-amber-500" /> : <span className={`size-2.5 rounded-full ${item.online ? "bg-emerald-400" : "bg-neutral-300"}`} />}</div>
                 <p className="mt-4 text-base font-black text-neutral-950">{item.name}</p>
                 <p className="mt-1 text-xs font-bold text-neutral-500">{item.locationName}</p>
-                <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-neutral-400"}`}>{item.online ? "Online · clicca per entrare" : "Non collegato"}</p>
+                <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-red-500"}`}>{item.online ? "Online · clicca per entrare" : "Non collegato · apri Paradise personale"}</p>
                 {item.active ? <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-amber-700">Controllato da {item.controllerName}</p> : null}
               </button>
             ))}
