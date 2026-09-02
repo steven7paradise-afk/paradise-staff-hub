@@ -1,11 +1,28 @@
 import type { NextConfig } from "next";
 
+const appBuildVersion = process.env.DEPLOY_ID || process.env.COMMIT_REF || `local-${Date.now().toString(36)}`;
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   typescript: { ignoreBuildErrors: true },
   serverExternalPackages: ["@prisma/client", "prisma", "bcryptjs", "googleapis"],
+  env: {
+    NEXT_PUBLIC_APP_BUILD_VERSION: appBuildVersion,
+  },
   async headers() {
     return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
+      {
+        source: "/api/app-version",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        ],
+      },
       {
         source: "/api/admin-assistant",
         headers: [

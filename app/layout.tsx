@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AppVersionWatcher } from "@/components/app-version-watcher";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,9 +27,13 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const currentVersion = process.env.NEXT_PUBLIC_APP_BUILD_VERSION || "unknown";
   return (
     <html lang="it" suppressHydrationWarning>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        <AppVersionWatcher currentVersion={currentVersion} />
+        {children}
+      </body>
     </html>
   );
 }

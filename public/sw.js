@@ -1,3 +1,19 @@
+self.addEventListener("install", function (event) {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", function (event) {
+  event.waitUntil(
+    self.clients.claim().then(function () {
+      return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    }).then(function (windowClients) {
+      return Promise.all(windowClients.map(function (client) {
+        return "navigate" in client ? client.navigate(client.url) : Promise.resolve();
+      }));
+    }),
+  );
+});
+
 self.addEventListener("push", function (event) {
   if (!event.data) return;
 
