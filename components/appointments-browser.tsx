@@ -6335,6 +6335,7 @@ export function AppointmentsBrowser({
                         <div className="flex-1 space-y-2">
                           {column.bookings.length ? column.bookings.map((booking) => {
                             const status = getBookingStatus(booking);
+                            const notePreview = getBookingNotePreview(booking);
                             return (
                               <div
                                 key={booking.id}
@@ -6402,6 +6403,7 @@ export function AppointmentsBrowser({
                                   <div>
                                     <p className="text-[9px] font-black uppercase tracking-wider text-[#5E6C84]">{formatDate(booking.startDate)}</p>
                                     <p className="mt-0.5 text-xs font-black tabular-nums text-[#172B4D]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
+                                    <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-[#7A869A]">{formatDuration(booking.startDate, booking.endDate)}</p>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <span className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
@@ -6455,10 +6457,14 @@ export function AppointmentsBrowser({
                                 </div>
                                 <p className="mt-2.5 truncate text-xs font-black text-[#172B4D]">{booking.customerName}</p>
                                 <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-[#5E6C84]">{booking.serviceTitle}</p>
-                                <div className="mt-2.5 flex items-center justify-between border-t border-[#EBECF0] pt-2 text-[8px] font-black uppercase tracking-wider text-[#7A869A]">
-                                  <span>{formatDuration(booking.startDate, booking.endDate)}</span>
-                                  <span>{getSalonLabel(booking.inferredSalon)}</span>
-                                </div>
+                                {notePreview ? (
+                                  <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
+                                    <p className="flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-[#7A869A]">
+                                      <MessageSquare className="size-3" /> Note Cowlendar
+                                    </p>
+                                    <p className="mt-1 line-clamp-2 text-[9px] font-semibold leading-snug text-[#42526E]">{notePreview}</p>
+                                  </div>
+                                ) : null}
                               </div>
                             );
                           }) : (
