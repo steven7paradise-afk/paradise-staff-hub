@@ -42,6 +42,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   const lastInputRevision = useRef(0);
   const lastPath = useRef("");
   const lastScrollRevision = useRef(0);
+  const stopping = useRef(false);
 
   useEffect(() => {
     if (!pcMode) return;
@@ -106,6 +107,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     let lastScrollSent = 0;
 
     const send = (payload: Record<string, unknown>) => {
+      if (stopping.current) return;
       void fetch("/api/remote-control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,6 +137,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       send({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
     };
     const onClick = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest("[data-remote-stop]")) return;
       send({ click: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
       const anchor = (event.target as Element | null)?.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target === "_blank" || anchor.origin !== window.location.origin) return;
@@ -184,13 +187,14 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   if (!pcMode && controllerTarget) {
     const targetCode = controllerTarget;
       const stop = async () => {
+        stopping.current = true;
         await fetch("/api/remote-control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop", targetCode }) });
         window.location.href = "/remote";
       };
       return (
         <div className="fixed bottom-5 right-5 z-[9999] flex items-center gap-3 rounded-2xl border border-fuchsia-300/30 bg-neutral-950 px-4 py-3 text-white shadow-2xl">
           <Radio className="size-4 animate-pulse text-fuchsia-400" /><span className="text-[11px] font-black uppercase tracking-wider">Remoto attivo</span>
-          <button type="button" onClick={() => void stop()} className="grid size-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20" aria-label="Termina controllo remoto"><X className="size-4" /></button>
+          <button type="button" data-remote-stop onClick={() => void stop()} className="grid size-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20" aria-label="Termina controllo remoto"><X className="size-4" /></button>
         </div>
       );
   }
