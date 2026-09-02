@@ -43,6 +43,41 @@ export type ShopifyDailyRevenue = {
 
 export type ShopifyRevenuePayment = ShopifyDailyRevenue["payments"][number];
 
+export async function getShopifyOrderClientNames(orderIds: string[]) {
+  const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  const numericIds = [...new Set(orderIds.map((orderId) => orderId.match(/(\d+)$/)?.[1]).filter((id): id is string => Boolean(id)))];
+  const names = new Map<string, string>();
+  if (!shop || !token || numericIds.length === 0) return names;
+
+  try {
+    const response = await fetch(
+      `https://${shop}/admin/api/2024-04/orders.json?ids=${encodeURIComponent(numericIds.join(","))}&status=any&limit=250&fields=id,name,customer`,
+      {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+        signal: AbortSignal.timeout(15000),
+        next: { revalidate: 300 },
+      },
+    );
+    if (!response.ok) return names;
+    const data = await response.json();
+    for (const order of Array.isArray(data?.orders) ? data.orders : []) {
+      const firstName = String(order?.customer?.first_name || "").trim();
+      const lastName = String(order?.customer?.last_name || "").trim();
+      const clientName = [firstName, lastName].filter(Boolean).join(" ");
+      if (!clientName) continue;
+      names.set(String(order.id), clientName);
+      names.set(String(order.name || "").replace(/^#/, "").trim().toLowerCase(), clientName);
+    }
+  } catch (error) {
+    console.error("Unable to load Shopify customer names:", error);
+  }
+  return names;
+}
+
 function moneyValue(value: unknown) {
   const amount = Number(String(value ?? "0").replace(",", "."));
   return Number.isFinite(amount) ? amount : 0;
