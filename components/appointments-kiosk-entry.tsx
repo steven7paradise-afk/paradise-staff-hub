@@ -36,7 +36,7 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlug }) {
+export function AppointmentsKioskEntry({ salone, pcName }: { salone: AppointmentSalonSlug; pcName?: string }) {
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -126,6 +126,11 @@ export function AppointmentsKioskEntry({ salone }: { salone: AppointmentSalonSlu
           <p className="text-sm font-medium uppercase tracking-[0.36em] text-neutral-700 md:text-base">
             Seleziona il tuo profilo per continuare.
           </p>
+          {pcName ? (
+            <div className="mx-auto inline-flex items-center rounded-full border border-[#D8B7A7]/50 bg-white/70 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-700 shadow-sm">
+              Dispositivo: {pcName}
+            </div>
+          ) : null}
         </div>
 
         {loading ? (

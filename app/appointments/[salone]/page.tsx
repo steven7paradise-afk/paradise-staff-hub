@@ -56,7 +56,7 @@ export default async function SalonAppointmentsPage({
   }
 
   if (!selectedWorker || !selectedWorkerRecord || forceProfileChoice) {
-    return <AppointmentsKioskEntry salone={salone} />;
+    return <AppointmentsKioskEntry salone={salone} pcName={pcAuth.name} />;
   }
 
   return await AppointmentsPage({

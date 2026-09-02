@@ -85,20 +85,21 @@ export async function GET(request: NextRequest) {
   if (isAdmin) {
     const locations = await prisma.location.findMany({ select: { id: true, name: true } });
     const locationNames = new Map(locations.map((item) => [item.id, item.name]));
-    const candidates = pcs.filter((pc) => pc.activatedAt && !pc.archivedAt && pc.accessTokenHash && !/tablet|test/i.test(pc.name));
-    const selectedByLocation = new Map<string, AuthorizedPC>();
+    const candidates = pcs.filter((pc) => pc.activatedAt && !pc.archivedAt && pc.accessTokenHash && !/test/i.test(pc.name));
+    const selectedByDeviceName = new Map<string, AuthorizedPC>();
     for (const pc of candidates) {
-      const current = selectedByLocation.get(pc.locationId);
+      const deviceKey = `${pc.locationId}:${pc.name.trim().toLocaleLowerCase("it")}`;
+      const current = selectedByDeviceName.get(deviceKey);
       const pcOnline = Date.now() - Date.parse(presence[pc.code] || "") < 35_000;
       const currentOnline = current ? Date.now() - Date.parse(presence[current.code] || "") < 35_000 : false;
       const pcTime = Date.parse(pc.activatedAt || pc.createdAt);
       const currentTime = current ? Date.parse(current.activatedAt || current.createdAt) : 0;
       if (!current || (pcOnline && !currentOnline) || (pcOnline === currentOnline && pcTime > currentTime)) {
-        selectedByLocation.set(pc.locationId, pc);
+        selectedByDeviceName.set(deviceKey, pc);
       }
     }
     return NextResponse.json({
-      targets: Array.from(selectedByLocation.values())
+      targets: Array.from(selectedByDeviceName.values())
         .map((pc) => {
           const locationName = locationNames.get(pc.locationId) || pc.name;
           const online = Date.now() - Date.parse(presence[pc.code] || "") < 35_000;
