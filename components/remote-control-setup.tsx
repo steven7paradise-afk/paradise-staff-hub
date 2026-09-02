@@ -53,6 +53,25 @@ export function RemoteControlSetup() {
     }
   }
 
+  async function reconnectCurrentDevice(target: Target) {
+    if (starting) return;
+    setStarting(target.id);
+    setError("");
+    try {
+      const response = await fetch("/api/remote-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "claim", targetCode: target.id }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile ricollegare questo PC.");
+      window.location.href = data?.appointmentUrl || `/appointments/${target.salone}?choose=1`;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossibile ricollegare questo PC.");
+      setStarting("");
+    }
+  }
+
   return (
     <section className="mx-auto max-w-6xl space-y-6">
       <header className="rounded-[30px] border border-black/5 bg-white/80 p-6 shadow-sm backdrop-blur md:p-8">
@@ -70,13 +89,20 @@ export function RemoteControlSetup() {
         {loading ? <div className="flex items-center gap-3 py-8 text-sm font-bold text-neutral-500"><Loader2 className="size-5 animate-spin" /> Caricamento dispositivi…</div> : targets.length === 0 ? <p className="rounded-2xl bg-amber-50 p-5 text-sm font-bold text-amber-900">Non risultano dispositivi attivati.</p> : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {targets.map((item) => (
-              <button key={item.id} type="button" disabled={Boolean(starting)} onClick={() => void openDevice(item)} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5 text-left transition hover:border-[#C23976] hover:bg-[#FFF2F7] disabled:opacity-55">
-                <div className="flex items-start justify-between gap-3"><Monitor className="size-6 text-neutral-900" />{starting === item.id ? <Loader2 className="size-5 animate-spin text-[#C23976]" /> : item.active ? <CheckCircle2 className="size-5 text-amber-500" /> : <span className={`size-2.5 rounded-full ${item.online ? "bg-emerald-400" : "bg-neutral-300"}`} />}</div>
-                <p className="mt-4 text-base font-black text-neutral-950">{item.name}</p>
-                <p className="mt-1 text-xs font-bold text-neutral-500">{item.locationName}</p>
-                <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-red-500"}`}>{item.online ? "Online · clicca per entrare" : "Non collegato · apri Paradise personale"}</p>
-                {item.active ? <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-amber-700">Controllato da {item.controllerName}</p> : null}
-              </button>
+              <article key={item.id} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3 transition hover:border-[#C23976] hover:bg-[#FFF2F7]">
+                <button type="button" disabled={Boolean(starting)} onClick={() => void openDevice(item)} className="w-full p-2 text-left disabled:opacity-55">
+                  <div className="flex items-start justify-between gap-3"><Monitor className="size-6 text-neutral-900" />{starting === item.id ? <Loader2 className="size-5 animate-spin text-[#C23976]" /> : item.active ? <CheckCircle2 className="size-5 text-amber-500" /> : <span className={`size-2.5 rounded-full ${item.online ? "bg-emerald-400" : "bg-neutral-300"}`} />}</div>
+                  <p className="mt-4 text-base font-black text-neutral-950">{item.name}</p>
+                  <p className="mt-1 text-xs font-bold text-neutral-500">{item.locationName}</p>
+                  <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-red-500"}`}>{item.online ? "Online · clicca per entrare" : "Non collegato"}</p>
+                  {item.active ? <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-amber-700">Controllato da {item.controllerName}</p> : null}
+                </button>
+                {!item.online ? (
+                  <button type="button" disabled={Boolean(starting)} onClick={() => void reconnectCurrentDevice(item)} className="mt-2 w-full rounded-xl border border-[#F0C4D7] bg-white px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#A93469] disabled:opacity-50">
+                    Sono su questo PC · Ricollega
+                  </button>
+                ) : null}
+              </article>
             ))}
           </div>
         )}

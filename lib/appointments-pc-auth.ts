@@ -86,6 +86,28 @@ export async function activatePC(code: string, ip: string | null): Promise<{ acc
   };
 }
 
+export async function reconnectPC(code: string, ip: string | null): Promise<{ accessToken: string; name: string; locationId: string }> {
+  const setting = await prisma.setting.findUnique({
+    where: { key: "appointments_authorized_pcs" },
+  });
+  const currentList = Array.isArray(setting?.value) ? (setting.value as unknown as AuthorizedPC[]) : [];
+  const index = currentList.findIndex((item) => item.code === code && item.activatedAt && !item.archivedAt);
+  if (index === -1) throw new Error("PC non disponibile o non autorizzato.");
+
+  const accessToken = randomBytes(32).toString("hex");
+  currentList[index] = {
+    ...currentList[index],
+    accessTokenHash: hashToken(accessToken),
+    registeredIp: ip,
+    activatedAt: new Date().toISOString(),
+  };
+  await prisma.setting.update({
+    where: { key: "appointments_authorized_pcs" },
+    data: { value: currentList as any },
+  });
+  return { accessToken, name: currentList[index].name, locationId: currentList[index].locationId };
+}
+
 export async function checkPCAuthorization(cookieToken: string | undefined): Promise<{ code: string; name: string; locationId: string; isPC: boolean } | null> {
   if (!cookieToken) return null;
 

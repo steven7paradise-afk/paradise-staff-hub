@@ -6,6 +6,7 @@ import {
   appointmentsPcWorkerCookieMaxAgeSeconds,
   appointmentsPcWorkerCookieName,
   checkPCAuthorization,
+  reconnectPC,
   type AuthorizedPC,
 } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName } from "@/lib/appointment-salon-url";
@@ -169,6 +170,24 @@ export async function POST(request: NextRequest) {
   ]);
   const pc = pcsFrom(pcsSetting?.value).find((item) => item.code === targetCode && item.activatedAt && !item.archivedAt);
   if (!pc) return NextResponse.json({ error: "PC non disponibile o non autorizzato." }, { status: 404 });
+
+  if (action === "claim") {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null;
+    const result = await reconnectPC(targetCode, ip);
+    const salonSlug = appointmentSalonSlugFromName((await prisma.location.findUnique({ where: { id: result.locationId }, select: { name: true } }))?.name) || "buenos-aires";
+    const response = NextResponse.json({ success: true, appointmentUrl: `/appointments/${salonSlug}?choose=1` });
+    response.cookies.set({
+      name: appointmentsPcCookieName,
+      value: result.accessToken,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365 * 10,
+    });
+    response.cookies.set({ name: appointmentsPcWorkerCookieName, value: "", path: "/", maxAge: 0 });
+    return response;
+  }
 
   const sessions = sessionsFrom(sessionsSetting?.value);
   const previous = sessions[targetCode];
