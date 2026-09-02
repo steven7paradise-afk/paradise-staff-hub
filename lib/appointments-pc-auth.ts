@@ -16,6 +16,10 @@ export interface AuthorizedPC {
   archivedAt: string | null;
 }
 
+type PCAuthorization = { code: string; name: string; locationId: string; isPC: boolean };
+const pcAuthorizationCache = new Map<string, { value: PCAuthorization; expiresAt: number }>();
+const PC_AUTH_CACHE_MS = 5_000;
+
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -95,6 +99,7 @@ export async function reconnectPC(code: string, ip: string | null): Promise<{ ac
   if (index === -1) throw new Error("PC non disponibile o non autorizzato.");
 
   const accessToken = randomBytes(32).toString("hex");
+  if (currentList[index].accessTokenHash) pcAuthorizationCache.delete(currentList[index].accessTokenHash!);
   currentList[index] = {
     ...currentList[index],
     accessTokenHash: hashToken(accessToken),
@@ -108,10 +113,13 @@ export async function reconnectPC(code: string, ip: string | null): Promise<{ ac
   return { accessToken, name: currentList[index].name, locationId: currentList[index].locationId };
 }
 
-export async function checkPCAuthorization(cookieToken: string | undefined): Promise<{ code: string; name: string; locationId: string; isPC: boolean } | null> {
+export async function checkPCAuthorization(cookieToken: string | undefined): Promise<PCAuthorization | null> {
   if (!cookieToken) return null;
 
   const accessTokenHash = hashToken(cookieToken);
+  const cached = pcAuthorizationCache.get(accessTokenHash);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (cached) pcAuthorizationCache.delete(accessTokenHash);
 
   const setting = await prisma.setting.findUnique({
     where: { key: "appointments_authorized_pcs" },
@@ -122,12 +130,18 @@ export async function checkPCAuthorization(cookieToken: string | undefined): Pro
 
   if (!found) return null;
 
-  return {
+  const authorization = {
     code: found.code,
     name: found.name,
     locationId: found.locationId,
     isPC: true,
   };
+  pcAuthorizationCache.set(accessTokenHash, { value: authorization, expiresAt: Date.now() + PC_AUTH_CACHE_MS });
+  if (pcAuthorizationCache.size > 100) {
+    const now = Date.now();
+    for (const [key, entry] of pcAuthorizationCache) if (entry.expiresAt <= now) pcAuthorizationCache.delete(key);
+  }
+  return authorization;
 }
 
 export async function verifyOneTimeCode(code: string): Promise<AuthorizedPC> {

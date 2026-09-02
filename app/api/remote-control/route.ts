@@ -21,7 +21,7 @@ const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 type PointerState = { x: number; y: number; revision: number };
 type InputState = { selector: string; value: string; revision: number };
-type ClickState = { x: number; y: number; selector?: string; revision: number };
+type ClickState = { x: number; y: number; selector?: string; label?: string; tag?: string; revision: number };
 type ScrollState = { x: number; y: number; revision: number };
 type RemoteSession = {
   targetCode: string;
@@ -73,18 +73,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 401 });
   }
 
-  const [pcsSetting, sessionsSetting, presenceSetting] = await Promise.all([
-    prisma.setting.findUnique({ where: { key: PCS_KEY } }),
-    prisma.setting.findUnique({ where: { key: SESSIONS_KEY } }),
-    prisma.setting.findUnique({ where: { key: PRESENCE_KEY } }),
-  ]);
-  const pcs = pcsFrom(pcsSetting?.value);
-  const sessions = sessionsFrom(sessionsSetting?.value);
-  const presence = presenceSetting?.value && typeof presenceSetting.value === "object" && !Array.isArray(presenceSetting.value)
-    ? presenceSetting.value as PresenceMap
-    : {};
-
   if (isAdmin && !(pcModeRequested && pcAuth)) {
+    const [pcsSetting, sessionsSetting, presenceSetting] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: PCS_KEY } }),
+      prisma.setting.findUnique({ where: { key: SESSIONS_KEY } }),
+      prisma.setting.findUnique({ where: { key: PRESENCE_KEY } }),
+    ]);
+    const pcs = pcsFrom(pcsSetting?.value);
+    const sessions = sessionsFrom(sessionsSetting?.value);
+    const presence = presenceSetting?.value && typeof presenceSetting.value === "object" && !Array.isArray(presenceSetting.value)
+      ? presenceSetting.value as PresenceMap
+      : {};
     const locations = await prisma.location.findMany({ select: { id: true, name: true } });
     const locationNames = new Map(locations.map((item) => [item.id, item.name]));
     const candidates = pcs.filter((pc) => pc.activatedAt && !pc.archivedAt && pc.accessTokenHash && !/test/i.test(pc.name));
@@ -120,6 +119,16 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // The cashier polls frequently during remote control. It only needs the
+  // current session and presence, not the complete device registry.
+  const [sessionsSetting, presenceSetting] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: SESSIONS_KEY } }),
+    prisma.setting.findUnique({ where: { key: PRESENCE_KEY } }),
+  ]);
+  const sessions = sessionsFrom(sessionsSetting?.value);
+  const presence = presenceSetting?.value && typeof presenceSetting.value === "object" && !Array.isArray(presenceSetting.value)
+    ? presenceSetting.value as PresenceMap
+    : {};
   const remote = sessions[pcAuth!.code];
   const lastSeen = Date.parse(presence[pcAuth!.code] || "");
   if (!Number.isFinite(lastSeen) || Date.now() - lastSeen > 10_000) {
@@ -233,6 +242,8 @@ export async function POST(request: NextRequest) {
           x: Math.max(0, Math.min(1, Number(body.click.x))),
           y: Math.max(0, Math.min(1, Number(body.click.y))),
           selector: typeof body.click.selector === "string" ? body.click.selector.slice(0, 500) : undefined,
+          label: typeof body.click.label === "string" ? body.click.label.slice(0, 160) : undefined,
+          tag: typeof body.click.tag === "string" ? body.click.tag.slice(0, 30) : undefined,
           revision: ((previous as RemoteSession & { click?: ClickState | null })?.click?.revision || 0) + 1,
         }
       : (previous as RemoteSession & { click?: ClickState | null })?.click || null;

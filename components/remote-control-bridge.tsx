@@ -11,7 +11,7 @@ type RemoteSession = {
   search: string;
   pointer: { x: number; y: number; revision: number } | null;
   input: { selector: string; value: string; revision: number } | null;
-  click: { x: number; y: number; selector?: string; revision: number } | null;
+  click: { x: number; y: number; selector?: string; label?: string; tag?: string; revision: number } | null;
   scroll: { x: number; y: number; revision: number } | null;
 };
 
@@ -37,6 +37,10 @@ function selectorFor(element: Element) {
   return parts.join(" > ");
 }
 
+function normalizedLabel(element: Element | null) {
+  return String(element?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+}
+
 export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   const [pcSession, setPcSession] = useState<RemoteSession | null>(null);
   const [controllerTarget, setControllerTarget] = useState("");
@@ -59,15 +63,40 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         setPcSession(remote);
         if (!remote) return;
 
+        const params = new URLSearchParams(remote.search || "");
+        params.delete("remoteTarget");
+        const salone = params.get("salone") || "buenos-aires";
+        let targetPath = remote.pathname;
+        if (targetPath === "/appointments") targetPath = `/appointments/${salone}`;
+        const cleanSearch = params.toString();
+        const wanted = `${targetPath}${cleanSearch ? `?${cleanSearch}` : ""}`;
+        const here = `${window.location.pathname}${window.location.search}`;
+        if (wanted !== here && wanted !== lastPath.current) {
+          // Navigate before replaying the event. Otherwise a click belonging to
+          // the next page is consumed against the old DOM and its popup is lost.
+          lastPath.current = wanted;
+          window.location.assign(wanted);
+          return;
+        }
+
         const clickStorageKey = `paradise-remote-click:${remote.targetCode}`;
         const storedClickRevision = Number(window.sessionStorage.getItem(clickStorageKey) || 0);
         const appliedClickRevision = Math.max(lastClickRevision.current, Number.isFinite(storedClickRevision) ? storedClickRevision : 0);
         if (remote.click && remote.click.revision > appliedClickRevision) {
           lastClickRevision.current = remote.click.revision;
           window.sessionStorage.setItem(clickStorageKey, String(remote.click.revision));
-          const selected = remote.click.selector
+          let selected = remote.click.selector
             ? document.querySelector(remote.click.selector) as HTMLElement | null
             : null;
+          const expectedLabel = remote.click.label || "";
+          if (selected && expectedLabel && normalizedLabel(selected) !== expectedLabel) selected = null;
+          if (!selected && expectedLabel) {
+            const selector = remote.click.tag && /^[a-z][a-z0-9-]*$/.test(remote.click.tag)
+              ? remote.click.tag
+              : "button,a,[role='button'],label,input,textarea,select";
+            selected = Array.from(document.querySelectorAll<HTMLElement>(selector))
+              .find((element) => normalizedLabel(element) === expectedLabel) || null;
+          }
           const fallback = document.elementFromPoint(
             remote.click.x * window.innerWidth,
             remote.click.y * window.innerHeight,
@@ -96,24 +125,12 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
           }
         }
 
-        const params = new URLSearchParams(remote.search || "");
-        params.delete("remoteTarget");
-        const salone = params.get("salone") || "buenos-aires";
-        let targetPath = remote.pathname;
-        if (targetPath === "/appointments") targetPath = `/appointments/${salone}`;
-        const cleanSearch = params.toString();
-        const wanted = `${targetPath}${cleanSearch ? `?${cleanSearch}` : ""}`;
-        const here = `${window.location.pathname}${window.location.search}`;
-        if (wanted !== here && wanted !== lastPath.current) {
-          lastPath.current = wanted;
-          window.location.assign(wanted);
-        }
       } catch {
         // A temporary network failure must not interrupt the cashier screen.
       }
     };
     void poll();
-    const interval = window.setInterval(poll, 700);
+    const interval = window.setInterval(poll, 300);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [pcMode]);
 
@@ -122,57 +139,92 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     const targetCode = new URLSearchParams(window.location.search).get("remoteTarget");
     if (!targetCode) return;
     setControllerTarget(targetCode);
-    let lastPointerSent = 0;
-    let lastScrollSent = 0;
+    let pending: Record<string, unknown> = {};
+    let timer: number | null = null;
+    let inFlight: Promise<void> | null = null;
 
-    const send = (payload: Record<string, unknown>) => {
+    const drain = async (): Promise<void> => {
       if (stopping.current) return;
-      void fetch("/api/remote-control", {
+      if (inFlight) {
+        await inFlight;
+        if (Object.keys(pending).length) await drain();
+        return;
+      }
+      if (!Object.keys(pending).length) return;
+      const payload = pending;
+      pending = {};
+      inFlight = fetch("/api/remote-control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "update", targetCode, pathname: window.location.pathname, search: window.location.search, ...payload }),
         keepalive: true,
-      });
+      }).then(() => undefined).catch(() => undefined);
+      await inFlight;
+      inFlight = null;
+      if (Object.keys(pending).length) await drain();
     };
-    send({});
+    const queue = (payload: Record<string, unknown>, immediate = false) => {
+      if (stopping.current) return;
+      pending = { ...pending, ...payload };
+      if (immediate) {
+        if (timer !== null) window.clearTimeout(timer);
+        timer = null;
+        void drain();
+      } else if (timer === null) {
+        timer = window.setTimeout(() => { timer = null; void drain(); }, 80);
+      }
+    };
+    queue({ sync: true }, true);
 
     const onPointer = (event: PointerEvent) => {
-      const now = Date.now();
-      if (now - lastPointerSent < 250) return;
-      lastPointerSent = now;
-      send({ pointer: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
+      queue({ pointer: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
     };
     const onInput = (event: Event) => {
       const field = event.target as HTMLInputElement | HTMLTextAreaElement | null;
       if (!field || !["INPUT", "TEXTAREA"].includes(field.tagName) || field.type === "password" || field.type === "file") return;
-      send({ input: { selector: selectorFor(field), value: field.value } });
+      queue({ input: { selector: selectorFor(field), value: field.value } });
     };
     const onScroll = () => {
-      const now = Date.now();
-      if (now - lastScrollSent < 250) return;
-      lastScrollSent = now;
       const maxX = Math.max(1, document.documentElement.scrollWidth - window.innerWidth);
       const maxY = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      send({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
+      queue({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
     };
     const onClick = (event: MouseEvent) => {
       const target = event.target as Element | null;
       if (target?.closest("[data-remote-stop],[data-remote-worker-choice]")) return;
       const actionable = target?.closest("button,a,[role='button'],label,input,textarea,select") || target;
-      send({ click: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight), selector: actionable ? selectorFor(actionable) : "" } });
+      const click = {
+        x: event.clientX / Math.max(1, window.innerWidth),
+        y: event.clientY / Math.max(1, window.innerHeight),
+        selector: actionable ? selectorFor(actionable) : "",
+        label: normalizedLabel(actionable),
+        tag: actionable?.tagName.toLowerCase() || "",
+      };
       const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
-      if (!anchor || anchor.target === "_blank" || anchor.origin !== window.location.origin) return;
+      if (!anchor || anchor.target === "_blank" || anchor.origin !== window.location.origin) {
+        queue({ click }, true);
+        return;
+      }
       const next = new URL(anchor.href);
-      if (!["/appointments", "/service-forms", "/orders", "/client-control"].some((path) => next.pathname === path || next.pathname.startsWith(`${path}/`))) return;
+      if (!["/appointments", "/service-forms", "/orders", "/client-control"].some((path) => next.pathname === path || next.pathname.startsWith(`${path}/`))) {
+        queue({ click }, true);
+        return;
+      }
       next.searchParams.set("remoteTarget", targetCode);
       event.preventDefault();
-      window.location.assign(`${next.pathname}${next.search}${next.hash}`);
+      // The pathname itself represents an internal-link click. Replaying the
+      // old anchor after the PC reaches the new page would consume the event on
+      // the wrong screen.
+      pending = { ...pending, pathname: next.pathname, search: next.search };
+      delete pending.click;
+      void drain().then(() => window.location.assign(`${next.pathname}${next.search}${next.hash}`));
     };
     window.addEventListener("pointermove", onPointer, { passive: true });
     document.addEventListener("input", onInput, true);
     document.addEventListener("click", onClick, true);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
+      if (timer !== null) window.clearTimeout(timer);
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("input", onInput, true);
       document.removeEventListener("click", onClick, true);
@@ -189,7 +241,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
           <span className="mr-2 inline-block size-2 animate-pulse rounded-full bg-fuchsia-400" />Controllo remoto attivo · {pcSession.controllerName}
         </div>
         {pcSession.pointer ? (
-          <div className="pointer-events-none fixed z-[9999] transition-[left,top] duration-200 ease-out" style={{ left: x, top: y }}>
+          <div className="pointer-events-none fixed z-[9999] transition-[left,top] duration-75 ease-out" style={{ left: x, top: y }}>
             <MousePointer2 className="size-8 -translate-x-1 -translate-y-1 fill-[#F12D83] text-white drop-shadow-[0_3px_4px_rgba(0,0,0,0.55)]" />
             <span className="ml-5 -mt-1 block whitespace-nowrap rounded-full bg-[#F12D83] px-2.5 py-1 text-[10px] font-black text-white shadow-lg">{pcSession.controllerName}</span>
           </div>
