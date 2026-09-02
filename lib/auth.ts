@@ -140,6 +140,15 @@ export const authConfig = {
       const pathname = request.nextUrl.pathname;
       if (isPublicOperationalRequest(pathname, request.method)) return true;
 
+      // An administrator may open the remote-control console from the cashier
+      // browser itself to reconnect that physical device. The PC cookie must not
+      // hide the administrator session for this one protected page.
+      const isAdminRemoteAccess =
+        (pathname === "/remote" || pathname.startsWith("/remote/")) &&
+        Boolean(auth?.user?.id) &&
+        ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(auth?.user?.role ?? "");
+      if (isAdminRemoteAccess) return true;
+
       // Strict lockdown for Cashier PCs with the operational APIs needed after profile selection.
       const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
       const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;

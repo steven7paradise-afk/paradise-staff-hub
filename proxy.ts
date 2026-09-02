@@ -4,8 +4,12 @@ import { auth } from "@/lib/auth";
 export const proxy = auth((request) => {
   const pathname = request.nextUrl.pathname;
   const isPcCassa = Boolean(request.cookies.get("appointments_pc_token")?.value);
+  const isAdminRemoteAccess =
+    (pathname === "/remote" || pathname.startsWith("/remote/")) &&
+    Boolean(request.auth?.user?.id) &&
+    ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(request.auth?.user?.role ?? "");
 
-  if (isPcCassa) {
+  if (isPcCassa && !isAdminRemoteAccess) {
     const isAllowedPage =
       pathname === "/appointments/buenos-aires" ||
       pathname === "/orders" ||
