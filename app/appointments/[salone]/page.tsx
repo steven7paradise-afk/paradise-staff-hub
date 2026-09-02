@@ -5,6 +5,7 @@ import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ export default async function SalonAppointmentsPage({
   const cookieStore = await cookies();
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = await checkPCAuthorization(pcToken);
+  const session = pcAuth ? null : await auth();
+  const remoteTarget = typeof resolvedSearchParams.remoteTarget === "string" ? resolvedSearchParams.remoteTarget : "";
+  const isAdminRemote = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
   const selectedWorkerIdentity = selectedWorker ? decodeURIComponent(selectedWorker) : "";
   const selectedWorkerRecord = pcAuth && selectedWorkerIdentity
@@ -37,7 +41,7 @@ export default async function SalonAppointmentsPage({
     : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
 
-  if (!pcAuth) {
+  if (!pcAuth && !isAdminRemote) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#FCE6EF] p-6 text-center text-neutral-900">
         <section className="w-full max-w-md rounded-[28px] border border-[#F4C9D9] bg-white p-8 shadow-2xl">
@@ -55,8 +59,12 @@ export default async function SalonAppointmentsPage({
     );
   }
 
+  if (isAdminRemote && forceProfileChoice) {
+    return <AppointmentsKioskEntry salone={salone} pcName="Controllo remoto Admin" remoteTarget={remoteTarget} />;
+  }
+
   if (!selectedWorker || !selectedWorkerRecord || forceProfileChoice) {
-    return <AppointmentsKioskEntry salone={salone} pcName={pcAuth.name} />;
+    return <AppointmentsKioskEntry salone={salone} pcName={pcAuth?.name} />;
   }
 
   return await AppointmentsPage({

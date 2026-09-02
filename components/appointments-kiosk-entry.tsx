@@ -36,7 +36,7 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-export function AppointmentsKioskEntry({ salone, pcName }: { salone: AppointmentSalonSlug; pcName?: string }) {
+export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string }) {
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -88,6 +88,25 @@ export function AppointmentsKioskEntry({ salone, pcName }: { salone: Appointment
   }
 
   async function enter(worker: ActiveWorker) {
+    if (remoteTarget) {
+      setSelectingWorkerId(worker.id);
+      setError("");
+      try {
+        const search = `?salone=${encodeURIComponent(salone)}&remoteTarget=${encodeURIComponent(remoteTarget)}`;
+        const response = await fetch("/api/remote-control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update", targetCode: remoteTarget, workerId: worker.id, pathname: "/appointments", search }),
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.error || "Impossibile selezionare il profilo remoto.");
+        window.location.href = `/appointments${search}`;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Impossibile selezionare il profilo remoto.");
+        setSelectingWorkerId("");
+      }
+      return;
+    }
     const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
     if (!/^\d{2}$/.test(cleanPinPrefix)) {
       setError("Inserisci le prime 2 cifre del PIN.");
@@ -112,7 +131,7 @@ export function AppointmentsKioskEntry({ salone, pcName }: { salone: Appointment
 
   return (
     <main className="relative h-dvh max-h-dvh overflow-hidden bg-[#FFFBF6] text-neutral-900">
-      <RemoteControlBridge pcMode />
+      <RemoteControlBridge pcMode={!remoteTarget} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(255,255,255,0.96),rgba(255,251,246,0.86)_42%,rgba(246,229,214,0.38))]" />
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex h-full flex-col items-center px-5 py-8 md:px-10 lg:px-14">
@@ -163,6 +182,10 @@ export function AppointmentsKioskEntry({ salone, pcName }: { salone: Appointment
                   key={worker.id}
                   type="button"
                   onClick={() => {
+                    if (remoteTarget) {
+                      void enter(worker);
+                      return;
+                    }
                     setSelectedWorkerId(worker.id);
                     setPinPrefix("");
                     setError("");

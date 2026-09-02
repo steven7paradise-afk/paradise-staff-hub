@@ -84,7 +84,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         const cleanSearch = params.toString();
         const wanted = `${targetPath}${cleanSearch ? `?${cleanSearch}` : ""}`;
         const here = `${window.location.pathname}${window.location.search}`;
-        if (remote.workerId && wanted !== here && wanted !== lastPath.current) {
+        if (wanted !== here && wanted !== lastPath.current) {
           lastPath.current = wanted;
           window.location.assign(wanted);
         }

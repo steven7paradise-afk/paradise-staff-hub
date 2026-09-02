@@ -180,7 +180,11 @@ export async function POST(request: NextRequest) {
     }
     sessions[targetCode] = { ...previous, active: false, updatedAt: now.toISOString(), expiresAt: now.toISOString() } as RemoteSession;
   } else {
-    const workerId = typeof body?.workerId === "string" ? body.workerId.trim() : previous?.workerId || null;
+    const workerId = typeof body?.workerId === "string"
+      ? body.workerId.trim()
+      : action === "start"
+        ? null
+        : previous?.workerId || null;
     if (workerId) {
       const worker = await prisma.user.findFirst({
         where: { id: workerId, active: true, OR: [{ sede_id: pc.locationId }, { sede_id: null }] },
