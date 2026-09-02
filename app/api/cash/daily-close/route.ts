@@ -82,10 +82,11 @@ export async function POST(request: NextRequest) {
   const formatEuro = (value: number) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
   const closingTime = before19 ? "Chiusura anticipata confermata prima delle 19:00." : "Chiusura effettuata dopo le 19:00.";
   const notes = [
-    "Chiusura giornaliera automatica Cashmatic.",
+    "Chiusura giornaliera automatica Contanti.",
     `Schede completate oggi: ${summary.completedControlCount}.`,
-    `Controllo Cliente dichiarato: ${formatEuro(summary.controlDeclaredCash)}.`,
-    `Shopify Cashmatic: ${formatEuro(summary.shopifyCash)}.`,
+    `Contanti collegati alle schede completate, rilevati da Shopify: ${formatEuro(summary.controlShopifyCash)}.`,
+    `Importo dichiarato nelle stesse schede: ${formatEuro(summary.controlDeclaredCash)}.`,
+    `Contanti Shopify: ${formatEuro(summary.shopifyCash)}.`,
     `Differenza sui controlli lavoratore presenti: ${formatEuro(summary.difference)}.`,
     closingTime,
   ].join(" ");

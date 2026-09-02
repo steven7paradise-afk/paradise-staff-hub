@@ -896,7 +896,7 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                       <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
                         <p className="text-base font-black">{formatMoney(payment.amount)}</p>
                         <p className={`mt-1 text-[10px] font-black uppercase ${isVerified ? "text-emerald-700" : "text-amber-700"}`}>
-                          {isCashmatic ? "Cashmatic" : isCash ? "Contanti" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
+                          {isCashmatic || isCash ? "Contanti" : payment.method === "CARTA" ? "Carta" : "Metodo da verificare"}
                         </p>
                       </div>
                     </div>

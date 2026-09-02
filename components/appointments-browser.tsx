@@ -4866,7 +4866,7 @@ export function AppointmentsBrowser({
                                 {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid"
                                   ? manualPaymentMethod
                                     ? `Metodo dichiarato · ${manualPaymentMethod === "CARTA" ? "Carta" : manualPaymentMethod === "SHOPIFY" ? "Shopify" : "Contanti"}`
-                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "MISTO" ? "Misto" : secondOrderDetails.paymentMethod === "CASHMATIC" ? "Cashmatic" : secondOrderDetails.paymentMethod === "CONTANTI" ? "Contanti" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
+                                    : `Pagamento verificato · ${secondOrderDetails.paymentMethod === "MISTO" ? "Misto" : secondOrderDetails.paymentMethod === "CASHMATIC" ? "Contanti" : secondOrderDetails.paymentMethod === "CONTANTI" ? "Contanti" : secondOrderDetails.paymentMethod === "CARTA" ? "Carta" : "Metodo da verificare"}`
                                   : `Ordine non pagato · ${secondOrderDetails.financialStatus || "stato assente"}`}
                                 {secondOrderDetails.paymentGateways?.length ? (
                                   <span className="ml-1 opacity-60">({secondOrderDetails.paymentGateways.join(", ")})</span>

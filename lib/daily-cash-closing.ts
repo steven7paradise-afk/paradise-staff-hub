@@ -1,6 +1,6 @@
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { prisma } from "@/lib/prisma";
-import { getShopifyDailyRevenue, getShopifyPaymentRegister } from "@/lib/shopify-payment-register";
+import { getShopifyDailyRevenue, getShopifyPaymentRegister, shopifyOrderMatchKeys } from "@/lib/shopify-payment-register";
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -23,11 +23,6 @@ function nextDateKey(dateKey: string) {
   const value = new Date(`${dateKey}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + 1);
   return value.toISOString().slice(0, 10);
-}
-
-function isDeclaredCash(method: string) {
-  const normalized = method.trim().toUpperCase();
-  return normalized.includes("CASHMATIC") || normalized.includes("CONTANT");
 }
 
 export function romeDateKey(date = new Date()) {
@@ -78,7 +73,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
         orderBy: { updated_at: "desc" },
       })
     : [];
-  const completedControlRows = rawCompletedControls
+  const allCompletedControlRows = rawCompletedControls
     .filter((response) => {
       const answers = response.answers as Record<string, unknown>;
       return answers.client_control_is_draft !== true
@@ -106,7 +101,6 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   for (const control of controls) {
     if (declarations.has(control.responseId)) continue;
     const declaredMethod = control.declaredMethod || control.method;
-    if (!isDeclaredCash(declaredMethod)) continue;
     declarations.set(control.responseId, {
       responseId: control.responseId,
       order: control.order,
@@ -141,19 +135,28 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   }
 
   const controlRows = Array.from(declarations.values()).map((declaration) => {
-    const shopifyRow = shopifyRowsByOrder.get(cleanOrder(declaration.order));
+    const shopifyRow = shopifyOrderMatchKeys(declaration.order)
+      .map((key) => shopifyRowsByOrder.get(key))
+      .find(Boolean);
     return {
       ...declaration,
       shopifyAmount: shopifyRow?.amount ?? null,
     };
-  });
-  const declaredOrderKeys = new Set(controlRows.map((row) => cleanOrder(row.order)).filter(Boolean));
+  }).filter((row) => row.shopifyAmount != null);
+  const shopifyCashOrderKeys = new Set(shopifyRowsByOrder.keys());
+  const completedControlRows = allCompletedControlRows.filter((row) => (
+    shopifyOrderMatchKeys(row.order).some((key) => shopifyCashOrderKeys.has(key))
+  ));
+  const declaredOrderKeys = new Set(controlRows.flatMap((row) => shopifyOrderMatchKeys(row.order)));
   const shopifyRows = Array.from(shopifyRowsByOrder.values()).map((row) => ({
     ...row,
-    controlDeclaredAmount: controlRows.find((control) => cleanOrder(control.order) === cleanOrder(row.orderName))?.declaredAmount ?? null,
+    controlDeclaredAmount: controlRows.find((control) => (
+      shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
+    ))?.declaredAmount ?? null,
   }));
   const shopifyOnlyRows = shopifyRows.filter((row) => !declaredOrderKeys.has(cleanOrder(row.orderName)));
   const controlDeclaredCash = roundMoney(controlRows.reduce((sum, row) => sum + row.declaredAmount, 0));
+  const controlShopifyCash = roundMoney(controlRows.reduce((sum, row) => sum + (row.shopifyAmount || 0), 0));
   const shopifyCash = roundMoney(shopify.cash);
   const matchedControlDifference = roundMoney(controlRows.reduce((sum, row) => (
     row.shopifyAmount == null ? sum : sum + row.declaredAmount - row.shopifyAmount
@@ -164,6 +167,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     date: dateKey,
     before19: isBeforeDailyClosingTime(),
     controlDeclaredCash,
+    controlShopifyCash,
     shopifyCash,
     difference: matchedControlDifference,
     controlCount: controlRows.length,
@@ -177,9 +181,13 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     cashOrders: shopifyRows.map((row) => ({
       order: row.orderName || row.orderId,
       amount: row.amount,
-      clientName: controlRows.find((control) => cleanOrder(control.order) === cleanOrder(row.orderName))?.clientName || row.clientName,
-      declaredMethod: "Cashmatic · rilevato automaticamente da Shopify",
-      controlResponseId: controlRows.find((control) => cleanOrder(control.order) === cleanOrder(row.orderName))?.responseId || null,
+      clientName: controlRows.find((control) => (
+        shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
+      ))?.clientName || row.clientName,
+      declaredMethod: "Contanti · rilevati automaticamente da Shopify",
+      controlResponseId: controlRows.find((control) => (
+        shopifyOrderMatchKeys(control.order).some((key) => key === cleanOrder(row.orderName))
+      ))?.responseId || null,
       shopifyAmount: row.amount,
     })),
   };

@@ -138,6 +138,7 @@ type AutomaticDailyCloseSummary = {
   locationName: string;
   before19: boolean;
   controlDeclaredCash: number;
+  controlShopifyCash: number;
   shopifyCash: number;
   difference: number;
   controlCount: number;
@@ -916,7 +917,7 @@ export function StaffFormsViewer({
         alreadyClosed: true,
         existing: { id: data.closing.id, signedAt: data.closing.signed_at, signedBy: data.closing.signature_name },
       } : current);
-      setDailyCloseMessage({ type: "success", text: "Chiusura giornaliera Cashmatic registrata correttamente, senza PIN." });
+      setDailyCloseMessage({ type: "success", text: "Chiusura giornaliera Contanti registrata correttamente, senza PIN." });
     } catch (error) {
       setDailyCloseMessage({ type: "error", text: error instanceof Error ? error.message : "Impossibile registrare la chiusura giornaliera." });
     } finally {
@@ -1355,7 +1356,7 @@ export function StaffFormsViewer({
               <div className="flex items-start gap-3">
                 <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#A1B5FD]/15 text-[#BCC9FF]"><Calculator className="size-6" /></span>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BCC9FF]">Cashmatic</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BCC9FF]">Contanti</p>
                   <h2 className="mt-1 text-2xl font-black">Chiusura giornaliera</h2>
                   <p className="mt-1 text-sm font-semibold text-white/45">Importi automatici di oggi, senza conteggio manuale e senza PIN.</p>
                 </div>
@@ -1375,25 +1376,25 @@ export function StaffFormsViewer({
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-[24px] border border-emerald-300/20 bg-emerald-300/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Schede completate oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Schede Contanti completate oggi</p>
                       <p className="mt-3 text-3xl font-black">{dailyCloseSummary.completedControlCount}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">Controlli Cliente completati nella sede</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Solo pagamenti contanti riconosciuti da Shopify</p>
                     </div>
                     <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Cash prelevato oggi</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Contanti prelevati oggi</p>
                       <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">Rilevato automaticamente da Cashmatic / Shopify</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Rilevati automaticamente da Shopify</p>
                     </div>
                     <div className="rounded-[24px] border border-[#A1B5FD]/25 bg-[#A1B5FD]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Controlli lavoratore Cash</p>
-                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlDeclaredCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "controllo registrato" : "controlli registrati"}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Contanti collegati alle schede</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlShopifyCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "ordine contanti riconosciuto" : "ordini contanti riconosciuti"} da Shopify</p>
                     </div>
                   </div>
 
                   {dailyCloseSummary.completedControlRows?.length ? (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Schede incluse nella chiusura</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Schede incluse nella chiusura Contanti</p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {dailyCloseSummary.completedControlRows.slice(0, 8).map((row) => (
                           <div key={row.responseId} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
@@ -1407,7 +1408,7 @@ export function StaffFormsViewer({
                   ) : null}
 
                   <div className={cn("flex items-center justify-between gap-4 rounded-2xl border px-4 py-4", Math.abs(dailyCloseSummary.difference) < 0.01 ? "border-emerald-300/25 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10")}>
-                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Differenza sui controlli lavoratore presenti</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p></div>
+                    <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Confronto importi delle schede collegate</p><p className="mt-1 text-2xl font-black">{formatEuro(dailyCloseSummary.difference)}</p><p className="mt-1 text-[10px] font-semibold text-white/40">Il tipo di pagamento è sempre quello rilevato da Shopify.</p></div>
                     <span className={cn("rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-wider", Math.abs(dailyCloseSummary.difference) < 0.01 ? "bg-emerald-300 text-emerald-950" : "bg-amber-200 text-amber-950")}>{Math.abs(dailyCloseSummary.difference) < 0.01 ? "Coincide" : "Da verificare"}</span>
                   </div>
 

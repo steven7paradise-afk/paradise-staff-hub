@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   const rows = summary.shopifyRows.map((row) => ({
     ...row,
-    method: "Cashmatic",
+    method: "Contanti",
     controlResponseId: summary.controlRows.find((control) => control.order.replace(/^#/, "").trim().toLowerCase() === row.orderName.replace(/^#/, "").trim().toLowerCase())?.responseId ?? null,
     controlClientName: summary.controlRows.find((control) => control.order.replace(/^#/, "").trim().toLowerCase() === row.orderName.replace(/^#/, "").trim().toLowerCase())?.clientName ?? null,
   }));

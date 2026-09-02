@@ -1596,9 +1596,9 @@ export function ClientControlDashboard({
                           ? "bg-emerald-50 text-emerald-700"
                           : "bg-amber-50 text-amber-700"
                       }`}>
-                        {String(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "Da verificare") === "CASHMATIC"
-                          ? "Cashmatic"
-                          : String(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "Da verificare") === "CARTA"
+                        {["CASHMATIC", "CONTANTI"].includes(String(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "Da verificare").toUpperCase())
+                          ? "Contanti"
+                          : String(viewingResponse.answers?.[CLIENT_CONTROL_FIELD_IDS.paymentMethod] || "Da verificare").toUpperCase() === "CARTA"
                             ? "Carta"
                             : "Da verificare"}
                       </span>

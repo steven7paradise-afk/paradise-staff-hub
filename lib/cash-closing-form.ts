@@ -75,7 +75,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
       where: { id: existing.id },
       data: {
         category: CASH_CLOSING_FORM_CATEGORY,
-        description: "Chiusura automatica Cashmatic con confronto tra Controllo Cliente e Shopify.",
+        description: "Chiusura automatica Contanti con confronto tra Controllo Cliente e Shopify.",
         icon: existing.icon || "Calculator",
         active: true,
         allowed_roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
@@ -88,7 +88,7 @@ export async function ensureCashClosingForm(createdById?: string | null) {
   return prisma.serviceForm.create({
     data: {
       name: CASH_CLOSING_FORM_NAME,
-      description: "Chiusura automatica Cashmatic con confronto tra Controllo Cliente e Shopify.",
+      description: "Chiusura automatica Contanti con confronto tra Controllo Cliente e Shopify.",
       category: CASH_CLOSING_FORM_CATEGORY,
       icon: "Calculator",
       active: true,
