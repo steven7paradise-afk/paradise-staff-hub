@@ -20,7 +20,9 @@ export const dynamic = "force-dynamic";
 const PCS_KEY = "appointments_authorized_pcs";
 const SESSIONS_KEY = "appointments_remote_sessions";
 const PRESENCE_KEY = "appointments_remote_presence";
+const RECONNECT_REQUESTS_KEY = "appointments_remote_reconnect_requests";
 const ADMIN_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
+const REMOTE_SESSION_TTL_MS = 45_000;
 
 type PointerState = { x: number; y: number; revision: number };
 type InputState = { selector: string; value: string; revision: number };
@@ -44,6 +46,7 @@ type RemoteSession = {
 };
 
 type PresenceMap = Record<string, string>;
+type ReconnectRequest = { requestedAt: string; requestedBy: string; expiresAt: string };
 
 function sessionsFrom(value: unknown): Record<string, RemoteSession> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -53,6 +56,12 @@ function sessionsFrom(value: unknown): Record<string, RemoteSession> {
 
 function pcsFrom(value: unknown): AuthorizedPC[] {
   return Array.isArray(value) ? (value as unknown as AuthorizedPC[]) : [];
+}
+
+function reconnectRequestsFrom(value: unknown): Record<string, ReconnectRequest> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, ReconnectRequest>
+    : {};
 }
 
 function cleanPath(value: unknown) {
@@ -124,15 +133,17 @@ export async function GET(request: NextRequest) {
 
   // The cashier polls frequently during remote control. It only needs the
   // current session and presence, not the complete device registry.
-  const [sessionsSetting, presenceSetting] = await Promise.all([
+  const [sessionsSetting, presenceSetting, reconnectSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: SESSIONS_KEY } }),
     prisma.setting.findUnique({ where: { key: PRESENCE_KEY } }),
+    prisma.setting.findUnique({ where: { key: RECONNECT_REQUESTS_KEY } }),
   ]);
   const sessions = sessionsFrom(sessionsSetting?.value);
   const presence = presenceSetting?.value && typeof presenceSetting.value === "object" && !Array.isArray(presenceSetting.value)
     ? presenceSetting.value as PresenceMap
     : {};
   const remote = sessions[pcAuth!.code];
+  const reconnectRequest = reconnectRequestsFrom(reconnectSetting?.value)[pcAuth!.code];
   const lastSeen = Date.parse(presence[pcAuth!.code] || "");
   if (!Number.isFinite(lastSeen) || Date.now() - lastSeen > 10_000) {
     presence[pcAuth!.code] = new Date().toISOString();
@@ -144,7 +155,8 @@ export async function GET(request: NextRequest) {
   }
   const response = NextResponse.json({
     session: activeSession(remote) ? remote : null,
-    target: { name: pcAuth!.name, locationId: pcAuth!.locationId },
+    target: { code: pcAuth!.code, name: pcAuth!.name, locationId: pcAuth!.locationId },
+    reconnectRequest: reconnectRequest && Date.parse(reconnectRequest.expiresAt) > Date.now() ? reconnectRequest : null,
   });
 
   if (activeSession(remote) && remote.workerId) {
@@ -169,14 +181,29 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id || !ADMIN_ROLES.has(session.user.role)) {
-    return NextResponse.json({ error: "Solo gli amministratori possono usare il controllo remoto." }, { status: 403 });
-  }
-
   const body = await request.json().catch(() => null);
   const targetCode = typeof body?.targetCode === "string" ? body.targetCode.trim() : "";
   const action = typeof body?.action === "string" ? body.action : "update";
   if (!targetCode) return NextResponse.json({ error: "PC non selezionato." }, { status: 400 });
+
+  if (action === "ack_reconnect") {
+    const cookieStore = await cookies();
+    const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+    if (!pcAuth || pcAuth.code !== targetCode) return NextResponse.json({ error: "Dispositivo non autorizzato." }, { status: 403 });
+    const reconnectSetting = await prisma.setting.findUnique({ where: { key: RECONNECT_REQUESTS_KEY } });
+    const reconnectRequests = reconnectRequestsFrom(reconnectSetting?.value);
+    delete reconnectRequests[targetCode];
+    await prisma.setting.upsert({
+      where: { key: RECONNECT_REQUESTS_KEY },
+      update: { value: reconnectRequests as any },
+      create: { key: RECONNECT_REQUESTS_KEY, value: reconnectRequests as any },
+    });
+    return NextResponse.json({ success: true });
+  }
+
+  if (!session?.user?.id || !ADMIN_ROLES.has(session.user.role)) {
+    return NextResponse.json({ error: "Solo gli amministratori possono usare il controllo remoto." }, { status: 403 });
+  }
 
   const [pcsSetting, sessionsSetting] = await Promise.all([
     prisma.setting.findUnique({ where: { key: PCS_KEY } }),
@@ -184,6 +211,23 @@ export async function POST(request: NextRequest) {
   ]);
   const pc = pcsFrom(pcsSetting?.value).find((item) => item.code === targetCode && item.activatedAt && !item.archivedAt);
   if (!pc) return NextResponse.json({ error: "PC non disponibile o non autorizzato." }, { status: 404 });
+
+  if (action === "request_reconnect") {
+    const reconnectSetting = await prisma.setting.findUnique({ where: { key: RECONNECT_REQUESTS_KEY } });
+    const reconnectRequests = reconnectRequestsFrom(reconnectSetting?.value);
+    const now = new Date();
+    reconnectRequests[targetCode] = {
+      requestedAt: now.toISOString(),
+      requestedBy: session.user.name || "Amministratore",
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+    await prisma.setting.upsert({
+      where: { key: RECONNECT_REQUESTS_KEY },
+      update: { value: reconnectRequests as any },
+      create: { key: RECONNECT_REQUESTS_KEY, value: reconnectRequests as any },
+    });
+    return NextResponse.json({ success: true });
+  }
 
   if (action === "claim") {
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null;
@@ -280,7 +324,10 @@ export async function POST(request: NextRequest) {
       scroll: action === "start" ? null : scroll,
       revision: (previous?.revision || 0) + 1,
       updatedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+      // The controller sends a heartbeat while the remote view is open. A
+      // short lease prevents a closed tab or an interrupted logout from
+      // leaving the cashier PC marked as controlled for hours.
+      expiresAt: new Date(now.getTime() + REMOTE_SESSION_TTL_MS).toISOString(),
     };
   }
 

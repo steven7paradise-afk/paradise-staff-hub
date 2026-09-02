@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MousePointer2, Radio, X } from "lucide-react";
+import { Link2, MousePointer2, Radio, X } from "lucide-react";
 
 type RemoteSession = {
   targetCode: string;
@@ -44,6 +44,8 @@ function normalizedLabel(element: Element | null) {
 export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   const [pcSession, setPcSession] = useState<RemoteSession | null>(null);
   const [controllerTarget, setControllerTarget] = useState("");
+  const [reconnectRequest, setReconnectRequest] = useState<{ requestedBy: string } | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
   const lastInputRevision = useRef(0);
   const lastClickRevision = useRef(0);
   const lastPath = useRef("");
@@ -61,6 +63,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         const remote = (data?.session || null) as RemoteSession | null;
         if (cancelled) return;
         setPcSession(remote);
+        setReconnectRequest(data?.reconnectRequest || null);
         if (!remote) return;
 
         const params = new URLSearchParams(remote.search || "");
@@ -134,6 +137,22 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [pcMode]);
 
+  async function acknowledgeReconnect() {
+    if (reconnecting) return;
+    setReconnecting(true);
+    const response = await fetch("/api/remote-control?mode=pc", { cache: "no-store" }).catch(() => null);
+    const data = response?.ok ? await response.json().catch(() => null) : null;
+    const targetCode = data?.session?.targetCode || data?.target?.code;
+    if (targetCode) {
+      await fetch("/api/remote-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ack_reconnect", targetCode }),
+      }).catch(() => undefined);
+    }
+    window.location.reload();
+  }
+
   useEffect(() => {
     if (pcMode) return;
     const targetCode = new URLSearchParams(window.location.search).get("remoteTarget");
@@ -175,6 +194,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       }
     };
     queue({ sync: true }, true);
+    const heartbeat = window.setInterval(() => queue({ sync: true }, true), 10_000);
 
     const onPointer = (event: PointerEvent) => {
       queue({ pointer: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
@@ -225,12 +245,28 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       if (timer !== null) window.clearTimeout(timer);
+      window.clearInterval(heartbeat);
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("input", onInput, true);
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("scroll", onScroll);
     };
   }, [pcMode]);
+
+  if (pcMode && reconnectRequest && !pcSession) {
+    return (
+      <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/55 p-5 backdrop-blur-sm">
+        <div className="w-full max-w-md rounded-[28px] border border-fuchsia-200 bg-white p-7 text-center shadow-2xl">
+          <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-fuchsia-100 text-fuchsia-700"><Link2 className="size-7" /></span>
+          <h2 className="mt-5 text-2xl font-black text-neutral-950">Ricollega questo dispositivo</h2>
+          <p className="mt-3 text-sm font-semibold leading-6 text-neutral-500">{reconnectRequest.requestedBy} chiede di ricollegare il tablet a Paradise personale.</p>
+          <button type="button" onClick={() => void acknowledgeReconnect()} disabled={reconnecting} className="mt-6 min-h-12 w-full rounded-2xl bg-neutral-950 px-5 text-sm font-black uppercase tracking-wider text-white disabled:opacity-50">
+            {reconnecting ? "Ricollegamento…" : "Ricollega ora"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (pcMode && pcSession) {
     const x = `${(pcSession.pointer?.x || 0.5) * 100}vw`;
@@ -267,7 +303,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       return (
         <div className="fixed bottom-5 right-5 z-[9999] flex items-center gap-3 rounded-2xl border border-fuchsia-300/30 bg-neutral-950 px-4 py-3 text-white shadow-2xl">
           <Radio className="size-4 animate-pulse text-fuchsia-400" /><span className="text-[11px] font-black uppercase tracking-wider">Remoto attivo</span>
-          <button type="button" data-remote-stop onClick={() => void stop()} className="grid size-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20" aria-label="Termina controllo remoto"><X className="size-4" /></button>
+          <button type="button" data-remote-stop onClick={() => void stop()} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-white/10 px-3 text-[10px] font-black uppercase tracking-wider hover:bg-white/20" aria-label="Abbandona controllo remoto"><X className="size-4" /> Abbandona</button>
         </div>
       );
   }

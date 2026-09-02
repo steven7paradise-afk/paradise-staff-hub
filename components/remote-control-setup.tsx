@@ -9,6 +9,7 @@ export function RemoteControlSetup() {
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState("");
+  const [requested, setRequested] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -72,6 +73,26 @@ export function RemoteControlSetup() {
     }
   }
 
+  async function requestReconnect(target: Target) {
+    if (starting) return;
+    setStarting(target.id);
+    setError("");
+    try {
+      const response = await fetch("/api/remote-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request_reconnect", targetCode: target.id }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile inviare la richiesta.");
+      setRequested(target.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossibile inviare la richiesta.");
+    } finally {
+      setStarting("");
+    }
+  }
+
   return (
     <section className="mx-auto max-w-6xl space-y-6">
       <header className="rounded-[30px] border border-black/5 bg-white/80 p-6 shadow-sm backdrop-blur md:p-8">
@@ -98,9 +119,14 @@ export function RemoteControlSetup() {
                   <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-red-500"}`}>{item.online ? "Online · clicca per entrare" : "Non collegato"}</p>
                   {item.active ? <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-amber-700">Controllato da {item.controllerName}</p> : null}
                 </button>
-                {!item.online ? (
+                {!item.online && item.current ? (
                   <button type="button" disabled={Boolean(starting)} onClick={() => void reconnectCurrentDevice(item)} className="mt-2 w-full rounded-xl border border-[#F0C4D7] bg-white px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#A93469] disabled:opacity-50">
                     Sono su questo PC · Ricollega
+                  </button>
+                ) : null}
+                {!item.online && !item.current ? (
+                  <button type="button" disabled={Boolean(starting)} onClick={() => void requestReconnect(item)} className="mt-2 w-full rounded-xl border border-[#F0C4D7] bg-white px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-[#A93469] disabled:opacity-50">
+                    {requested === item.id ? "Richiesta inviata" : "Invia pop-up di ricollegamento"}
                   </button>
                 ) : null}
               </article>
