@@ -45,13 +45,6 @@ function romeDateKey(date: Date) {
   }).format(date);
 }
 
-function methodLabel(method: string) {
-  if (method === "CASHMATIC") return "Contanti";
-  if (method === "CONTANTI") return "Contanti";
-  if (method === "CARTA") return "Carta";
-  return "Da verificare";
-}
-
 function gatewayLabel(gateway: string) {
   const value = gateway.trim();
   if (!value) return "Gateway non rilevato";
@@ -173,15 +166,9 @@ export default async function ShopifyPaymentsPage(props: {
     const control = controls[0] || null;
     const declaredAmount = control ? control.declaredAmount : 0;
     const amountMatches = Boolean(control) && Math.abs(declaredAmount - payment.amount) < 0.01;
-    const declaredMethodText = (control?.declaredMethod || "Non dichiarato").replace(/cashmatic/gi, "Contanti");
-    const declaredNormalized = declaredMethodText.toLowerCase();
-    const methodMatches = Boolean(control) && payment.providers.every((item, index) => (
-      declaredNormalized.includes(providerLabel(item).toLowerCase()) ||
-      declaredNormalized.includes(methodLabel(payment.methods[index] || payment.methods[0] || "").toLowerCase())
-    ));
     const state = !control
       ? "AUTOMATIC"
-      : amountMatches && methodMatches
+      : amountMatches
         ? "CONFIRMED"
         : "MISMATCH";
     return {
@@ -192,9 +179,7 @@ export default async function ShopifyPaymentsPage(props: {
         || payment.clientName,
       control,
       declaredAmount,
-      declaredMethodText,
       amountMatches,
-      methodMatches,
       state,
     };
   });
@@ -342,9 +327,7 @@ export default async function ShopifyPaymentsPage(props: {
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {dailyIssues.slice(0, 6).map((payment) => {
-                        const issueLabel = !payment.amountMatches
-                            ? "Importo diverso"
-                            : "Metodo diverso";
+                        const issueLabel = "Importo diverso";
                         return (
                           <a
                             key={payment.orderId}
@@ -581,7 +564,7 @@ export default async function ShopifyPaymentsPage(props: {
                     <div className={`rounded-2xl border p-3 ${isAutomatic ? "border-amber-200 bg-amber-100/70" : isConfirmed ? "border-emerald-200 bg-emerald-100/70" : "border-rose-200 bg-rose-50"}`}>
                       <p className="text-sm font-black">{isAutomatic ? "Controllo Cliente mancante" : payment.control?.clientName}</p>
                       <p className="mt-1 text-xs font-black">{isAutomatic ? "—" : formatMoney(payment.declaredAmount)}</p>
-                      <p className="mt-1 text-[10px] font-semibold text-black/45">{isAutomatic ? "Pagamento presente in Shopify" : `Controllo Cliente · ${payment.declaredMethodText}`}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-black/45">{isAutomatic ? "Pagamento presente in Shopify" : "Controllo Cliente inserito · Metodo rilevato da Shopify"}</p>
                     </div>
                     <div className="flex flex-col items-start gap-2 md:items-end">
                       <span className="inline-flex min-h-8 items-center rounded-full bg-emerald-100 px-3 text-[9px] font-black uppercase text-emerald-800">Controllo automatico</span>
@@ -589,7 +572,7 @@ export default async function ShopifyPaymentsPage(props: {
                         <span className={`inline-flex min-h-8 items-center rounded-full px-3 text-[9px] font-black uppercase ${isConfirmed ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>{isConfirmed ? "Controllo lavoratore" : "Differenza lavoratore"}</span>
                       ) : <span className="inline-flex min-h-8 items-center rounded-full bg-amber-100 px-3 text-[9px] font-black uppercase text-amber-800">Da inserire</span>}
                       {isCashPayment ? <span className="inline-flex min-h-8 items-center rounded-full bg-sky-100 px-3 text-[9px] font-black uppercase text-sky-800">Contanti</span> : null}
-                      {payment.state === "MISMATCH" ? <p className="text-[9px] font-bold leading-4 text-rose-700">{!payment.amountMatches ? "Importo diverso" : ""}{!payment.amountMatches && !payment.methodMatches ? " · " : ""}{!payment.methodMatches ? "Metodo diverso" : ""}</p> : null}
+                      {payment.state === "MISMATCH" ? <p className="text-[9px] font-bold leading-4 text-rose-700">Importo diverso</p> : null}
                     </div>
                   </article>
                 );
