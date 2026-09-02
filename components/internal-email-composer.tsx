@@ -7,15 +7,20 @@ import {
   Archive,
   ArrowLeft,
   ArrowUp,
+  Bold,
   Check,
   FileText,
   Forward,
   ImagePlus,
   Inbox,
+  Italic,
   CalendarDays,
   CheckSquare,
   LayoutDashboard,
   ListFilter,
+  ListOrdered,
+  List as ListIcon,
+  Link2,
   Loader2,
   Mail,
   MailOpen,
@@ -27,6 +32,7 @@ import {
   Send,
   Star,
   Trash2,
+  Underline,
   X,
 } from "lucide-react";
 
@@ -54,6 +60,14 @@ function formatMailDate(value: string) {
   if (date.toDateString() === today.toDateString()) return new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(date);
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short" }).format(date);
 }
+function isRichEmailBody(value: string) { return /<\/?(?:p|div|br|strong|b|em|i|u|s|ul|ol|li|a|blockquote)(?:\s|>|\/)/i.test(value); }
+function escapeEditorText(value: string) { return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
+function editorHtml(value: string) { return isRichEmailBody(value) ? value : escapeEditorText(value).replaceAll("\n", "<br>"); }
+function emailPlainText(value: string) {
+  if (!isRichEmailBody(value)) return value.trim();
+  return value.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(?:p|div|blockquote|li)>/gi, "\n").replace(/<[^>]*>/g, "").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&quot;/gi, '"').replace(/&#(?:0*39|x0*27);/gi, "'").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+function hasEmailContent(value: string) { return emailPlainText(value).length > 0; }
 
 export function InternalEmailComposer({ currentUserId, currentUserName, currentUserEmail, recipients, restrictedToLocation, focusMessageId }: Props) {
   const [folder, setFolder] = useState<Folder>("inbox");
@@ -68,6 +82,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(new Set());
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [editorSession, setEditorSession] = useState({ key: 0, html: "" });
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -77,7 +92,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
   const [composeDragY, setComposeDragY] = useState(0);
   const [composeDragging, setComposeDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const composeDragStartRef = useRef(0);
   const composeDragYRef = useRef(0);
   const composeCloseTimerRef = useRef<number | null>(null);
@@ -121,7 +136,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
     return messages.filter((message) => {
       if (readFilter === "read" && !message.read) return false;
       if (readFilter === "unread" && message.read) return false;
-      return !query || `${message.sender.name} ${message.subject} ${message.body} ${message.recipients.map((recipient) => recipient.name).join(" ")}`.toLocaleLowerCase("it").includes(query);
+      return !query || `${message.sender.name} ${message.subject} ${emailPlainText(message.body)} ${message.recipients.map((recipient) => recipient.name).join(" ")}`.toLocaleLowerCase("it").includes(query);
     });
   }, [messages, readFilter, search]);
   const selectedRecipients = recipients.filter((recipient) => selectedRecipientIds.has(recipient.id));
@@ -129,13 +144,14 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
   function resetComposer() { setSelectedRecipientIds(new Set()); setSubject(""); setBody(""); setAttachments([]); setDraftId(null); setError(""); }
   function newMessage(options?: { recipientIds?: string[]; subject?: string; body?: string; draftId?: string | null; attachments?: Attachment[] }) {
     if (composeCloseTimerRef.current !== null) { window.clearTimeout(composeCloseTimerRef.current); composeCloseTimerRef.current = null; }
-    setSelectedRecipientIds(new Set(options?.recipientIds || [])); setSubject(options?.subject || ""); setBody(options?.body || ""); setDraftId(options?.draftId || null); setAttachments(options?.attachments || []); setComposeDragging(false); setComposeDragY(0); composeDragYRef.current = 0; setCompose(true); setRecipientPicker(false); setError(""); setNotice("");
+    const nextBody = options?.body || "";
+    setSelectedRecipientIds(new Set(options?.recipientIds || [])); setSubject(options?.subject || ""); setBody(nextBody); setEditorSession((current) => ({ key: current.key + 1, html: editorHtml(nextBody) })); setDraftId(options?.draftId || null); setAttachments(options?.attachments || []); setComposeDragging(false); setComposeDragY(0); composeDragYRef.current = 0; setCompose(true); setRecipientPicker(false); setError(""); setNotice("");
   }
   function closeComposer() { if (composeCloseTimerRef.current !== null) window.clearTimeout(composeCloseTimerRef.current); composeCloseTimerRef.current = null; setCompose(false); setComposeDragging(false); setComposeDragY(0); composeDragYRef.current = 0; resetComposer(); }
   function startComposeDrag(event: ReactPointerEvent<HTMLButtonElement>) { if (event.pointerType === "mouse" && event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); composeDragStartRef.current = event.clientY; composeDragYRef.current = 0; setComposeDragging(true); }
   function moveComposeDrag(event: ReactPointerEvent<HTMLButtonElement>) { if (!composeDragging) return; const next = Math.max(0, event.clientY - composeDragStartRef.current); composeDragYRef.current = next; setComposeDragY(next); }
   function endComposeDrag() { if (!composeDragging) return; setComposeDragging(false); if (composeDragYRef.current > 110) { const exitY = typeof window === "undefined" ? 900 : window.innerHeight; composeDragYRef.current = exitY; setComposeDragY(exitY); if (composeCloseTimerRef.current !== null) window.clearTimeout(composeCloseTimerRef.current); composeCloseTimerRef.current = window.setTimeout(closeComposer, 230); } else { composeDragYRef.current = 0; setComposeDragY(0); } }
-  function quote(message: InternalMessage) { return `\n\n--- Messaggio precedente ---\nDa: ${message.sender.name}\nOggetto: ${message.subject}\n\n${message.body}`; }
+  function quote(message: InternalMessage) { return `\n\n--- Messaggio precedente ---\nDa: ${message.sender.name}\nOggetto: ${message.subject}\n\n${emailPlainText(message.body)}`; }
   function reply(message: InternalMessage, all = false) {
     const isOwnMessage = message.sender.id === currentUserId;
     const ids = all
@@ -162,10 +178,10 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
   }
 
   async function saveOrSend(mode: "draft" | "send") {
-    if (mode === "send" && (!selectedRecipientIds.size || !subject.trim() || !body.trim())) { setError("Seleziona i destinatari e inserisci oggetto e messaggio."); return; }
+    if (mode === "send" && (!selectedRecipientIds.size || !subject.trim() || !hasEmailContent(body))) { setError("Seleziona i destinatari e inserisci oggetto e messaggio."); return; }
     setSending(true); setError("");
     try {
-      const response = await fetch("/api/internal-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, draftId, recipientIds: [...selectedRecipientIds], subject, message: body, attachments }) });
+      const response = await fetch("/api/internal-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, format: "html", draftId, recipientIds: [...selectedRecipientIds], subject, message: body, attachments }) });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Operazione non riuscita.");
       if (mode === "draft") { setDraftId(data.draftId); setNotice("Bozza salvata correttamente"); setFolder("drafts"); setCompose(false); }
@@ -199,6 +215,24 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
       setAttachments((current) => [...current, ...uploaded]);
     } catch (uploadError) { setError(uploadError instanceof Error ? uploadError.message : "Caricamento non riuscito."); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  }
+
+  function runEditorCommand(command: string) {
+    bodyRef.current?.focus();
+    document.execCommand(command, false);
+    setBody(bodyRef.current?.innerHTML || "");
+  }
+
+  function addEditorLink() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) { setError("Seleziona prima il testo da trasformare in link."); bodyRef.current?.focus(); return; }
+    const entered = window.prompt("Inserisci l’indirizzo del link (es. https://paradisebeauty.it)");
+    if (!entered?.trim()) return;
+    const rawUrl = entered.trim();
+    const url = /^[a-z][a-z\d+.-]*:/i.test(rawUrl) ? rawUrl : rawUrl.includes("@") && !rawUrl.includes("/") ? `mailto:${rawUrl}` : `https://${rawUrl}`;
+    document.execCommand("createLink", false, url);
+    setBody(bodyRef.current?.innerHTML || "");
+    setError("");
   }
 
   const countFor = (id: Folder) => id === "inbox" ? counts.inbox : id === "important" ? counts.important : id === "drafts" ? counts.drafts : id === "trash" ? counts.trash : 0;
@@ -244,7 +278,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
             {loading ? <div className="grid h-48 place-items-center"><Loader2 className="size-6 animate-spin text-[#B43A70]" /></div> : visibleMessages.length ? visibleMessages.map((message) => {
               const active = selectedId === message.id && !compose; const outgoing = folder === "sent" || folder === "drafts"; const contact = outgoing ? message.recipients[0] : message.sender; const senderName = outgoing ? message.recipients.map((recipient) => recipient.name).join(", ") || "Bozza" : message.sender.name; const contactPhoto = personPhoto(contact);
               return <button key={message.id} type="button" onClick={() => folder === "drafts" ? newMessage({ recipientIds: message.draftRecipientIds, subject: message.subject, body: message.body, draftId: message.id, attachments: message.attachments }) : void selectMessage(message)} className={`w-full border-b border-[#F0E8EC] px-5 py-4 text-left transition ${active ? "bg-[#FFF0F7]" : "bg-white hover:bg-[#FFFAFC]"}`}>
-                <div className="flex items-start gap-3"><span className={`mt-4 size-2 shrink-0 rounded-full ${message.read ? "bg-transparent" : "bg-[#F49BC4]"}`} />{contactPhoto ? <img src={contactPhoto} alt={contact?.name || "Profilo"} className="size-11 shrink-0 rounded-full object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-[10px] font-black text-[#8E315D]">{initials(contact?.name || "P")}</span>}<span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className={`min-w-0 flex-1 truncate text-[15px] ${message.read ? "font-bold text-[#493A42]" : "font-black text-[#211A1E]"}`}>{senderName}</span><span className="shrink-0 text-xs font-medium text-black/40">{formatMailDate(message.updatedAt || message.createdAt)}</span><span className="text-lg leading-none text-black/25 lg:hidden">›</span></span><span className="mt-0.5 block truncate text-[13px] font-bold text-[#352930]">{message.subject}</span><span className="mt-0.5 block line-clamp-2 text-[13px] font-medium leading-[18px] text-black/42">{message.body || "Nessun testo"}</span><span className="mt-1.5 flex gap-2">{message.starred ? <Star className="size-3.5 fill-amber-400 text-amber-400" /> : null}{message.attachments.length ? <Paperclip className="size-3.5 text-[#B43A70]" /> : null}</span></span></div>
+                <div className="flex items-start gap-3"><span className={`mt-4 size-2 shrink-0 rounded-full ${message.read ? "bg-transparent" : "bg-[#F49BC4]"}`} />{contactPhoto ? <img src={contactPhoto} alt={contact?.name || "Profilo"} className="size-11 shrink-0 rounded-full object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-[10px] font-black text-[#8E315D]">{initials(contact?.name || "P")}</span>}<span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className={`min-w-0 flex-1 truncate text-[15px] ${message.read ? "font-bold text-[#493A42]" : "font-black text-[#211A1E]"}`}>{senderName}</span><span className="shrink-0 text-xs font-medium text-black/40">{formatMailDate(message.updatedAt || message.createdAt)}</span><span className="text-lg leading-none text-black/25 lg:hidden">›</span></span><span className="mt-0.5 block truncate text-[13px] font-bold text-[#352930]">{message.subject}</span><span className="mt-0.5 block line-clamp-2 text-[13px] font-medium leading-[18px] text-black/42">{emailPlainText(message.body) || "Nessun testo"}</span><span className="mt-1.5 flex gap-2">{message.starred ? <Star className="size-3.5 fill-amber-400 text-amber-400" /> : null}{message.attachments.length ? <Paperclip className="size-3.5 text-[#B43A70]" /> : null}</span></span></div>
               </button>;
             }) : <div className="grid h-60 place-items-center px-8 text-center"><div><MailOpen className="mx-auto size-8 text-black/15" /><p className="mt-3 text-sm font-black text-black/40">Nessuna email</p></div></div>}
           </div>
@@ -255,7 +289,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
           {compose ? (
             <div className="email-compose-enter h-full">
             <div className="flex h-full flex-col bg-[#FFFDFE] lg:bg-white" style={{ transform: `translate3d(0,${composeDragY}px,0)`, transition: composeDragging ? "none" : "transform 230ms cubic-bezier(.22,.86,.3,1)" }}>
-              <div className="relative flex shrink-0 items-center justify-between px-5 pb-3 pt-[calc(env(safe-area-inset-top)+16px)] lg:hidden"><button type="button" onPointerDown={startComposeDrag} onPointerMove={moveComposeDrag} onPointerUp={endComposeDrag} onPointerCancel={endComposeDrag} className="absolute left-1/2 top-1 h-8 w-20 -translate-x-1/2 touch-none cursor-grab active:cursor-grabbing" aria-label="Trascina verso il basso per chiudere"><span className="absolute left-1/2 top-2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-black/20" /></button><button type="button" onClick={closeComposer} className="grid size-12 place-items-center rounded-full border border-black/10 bg-white/80 text-black shadow-[0_8px_24px_rgba(32,24,28,.08)] backdrop-blur-xl" aria-label="Chiudi"><X className="size-7" /></button><button type="button" onClick={() => void saveOrSend("send")} disabled={sending || !selectedRecipientIds.size || !subject.trim() || !body.trim()} className="grid size-12 place-items-center rounded-full border border-black/10 bg-white/80 text-[#B43A70] shadow-[0_8px_24px_rgba(32,24,28,.08)] backdrop-blur-xl disabled:text-black/22" aria-label="Invia email">{sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-7" />}</button></div>
+              <div className="relative flex shrink-0 items-center justify-between px-5 pb-3 pt-[calc(env(safe-area-inset-top)+16px)] lg:hidden"><button type="button" onPointerDown={startComposeDrag} onPointerMove={moveComposeDrag} onPointerUp={endComposeDrag} onPointerCancel={endComposeDrag} className="absolute left-1/2 top-1 h-8 w-20 -translate-x-1/2 touch-none cursor-grab active:cursor-grabbing" aria-label="Trascina verso il basso per chiudere"><span className="absolute left-1/2 top-2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-black/20" /></button><button type="button" onClick={closeComposer} className="grid size-12 place-items-center rounded-full border border-black/10 bg-white/80 text-black shadow-[0_8px_24px_rgba(32,24,28,.08)] backdrop-blur-xl" aria-label="Chiudi"><X className="size-7" /></button><button type="button" onClick={() => void saveOrSend("send")} disabled={sending || !selectedRecipientIds.size || !subject.trim() || !hasEmailContent(body)} className="grid size-12 place-items-center rounded-full border border-black/10 bg-white/80 text-[#B43A70] shadow-[0_8px_24px_rgba(32,24,28,.08)] backdrop-blur-xl disabled:text-black/22" aria-label="Invia email">{sending ? <Loader2 className="size-6 animate-spin" /> : <ArrowUp className="size-7" />}</button></div>
               <div className="hidden items-center justify-between border-b border-[#EEE4E8] px-6 py-5 lg:flex"><div><p className="text-[9px] font-black uppercase tracking-[.2em] text-[#B43A70]">Composizione</p><h3 className="mt-1 text-2xl font-black text-[#211A1E]">Nuova email</h3></div><button type="button" onClick={closeComposer} className="grid size-10 place-items-center rounded-full bg-black/5"><X className="size-5" /></button></div>
               <div className="flex-1 overflow-y-auto px-5 pb-8 pt-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:p-6 lg:[scrollbar-width:auto]">
                 <h3 className="mb-12 text-[42px] font-black leading-none tracking-[-.045em] text-black lg:hidden">Nuovo messaggio</h3>
@@ -273,7 +307,19 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
                 </div>
                 <div className="flex min-h-16 items-center border-b border-black/[.08] lg:hidden"><span className="min-w-0 flex-1 truncate text-base font-medium text-black/38">Cc/Ccn, Da: {currentUserEmail}</span></div>
                 <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={160} placeholder="Oggetto:" className="h-16 w-full border-b border-black/[.08] bg-transparent px-0 text-xl font-medium outline-none placeholder:text-black/38 lg:mt-3 lg:h-14 lg:rounded-2xl lg:border lg:border-[#E8DCE2] lg:bg-[#FFFBFD] lg:px-4 lg:text-sm lg:font-black lg:focus:border-[#D96F9E]" />
-                <textarea ref={bodyRef} value={body} onChange={(event) => setBody(event.target.value)} maxLength={10000} placeholder="Scrivi il messaggio..." className="mt-6 min-h-[42dvh] w-full resize-none bg-transparent p-0 text-[18px] font-medium leading-7 outline-none placeholder:text-black/25 lg:mt-3 lg:min-h-72 lg:resize-y lg:rounded-2xl lg:border lg:border-[#E8DCE2] lg:bg-white lg:p-4 lg:text-sm lg:leading-6 lg:focus:border-[#D96F9E]" />
+                <div className="mt-4 overflow-hidden rounded-2xl border border-[#E8DCE2] bg-white focus-within:border-[#D96F9E] lg:mt-3">
+                  <div className="flex items-center gap-1 overflow-x-auto border-b border-[#EEE4E8] bg-[#FFF8FB] p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Formattazione testo">
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runEditorCommand("bold")} className="editor-tool" aria-label="Grassetto" title="Grassetto"><Bold className="size-4" /></button>
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runEditorCommand("italic")} className="editor-tool" aria-label="Corsivo" title="Corsivo"><Italic className="size-4" /></button>
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runEditorCommand("underline")} className="editor-tool" aria-label="Sottolineato" title="Sottolineato"><Underline className="size-4" /></button>
+                    <span className="mx-1 h-6 w-px shrink-0 bg-black/10" />
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runEditorCommand("insertUnorderedList")} className="editor-tool" aria-label="Elenco puntato" title="Elenco puntato"><ListIcon className="size-4" /></button>
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => runEditorCommand("insertOrderedList")} className="editor-tool" aria-label="Elenco numerato" title="Elenco numerato"><ListOrdered className="size-4" /></button>
+                    <span className="mx-1 h-6 w-px shrink-0 bg-black/10" />
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={addEditorLink} className="editor-tool" aria-label="Inserisci link" title="Inserisci link"><Link2 className="size-4" /></button>
+                  </div>
+                  <div key={editorSession.key} ref={bodyRef} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder="Scrivi il messaggio..." dangerouslySetInnerHTML={{ __html: editorSession.html }} onInput={(event) => setBody(event.currentTarget.innerHTML)} onPaste={(event) => { event.preventDefault(); document.execCommand("insertText", false, event.clipboardData.getData("text/plain")); setBody(event.currentTarget.innerHTML); }} className="email-rich-editor min-h-[42dvh] w-full bg-transparent p-4 text-[18px] font-medium leading-7 outline-none lg:min-h-72 lg:text-sm lg:leading-6" />
+                </div>
                 {attachments.length ? <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{attachments.map((attachment) => <div key={attachment.id} className="group relative overflow-hidden rounded-2xl border border-[#E8DCE2] bg-[#FFF8FB]"><img src={attachment.previewUrl} alt="" className="h-28 w-full object-cover" /><button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))} className="absolute right-2 top-2 grid size-7 place-items-center rounded-full bg-black/70 text-white"><X className="size-3.5" /></button><p className="truncate px-2 py-2 text-[9px] font-bold">{attachment.name}</p></div>)}</div> : null}
                 {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div> : null}
               </div>
@@ -283,7 +329,7 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
                 <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-[#E4D5DC] px-4 text-xs font-black text-[#7D4A61]">{uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />} Immagini</button>
                 <button type="button" onClick={() => void saveOrSend("draft")} disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-[#E4D5DC] px-4 text-xs font-black text-black/55 disabled:opacity-55">{sending ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} {sending ? "Salvataggio..." : "Salva bozza"}</button>
                 {draftId ? <button type="button" onClick={() => void deleteDraft()} disabled={sending} className="grid size-12 place-items-center rounded-2xl border border-red-200 text-red-600" aria-label="Elimina bozza"><Trash2 className="size-4" /></button> : null}
-                <button type="button" onClick={() => void saveOrSend("send")} disabled={sending} className="inline-flex min-h-12 min-w-36 items-center justify-center gap-2 rounded-2xl bg-[#211E20] px-5 text-xs font-black text-white shadow-lg hover:bg-[#A93469] disabled:opacity-55">{sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} {sending ? "Invio..." : "Invia"}</button>
+                <button type="button" onClick={() => void saveOrSend("send")} disabled={sending || !selectedRecipientIds.size || !subject.trim() || !hasEmailContent(body)} className="inline-flex min-h-12 min-w-36 items-center justify-center gap-2 rounded-2xl bg-[#211E20] px-5 text-xs font-black text-white shadow-lg hover:bg-[#A93469] disabled:opacity-55">{sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} {sending ? "Invio..." : "Invia"}</button>
               </div>
             </div>
             </div>
@@ -303,14 +349,14 @@ export function InternalEmailComposer({ currentUserId, currentUserName, currentU
                 </div>
               </div>
               <article className="flex-1 overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+24px)] sm:p-7">{(() => { const outgoing = selectedMessage.sender.id === currentUserId; const contact = outgoing ? selectedMessage.recipients[0] : selectedMessage.sender; const photo = personPhoto(contact); return <div className="flex items-start gap-4">{photo ? <img src={photo} alt={contact?.name || "Profilo"} className="size-12 shrink-0 rounded-full object-cover" /> : <div className="grid size-12 shrink-0 place-items-center rounded-full bg-[#F3DFE8] text-sm font-black text-[#8E315D]">{initials(contact?.name || "P")}</div>}<div className="min-w-0 flex-1"><h1 className="font-serif text-2xl font-semibold text-[#211A1E] sm:text-3xl">{selectedMessage.subject}</h1><div className="mt-4 text-xs text-black/45"><strong className="block text-sm leading-5 text-[#30252A]">{outgoing ? `A: ${selectedMessage.recipients.map((recipient) => recipient.name).join(", ")}` : selectedMessage.sender.name}</strong><div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1"><span className="break-all">{outgoing ? selectedMessage.recipients.map((recipient) => recipient.email).join(", ") : `<${selectedMessage.sender.email}>`}</span><span aria-hidden="true">·</span><span>{new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(new Date(selectedMessage.createdAt))}</span></div></div><p className="mt-2 block text-[11px] font-semibold text-black/35">Da: {selectedMessage.sender.name}</p></div></div>; })()}
-                <div className="mt-8 whitespace-pre-wrap break-words text-[15px] font-medium leading-7 text-[#493D43]">{selectedMessage.body}</div>
+                {isRichEmailBody(selectedMessage.body) ? <div className="email-rich-content mt-8 break-words text-[15px] font-medium leading-7 text-[#493D43]" dangerouslySetInnerHTML={{ __html: selectedMessage.body }} /> : <div className="mt-8 whitespace-pre-wrap break-words text-[15px] font-medium leading-7 text-[#493D43]">{selectedMessage.body}</div>}
                 {selectedMessage.attachments.length ? <div className="mt-8 border-t border-[#EEE3E8] pt-5"><p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-black/40"><Paperclip className="size-4" /> Immagini allegate</p><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{selectedMessage.attachments.map((attachment) => <a key={attachment.id} href={attachment.webViewLink || attachment.previewUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-2xl border border-[#E8DCE2]"><img src={attachment.previewUrl} alt={attachment.name} className="h-32 w-full object-cover" /><p className="truncate p-2 text-[10px] font-bold">{attachment.name}</p></a>)}</div></div> : null}
               </article>
             </div>
           ) : <div className="hidden h-full place-items-center text-center lg:grid"><div><Mail className="mx-auto size-10 text-black/12" /><p className="mt-4 text-sm font-black text-black/35">Seleziona un messaggio oppure crea una nuova email</p></div></div>}
         </main>
       </div>
-      <style jsx>{`.mail-action{display:inline-flex;min-height:40px;flex-shrink:0;align-items:center;gap:6px;border-radius:12px;padding:0 10px;font-size:11px;font-weight:800;color:#51434a;transition:.15s}.mail-action:hover{background:#fff0f7;color:#9e3262}.mail-icon-action{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border:1px solid rgba(255,255,255,.85);border-radius:999px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(255,228,241,.65));box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 7px 18px rgba(86,48,67,.12);color:#51434a;backdrop-filter:blur(18px);transition:.15s}.mail-icon-action:active{transform:scale(.94)}@media(max-width:1023px){.email-compose-enter{transform-origin:bottom center;animation:email-compose-slide-up .42s cubic-bezier(.22,.86,.3,1) both}}@keyframes email-compose-slide-up{from{transform:translate3d(0,100%,0);opacity:.72}to{transform:translate3d(0,0,0);opacity:1}}@media(prefers-reduced-motion:reduce){.email-compose-enter{animation:none!important}}`}</style>
+      <style jsx global>{`.mail-action{display:inline-flex;min-height:40px;flex-shrink:0;align-items:center;gap:6px;border-radius:12px;padding:0 10px;font-size:11px;font-weight:800;color:#51434a;transition:.15s}.mail-action:hover{background:#fff0f7;color:#9e3262}.mail-icon-action{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border:1px solid rgba(255,255,255,.85);border-radius:999px;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(255,228,241,.65));box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 7px 18px rgba(86,48,67,.12);color:#51434a;backdrop-filter:blur(18px);transition:.15s}.mail-icon-action:active{transform:scale(.94)}.editor-tool{display:grid;width:36px;height:36px;flex:0 0 36px;place-items:center;border-radius:10px;color:#51434a;transition:.15s}.editor-tool:hover,.editor-tool:focus-visible{background:#f8dce9;color:#94305e;outline:none}.email-rich-editor:empty:before{content:attr(data-placeholder);color:rgba(0,0,0,.25);pointer-events:none}.email-rich-editor p,.email-rich-content p{margin:.45em 0}.email-rich-editor ul,.email-rich-content ul{margin:.55em 0;padding-left:1.55em;list-style:disc}.email-rich-editor ol,.email-rich-content ol{margin:.55em 0;padding-left:1.55em;list-style:decimal}.email-rich-editor blockquote,.email-rich-content blockquote{margin:.8em 0;padding-left:1em;border-left:3px solid #e7a9c5;color:#79646e}.email-rich-editor a,.email-rich-content a{color:#a93469;text-decoration:underline;text-underline-offset:2px}.email-rich-content strong,.email-rich-content b{font-weight:800}.email-rich-content em,.email-rich-content i{font-style:italic}.email-rich-content u{text-decoration:underline}@media(max-width:1023px){.email-compose-enter{transform-origin:bottom center;animation:email-compose-slide-up .42s cubic-bezier(.22,.86,.3,1) both}}@keyframes email-compose-slide-up{from{transform:translate3d(0,100%,0);opacity:.72}to{transform:translate3d(0,0,0);opacity:1}}@media(prefers-reduced-motion:reduce){.email-compose-enter{animation:none!important}}`}</style>
     </div>
   );
 }
