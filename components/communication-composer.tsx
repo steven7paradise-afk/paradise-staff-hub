@@ -292,7 +292,7 @@ export function CommunicationComposer({
               <div className="p-5">
                 <span className="inline-flex items-center gap-1.5 bg-[#FBE7F0] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-[#A73362]"><Megaphone className="size-3" /> Comunicazione</span>
                 <h3 className="mt-4 text-xl font-black leading-tight">{title.trim() || "Titolo della comunicazione"}</h3>
-                <p className="mt-3 line-clamp-6 whitespace-pre-line text-sm font-medium leading-6 text-black/60">{message.trim() || "Il testo apparirà qui mentre scrivi."}</p>
+                <p className="mt-3 line-clamp-6 whitespace-pre-wrap break-words text-sm font-medium leading-6 text-black/60">{message.trim() || "Il testo apparirà qui mentre scrivi."}</p>
                 {attachedFileName ? <p className="mt-4 flex items-center gap-2 border-t border-black/10 pt-4 text-xs font-bold text-[#A73362]"><Paperclip className="size-3.5" /> {attachedFileName}</p> : null}
               </div>
             </section>

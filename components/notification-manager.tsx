@@ -471,7 +471,7 @@ export function NotificationManager({
                   </div>
                 </dl>
                 <div className="border-t border-black/10 px-5 py-5">
-                  <p className="line-clamp-5 whitespace-pre-line rounded-md bg-[#F7F4F8] p-4 text-sm font-medium leading-6 text-black/65">
+                  <p className="line-clamp-5 whitespace-pre-wrap break-words rounded-md bg-[#F7F4F8] p-4 text-sm font-medium leading-6 text-black/65">
                     {focusedMessage}
                   </p>
                 </div>
@@ -547,7 +547,7 @@ export function NotificationManager({
               <span>Direzione Paradise</span>
               <time>{dateLabel(activeItem.createdAt)}</time>
             </div>
-            <div className="mt-8 whitespace-pre-line text-base font-medium leading-7 text-black/75 sm:text-lg sm:leading-8">
+            <div className="mt-8 whitespace-pre-wrap break-words text-base font-medium leading-7 text-black/75 sm:text-lg sm:leading-8">
               {focusedMessage}
             </div>
 
@@ -814,7 +814,7 @@ export function NotificationManager({
                   {/* Article Content Body */}
                   <div className="p-6 sm:p-8 space-y-6">
                     <div className="space-y-5 border-l-2 border-[#D3879D] bg-[#FFFDFC] p-5 sm:p-6">
-                      <p className="whitespace-pre-line text-base font-semibold leading-relaxed text-[#2C2C2C]">
+                      <p className="whitespace-pre-wrap break-words text-base font-semibold leading-relaxed text-[#2C2C2C]">
                         {activeItem.message
                           .replace(/\n\n📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")
                           .replace(/📄 ALLEGATO DRIVE: \[.*?\]\(.*?\)/gi, "")

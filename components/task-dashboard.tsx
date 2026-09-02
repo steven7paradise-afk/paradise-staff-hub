@@ -1937,7 +1937,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
               <Card className="bg-white p-4 md:p-5">
                 <h2 className="font-semibold">Prova completamento</h2>
-                {selected.completionNote ? <p className="mt-4 leading-7 text-black/55">{selected.completionNote}</p> : null}
+                {selected.completionNote ? <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-black/55">{selected.completionNote}</p> : null}
                 <div className="mt-4 grid gap-3">
                   {selected.completionFiles.map((file, index) => (
                     <AttachmentCard key={`${file.name}-${index}`} name={file.name} url={file.url} />
