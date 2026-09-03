@@ -6,7 +6,18 @@ import { activeShiftFollowUps, type ShiftResponsibleAnswer, type ShiftResponsibl
 import type { ShiftAppointmentClient } from "@/lib/shift-responsible-appointments";
 
 type SaveStatus = "saving" | "saved" | "error";
-type ShiftStaffMember = { id: string; name: string; role: string; photoUrl: string | null; shiftTime: string };
+type ShiftStaffMember = {
+  id: string;
+  name: string;
+  role: string;
+  photoUrl: string | null;
+  shiftTime: string;
+  clockIn?: string | null;
+  delayMinutes?: number | null;
+  attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED";
+  pauseSummary?: string | null;
+  workedHoursFormatted?: string | null;
+};
 type TaskAssignee = { id: string; name: string; group: "Ufficio" | "Responsabile" };
 
 function answerTypeName(type: ShiftResponsibleQuestion["answerType"]) {
@@ -404,16 +415,73 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
 
   return (
     <div className="mt-4 border-t border-black/[0.06] pt-4">
-      <div className="space-y-2">
-        {staff.map((person) => (
-          <label key={person.id} className="grid gap-3 rounded-xl border border-black/10 bg-white p-3 sm:grid-cols-[minmax(180px,0.8fr)_minmax(0,1.2fr)] sm:items-center">
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-black/35">{person.photoUrl ? <img src={person.photoUrl} alt="" className="size-full object-cover" /> : <UserRound className="size-4" />}</span>
-              <span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-black text-[#202124]">{person.name}</span><span className="mt-0.5 block truncate text-[8px] text-[#5f6368]">{person.role} · {person.shiftTime}</span></span>
-            </span>
-            <span><span className="sr-only">Nota per {person.name}</span><textarea value={notes[person.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [person.id]: event.target.value }))} rows={2} maxLength={400} placeholder={`Nota per ${person.name}…`} className="w-full resize-none rounded-lg border border-black/10 bg-[#f8f9fa] px-3 py-2.5 text-xs outline-none focus:border-[#2ed65d] focus:bg-white" /></span>
-          </label>
-        ))}
+      <div className="space-y-3">
+        {staff.map((person) => {
+          const hasClockIn = Boolean(person.clockIn);
+          const isLate = typeof person.delayMinutes === "number" && person.delayMinutes > 0;
+          const isEarlyOrOnTime = typeof person.delayMinutes === "number" && person.delayMinutes <= 0;
+
+          return (
+            <div key={person.id} className="rounded-xl border border-black/10 bg-white p-3.5 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-[#ececec] text-black/35">
+                    {person.photoUrl ? <img src={person.photoUrl} alt="" className="size-full object-cover" /> : <UserRound className="size-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-black text-[#202124]">{person.name}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-[#5f6368]">{person.role} · Orario: {person.shiftTime}</span>
+                  </div>
+                </div>
+
+                {/* Badges metriche timbrature, pause e ore lavorate */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[9px] font-bold">
+                  {/* Badge Entrata & Ritardo */}
+                  {hasClockIn ? (
+                    isLate ? (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800">
+                        <span>⚠️</span> Entrata: {person.clockIn} (Ritardo +{person.delayMinutes}m)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800">
+                        <span>✓</span> Entrata: {person.clockIn} ({isEarlyOrOnTime ? "In orario" : ""})
+                      </span>
+                    )
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-neutral-200 bg-neutral-100 px-2 py-0.5 text-neutral-600">
+                      <span>⏳</span> Non ancora timbrato
+                    </span>
+                  )}
+
+                  {/* Badge Pausa */}
+                  <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-purple-900">
+                    <span>☕</span> {person.pauseSummary || "Nessuna pausa"}
+                  </span>
+
+                  {/* Badge Ore Lavorate Fatte */}
+                  {person.workedHoursFormatted ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 text-slate-800">
+                      <span>⏱️</span> Ore fatte: {person.workedHoursFormatted}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Textarea note */}
+              <div className="mt-3 min-w-[200px] flex-1 sm:mt-0">
+                <span className="sr-only">Nota per {person.name}</span>
+                <textarea
+                  value={notes[person.id] ?? ""}
+                  onChange={(event) => setNotes((current) => ({ ...current, [person.id]: event.target.value }))}
+                  rows={2}
+                  maxLength={400}
+                  placeholder={`Nota per ${person.name}…`}
+                  className="w-full resize-none rounded-lg border border-black/10 bg-[#f8f9fa] px-3 py-2 text-xs outline-none focus:border-[#2ed65d] focus:bg-white"
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
       <div className="mt-3 flex items-center justify-end gap-2">
         {status === "saving" || status === "error" ? <SaveStatusLine status={status} /> : isSaved ? <SaveStatusLine status="saved" /> : null}

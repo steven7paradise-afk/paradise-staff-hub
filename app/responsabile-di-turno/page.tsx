@@ -103,6 +103,11 @@ export default async function ResponsabileDiTurnoPage() {
           take: 1,
           select: { start_time: true, end_time: true, category: { select: { name: true, start_time: true, end_time: true } } },
         },
+        attendance_logs: {
+          where: { timestamp: { gte: start, lt: end } },
+          orderBy: { timestamp: "asc" },
+          select: { type: true, timestamp: true, time: true },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -135,12 +140,67 @@ export default async function ResponsabileDiTurnoPage() {
     const startTime = schedule?.start_time || schedule?.category.start_time;
     const endTime = schedule?.end_time || schedule?.category.end_time;
     if (!startTime || !endTime) return [];
+
+    const attendance = deriveAttendanceState(person.attendance_logs);
+    const clockIn = attendance.firstEntry?.time
+      ? attendance.firstEntry.time
+      : attendance.firstEntry?.timestamp
+        ? new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(attendance.firstEntry.timestamp))
+        : null;
+
+    let delayMinutes: number | null = null;
+    if (clockIn && startTime) {
+      const [schedH, schedM] = startTime.split(":").map(Number);
+      const [clockH, clockM] = clockIn.split(":").map(Number);
+      if (Number.isFinite(schedH) && Number.isFinite(schedM) && Number.isFinite(clockH) && Number.isFinite(clockM)) {
+        delayMinutes = (clockH * 60 + clockM) - (schedH * 60 + schedM);
+      }
+    }
+
+    let pauseSummary: string | null = null;
+    if (attendance.status === "BREAK" && attendance.activePause) {
+      const pauseTime = attendance.activePause.time || new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(attendance.activePause.timestamp));
+      pauseSummary = `In pausa dalle ${pauseTime}`;
+    } else if (attendance.breaks.length > 0) {
+      pauseSummary = attendance.breaks
+        .map((b) => {
+          const tPausa = b.pausa.time || new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(b.pausa.timestamp));
+          const tRientro = b.rientro
+            ? (b.rientro.time || new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(b.rientro.timestamp)))
+            : "…";
+          return `${tPausa}–${tRientro} (${b.minutes ?? 0}m)`;
+        })
+        .join(", ");
+    }
+
+    let workedHoursFormatted: string | null = null;
+    if (attendance.firstEntry) {
+      const totalPauseMs = attendance.breaks.reduce((acc, b) => acc + (b.minutes || 0) * 60_000, 0);
+      const endMs = attendance.lastExit
+        ? new Date(attendance.lastExit.timestamp).getTime()
+        : Date.now();
+      const startMs = new Date(attendance.firstEntry.timestamp).getTime();
+      const totalMs = Math.max(0, endMs - startMs);
+      const activeMs = Math.max(0, totalMs - totalPauseMs);
+      const totalMins = Math.floor(activeMs / 60_000);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      workedHoursFormatted = `${h}h ${m.toString().padStart(2, "0")}m`;
+    }
+
+    const attendanceStatus: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" = attendance.status === "OUT" && !attendance.firstEntry ? "NOT_CLOCKED" : attendance.status;
+
     return [{
       id: person.id,
       name: person.name,
       role: person.mansione || "Staff",
       photoUrl: person.photo_url ? resolveDrivePhotoUrl(person.photo_url) : null,
       shiftTime: `${startTime} – ${endTime}`,
+      clockIn,
+      delayMinutes,
+      attendanceStatus,
+      pauseSummary,
+      workedHoursFormatted,
     }];
   });
   const workspacePeople = responsabili.map((person) => {

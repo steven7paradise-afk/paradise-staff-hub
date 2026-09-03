@@ -22,6 +22,11 @@ type ShiftStaffMember = {
   role: string;
   photoUrl: string | null;
   shiftTime: string;
+  clockIn?: string | null;
+  delayMinutes?: number | null;
+  attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED";
+  pauseSummary?: string | null;
+  workedHoursFormatted?: string | null;
 };
 
 type TaskAssignee = { id: string; name: string; group: "Ufficio" | "Responsabile" };
