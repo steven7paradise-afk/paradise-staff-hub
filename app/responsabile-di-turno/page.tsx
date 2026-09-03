@@ -89,6 +89,14 @@ export default async function ResponsabileDiTurnoPage() {
             location: { name: { contains: "Buenos Aires", mode: "insensitive" } },
           },
         },
+        leave_requests: {
+          none: {
+            status: "APPROVED",
+            type: "FERIE",
+            start_date: { lt: end },
+            end_date: { gte: start },
+          },
+        },
       },
       select: {
         id: true,
