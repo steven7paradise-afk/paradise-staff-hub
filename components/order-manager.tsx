@@ -271,6 +271,27 @@ function orderStatusDate(order: OrderResponse) {
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
+function orderReadyTimestamp(order: OrderResponse) {
+  const readyEvent = Array.isArray(order.activity_log)
+    ? [...order.activity_log].reverse().find((event) => event?.to === "READY")
+    : null;
+
+  // Gli ordini importati conservano la loro data originale in created_at.
+  if (readyEvent?.note?.toLowerCase?.().includes("importato da csv")) return order.created_at;
+  return readyEvent?.at || order.updated_at || order.created_at;
+}
+
+function orderReadyAgeDays(order: OrderResponse) {
+  if ((order.status || "NEW") !== "READY") return 0;
+  const readyAt = new Date(orderReadyTimestamp(order)).getTime();
+  if (!Number.isFinite(readyAt)) return 0;
+  return Math.max(0, Math.floor((Date.now() - readyAt) / 86_400_000));
+}
+
+function isReadyOrderOverdue(order: OrderResponse) {
+  return orderReadyAgeDays(order) >= 3;
+}
+
 function orderPhoto(order: OrderResponse): OrderPhoto | null {
   const photo = order.answers?.[ORDER_PHOTO_KEY];
   if (!photo || typeof photo !== "object" || typeof photo.url !== "string") return null;
@@ -1019,12 +1040,17 @@ export function OrderManager({
             const status = ORDER_COLUMNS.find((column) => column.id === currentStatus) ?? ORDER_COLUMNS[0];
             const Icon = status.icon;
             const photo = orderPhoto(order);
+            const readyAgeDays = orderReadyAgeDays(order);
+            const readyOverdue = isReadyOrderOverdue(order);
             return (
               <button
                 key={order.id}
                 type="button"
                 onClick={() => setSelected(order)}
-                className="w-full overflow-hidden rounded-[20px] border border-black/[0.06] bg-white text-left shadow-[0_8px_24px_rgba(74,38,56,0.055)] transition active:scale-[0.99]"
+                className={cn(
+                  "w-full overflow-hidden rounded-[20px] border text-left shadow-[0_8px_24px_rgba(74,38,56,0.055)] transition active:scale-[0.99]",
+                  readyOverdue ? "border-amber-300 bg-amber-50" : "border-black/[0.06] bg-white"
+                )}
               >
                 <div className="flex gap-3 p-3">
                   {photo ? (
@@ -1044,8 +1070,8 @@ export function OrderManager({
                   <div className="min-w-0 flex-1 py-0.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                        <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.05em]", statusPillClass(currentStatus))}>
-                          {status.label}
+                        <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-[0.05em]", readyOverdue ? "bg-amber-200 text-amber-900 ring-1 ring-inset ring-amber-300" : statusPillClass(currentStatus))}>
+                          {readyOverdue ? `Pronto da ${readyAgeDays} giorni` : status.label}
                         </span>
                         <span className="text-[10px] font-bold text-black/35">#{String(orderNumber(order)).replace(/^#/, "")}</span>
                       </div>
@@ -1053,7 +1079,7 @@ export function OrderManager({
                     </div>
                     <h3 className="mt-1.5 line-clamp-2 text-[15px] font-black leading-[1.15] tracking-[-0.01em] text-[#211b20]">{orderClientName(order)}</h3>
                     <p className="mt-1 line-clamp-1 text-[11px] font-medium leading-4 text-black/48">{orderItems(order) || "Nessun dettaglio prodotti"}</p>
-                    <p className={cn("mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.04em]", currentStatus === "READY" ? "text-blue-700" : "text-black/38")}>{orderNextAction(order)}</p>
+                    <p className={cn("mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.04em]", readyOverdue ? "text-amber-900" : currentStatus === "READY" ? "text-blue-700" : "text-black/38")}>{orderNextAction(order)}</p>
                   </div>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5 border-t border-black/[0.05] px-3 py-2.5 text-[10px] font-bold text-black/38">
@@ -1102,6 +1128,8 @@ export function OrderManager({
                 {columnOrders.map((order) => {
                   const photo = orderPhoto(order);
                   const taskType = getOrderTaskType(order);
+                  const readyAgeDays = orderReadyAgeDays(order);
+                  const readyOverdue = isReadyOrderOverdue(order);
                   const borderStyle = taskType === "conversione" 
                     ? "border-l-4 border-l-pink-500 border-t border-r border-b border-pink-200/60" 
                     : taskType === "acquisto"
@@ -1116,7 +1144,8 @@ export function OrderManager({
                       onClick={() => setSelected(order)} 
                       className={cn(
                         "overflow-hidden rounded-2xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md border border-slate-100",
-                        borderStyle
+                        borderStyle,
+                        readyOverdue && "!border-amber-300 !border-l-amber-500 bg-amber-50"
                       )}
                     >
                       {photo ? (
@@ -1137,10 +1166,15 @@ export function OrderManager({
                           </div>
                           <Eye className="size-4 shrink-0 text-black/35" />
                         </div>
+                        {readyOverdue ? (
+                          <span className="mt-3 inline-flex rounded-full bg-amber-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.05em] text-amber-900 ring-1 ring-inset ring-amber-300">
+                            Pronto da {readyAgeDays} giorni
+                          </span>
+                        ) : null}
                         <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
                         <div className={cn(
                           "mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.04em]",
-                          column.id === "READY" ? "bg-blue-100 text-blue-800" : "bg-black/[0.035] text-black/45"
+                          readyOverdue ? "bg-amber-200 text-amber-900" : column.id === "READY" ? "bg-blue-100 text-blue-800" : "bg-black/[0.035] text-black/45"
                         )}>
                           {column.id === "READY" ? (() => {
                             const delivery = orderDeliveryAction(order);
