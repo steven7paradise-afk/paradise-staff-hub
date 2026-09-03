@@ -41,11 +41,11 @@ type OrderResponse = {
 };
 
 const ORDER_COLUMNS = [
-  { id: "NEW", label: "Nuovo ordine", icon: ShoppingCart, color: "bg-pink-50 text-[#C66170] border-pink-100" },
-  { id: "PREPARING", label: "Preparando ordine", icon: Clock3, color: "bg-amber-50 text-amber-700 border-amber-100" },
-  { id: "ORDERED", label: "Ordinato", icon: Truck, color: "bg-violet-50 text-violet-700 border-violet-100" },
-  { id: "READY", label: "Arrivato / pronto", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
-  { id: "COMPLETED", label: "Completato", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+  { id: "NEW", label: "Da ordinare", helper: "Invia l’ordine al fornitore", icon: ShoppingCart, color: "bg-pink-50 text-[#C66170] border-pink-100" },
+  { id: "PREPARING", label: "In preparazione", helper: "Controlla dati e prodotti", icon: Clock3, color: "bg-amber-50 text-amber-700 border-amber-100" },
+  { id: "ORDERED", label: "Ordinato · in arrivo", helper: "Attendi l’arrivo dell’ordine", icon: Truck, color: "bg-violet-50 text-violet-700 border-violet-100" },
+  { id: "READY", label: "Pronto · azione richiesta", helper: "Spedisci, fissa l’appuntamento o prepara il ritiro", icon: PackageCheck, color: "bg-blue-50 text-blue-700 border-blue-100" },
+  { id: "COMPLETED", label: "Consegnato", helper: "Operazione conclusa", icon: CheckCircle2, color: "bg-emerald-50 text-emerald-700 border-emerald-100" },
 ];
 
 const monthsList = [
@@ -261,6 +261,16 @@ function orderDate(order: OrderResponse) {
   return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(order.created_at));
 }
 
+function orderCompletionTimestamp(order: OrderResponse) {
+  const pickup = orderPickup(order);
+  return pickup?.completedAt || pickup?.signature?.signedAt || order.updated_at || order.created_at;
+}
+
+function orderStatusDate(order: OrderResponse) {
+  const value = (order.status || "NEW") === "COMPLETED" ? orderCompletionTimestamp(order) : order.created_at;
+  return new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
 function orderPhoto(order: OrderResponse): OrderPhoto | null {
   const photo = order.answers?.[ORDER_PHOTO_KEY];
   if (!photo || typeof photo !== "object" || typeof photo.url !== "string") return null;
@@ -340,6 +350,42 @@ function statusPillClass(status: string) {
   return "bg-[#FAF0F5] text-[#a94670] ring-1 ring-inset ring-pink-200";
 }
 
+function orderDeliveryAction(order: OrderResponse) {
+  const fields = order.form?.fields ?? [];
+  const deliveryField = fields.find((field) => {
+    const label = field.label.trim().toLowerCase();
+    return label === "consegna" || label.includes("modalità di consegna") || label.includes("modalita di consegna");
+  });
+  const addressField = fields.find((field) => field.label.toLowerCase().includes("indirizzo di spedizione"));
+  const delivery = deliveryField ? answerById(order, deliveryField.id).trim().toUpperCase() : "";
+  const address = addressField ? answerById(order, addressField.id).trim() : "";
+
+  if (delivery.includes("SPEDIZIONE")) {
+    return {
+      kind: "shipping" as const,
+      label: address ? `Spedisci a casa · ${address}` : "Spedisci a casa · controlla l’indirizzo",
+      address,
+    };
+  }
+  if (delivery.includes("RITIRO")) return { kind: "pickup" as const, label: "Ritiro in negozio · non spedire", address: "" };
+  if (delivery.includes("APPUNTAMENTO")) return { kind: "appointment" as const, label: "Fissa appuntamento con la cliente", address: "" };
+  return { kind: "unknown" as const, label: "Controlla la modalità di consegna", address: "" };
+}
+
+function hasShippingAddress(order: OrderResponse) {
+  const delivery = orderDeliveryAction(order);
+  return delivery.kind === "shipping" && Boolean(delivery.address);
+}
+
+function orderNextAction(order: OrderResponse) {
+  const status = order.status || "NEW";
+  if (status === "READY") return orderDeliveryAction(order).label;
+  if (status === "ORDERED") return "Non spedire ancora · attendi l’arrivo";
+  if (status === "PREPARING") return "Completa la preparazione";
+  if (status === "COMPLETED") return "Consegna completata";
+  return "Da inviare al fornitore";
+}
+
 export function OrderManager({
   initialOrders,
   canManage,
@@ -371,6 +417,7 @@ export function OrderManager({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [selectedTaskType, setSelectedTaskType] = useState<"ALL" | "conversione" | "acquisto" | "accessori" | "altro">("ALL");
+  const [shippingOnly, setShippingOnly] = useState(false);
   const [visibleMobileCount, setVisibleMobileCount] = useState(18);
   const [dismissedDeepLink, setDismissedDeepLink] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -552,7 +599,7 @@ export function OrderManager({
       result = orders.filter((order) => {
         const status = order.status || "NEW";
         if (status !== "COMPLETED") return true;
-        const d = new Date(order.created_at);
+        const d = new Date(orderCompletionTimestamp(order));
         return d.getFullYear() === selectedYear && (d.getMonth() + 1) === selectedMonth;
       });
     }
@@ -561,12 +608,16 @@ export function OrderManager({
       result = result.filter(order => getOrderTaskType(order) === selectedTaskType);
     }
 
+    if (shippingOnly) {
+      result = result.filter((order) => (order.status || "NEW") !== "COMPLETED" && hasShippingAddress(order));
+    }
+
     if (requestedStatus && ORDER_COLUMNS.some((column) => column.id === requestedStatus)) {
       result = result.filter((order) => (order.status || "NEW") === requestedStatus);
     }
 
     return result;
-  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, requestedStatus]);
+  }, [orders, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly, requestedStatus]);
 
   const mobileOrders = useMemo(() => {
     if (mobileStatus === "ALL") return filteredOrders;
@@ -583,7 +634,7 @@ export function OrderManager({
 
   useEffect(() => {
     setVisibleMobileCount(18);
-  }, [mobileStatus, query, selectedMonth, selectedYear, selectedTaskType]);
+  }, [mobileStatus, query, selectedMonth, selectedYear, selectedTaskType, shippingOnly]);
 
   async function moveOrder(order: OrderResponse, status: string, note?: string) {
     setSavingId(order.id);
@@ -756,7 +807,7 @@ export function OrderManager({
               <h1 className="text-2xl font-black tracking-[-0.03em] text-[#221b20] md:text-4xl md:font-semibold">Ordini</h1>
               <span className="grid min-w-7 place-items-center rounded-full bg-[#f8e5ee] px-2 py-1 text-xs font-black text-[#a73f6c]">{filteredOrders.length}</span>
             </div>
-            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{canManage ? "Gestisci" : "Controlla"} preparazione, arrivo e consegna.</p>
+            <p className="mt-0.5 text-xs font-medium text-black/45 md:mt-1 md:text-sm">{canManage ? "Gestisci" : "Controlla"} cosa ordinare, cosa attendere e cosa spedire.</p>
           </div>
           
           <div className="grid w-full gap-2.5 lg:flex lg:w-auto lg:flex-wrap lg:items-center lg:gap-3">
@@ -835,6 +886,25 @@ export function OrderManager({
                 <option value="altro">Altro</option>
               </select>
             </div>
+
+            <button
+              type="button"
+              aria-pressed={shippingOnly}
+              onClick={() => {
+                setShippingOnly((current) => !current);
+                setMobileStatus("ALL");
+              }}
+              className={cn(
+                "inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-black transition lg:h-auto lg:w-auto lg:rounded-full lg:py-2 lg:text-xs",
+                shippingOnly
+                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              )}
+            >
+              <Truck className="size-4" />
+              Da spedire
+              {shippingOnly ? <X className="size-3.5" aria-hidden="true" /> : null}
+            </button>
           </div>
         </div>
         {scannerOpen ? (
@@ -979,10 +1049,11 @@ export function OrderManager({
                         </span>
                         <span className="text-[10px] font-bold text-black/35">#{String(orderNumber(order)).replace(/^#/, "")}</span>
                       </div>
-                      <span className="shrink-0 text-[10px] font-semibold text-black/35">{orderDate(order)}</span>
+                      <span className="shrink-0 text-[10px] font-semibold text-black/35">{orderStatusDate(order)}</span>
                     </div>
                     <h3 className="mt-1.5 line-clamp-2 text-[15px] font-black leading-[1.15] tracking-[-0.01em] text-[#211b20]">{orderClientName(order)}</h3>
                     <p className="mt-1 line-clamp-1 text-[11px] font-medium leading-4 text-black/48">{orderItems(order) || "Nessun dettaglio prodotti"}</p>
+                    <p className={cn("mt-2 line-clamp-1 text-[10px] font-black uppercase tracking-[0.04em]", currentStatus === "READY" ? "text-blue-700" : "text-black/38")}>{orderNextAction(order)}</p>
                   </div>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5 border-t border-black/[0.05] px-3 py-2.5 text-[10px] font-bold text-black/38">
@@ -1017,7 +1088,10 @@ export function OrderManager({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Icon className="size-5" />
-                  <h2 className="font-semibold">{column.label}</h2>
+                  <div>
+                    <h2 className="font-semibold leading-tight">{column.label}</h2>
+                    <p className="mt-1 text-[10px] font-semibold leading-tight opacity-60">{column.helper}</p>
+                  </div>
                 </div>
                 <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black/55">{columnOrders.length}</span>
               </div>
@@ -1064,12 +1138,23 @@ export function OrderManager({
                           <Eye className="size-4 shrink-0 text-black/35" />
                         </div>
                         <p className="mt-2 line-clamp-3 text-xs leading-5 text-black/50">{orderItems(order) || "Nessun dettaglio prodotti."}</p>
+                        <div className={cn(
+                          "mt-3 flex items-start gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.04em]",
+                          column.id === "READY" ? "bg-blue-100 text-blue-800" : "bg-black/[0.035] text-black/45"
+                        )}>
+                          {column.id === "READY" ? (() => {
+                            const delivery = orderDeliveryAction(order);
+                            const ActionIcon = delivery.kind === "shipping" ? Truck : delivery.kind === "appointment" ? CalendarDays : MapPin;
+                            return <ActionIcon className="mt-0.5 size-3.5 shrink-0" />;
+                          })() : null}
+                          <span>{orderNextAction(order)}</span>
+                        </div>
                         <div className="mt-3 flex flex-wrap gap-2 items-center">
                           {renderTaskBadge(taskType)}
                           <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
                           {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
                         </div>
-                        <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderDate(order)}</p>
+                        <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderStatusDate(order)}</p>
                       </div>
                     </button>
                   );
