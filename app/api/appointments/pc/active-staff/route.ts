@@ -23,6 +23,7 @@ function normalizeStaffAliases(value: unknown) {
 
 export async function GET(request: NextRequest) {
   const salonSlug = normalizeAppointmentSalonSlug(request.nextUrl.searchParams.get("salone"));
+  const includeAllSalonStaff = request.nextUrl.searchParams.get("scope") === "salon";
   const session = await auth();
   let isAuthorized = Boolean(session?.user?.id);
   let locationId = session?.user?.sedeId || null;
@@ -104,10 +105,12 @@ export async function GET(request: NextRequest) {
             .map(([externalId]) => externalId),
         };
       })
-      .filter((worker) => worker.alwaysActive || (
-        (worker.status === "IN" || worker.status === "BREAK") &&
-        (!locationId || worker.sede_id === locationId)
-      ));
+      .filter((worker) => includeAllSalonStaff
+        ? (!locationId || worker.sede_id === locationId)
+        : worker.alwaysActive || (
+            (worker.status === "IN" || worker.status === "BREAK") &&
+            (!locationId || worker.sede_id === locationId)
+          ));
 
     clockedInWorkers.sort((a, b) => a.name.localeCompare(b.name, "it"));
 

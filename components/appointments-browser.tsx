@@ -1519,15 +1519,15 @@ export function AppointmentsBrowser({
       setBoardStaffLoading(true);
       setBoardStaffError("");
       try {
-        const response = await fetch("/api/appointments/pc/active-staff?salone=buenos-aires", {
+        const response = await fetch("/api/appointments/pc/active-staff?salone=buenos-aires&scope=salon", {
           cache: "no-store",
           headers: { Accept: "application/json" },
         });
         const data = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(data?.error || "Impossibile recuperare il personale timbrato.");
+        if (!response.ok) throw new Error(data?.error || "Impossibile recuperare il personale del salone.");
         if (active) setBoardActiveStaff(Array.isArray(data) ? data : []);
       } catch (error) {
-        if (active) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale timbrato.");
+        if (active) setBoardStaffError(error instanceof Error ? error.message : "Impossibile recuperare il personale del salone.");
       } finally {
         if (active) setBoardStaffLoading(false);
       }
@@ -3994,7 +3994,6 @@ export function AppointmentsBrowser({
   const appointmentBoardColumns = useMemo(() => {
     const orderIndex = new Map(boardWorkerOrder.map((id, index) => [id, index]));
     const workers = boardActiveStaff
-      .filter((worker) => worker.status === "IN" || worker.status === "BREAK")
       .map((worker) => ({
         id: worker.id,
         name: worker.name,
@@ -4054,7 +4053,7 @@ export function AppointmentsBrowser({
       (left, right) => new Date(left.startDate).getTime() - new Date(right.startDate).getTime(),
     );
 
-    const columns = workers.map((worker) => {
+    const workerColumns = workers.map((worker) => {
       const bookings = sortBookings(bookingsByWorker.get(worker.id) || []);
       return {
         ...worker,
@@ -4062,6 +4061,13 @@ export function AppointmentsBrowser({
         hours: durationHours(bookings),
       };
     });
+
+    // Mantiene l'ordine scelto dall'utente all'interno dei due gruppi, ma porta
+    // sempre in fondo il personale che non ha appuntamenti nel periodo visibile.
+    const columns = [
+      ...workerColumns.filter((column) => column.bookings.length > 0),
+      ...workerColumns.filter((column) => column.bookings.length === 0),
+    ];
 
     if (unassignedBookings.length) {
       const bookings = sortBookings(unassignedBookings);
@@ -6271,7 +6277,7 @@ export function AppointmentsBrowser({
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · Salone Corso</p>
                   <div>
                     <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#172B4D]">Board</h2>
-                    <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">Personale timbrato e schede ordinate per orario</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">Tutto il personale del salone · chi non ha appuntamenti è mostrato per ultimo</p>
                     <p className="mt-1 text-[10px] font-bold text-[#9E3262] lg:hidden">Un dito premuto: cambia stato · Due dita: sposta</p>
                   </div>
                 </div>
@@ -6369,8 +6375,8 @@ export function AppointmentsBrowser({
                                 <p className="truncate text-[11px] font-black uppercase tracking-wide text-[#42526E]">{column.name}</p>
                                 <span className="text-[10px] font-bold text-[#6B778C]">{column.bookings.length}</span>
                               </div>
-                              <p className={`mt-0.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : "text-emerald-600"}`}>
-                                {column.id === "unassigned" ? "Da assegnare" : column.status === "BREAK" ? "In pausa" : "Attivo"}
+                              <p className={`mt-0.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
+                                {column.id === "unassigned" ? "Da assegnare" : column.status === "BREAK" ? "In pausa" : column.status === "IN" ? "Attivo" : "Non timbrato"}
                               </p>
                               {column.id !== "unassigned" && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
                                 <p className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B778C]">
@@ -6568,15 +6574,15 @@ export function AppointmentsBrowser({
                 <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
                   <div>
                     <Loader2 className="mx-auto size-7 animate-spin text-[#A93469]" />
-                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale timbrato del Salone Corso...</p>
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Carico il personale del Salone Corso...</p>
                   </div>
                 </div>
               ) : (
                 <div className="grid min-h-64 place-items-center px-6 py-10 text-center">
                   <div>
                     <UsersRound className="mx-auto size-7 text-[#CDA7B9]" />
-                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente timbrato al Salone Corso</p>
-                    <p className="mt-1 text-xs font-semibold text-black/40">{boardStaffError || "La Board mostrerà il personale dopo la timbratura di entrata."}</p>
+                    <p className="mt-3 text-sm font-black text-[#33252C]">Nessun dipendente disponibile al Salone Corso</p>
+                    <p className="mt-1 text-xs font-semibold text-black/40">{boardStaffError || "Controlla che il personale sia attivo e assegnato al salone."}</p>
                   </div>
                 </div>
               )}
