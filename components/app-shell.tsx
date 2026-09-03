@@ -41,6 +41,8 @@ const nav = [
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
   { href: "/hub", label: "Magazzino Paradise", iconName: "PanelsTopLeft", roles: routePermissions["/hub"], section: "Generale" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
+  { href: "/responsabile-di-turno", label: "Responsabile di turno", iconName: "UserRound", roles: routePermissions["/responsabile-di-turno"], section: "Generale" },
+  { href: "/programmazione-responsabile-di-turno", label: "Turni responsabili", iconName: "CalendarDays", roles: routePermissions["/programmazione-responsabile-di-turno"], section: "Generale" },
   { href: "/tasks", label: "Task", iconName: "CheckSquare", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/notifications", label: "Comunicazioni", iconName: "Bell", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
 

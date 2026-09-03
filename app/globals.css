@@ -4,6 +4,87 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes responsible-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes responsible-selected-in {
+  0% {
+    opacity: 0.45;
+    transform: translateY(18px) scale(0.82);
+  }
+  70% {
+    transform: translateY(-2px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes responsible-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(36px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes responsible-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.responsible-picker {
+  animation: responsible-picker-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.responsible-picker-selected {
+  animation: responsible-selected-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.responsible-picker-option {
+  transition: transform 220ms ease, border-color 220ms ease, opacity 220ms ease;
+}
+
+.responsible-picker-option:hover {
+  transform: translateY(-3px) scale(1.06);
+}
+
+.responsible-sheet {
+  animation: responsible-sheet-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.responsible-sheet-backdrop {
+  animation: responsible-backdrop-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .responsible-picker,
+  .responsible-picker-selected {
+    animation: none;
+  }
+
+  .responsible-sheet,
+  .responsible-sheet-backdrop {
+    animation: none;
+  }
+
+  .responsible-picker-option {
+    transition: none;
+  }
+}
+
 :root {
   --primary: #ffa8dd;
   --secondary: #ffd6ea;
@@ -1584,4 +1665,27 @@ textarea {
   .cash-closing-workspace .cash-closing-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
+}
+
+/* Responsabile di turno: superficie operativa unica, bianca e opaca. Il
+   canvas globale usa vetro e gradienti; questa pagina li disattiva per evitare
+   stacchi di colore durante lo scorrimento del questionario. */
+.app-content-surface:has(.shift-responsible-page),
+.app-content-surface:has(.shift-responsible-page) .app-liquid-canvas,
+.app-content-surface .app-liquid-canvas .shift-responsible-page {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color-scheme: light;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-content-surface:has(.shift-responsible-programming-page),
+.app-content-surface:has(.shift-responsible-programming-page) .app-liquid-canvas,
+.app-content-surface .app-liquid-canvas .shift-responsible-programming-page {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color-scheme: light;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
