@@ -1,10 +1,21 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import type { Role } from "@/lib/roles";
-import { normalizeServicePage, type ServicePageNumber } from "@/lib/service-pages";
+import { canAccessForUser, type Role } from "@/lib/roles";
+import { normalizeServicePage, servicePages, type ServicePageNumber } from "@/lib/service-pages";
 
 export async function requireServicePageAccess(role: Role, locationId: string | null | undefined, page: ServicePageNumber, userId?: string) {
   if (role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE") return;
+
+  // La matrice Ruoli & permessi e le autorizzazioni della mansione sono
+  // definitive. Una pagina concessa esplicitamente non deve essere bloccata
+  // dalla vecchia impostazione che sceglieva una sola pagina per ogni sede.
+  if (userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, mansione: true, access_list: true },
+    });
+    if (user && await canAccessForUser(prisma, servicePages[page].href, user)) return;
+  }
 
   if (page === 3 && userId) {
     // Check if the user is nominated for notifications
