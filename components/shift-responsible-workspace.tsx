@@ -24,7 +24,7 @@ type ShiftStaffMember = {
   shiftTime: string;
   clockIn?: string | null;
   delayMinutes?: number | null;
-  attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED";
+  attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" | "FERIE" | "MALATTIA" | "RIPOSO";
   pauseSummary?: string | null;
   workedHoursFormatted?: string | null;
 };

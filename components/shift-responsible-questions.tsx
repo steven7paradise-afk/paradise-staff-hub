@@ -14,7 +14,7 @@ type ShiftStaffMember = {
   shiftTime: string;
   clockIn?: string | null;
   delayMinutes?: number | null;
-  attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED";
+  attendanceStatus?: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" | "FERIE" | "MALATTIA" | "RIPOSO";
   pauseSummary?: string | null;
   workedHoursFormatted?: string | null;
 };
@@ -436,8 +436,20 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
 
                 {/* Badges metriche timbrature, pause e ore lavorate */}
                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[9px] font-bold">
-                  {/* Badge Entrata & Ritardo */}
-                  {hasClockIn ? (
+                  {/* Badge Entrata / Stato */}
+                  {person.attendanceStatus === "FERIE" ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-sky-800">
+                      <span>🏖️</span> In Ferie
+                    </span>
+                  ) : person.attendanceStatus === "MALATTIA" ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-0.5 text-rose-800">
+                      <span>🤒</span> In Malattia
+                    </span>
+                  ) : person.attendanceStatus === "RIPOSO" ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-0.5 text-indigo-800">
+                      <span>🛋️</span> Riposo / Permesso
+                    </span>
+                  ) : hasClockIn ? (
                     isLate ? (
                       <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800">
                         <span>⚠️</span> Entrata: {person.clockIn} (Ritardo +{person.delayMinutes}m)
@@ -448,15 +460,17 @@ function StaffNoteAnswer({ staff, selected, status, onAnswer }: { staff: ShiftSt
                       </span>
                     )
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-neutral-200 bg-neutral-100 px-2 py-0.5 text-neutral-600">
-                      <span>⏳</span> Non ancora timbrato
+                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-400/60 bg-amber-100/70 px-2 py-0.5 text-amber-900">
+                      <span>⚠️</span> Non ancora timbrato / Assente
                     </span>
                   )}
 
-                  {/* Badge Pausa */}
-                  <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-purple-900">
-                    <span>☕</span> {person.pauseSummary || "Nessuna pausa"}
-                  </span>
+                  {/* Badge Pausa (se applicabile) */}
+                  {person.attendanceStatus !== "FERIE" && person.attendanceStatus !== "MALATTIA" && person.attendanceStatus !== "RIPOSO" ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-purple-900">
+                      <span>☕</span> {person.pauseSummary || "Nessuna pausa"}
+                    </span>
+                  ) : null}
 
                   {/* Badge Ore Lavorate Fatte */}
                   {person.workedHoursFormatted ? (

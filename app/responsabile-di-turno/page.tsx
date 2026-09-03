@@ -108,6 +108,15 @@ export default async function ResponsabileDiTurnoPage() {
           orderBy: { timestamp: "asc" },
           select: { type: true, timestamp: true, time: true },
         },
+        leave_requests: {
+          where: {
+            status: "APPROVED",
+            type: "FERIE",
+            start_date: { lt: end },
+            end_date: { gte: start },
+          },
+          select: { id: true },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -140,6 +149,12 @@ export default async function ResponsabileDiTurnoPage() {
     const startTime = schedule?.start_time || schedule?.category.start_time;
     const endTime = schedule?.end_time || schedule?.category.end_time;
     if (!startTime || !endTime) return [];
+
+    const categoryName = (schedule?.category.name || "").toLowerCase();
+    const isFerie = categoryName.includes("ferie");
+    const isMalattia = categoryName.includes("malattia");
+    const isRiposo = categoryName.includes("riposo") || categoryName.includes("permesso");
+    if (isFerie || person.leave_requests.length > 0) return [];
 
     const attendance = deriveAttendanceState(person.attendance_logs);
     const clockIn = attendance.firstEntry?.time
@@ -188,7 +203,15 @@ export default async function ResponsabileDiTurnoPage() {
       workedHoursFormatted = `${h}h ${m.toString().padStart(2, "0")}m`;
     }
 
-    const attendanceStatus: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" = attendance.status === "OUT" && !attendance.firstEntry ? "NOT_CLOCKED" : attendance.status;
+    const attendanceStatus: "IN" | "BREAK" | "OUT" | "NOT_CLOCKED" | "FERIE" | "MALATTIA" | "RIPOSO" = isFerie
+      ? "FERIE"
+      : isMalattia
+        ? "MALATTIA"
+        : isRiposo
+          ? "RIPOSO"
+          : attendance.status === "OUT" && !attendance.firstEntry
+            ? "NOT_CLOCKED"
+            : attendance.status;
 
     return [{
       id: person.id,
