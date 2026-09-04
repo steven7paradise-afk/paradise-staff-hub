@@ -145,7 +145,6 @@ function detectServiceDetails(serviceTitle?: string | null): string[] {
 
   return detected;
 }
-
 function readStoredServiceDetails(value: unknown): string[] {
   const raw = Array.isArray(value) ? value : String(value || "").split(/[,;|]+/);
   return raw
@@ -4112,6 +4111,8 @@ export function AppointmentsBrowser({
     (column) =>
       column.id !== "unassigned" &&
       column.bookings.length === 0 &&
+      column.status !== "IN" &&
+      column.status !== "BREAK" &&
       !staffNamesReferToSamePerson(column.name, initialPcWorkerName),
   ).length;
   const visibleAppointmentBoardColumns = useMemo(() => {
@@ -4120,6 +4121,8 @@ export function AppointmentsBrowser({
       (column) =>
         column.id === "unassigned" ||
         column.bookings.length > 0 ||
+        column.status === "IN" ||
+        column.status === "BREAK" ||
         staffNamesReferToSamePerson(column.name, initialPcWorkerName),
     );
     return visibleColumns.length ? visibleColumns : appointmentBoardColumns;
@@ -6334,8 +6337,8 @@ export function AppointmentsBrowser({
                       className="inline-flex min-h-10 items-center rounded-lg border border-[#DFE2E7] bg-white px-3 text-[10px] font-black text-[#505F79] transition hover:border-[#9E3262] hover:text-[#9E3262]"
                     >
                       {showEmptyBoardWorkers
-                        ? "Nascondi colonne vuote"
-                        : `Mostra senza appuntamenti (${hiddenEmptyBoardWorkerCount})`}
+                        ? "Nascondi personale non in turno"
+                        : `Mostra personale non in turno (${hiddenEmptyBoardWorkerCount})`}
                     </button>
                   ) : null}
                   <div className="hidden items-center -space-x-2 xl:flex">
