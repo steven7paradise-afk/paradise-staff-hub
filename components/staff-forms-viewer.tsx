@@ -293,6 +293,7 @@ export function StaffFormsViewer({
   const [pickupLoadingOrders, setPickupLoadingOrders] = useState(false);
   const [pickupSelectedOrder, setPickupSelectedOrder] = useState<PickupReadyOrder | null>(null);
   const [pickupStatusNotice, setPickupStatusNotice] = useState<PickupStatusNotice | null>(null);
+  const pickupDetailScrollRef = React.useRef<HTMLDivElement | null>(null);
   const [cashSummary, setCashSummary] = useState<CashDailySummary | null>(null);
   const [cashSummaryLoading, setCashSummaryLoading] = useState(false);
   const [cashSummaryError, setCashSummaryError] = useState("");
@@ -373,6 +374,14 @@ export function StaffFormsViewer({
       void loadPickupReadyOrders();
     }
   }, [showPickupModal, loadPickupReadyOrders]);
+
+  React.useEffect(() => {
+    if (!showPickupModal) return;
+    const frame = window.requestAnimationFrame(() => {
+      pickupDetailScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showPickupModal, pickupSelectedOrder?.id]);
 
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -1662,7 +1671,7 @@ export function StaffFormsViewer({
 
                 </div>
 
-                <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pl-1 xl:pr-2">
+                <div ref={pickupDetailScrollRef} className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pl-1 xl:pr-2">
               {pickupSelectedOrder ? (
                 <div className="space-y-3 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
