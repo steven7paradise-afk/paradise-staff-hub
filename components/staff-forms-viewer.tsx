@@ -286,7 +286,6 @@ export function StaffFormsViewer({
   const [pickupName, setPickupName] = useState("");
   const [pickupPin, setPickupPin] = useState("");
   const [pickupPaidConfirmed, setPickupPaidConfirmed] = useState(false);
-  const [pickupProof, setPickupProof] = useState<File | null>(null);
   const [pickupSubmitting, setPickupSubmitting] = useState(false);
   const [pickupMessage, setPickupMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [pickupReadyOrders, setPickupReadyOrders] = useState<PickupReadyOrder[]>([]);
@@ -841,9 +840,6 @@ export function StaffFormsViewer({
       formData.append("pickupName", pickupName.trim());
       if (pickupPin.trim()) formData.append("pickupPin", pickupPin.trim());
       formData.append("paidConfirmed", pickupPaidConfirmed ? "true" : "false");
-      if (pickupProof) {
-        formData.append("proof", pickupProof);
-      }
 
       const response = await fetch("/api/orders/pickup", {
         method: "POST",
@@ -865,7 +861,6 @@ export function StaffFormsViewer({
       setPickupName("");
       setPickupPin("");
       setPickupPaidConfirmed(false);
-      setPickupProof(null);
       setPickupSelectedOrder(null);
     } catch (error) {
       setPickupMessage({
@@ -1666,6 +1661,54 @@ export function StaffFormsViewer({
                 </div>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setPickupPaidConfirmed((current) => !current)}
+                className={cn(
+                  "flex min-h-16 w-full items-center justify-between rounded-2xl border px-4 text-left transition active:scale-[0.99]",
+                  pickupPaidConfirmed
+                    ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
+                    : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
+                )}
+              >
+                <span>
+                  <span className="block text-sm font-black">Ha saldato tutto?</span>
+                  <span className="block text-xs font-semibold text-white/40">Conferma obbligatoria prima di completare.</span>
+                </span>
+                <span
+                  className={cn(
+                    "grid size-8 place-items-center rounded-full border",
+                    pickupPaidConfirmed ? "border-emerald-300 bg-emerald-300 text-black" : "border-white/20"
+                  )}
+                >
+                  {pickupPaidConfirmed && <Check className="size-4" />}
+                </span>
+              </button>
+
+              {pickupSelectedOrder?.attachments?.some((attachment) => attachment.previewable) ? (
+                <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
+                  <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">Anteprima foto ordine</p>
+                  {pickupSelectedOrder.attachments
+                    .filter((attachment) => attachment.previewable)
+                    .slice(0, 1)
+                    .map((attachment, index) => (
+                      <a
+                        key={`${attachment.url}-preview-${index}`}
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="group block overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                      >
+                        <img src={attachment.url} alt={attachment.name} className="h-48 w-full object-contain transition group-hover:scale-[1.01]" />
+                        <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                          <p className="truncate text-xs font-black text-white/70">{attachment.name}</p>
+                          <ArrowUpRight className="size-4 shrink-0 text-white/35" />
+                        </div>
+                      </a>
+                    ))}
+                </div>
+              ) : null}
+
                 </div>
 
                 <div ref={pickupDetailScrollRef} className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pl-1 xl:pr-2">
@@ -1810,45 +1853,6 @@ export function StaffFormsViewer({
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => setPickupPaidConfirmed((current) => !current)}
-                className={cn(
-                  "flex min-h-16 w-full items-center justify-between rounded-2xl border px-4 text-left transition active:scale-[0.99]",
-                  pickupPaidConfirmed
-                    ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-100"
-                    : "border-white/10 bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
-                )}
-              >
-                <span>
-                  <span className="block text-sm font-black">Ha saldato tutto?</span>
-                  <span className="block text-xs font-semibold text-white/40">Conferma obbligatoria prima di completare.</span>
-                </span>
-                <span
-                  className={cn(
-                    "grid size-8 place-items-center rounded-full border",
-                    pickupPaidConfirmed ? "border-emerald-300 bg-emerald-300 text-black" : "border-white/20"
-                  )}
-                >
-                  {pickupPaidConfirmed && <Check className="size-4" />}
-                </span>
-              </button>
-
-              <label className="group relative flex min-h-36 w-full items-center justify-center rounded-3xl border border-dashed border-white/15 bg-white/[0.04] transition hover:border-emerald-300/50 hover:bg-white/[0.07]">
-                <input
-                  type="file"
-                  accept="image/*,.heic,.heif,application/pdf"
-                  onChange={(event) => setPickupProof(event.target.files?.[0] ?? null)}
-                  className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                />
-                <div className="pointer-events-none flex flex-col items-center p-5 text-center">
-                  <Upload className="size-9 text-white/35 transition group-hover:text-emerald-300" />
-                  <span className="mt-3 text-sm font-black text-white">
-                    {pickupProof ? pickupProof.name : "Carica foto scontrino o ordine Shopify"}
-                  </span>
-                  <span className="mt-1 text-[11px] font-semibold text-white/35">Facoltativo se il saldo e gia stato verificato. Foto o PDF, massimo 12 MB.</span>
-                </div>
-              </label>
                 </div>
               </div>
             </div>
