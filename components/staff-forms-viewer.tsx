@@ -83,6 +83,7 @@ type PickupReadyOrder = {
     label: string;
     name: string;
     url: string;
+    previewUrl?: string;
     type?: string;
     isImage?: boolean;
     previewable?: boolean;
@@ -1699,7 +1700,7 @@ export function StaffFormsViewer({
                         rel="noreferrer"
                         className="group block overflow-hidden rounded-2xl border border-white/10 bg-black/20"
                       >
-                        <img src={attachment.url} alt={attachment.name} className="h-48 w-full object-contain transition group-hover:scale-[1.01]" />
+                        <img src={attachment.previewUrl || attachment.url} alt={attachment.name} className="h-48 w-full object-contain transition group-hover:scale-[1.01]" />
                         <div className="flex items-center justify-between gap-3 px-3 py-2.5">
                           <p className="truncate text-xs font-black text-white/70">{attachment.name}</p>
                           <ArrowUpRight className="size-4 shrink-0 text-white/35" />
@@ -1813,7 +1814,7 @@ export function StaffFormsViewer({
                             className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] transition hover:border-emerald-300/40 hover:bg-white/[0.09]"
                           >
                             {attachment.previewable ? (
-                              <img src={attachment.url} alt={attachment.name} className="h-36 w-full object-cover" />
+                              <img src={attachment.previewUrl || attachment.url} alt={attachment.name} className="h-36 w-full object-cover" />
                             ) : (
                               <div className="grid h-24 place-items-center bg-black/20">
                                 <FileText className="size-8 text-white/35" />

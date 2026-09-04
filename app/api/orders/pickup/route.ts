@@ -171,7 +171,7 @@ function collectOrderAttachments(order: any) {
   const answers = order.answers && typeof order.answers === "object" ? order.answers : {};
   const fields = Array.isArray(order.form?.fields) ? order.form.fields : [];
   const labelById = new Map(fields.map((field: any) => [String(field.id ?? ""), String(field.label ?? field.id ?? "Allegato")]));
-  const attachments: Array<{ label: string; name: string; url: string; type: string; isImage: boolean; previewable: boolean }> = [];
+  const attachments: Array<{ label: string; name: string; url: string; previewUrl: string; type: string; isImage: boolean; previewable: boolean }> = [];
   const seen = new Set<string>();
 
   const addAttachment = (label: string, rawValue: any) => {
@@ -179,11 +179,13 @@ function collectOrderAttachments(order: any) {
     if (!url || seen.has(url)) return;
     const name = attachmentName(rawValue, label || "Allegato");
     const type = String(rawValue?.type || rawValue?.mimeType || rawValue?.contentType || "");
-    const imageSource = `${type} ${name} ${url}`;
-    const isImage = type.startsWith("image/") || /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(imageSource);
-    const previewable = type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(imageSource);
+    const previewUrl = String(rawValue?.previewUrl || rawValue?.thumbnailLink || "").trim();
+    const imageName = /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(name);
+    const browserImageName = /\.(png|jpe?g|webp|gif)$/i.test(name);
+    const isImage = type.startsWith("image/") || imageName || Boolean(previewUrl);
+    const previewable = type.startsWith("image/") || browserImageName || Boolean(previewUrl);
     seen.add(url);
-    attachments.push({ label, name, url, type, isImage, previewable });
+    attachments.push({ label, name, url, previewUrl: previewUrl || url, type, isImage, previewable });
   };
 
   Object.entries(answers).forEach(([key, value]) => {
