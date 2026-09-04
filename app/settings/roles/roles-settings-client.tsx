@@ -66,6 +66,7 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/team": { name: "Team", description: "Elenco membri del team.", group: "Gestione Staff" },
   "/client-control": { name: "Controllo Cliente", description: "Schede cliente, note servizio, foto e trattamenti.", group: "Amministrazione" },
   "/cash": { name: "Cassa & Transazioni", description: "Cassa, chiusure, prelievi, cassaforte e movimenti.", group: "Amministrazione" },
+  "/cassa-live": { name: "Cassa Live", description: "Accesso alla cassa Cashmatic in tempo reale.", group: "Amministrazione" },
   "/invoices": { name: "Fatture", description: "Richieste fattura e dati commercialista.", group: "Amministrazione" },
   "/refunds": { name: "Rimborsi", description: "Rimborsi e note credito.", group: "Amministrazione" },
   "/rimborsi": { name: "Rimborsi vecchio link", description: "Compatibilita con il vecchio percorso rimborsi.", group: "Amministrazione" },
