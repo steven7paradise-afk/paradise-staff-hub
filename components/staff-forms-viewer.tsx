@@ -1651,7 +1651,7 @@ export function StaffFormsViewer({
                             </span>
                           </div>
                           <div className="mt-3 grid gap-2 text-xs font-bold text-white/55 sm:grid-cols-3">
-                            <span className="rounded-xl bg-black/25 px-3 py-2">Pagato: {formatEuro(order.payment?.paid ?? 0)}</span>
+                            <span className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-emerald-100">Ha pagato: {formatEuro(order.payment?.paid ?? 0)}</span>
                             <span className="rounded-xl bg-black/25 px-3 py-2">Totale: {formatEuro(order.payment?.total)}</span>
                             <span className="rounded-xl bg-black/25 px-3 py-2">Creato: {formatPickupDate(order.createdAt) || "-"}</span>
                           </div>
@@ -1736,22 +1736,33 @@ export function StaffFormsViewer({
                       {pickupSelectedOrder.statusLabel || pickupSelectedOrder.status || "Stato non indicato"}
                     </span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    <div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl bg-black/20 p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Ordine</p>
-                      <p className="mt-1 font-black">{pickupSelectedOrder.orderNumber}</p>
+                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.orderNumber}</p>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Pagato</p>
-                      <p className="mt-1 font-black">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p>
+                    <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/15 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Ha pagato</p>
+                      <p className="mt-2 text-2xl font-black text-emerald-100">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Manca</p>
-                      <p className="mt-1 font-black">{formatEuro(pickupSelectedOrder.payment?.missing)}</p>
+                    <div className={cn(
+                      "rounded-2xl border p-4",
+                      (pickupSelectedOrder.payment?.missing ?? 0) > 0
+                        ? "border-rose-300/30 bg-rose-300/15"
+                        : "border-white/10 bg-black/20"
+                    )}>
+                      <p className={cn(
+                        "text-[10px] font-black uppercase tracking-[0.16em]",
+                        (pickupSelectedOrder.payment?.missing ?? 0) > 0 ? "text-rose-200" : "text-white/45"
+                      )}>Da pagare</p>
+                      <p className={cn(
+                        "mt-2 text-2xl font-black",
+                        (pickupSelectedOrder.payment?.missing ?? 0) > 0 ? "text-rose-100" : "text-white"
+                      )}>{formatEuro(pickupSelectedOrder.payment?.missing)}</p>
                     </div>
-                    <div>
+                    <div className="rounded-2xl bg-black/20 p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Salone</p>
-                      <p className="mt-1 font-black">{pickupSelectedOrder.salon || "-"}</p>
+                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.salon || "-"}</p>
                     </div>
                   </div>
                   {pickupSelectedOrder.statusAudit || pickupSelectedOrder.pickup ? (
@@ -1799,37 +1810,6 @@ export function StaffFormsViewer({
                     <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/70">Tutte le note ordine</p>
                       <p className="mt-2 whitespace-pre-wrap text-sm font-bold leading-6 text-amber-50">{pickupSelectedOrder.notes}</p>
-                    </div>
-                  ) : null}
-                  {pickupSelectedOrder.attachments?.length ? (
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200/70">Foto e allegati ordine</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {pickupSelectedOrder.attachments.map((attachment, index) => (
-                          <a
-                            key={`${attachment.url}-${index}`}
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] transition hover:border-emerald-300/40 hover:bg-white/[0.09]"
-                          >
-                            {attachment.previewable ? (
-                              <img src={attachment.previewUrl || attachment.url} alt={attachment.name} className="h-36 w-full object-cover" />
-                            ) : (
-                              <div className="grid h-24 place-items-center bg-black/20">
-                                <FileText className="size-8 text-white/35" />
-                              </div>
-                            )}
-                            <div className="flex items-center justify-between gap-3 p-3">
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-black uppercase tracking-[0.14em] text-white/35">{attachment.label}</p>
-                                <p className="mt-1 truncate text-sm font-black text-white">{attachment.name}</p>
-                              </div>
-                              <ArrowUpRight className="size-4 shrink-0 text-white/35 transition group-hover:text-emerald-200" />
-                            </div>
-                          </a>
-                        ))}
-                      </div>
                     </div>
                   ) : null}
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
