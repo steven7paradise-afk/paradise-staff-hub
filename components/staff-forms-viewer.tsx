@@ -536,7 +536,14 @@ export function StaffFormsViewer({
   };
 
   const handleShopifyOrderLookup = async () => {
-    const query = String(answers["invoice_shopify_order"] || "").trim();
+    const isOrderFormLookup = isOrderLabelForm(selectedForm);
+    const queryFieldId = isOrderFormLookup ? "order_shopify_order" : "invoice_shopify_order";
+    const query = String(answers[queryFieldId] || "").trim();
+
+    if (isOrderFormLookup && !query) {
+      setShopifyLookupStatus({ success: false, message: "Inserisci il numero dell'ordine Shopify." });
+      return;
+    }
     
     setLoadingShopify(true);
     setShopifyLookupStatus(null);
@@ -550,17 +557,25 @@ export function StaffFormsViewer({
 
       setAnswers(prev => {
         const nextAnswers = { ...prev };
-        if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
-        if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
-        if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
-        if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
+        if (isOrderFormLookup) {
+          if (data.orderName) nextAnswers["order_shopify_order"] = data.orderName;
+          if (data.clientName) nextAnswers["order_client_name"] = data.clientName;
+          if (data.email) nextAnswers["order_client_email"] = data.email;
+          if (data.phone) nextAnswers["order_client_phone"] = data.phone;
+          nextAnswers["order_paid_amount"] = String(data.paidAmount ?? 0);
+        } else {
+          if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
+          if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
+          if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
+          if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
+        }
         
         const titles = Array.isArray(data.lineItems) ? data.lineItems.map((it: any) => it.title) : [];
         let productsNote = `Importato da ordine Shopify ${data.orderName || ""}`;
         if (titles.length > 0) {
           productsNote += `\nProdotti: ${titles.join(", ")}`;
         }
-        nextAnswers["invoice_notes"] = productsNote;
+        if (!isOrderFormLookup) nextAnswers["invoice_notes"] = productsNote;
 
         return nextAnswers;
       });
@@ -571,8 +586,11 @@ export function StaffFormsViewer({
         : "Nessuno";
       setShopifyLookupStatus({
         success: true,
-        message: `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "N/A"}\n• Totale: € ${data.totalPrice !== null ? data.totalPrice.toFixed(2) : "0.00"}\n• Prodotti: ${prodList}`
+        message: isOrderFormLookup
+          ? `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "Da completare"}\n• Ha pagato: € ${Number(data.paidAmount ?? 0).toFixed(2)}\n• Totale ordine: € ${Number(data.totalPrice ?? 0).toFixed(2)}`
+          : `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "N/A"}\n• Totale: € ${data.totalPrice !== null ? data.totalPrice.toFixed(2) : "0.00"}\n• Prodotti: ${prodList}`
       });
+      if (isOrderFormLookup) setActiveFieldIndex(1);
     } catch (err: any) {
       setShopifyLookupStatus({
         success: false,
@@ -609,6 +627,7 @@ export function StaffFormsViewer({
   const isCashClosingForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CHIUSURA CASSA") || selectedForm.category.toUpperCase().includes("CASSA")
     : false;
+  const isSelectedOrderForm = isOrderLabelForm(selectedForm);
   const isSelectedClientControlForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
     : false;
@@ -673,6 +692,9 @@ export function StaffFormsViewer({
   }).length;
 
   const isCurrentFieldValid = (field: FormField) => {
+    if (field.id === "order_shopify_order") {
+      return Boolean(String(answers[field.id] || "").trim()) && shopifyLookupStatus?.success === true;
+    }
     if (!field.required) return true;
 
     // Special case: group course participants details validation
@@ -716,7 +738,11 @@ export function StaffFormsViewer({
     if (!currentField) return;
 
     if (!isCurrentFieldValid(currentField)) {
-      setErrorMsg("Per favore, compila questo campo obbligatorio prima di procedere.");
+      setErrorMsg(
+        currentField.id === "order_shopify_order"
+          ? "Cerca e verifica l'ordine Shopify prima di continuare."
+          : "Per favore, compila questo campo obbligatorio prima di procedere."
+      );
       return;
     }
 
@@ -918,6 +944,7 @@ export function StaffFormsViewer({
     setActiveCashCustomerIndex(0);
     setShowPastCustomers(false);
     setCustomerSearchQuery("");
+    setShopifyLookupStatus(null);
   };
 
   const loadDailyClosing = async (date: string) => {
@@ -1041,6 +1068,18 @@ export function StaffFormsViewer({
   }, [autoFillFormId, autoFillFormName, forms]);
 
   const handleTextChange = (fieldId: string, value: string) => {
+    if (fieldId === "order_shopify_order") {
+      setShopifyLookupStatus(null);
+      setAnswers((prev) => ({
+        ...prev,
+        [fieldId]: value,
+        order_client_name: "",
+        order_client_email: "",
+        order_client_phone: "",
+        order_paid_amount: "",
+      }));
+      return;
+    }
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
   };
 
@@ -1984,8 +2023,9 @@ export function StaffFormsViewer({
         <div className={cn(
           "fixed inset-0 z-50",
           isCashClosingForm && "cash-closing-workspace",
-          !isCashClosingForm && "service-form-fill-workspace",
-          isCashClosingForm
+          isSelectedOrderForm && "service-order-workspace",
+          !isCashClosingForm && !isSelectedOrderForm && "service-form-fill-workspace",
+          isCashClosingForm || isSelectedOrderForm
             ? "overflow-y-auto bg-[#f4eff2]"
             : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
         )}>
@@ -1993,11 +2033,14 @@ export function StaffFormsViewer({
             "flex w-full flex-col border border-slate-100 bg-white text-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.25)] animate-in fade-in duration-200",
             isCashClosingForm
               ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_15%_0%,rgba(167,71,88,0.12),transparent_32%),linear-gradient(180deg,#faf8f9,#f3eef1)]"
+              : isSelectedOrderForm
+                ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_12%_0%,rgba(167,71,88,0.10),transparent_30%),linear-gradient(180deg,#fff,#f8f3f5)]"
               : "max-h-[92vh] max-w-4xl overflow-hidden rounded-[32px] zoom-in-95"
           )}>
             <div className={cn(
               "relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7",
-              isCashClosingForm && "cash-closing-header sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl"
+              isCashClosingForm && "cash-closing-header sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl",
+              isSelectedOrderForm && "sticky top-0 z-30 px-6 py-5 shadow-sm backdrop-blur-2xl lg:px-12"
             )}>
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
               <div className="flex items-start justify-between gap-4">
@@ -2089,6 +2132,8 @@ export function StaffFormsViewer({
                   "flex min-h-[430px] flex-1 flex-col justify-between",
                   isCashClosingForm
                     ? "w-full overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
+                    : isSelectedOrderForm
+                      ? "mx-auto w-full max-w-6xl overflow-visible bg-transparent px-5 py-8 sm:px-8 lg:py-12"
                     : "overflow-y-auto bg-white p-5 sm:p-7"
                 )}
               >
@@ -2111,6 +2156,12 @@ export function StaffFormsViewer({
                     <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">
                       <AlertCircle className="size-4 flex-shrink-0" />
                       <span>{errorMsg}</span>
+                    </div>
+                  )}
+
+                  {isSelectedOrderForm && currentActiveIndex > 0 && shopifyLookupStatus?.success && (
+                    <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold leading-6 text-emerald-800 whitespace-pre-line shadow-sm">
+                      {shopifyLookupStatus.message}
                     </div>
                   )}
 
@@ -2152,11 +2203,18 @@ export function StaffFormsViewer({
                                   required={field.required}
                                   value={answers[field.id] || ""}
                                   onChange={(e) => handleTextChange(field.id, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, field.type)}
+                                  onKeyDown={(e) => {
+                                    if (field.id === "order_shopify_order" && e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleShopifyOrderLookup();
+                                      return;
+                                    }
+                                    handleKeyDown(e, field.type);
+                                  }}
                                   placeholder="Scrivi qui..."
                                   className={cn(
                                     "h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white",
-                                    (field.id === "invoice_vat_number" || field.id === "invoice_shopify_order") && "pr-32"
+                                    (field.id === "invoice_vat_number" || field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && "pr-36"
                                   )}
                                 />
                                 {field.id === "invoice_vat_number" && (
@@ -2174,7 +2232,7 @@ export function StaffFormsViewer({
                                     Cerca
                                   </button>
                                 )}
-                                {field.id === "invoice_shopify_order" && (
+                                {(field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && (
                                   <button
                                     type="button"
                                     onClick={handleShopifyOrderLookup}
@@ -2186,7 +2244,7 @@ export function StaffFormsViewer({
                                     ) : (
                                       <Download className="size-3.5" />
                                     )}
-                                    Importa
+                                    {field.id === "order_shopify_order" ? "Cerca ordine" : "Importa"}
                                   </button>
                                 )}
                               </div>
@@ -2200,7 +2258,7 @@ export function StaffFormsViewer({
                                   {vatLookupStatus.message}
                                 </div>
                               )}
-                              {field.id === "invoice_shopify_order" && shopifyLookupStatus && (
+                              {(field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && shopifyLookupStatus && (
                                 <div className={cn(
                                   "text-xs font-semibold px-4 py-3 whitespace-pre-line rounded-2xl border animate-in fade-in slide-in-from-top-1 duration-200 mt-2",
                                   shopifyLookupStatus.success 
@@ -2839,7 +2897,11 @@ export function StaffFormsViewer({
                 {/* Footer buttons */}
                 <div className={cn(
                   "sticky bottom-0 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur",
-                  isCashClosingForm ? "cash-closing-footer z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8" : "-mx-5 sm:-mx-7 sm:px-7"
+                  isCashClosingForm
+                    ? "cash-closing-footer z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+                    : isSelectedOrderForm
+                      ? "z-20 -mx-5 px-5 pb-5 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-8 sm:px-8"
+                      : "-mx-5 sm:-mx-7 sm:px-7"
                 )}>
                   <div>
                     <Button

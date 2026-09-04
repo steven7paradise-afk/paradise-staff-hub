@@ -741,6 +741,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   id: string;
   clientName: string | null;
   totalPrice: number | null;
+  paidAmount: number;
   lineItems: Array<{ title: string; quantity: number; price: number }>;
   note: string | null;
   email: string | null;
@@ -906,11 +907,13 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const paymentMethod = recognizedMethods.size > 1
         ? "MISTO" as const
         : paymentBreakdown[0]?.method ?? classifyShopifyPaymentMethod(paymentGateways);
+      const paidAmount = paymentBreakdown.reduce((total, payment) => total + payment.amount, 0);
 
       return {
         id: String(orderData.id),
         clientName,
         totalPrice,
+        paidAmount,
         lineItems,
         note,
         email,
