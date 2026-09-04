@@ -1434,6 +1434,7 @@ export function AppointmentsBrowser({
   const [draggedBoardBookingId, setDraggedBoardBookingId] = useState<string | null>(null);
   const [boardDropTargetId, setBoardDropTargetId] = useState<string | null>(null);
   const [boardWorkerOrder, setBoardWorkerOrder] = useState<string[]>([]);
+  const [showEmptyBoardWorkers, setShowEmptyBoardWorkers] = useState(false);
   const [draggedBoardWorkerId, setDraggedBoardWorkerId] = useState<string | null>(null);
   const [boardWorkerDropTarget, setBoardWorkerDropTarget] = useState<{ id: string; position: "before" | "after" } | null>(null);
   const [boardStatusMenu, setBoardStatusMenu] = useState<{
@@ -1448,6 +1449,7 @@ export function AppointmentsBrowser({
     Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])),
   );
   const boardLongPressTimerRef = useRef<number | null>(null);
+  const boardScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const boardLongPressStartRef = useRef<{
     bookingId: string;
     x: number;
@@ -4062,33 +4064,76 @@ export function AppointmentsBrowser({
       };
     });
 
-    // Mantiene l'ordine scelto dall'utente all'interno dei due gruppi, ma porta
-    // sempre in fondo il personale che non ha appuntamenti nel periodo visibile.
-    const columns = [
-      ...workerColumns.filter((column) => column.bookings.length > 0),
-      ...workerColumns.filter((column) => column.bookings.length === 0),
-    ];
+    const selectedWorkerColumn = initialPcWorkerName
+      ? workerColumns.find((column) => staffNamesReferToSamePerson(column.name, initialPcWorkerName)) || null
+      : null;
+    const bookedWorkerColumns = workerColumns.filter(
+      (column) => column.bookings.length > 0 && column.id !== selectedWorkerColumn?.id,
+    );
+    const emptyWorkerColumns = workerColumns.filter(
+      (column) => column.bookings.length === 0 && column.id !== selectedWorkerColumn?.id,
+    );
+    const unassignedColumn = unassignedBookings.length
+      ? (() => {
+          const bookings = sortBookings(unassignedBookings);
+          return {
+            id: "unassigned",
+            name: "Non assegnati",
+            photoUrl: null,
+            status: "IN",
+            clockedInAt: null,
+            breakStartedAt: null,
+            externalIds: [],
+            bookings,
+            hours: durationHours(bookings),
+          };
+        })()
+      : null;
 
-    if (unassignedBookings.length) {
-      const bookings = sortBookings(unassignedBookings);
-      columns.push({
-        id: "unassigned",
-        name: "Non assegnati",
-        photoUrl: null,
-        status: "IN",
-        clockedInAt: null,
-        breakStartedAt: null,
-        externalIds: [],
-        bookings,
-        hours: durationHours(bookings),
-      });
-    }
+    // Sul PC del salone la persona selezionata resta sempre la prima colonna e
+    // gli appuntamenti da assegnare sono subito accanto. Le colonne vuote vanno
+    // in fondo e possono essere nascoste dalla board.
+    const columns = initialPcWorkerName
+      ? [
+          ...(selectedWorkerColumn ? [selectedWorkerColumn] : []),
+          ...(unassignedColumn ? [unassignedColumn] : []),
+          ...bookedWorkerColumns,
+          ...emptyWorkerColumns,
+        ]
+      : [
+          ...bookedWorkerColumns,
+          ...(unassignedColumn ? [unassignedColumn] : []),
+          ...emptyWorkerColumns,
+        ];
 
     return columns;
-  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, teamByBooking]);
+  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, initialPcWorkerName, teamByBooking]);
+  const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
+    (column) =>
+      column.id !== "unassigned" &&
+      column.bookings.length === 0 &&
+      !staffNamesReferToSamePerson(column.name, initialPcWorkerName),
+  ).length;
+  const visibleAppointmentBoardColumns = useMemo(() => {
+    if (showEmptyBoardWorkers) return appointmentBoardColumns;
+    const visibleColumns = appointmentBoardColumns.filter(
+      (column) =>
+        column.id === "unassigned" ||
+        column.bookings.length > 0 ||
+        staffNamesReferToSamePerson(column.name, initialPcWorkerName),
+    );
+    return visibleColumns.length ? visibleColumns : appointmentBoardColumns;
+  }, [appointmentBoardColumns, initialPcWorkerName, showEmptyBoardWorkers]);
   const boardBookingCount = new Set(
-    appointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
+    visibleAppointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
   ).size;
+
+  function scrollAppointmentBoard(direction: "left" | "right") {
+    boardScrollContainerRef.current?.scrollBy({
+      left: direction === "left" ? -580 : 580,
+      behavior: "smooth",
+    });
+  }
 
   const detailEntries = useMemo(() => {
     if (!selectedBooking?.extraDetails?.length) {
@@ -6277,33 +6322,67 @@ export function AppointmentsBrowser({
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · Salone Corso</p>
                   <div>
                     <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#172B4D]">Board</h2>
-                    <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">Tutto il personale del salone · chi non ha appuntamenti è mostrato per ultimo</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">La lavoratrice selezionata e gli appuntamenti da assegnare sono sempre all'inizio</p>
                     <p className="mt-1 text-[10px] font-bold text-[#9E3262] lg:hidden">Un dito premuto: cambia stato · Due dita: sposta</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center -space-x-2">
-                    {appointmentBoardColumns.filter((column) => column.id !== "unassigned").slice(0, 5).map((column) => (
+                  {hiddenEmptyBoardWorkerCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowEmptyBoardWorkers((current) => !current)}
+                      className="inline-flex min-h-10 items-center rounded-lg border border-[#DFE2E7] bg-white px-3 text-[10px] font-black text-[#505F79] transition hover:border-[#9E3262] hover:text-[#9E3262]"
+                    >
+                      {showEmptyBoardWorkers
+                        ? "Nascondi colonne vuote"
+                        : `Mostra senza appuntamenti (${hiddenEmptyBoardWorkerCount})`}
+                    </button>
+                  ) : null}
+                  <div className="hidden items-center -space-x-2 xl:flex">
+                    {visibleAppointmentBoardColumns.filter((column) => column.id !== "unassigned").slice(0, 5).map((column) => (
                       <span key={column.id} className="rounded-full border-2 border-white bg-white">
                         <Avatar name={column.name} photoUrl={column.photoUrl} size="size-7" />
                       </span>
                     ))}
-                    {appointmentBoardColumns.filter((column) => column.id !== "unassigned").length > 5 ? (
+                    {visibleAppointmentBoardColumns.filter((column) => column.id !== "unassigned").length > 5 ? (
                       <span className="grid size-7 place-items-center rounded-full border-2 border-white bg-[#E9ECF2] text-[9px] font-black text-[#505F79]">
-                        +{appointmentBoardColumns.filter((column) => column.id !== "unassigned").length - 5}
+                        +{visibleAppointmentBoardColumns.filter((column) => column.id !== "unassigned").length - 5}
                       </span>
                     ) : null}
                   </div>
                   <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold text-[#505F79]">
                     <UsersRound className="size-3.5" /> {boardBookingCount} schede
                   </span>
+                  <div className="flex items-center gap-1" role="group" aria-label="Scorri la board">
+                    <button
+                      type="button"
+                      onClick={() => scrollAppointmentBoard("left")}
+                      className="grid size-10 place-items-center rounded-lg border border-[#DFE2E7] bg-white text-[#42526E] transition hover:border-[#9E3262] hover:text-[#9E3262]"
+                      aria-label="Scorri a sinistra"
+                    >
+                      <ChevronLeft className="size-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollAppointmentBoard("right")}
+                      className="grid size-10 place-items-center rounded-lg border border-[#DFE2E7] bg-white text-[#42526E] transition hover:border-[#9E3262] hover:text-[#9E3262]"
+                      aria-label="Scorri a destra"
+                    >
+                      <ChevronRight className="size-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {appointmentBoardColumns.length ? (
-                <div className="overflow-x-auto bg-white p-3 sm:p-4">
+              {visibleAppointmentBoardColumns.length ? (
+                <div
+                  ref={boardScrollContainerRef}
+                  className="overflow-x-auto scroll-smooth bg-white p-3 sm:p-4"
+                  tabIndex={0}
+                  aria-label="Colonne degli appuntamenti"
+                >
                   <div className="flex min-h-[520px] min-w-max items-stretch gap-3">
-                    {appointmentBoardColumns.map((column) => (
+                    {visibleAppointmentBoardColumns.map((column) => (
                       <article
                         key={column.id}
                         data-board-worker-id={column.id}

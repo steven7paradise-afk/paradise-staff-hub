@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
 import { prisma } from "@/lib/prisma";
+import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 
-const OFFICE_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 const NOTE_KEY_PREFIX = "appointment_office_note:";
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,18 @@ export async function POST(request: NextRequest) {
   if (!operationalUser?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }
-  if (!OFFICE_ROLES.has(operationalUser.role || "")) {
+  const userAccess = operationalUser.id === "PC_CASSA"
+    ? null
+    : await prisma.user.findUnique({
+        where: { id: operationalUser.id },
+        select: { mansione: true, location: { select: { name: true } } },
+      }).catch(() => null);
+  if (!canManageAppointmentOfficeNotes({
+    role: operationalUser.role,
+    mansione: userAccess?.mansione,
+    locationName: userAccess?.location?.name,
+    isPC: operationalUser.isPC,
+  })) {
     return NextResponse.json({ error: "Solo l'ufficio può modificare questa nota" }, { status: 403 });
   }
 

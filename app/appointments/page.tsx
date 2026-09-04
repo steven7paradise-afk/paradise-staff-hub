@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { AppointmentsBrowser } from "@/components/appointments-browser";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
+import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
 import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken } from "@/lib/cowlendar";
@@ -678,7 +679,12 @@ export default async function AppointmentsPage({
         navigationBasePath={navigationBasePath}
         pageTitle={pageTitle}
         pageSubtitle={pageSubtitle}
-        canManageParadiseNotes={!isPC && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(role)}
+        canManageParadiseNotes={canManageAppointmentOfficeNotes({
+          role,
+          mansione: accessUser?.mansione,
+          locationName: accessUser?.location?.name,
+          isPC,
+        })}
       />
     </AppShell>
   );
