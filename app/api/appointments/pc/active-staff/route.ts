@@ -5,12 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
 const STAFF_ALIAS_SETTING_KEY = "appointment_staff_aliases";
-const ALWAYS_ACTIVE_STAFF_NAMES = new Set(["franci"]);
-
 type StaffAlias = {
   userId?: string;
   externalName?: string;
@@ -85,7 +84,7 @@ export async function GET(request: NextRequest) {
     const clockedInWorkers = workers
       .map((worker) => {
         const state = deriveAttendanceState(worker.attendance_logs);
-        const alwaysActive = ALWAYS_ACTIVE_STAFF_NAMES.has(worker.name.trim().toLocaleLowerCase("it"));
+        const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name);
         return {
           id: worker.id,
           name: worker.name,

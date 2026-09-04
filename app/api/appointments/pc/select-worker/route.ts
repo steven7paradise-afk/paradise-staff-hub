@@ -10,6 +10,7 @@ import {
 } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
 import { isPinPrefixValidForUser } from "@/lib/pin";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +44,11 @@ export async function POST(request: NextRequest) {
     where: {
       id: workerId,
       active: true,
-      OR: [{ sede_id: pcAuth.locationId }, { sede_id: null }],
     },
     select: {
       id: true,
       name: true,
+      sede_id: true,
       pin_lookup: true,
       attendance_logs: {
         where: { date: { gte: today, lt: tomorrow } },
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
 
+  const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name);
+  if (!alwaysActive && worker.sede_id !== null && worker.sede_id !== pcAuth.locationId) {
+    return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
+  }
+
   const isPinValid = isPinPrefixValidForUser(pinPrefix, worker.pin_lookup);
 
   if (!isPinValid) {
@@ -68,7 +74,7 @@ export async function POST(request: NextRequest) {
   }
 
   const state = deriveAttendanceState(worker.attendance_logs);
-  if (state.status !== "IN" && state.status !== "BREAK") {
+  if (!alwaysActive && state.status !== "IN" && state.status !== "BREAK") {
     return NextResponse.json({ error: "Questo profilo non risulta timbrato adesso." }, { status: 403 });
   }
 
