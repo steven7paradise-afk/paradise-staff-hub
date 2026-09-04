@@ -232,6 +232,26 @@ function pickupOrderDetails(order: PickupReadyOrder) {
   return details;
 }
 
+function pickupStructuredNotes(order: PickupReadyOrder) {
+  const highlights: Array<{ label: string; value: string }> = [];
+  const narrative: string[] = [];
+
+  String(order.notes || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const match = line.match(/^([^:]{2,48}\??):\s*(.+)$/);
+      if (match && highlights.length < 4) {
+        highlights.push({ label: match[1].trim(), value: match[2].trim() });
+      } else {
+        narrative.push(line);
+      }
+    });
+
+  return { highlights, narrative };
+}
+
 function pickupProofUrl(order: PickupReadyOrder) {
   return order.pickup?.proof?.driveFileUrl || order.pickup?.proof?.webViewLink || order.pickup?.proof?.webContentLink || "";
 }
@@ -1558,7 +1578,7 @@ export function StaffFormsViewer({
             className="flex h-full w-full flex-col overflow-hidden bg-[#0b0b0c] text-white"
           >
             <div className="flex-none border-b border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
-              <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-4">
+              <div className="mx-auto flex w-full max-w-[1900px] items-start justify-between gap-4">
                 <div className="flex gap-3">
                   <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
                     <PackageCheck className="size-6" />
@@ -1580,27 +1600,33 @@ export function StaffFormsViewer({
               </div>
             </div>
 
-            <div className="mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-7 xl:overflow-hidden">
-              <div className="grid min-h-full gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(380px,0.85fr)_minmax(0,1.55fr)]">
+            <div className="mx-auto min-h-0 w-full max-w-[1900px] flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 xl:overflow-hidden">
+              <div className="grid min-h-full gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(420px,0.78fr)_minmax(0,1.42fr)]">
                 <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pr-2">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Cerca ordine</span>
-                  <input
-                    value={pickupQuery}
-                    onChange={(event) => setPickupQuery(event.target.value)}
-                    placeholder="Numero ordine, nome o telefono"
-                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
-                  />
+                  <span className="relative block">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-emerald-200/55" />
+                    <input
+                      value={pickupQuery}
+                      onChange={(event) => setPickupQuery(event.target.value)}
+                      placeholder="Numero ordine, nome o telefono"
+                      className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-12 pr-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                    />
+                  </span>
                 </label>
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Chi ritira</span>
-                  <input
-                    value={pickupName}
-                    onChange={(event) => setPickupName(event.target.value)}
-                    placeholder="Nome di chi ritira"
-                    className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
-                  />
+                  <span className="relative block">
+                    <User className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-emerald-200/55" />
+                    <input
+                      value={pickupName}
+                      onChange={(event) => setPickupName(event.target.value)}
+                      placeholder="Nome di chi ritira"
+                      className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-12 pr-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                    />
+                  </span>
                 </label>
               </div>
 
@@ -1680,11 +1706,16 @@ export function StaffFormsViewer({
                           )}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-300/10 text-emerald-200">
+                                <FileText className="size-4.5" />
+                              </span>
+                              <div className="min-w-0">
                               <p className="truncate text-base font-black text-white">{order.clientName}</p>
                               <p className="mt-0.5 text-xs font-bold text-white/45">
                                 {order.orderNumber} {order.phone ? `· ${order.phone}` : ""} {order.salon ? `· ${order.salon}` : ""}
                               </p>
+                              </div>
                             </div>
                             <span
                               className={cn(
@@ -1782,32 +1813,36 @@ export function StaffFormsViewer({
                     </span>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl bg-black/20 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Ordine</p>
-                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.orderNumber}</p>
+                    <div className="flex gap-3 rounded-2xl bg-black/20 p-4">
+                      <FileText className="mt-0.5 size-5 shrink-0 text-emerald-100/80" />
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Ordine</p>
+                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.orderNumber}</p></div>
                     </div>
-                    <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/15 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Ha pagato</p>
-                      <p className="mt-2 text-2xl font-black text-emerald-100">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p>
+                    <div className="flex gap-3 rounded-2xl border border-emerald-300/30 bg-emerald-300/15 p-4">
+                      <Banknote className="mt-0.5 size-5 shrink-0 text-emerald-100" />
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Ha pagato</p>
+                      <p className="mt-2 text-2xl font-black text-emerald-100">{formatEuro(pickupSelectedOrder.payment?.paid ?? 0)}</p></div>
                     </div>
                     <div className={cn(
-                      "rounded-2xl border p-4",
+                      "flex gap-3 rounded-2xl border p-4",
                       (pickupSelectedOrder.payment?.missing ?? 0) > 0
                         ? "border-rose-300/30 bg-rose-300/15"
                         : "border-white/10 bg-black/20"
                     )}>
-                      <p className={cn(
+                      <CreditCard className="mt-0.5 size-5 shrink-0 text-white/70" />
+                      <div><p className={cn(
                         "text-[10px] font-black uppercase tracking-[0.16em]",
                         (pickupSelectedOrder.payment?.missing ?? 0) > 0 ? "text-rose-200" : "text-white/45"
                       )}>Da pagare</p>
                       <p className={cn(
                         "mt-2 text-2xl font-black",
                         (pickupSelectedOrder.payment?.missing ?? 0) > 0 ? "text-rose-100" : "text-white"
-                      )}>{formatEuro(pickupSelectedOrder.payment?.missing)}</p>
+                      )}>{formatEuro(pickupSelectedOrder.payment?.missing)}</p></div>
                     </div>
-                    <div className="rounded-2xl bg-black/20 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Salone</p>
-                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.salon || "-"}</p>
+                    <div className="flex gap-3 rounded-2xl bg-black/20 p-4">
+                      <MapPin className="mt-0.5 size-5 shrink-0 text-emerald-100/80" />
+                      <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200/70">Salone</p>
+                      <p className="mt-2 text-lg font-black">{pickupSelectedOrder.salon || "-"}</p></div>
                     </div>
                   </div>
                   {pickupSelectedOrder.statusAudit || pickupSelectedOrder.pickup ? (
@@ -1853,8 +1888,31 @@ export function StaffFormsViewer({
                   ) : null}
                   {pickupSelectedOrder.notes ? (
                     <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/70">Tutte le note ordine</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm font-bold leading-6 text-amber-50">{pickupSelectedOrder.notes}</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200/80">Tutte le note ordine</p>
+                      <div className="mt-3 grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+                        <div className="space-y-3">
+                          {pickupStructuredNotes(pickupSelectedOrder).highlights.map((note, index) => (
+                            <div key={`${note.label}-${index}`} className="flex gap-3">
+                              <ClipboardList className="mt-0.5 size-4 shrink-0 text-amber-100/75" />
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/50">{note.label}</p>
+                                <p className="mt-1 text-sm font-black leading-5 text-amber-50">{note.value}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {pickupStructuredNotes(pickupSelectedOrder).narrative.length > 0 ? (
+                          <div className="border-t border-amber-100/20 pt-3 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+                            <div className="flex gap-3">
+                              <FileText className="mt-0.5 size-4 shrink-0 text-amber-100/75" />
+                              <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-amber-100/50">Note della lavorazione</p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-6 text-amber-50">{pickupStructuredNotes(pickupSelectedOrder).narrative.join("\n\n")}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                   <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -1884,7 +1942,7 @@ export function StaffFormsViewer({
             </div>
 
             <div className="flex-none border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
-              <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
+              <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-3">
                 {pickupMessage ? (
                   <div
                     className={cn(
