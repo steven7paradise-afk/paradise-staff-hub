@@ -161,7 +161,9 @@ export const authConfig = {
           pathname === "/orders" ||
           pathname.startsWith("/orders/") ||
           pathname === "/service-forms" || 
-          pathname.startsWith("/service-forms/");
+          pathname.startsWith("/service-forms/") ||
+          pathname === "/cassa-live" ||
+          pathname.startsWith("/cassa-live/");
           
         const isAllowedApi = 
           pathname.startsWith("/api/appointments") || 

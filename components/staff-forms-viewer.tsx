@@ -1187,16 +1187,26 @@ export function StaffFormsViewer({
             </div>
             <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">Cassa & Moduli</h1>
             <p className="mt-2 text-xs font-semibold text-white/45">Interfaccia touch-friendly per la gestione rapida del salone.</p>
-            {cashClosingForm && (
-              <button
-                type="button"
-                onClick={() => void openDailyClosing()}
-                className="mt-5 inline-flex min-h-14 items-center gap-3 rounded-2xl border border-[#A1B5FD]/30 bg-gradient-to-r from-[#A1B5FD] to-[#d8e1ff] px-5 text-sm font-black text-[#172554] shadow-[0_14px_40px_rgba(161,181,253,0.22)] transition hover:-translate-y-0.5 active:scale-[0.98]"
+            <div className="mt-5 flex flex-wrap gap-3">
+              {cashClosingForm && (
+                <button
+                  type="button"
+                  onClick={() => void openDailyClosing()}
+                  className="inline-flex min-h-14 items-center gap-3 rounded-2xl border border-[#A1B5FD]/30 bg-gradient-to-r from-[#A1B5FD] to-[#d8e1ff] px-5 text-sm font-black text-[#172554] shadow-[0_14px_40px_rgba(161,181,253,0.22)] transition hover:-translate-y-0.5 active:scale-[0.98]"
+                >
+                  <span className="grid size-9 place-items-center rounded-xl bg-[#172554]/15"><Calculator className="size-5" /></span>
+                  Chiusura giornaliera
+                </button>
+              )}
+              <Link
+                href="/cassa-live"
+                className="inline-flex min-h-14 items-center gap-3 rounded-2xl border border-emerald-300/30 bg-gradient-to-r from-[#8DE0BD] to-[#c5f4df] px-5 text-sm font-black text-[#10251c] shadow-[0_14px_40px_rgba(141,224,189,0.18)] transition hover:-translate-y-0.5 active:scale-[0.98]"
               >
-                <span className="grid size-9 place-items-center rounded-xl bg-[#172554]/15"><Calculator className="size-5" /></span>
-                Chiusura giornaliera
-              </button>
-            )}
+                <span className="grid size-9 place-items-center rounded-xl bg-[#14532d]/15"><Banknote className="size-5" /></span>
+                Cassa Live
+                <ArrowUpRight className="size-4" aria-hidden="true" />
+              </Link>
+            </div>
           </div>
         </div>
 

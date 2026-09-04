@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
+import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 
@@ -10,6 +12,27 @@ const CASHMATIC_LIVE_URL = "https://cashmatic-payment-production.up.railway.app/
 
 export default async function CassaLivePage() {
   const session = await auth();
+  const cookieStore = await cookies();
+  const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
+  const pcAuth = await checkPCAuthorization(pcToken);
+
+  if (pcAuth) {
+    return (
+      <AppShell
+        title="Cassa Live"
+        subtitle="Controllo Cashmatic in tempo reale"
+        role="RESPONSABILE"
+        hideHeader
+        edgeToEdgeMain
+        hideDesktopControls
+        hideAdminAssistant
+        pcMode
+      >
+        <CashmaticLiveFrame />
+      </AppShell>
+    );
+  }
+
   if (!session?.user?.id || !session.user.role) redirect("/login");
 
   const user = await prisma.user.findUnique({
@@ -36,13 +59,19 @@ export default async function CassaLivePage() {
       hideDesktopControls
       hideAdminAssistant
     >
-      <iframe
-        src={CASHMATIC_LIVE_URL}
-        title="Cassa Live Cashmatic"
-        loading="eager"
-        allow="clipboard-read; clipboard-write"
-        className="block h-[calc(100dvh-64px)] min-h-[640px] w-full border-0 bg-white xl:h-dvh"
-      />
+      <CashmaticLiveFrame />
     </AppShell>
+  );
+}
+
+function CashmaticLiveFrame() {
+  return (
+    <iframe
+      src={CASHMATIC_LIVE_URL}
+      title="Cassa Live Cashmatic"
+      loading="eager"
+      allow="clipboard-read; clipboard-write"
+      className="block h-[calc(100dvh-64px)] min-h-[640px] w-full border-0 bg-white xl:h-dvh"
+    />
   );
 }
