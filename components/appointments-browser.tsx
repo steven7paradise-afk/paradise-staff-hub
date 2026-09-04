@@ -3456,14 +3456,6 @@ export function AppointmentsBrowser({
     const previousStatus = booking
       ? getBookingStatus(booking)
       : statusByBooking[bookingId];
-    if (previousStatus === "COMPLETATO" && nextStatus !== "COMPLETATO") {
-      showPushToast(
-        "Stato bloccato",
-        "Un appuntamento completato non può più essere modificato.",
-        "error",
-      );
-      return;
-    }
     const previousTiming = statusTimingByBooking[bookingId] || {};
     const transitionAt = new Date();
     const optimisticTiming = { ...previousTiming };
@@ -3736,14 +3728,6 @@ export function AppointmentsBrowser({
     touch = false,
   ) {
     if (booking.isCanceled) return;
-    if (status === "COMPLETATO") {
-      showPushToast(
-        "Stato bloccato",
-        "Un appuntamento completato non può più essere modificato.",
-        "error",
-      );
-      return;
-    }
     setBoardStatusMenu({
       bookingId: booking.id,
       x: Math.min(x, window.innerWidth - 240),
