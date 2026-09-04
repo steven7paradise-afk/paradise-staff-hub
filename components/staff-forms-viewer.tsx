@@ -1179,39 +1179,39 @@ export function StaffFormsViewer({
 
       {/* Tablet cash-register shortcuts */}
       <div className="w-full">
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#E8C98B]">
-              <div className="size-1.5 rounded-full bg-yellow-400 animate-pulse" />
-              Terminale operativo POS
-            </div>
-            <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">TERMINALE POS</h1>
-            <p className="mt-2 text-xs font-semibold text-white/45">Interfaccia touch-friendly per la gestione rapida del salone.</p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              {cashClosingForm && (
-                <button
-                  type="button"
-                  onClick={() => void openDailyClosing()}
-                  className="inline-flex min-h-14 items-center gap-3 rounded-2xl border border-[#A1B5FD]/30 bg-gradient-to-r from-[#A1B5FD] to-[#d8e1ff] px-5 text-sm font-black text-[#172554] shadow-[0_14px_40px_rgba(161,181,253,0.22)] transition hover:-translate-y-0.5 active:scale-[0.98]"
-                >
-                  <span className="grid size-9 place-items-center rounded-xl bg-[#172554]/15"><Calculator className="size-5" /></span>
-                  Chiusura giornaliera
-                </button>
-              )}
-              <Link
-                href="/cassa-live"
-                className="inline-flex min-h-14 items-center gap-3 rounded-2xl border border-emerald-300/30 bg-gradient-to-r from-[#8DE0BD] to-[#c5f4df] px-5 text-sm font-black text-[#10251c] shadow-[0_14px_40px_rgba(141,224,189,0.18)] transition hover:-translate-y-0.5 active:scale-[0.98]"
-              >
-                <span className="grid size-12 place-items-center rounded-2xl bg-[#14532d]/15"><DynamicIcon name="CashRegister" className="size-8" /></span>
-                TERMINALE POS
-                <ArrowUpRight className="size-4" aria-hidden="true" />
-              </Link>
-            </div>
-          </div>
-        </div>
-
         {/* Unified POS Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
+          {cashClosingForm && (
+            <button
+              type="button"
+              onClick={() => void openDailyClosing()}
+              className="group flex aspect-square flex-col justify-between rounded-[32px] border border-[#A1B5FD]/30 bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.2)" }}
+            >
+              <span className="grid size-14 place-items-center rounded-2xl bg-[#172554]/15">
+                <Calculator className="size-8 text-[#172554]" />
+              </span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#172554]/65">CONTANTI</p>
+                <h2 className="mt-1 text-xl font-black leading-tight text-[#172554]">Chiusura giornaliera</h2>
+              </div>
+            </button>
+          )}
+
+          <Link
+            href="/cassa-live"
+            className="group flex aspect-square flex-col justify-between rounded-[32px] border border-[#8DE0BD]/30 bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(141,224,189,0.2)" }}
+          >
+            <span className="grid size-16 place-items-center rounded-2xl bg-[#14532d]/15">
+              <DynamicIcon name="CashRegister" className="size-10 text-[#14532d]" />
+            </span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#14532d]/65">PAGAMENTI</p>
+              <h2 className="mt-1 text-xl font-black leading-tight text-[#10251c]">TERMINALE POS</h2>
+            </div>
+          </Link>
+
           {/* Card: Nuovo Ordine */}
           {orderForm && (
             <button
