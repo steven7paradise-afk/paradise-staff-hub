@@ -1659,9 +1659,6 @@ export function StaffFormsViewer({
                             <span className="rounded-xl bg-black/25 px-3 py-2">Totale: {formatEuro(order.payment?.total)}</span>
                             <span className="rounded-xl bg-black/25 px-3 py-2">Creato: {formatPickupDate(order.createdAt) || "-"}</span>
                           </div>
-                          {selected && order.summary ? (
-                            <p className="mt-3 rounded-xl bg-black/25 px-3 py-2 text-xs font-semibold leading-5 text-white/50">{order.summary}</p>
-                          ) : null}
                         </button>
                       );
                     })
