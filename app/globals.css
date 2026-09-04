@@ -1661,6 +1661,160 @@ textarea {
   background-color: #f8fafc !important;
 }
 
+/* Moduli operativi: workspace scuro a due colonne ispirato a una postazione POS. */
+.dark .service-form-wizard-workspace,
+.service-form-wizard-workspace {
+  color: #f7f5f6 !important;
+  background:
+    radial-gradient(circle at 78% 8%, rgba(167, 71, 88, 0.13), transparent 28%),
+    #090b0d !important;
+  color-scheme: dark !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-header,
+.service-form-wizard-workspace .service-form-wizard-header {
+  color: #f7f5f6 !important;
+  background: #121214 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step,
+.service-form-wizard-workspace .service-form-wizard-step {
+  color: #aaa5ab !important;
+  background: #1d1c1f !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step:hover,
+.service-form-wizard-workspace .service-form-wizard-step:hover {
+  color: #ffffff !important;
+  background: #29272b !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step[data-state="active"],
+.service-form-wizard-workspace .service-form-wizard-step[data-state="active"] {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #a74758, #c55d72) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 12px 26px rgba(167, 71, 88, 0.24) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-step[data-state="done"],
+.service-form-wizard-workspace .service-form-wizard-step[data-state="done"] {
+  color: #96e8c2 !important;
+  background: rgba(36, 113, 80, 0.2) !important;
+  border-color: rgba(85, 211, 155, 0.2) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-footer,
+.service-form-wizard-workspace .service-form-wizard-footer {
+  color: #f7f5f6 !important;
+  background: rgba(27, 26, 29, 0.97) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-secondary,
+.service-form-wizard-workspace .service-form-wizard-secondary {
+  color: #dedade !important;
+  -webkit-text-fill-color: #dedade !important;
+  background: #302f33 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-secondary:hover,
+.service-form-wizard-workspace .service-form-wizard-secondary:hover {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #3a383d !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-field-card,
+.service-form-wizard-workspace .service-form-wizard-field-card {
+  color: #f7f5f6 !important;
+  background: #242326 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-description,
+.service-form-wizard-workspace .service-form-wizard-description {
+  color: #aaa5ab !important;
+  background: #242326 !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-option,
+.service-form-wizard-workspace .service-form-wizard-option {
+  color: #dedade !important;
+  background: #302f33 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-option:hover,
+.service-form-wizard-workspace .service-form-wizard-option:hover {
+  color: #ffffff !important;
+  background: #39373c !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-option[data-state="selected"],
+.service-form-wizard-workspace .service-form-wizard-option[data-state="selected"] {
+  color: #ffb6c4 !important;
+  background: rgba(167, 71, 88, 0.17) !important;
+  border-color: #c65a70 !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-customer-list,
+.service-form-wizard-workspace .service-form-wizard-customer-list {
+  background: #1b1a1d !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-customer-row,
+.service-form-wizard-workspace .service-form-wizard-customer-row {
+  background: #29282c !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.dark .service-form-wizard-workspace .service-form-wizard-customer-row:hover,
+.service-form-wizard-workspace .service-form-wizard-customer-row:hover {
+  background: #343237 !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark .service-form-wizard-workspace :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]),
+.service-form-wizard-workspace :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]) {
+  color: #f7f5f6 !important;
+}
+
+.dark .service-form-wizard-workspace :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]),
+.service-form-wizard-workspace :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]) {
+  color: #a9a4aa !important;
+}
+
+.dark .service-form-wizard-workspace :is(input, textarea, select),
+.service-form-wizard-workspace :is(input, textarea, select) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #302f33 !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  opacity: 1 !important;
+}
+
+.dark .service-form-wizard-workspace :is(input, textarea)::placeholder,
+.service-form-wizard-workspace :is(input, textarea)::placeholder {
+  color: #8f8990 !important;
+  -webkit-text-fill-color: #8f8990 !important;
+  opacity: 1 !important;
+}
+
+@media (max-width: 639px) {
+  .service-form-wizard-workspace .service-form-wizard-footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
+
 @media (max-width: 1279px) {
   .cash-closing-workspace .cash-closing-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));

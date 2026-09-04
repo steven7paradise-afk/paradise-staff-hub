@@ -628,6 +628,7 @@ export function StaffFormsViewer({
     ? selectedForm.name.toUpperCase().includes("CHIUSURA CASSA") || selectedForm.category.toUpperCase().includes("CASSA")
     : false;
   const isSelectedOrderForm = isOrderLabelForm(selectedForm);
+  const isProfessionalWizardForm = Boolean(selectedForm) && !isCashClosingForm;
   const isSelectedClientControlForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
     : false;
@@ -2020,30 +2021,32 @@ export function StaffFormsViewer({
 
       {/* FILL OUT MODAL */}
       {selectedForm && (
+        <GlobalFullscreenLayer>
         <div className={cn(
           "fixed inset-0 z-50",
           isCashClosingForm && "cash-closing-workspace",
-          isSelectedOrderForm && "service-order-workspace",
-          !isCashClosingForm && !isSelectedOrderForm && "service-form-fill-workspace",
-          isCashClosingForm || isSelectedOrderForm
+          isProfessionalWizardForm && "service-form-wizard-workspace",
+          isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
-            : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
+            : isProfessionalWizardForm
+              ? "flex items-center justify-center overflow-hidden bg-[#090b0d] p-0"
+              : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
         )}>
           <div className={cn(
             "flex w-full flex-col border border-slate-100 bg-white text-slate-900 shadow-[0_35px_120px_rgba(0,0,0,0.25)] animate-in fade-in duration-200",
             isCashClosingForm
               ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_15%_0%,rgba(167,71,88,0.12),transparent_32%),linear-gradient(180deg,#faf8f9,#f3eef1)]"
-              : isSelectedOrderForm
-                ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_12%_0%,rgba(167,71,88,0.10),transparent_30%),linear-gradient(180deg,#fff,#f8f3f5)]"
+              : isProfessionalWizardForm
+                ? "service-form-wizard-shell h-[100dvh] min-h-[100dvh] max-w-none overflow-hidden border-0 border-white/10 bg-[#1b1a1d] shadow-[0_32px_100px_rgba(0,0,0,0.55)] xl:!grid xl:grid-cols-[310px_minmax(0,1fr)]"
               : "max-h-[92vh] max-w-4xl overflow-hidden rounded-[32px] zoom-in-95"
           )}>
             <div className={cn(
               "relative overflow-hidden border-b border-slate-100 bg-[radial-gradient(circle_at_top_left,rgba(167,71,88,0.06),transparent_40%),linear-gradient(135deg,#f8fafc,#ffffff_60%)] px-5 py-5 sm:px-7",
               isCashClosingForm && "cash-closing-header sticky top-0 z-30 py-4 shadow-sm backdrop-blur-2xl",
-              isSelectedOrderForm && "sticky top-0 z-30 px-6 py-5 shadow-sm backdrop-blur-2xl lg:px-12"
+              isProfessionalWizardForm && "service-form-wizard-header relative z-30 shrink-0 px-6 py-6 xl:h-[100dvh] xl:border-b-0 xl:border-r xl:px-6 xl:py-8"
             )}>
               <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-[#A74758] via-[#ff8bb2] to-transparent" />
-              <div className="flex items-start justify-between gap-4">
+                <div className={cn("flex items-start justify-between gap-4", isProfessionalWizardForm && "xl:block")}>
                 <div className="flex min-w-0 gap-3">
                   <div className="grid size-12 shrink-0 place-items-center rounded-2xl border border-slate-100 bg-slate-50 shadow-sm">
                     <DynamicIcon name={selectedForm.icon || "ClipboardList"} className="size-6 text-[#A74758]" />
@@ -2063,14 +2066,17 @@ export function StaffFormsViewer({
                 <button
                   type="button"
                   onClick={() => !submitting && setSelectedForm(null)}
-                  className="grid size-10 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600",
+                      isProfessionalWizardForm && "xl:absolute xl:right-5 xl:top-5"
+                    )}
                 >
                   <X className="size-5" />
                 </button>
               </div>
 
               {!success && visibleFields.length > 0 && (
-                <div className={cn("mt-5 space-y-3", isCashClosingForm && "mt-3")}>
+                <div className={cn("mt-5 space-y-3", isCashClosingForm && "mt-3", isProfessionalWizardForm && "xl:mt-12")}>
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
                     <span>Progresso compilazione</span>
                     <span>{progressPercentage}%</span>
@@ -2081,7 +2087,7 @@ export function StaffFormsViewer({
                       style={{ width: `${progressPercentage}%` }}
                     />
                   </div>
-                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <div className={cn("flex gap-1.5 overflow-x-auto pb-1", isProfessionalWizardForm && "xl:max-h-[calc(100vh-280px)] xl:flex-col xl:gap-2 xl:overflow-y-auto xl:pr-1")}>
                     {visibleFields.map((field, index) => {
                       const isActive = index === currentActiveIndex;
                       const isDone = field.type === "file"
@@ -2097,15 +2103,20 @@ export function StaffFormsViewer({
                           }}
                           className={cn(
                             "grid size-8 shrink-0 place-items-center rounded-full border text-[11px] font-black transition",
+                            isProfessionalWizardForm && "service-form-wizard-step xl:flex xl:h-auto xl:w-full xl:justify-start xl:gap-3 xl:rounded-2xl xl:px-3 xl:py-3 xl:text-left",
                             isActive
                               ? "border-[#A74758] bg-[#A74758] text-white"
                               : isDone
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-600"
                                 : "border-slate-200 bg-slate-50 text-slate-400"
                           )}
+                          data-state={isActive ? "active" : isDone ? "done" : "pending"}
                           title={field.label}
                         >
-                          {isDone && !isActive ? <Check className="size-3.5" /> : index + 1}
+                          <span className={cn(isProfessionalWizardForm && "xl:grid xl:size-7 xl:shrink-0 xl:place-items-center xl:rounded-full xl:border xl:border-current/25")}>
+                            {isDone && !isActive ? <Check className="size-3.5" /> : index + 1}
+                          </span>
+                          {isProfessionalWizardForm && <span className="hidden truncate text-xs font-black xl:block">{field.label}</span>}
                         </button>
                       );
                     })}
@@ -2132,8 +2143,8 @@ export function StaffFormsViewer({
                   "flex min-h-[430px] flex-1 flex-col justify-between",
                   isCashClosingForm
                     ? "w-full overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
-                    : isSelectedOrderForm
-                      ? "mx-auto w-full max-w-6xl overflow-visible bg-transparent px-5 py-8 sm:px-8 lg:py-12"
+                    : isProfessionalWizardForm
+                      ? "service-form-wizard-body min-h-0 w-full max-w-none overflow-y-auto bg-[#1b1a1d] px-5 py-7 sm:px-8 lg:px-12 lg:py-10"
                     : "overflow-y-auto bg-white p-5 sm:p-7"
                 )}
               >
@@ -2146,8 +2157,11 @@ export function StaffFormsViewer({
                     : ""
                 )}>
                   <div className="space-y-5">
-                  {selectedForm.description && currentActiveIndex === 0 && (
-                    <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600">
+                  {selectedForm.description && currentActiveIndex === 0 && !isSelectedOrderForm && (
+                    <div className={cn(
+                      "rounded-3xl border border-slate-100 bg-slate-50 p-4 text-sm leading-relaxed text-slate-600",
+                      isProfessionalWizardForm && "service-form-wizard-description"
+                    )}>
                       {selectedForm.description}
                     </div>
                   )}
@@ -2176,7 +2190,8 @@ export function StaffFormsViewer({
                       >
                         <div className={cn(
                           "rounded-[28px] border border-slate-100 bg-slate-50/50 p-5 shadow-sm sm:p-6",
-                          isCashClosingForm && "cash-closing-field-card"
+                          isCashClosingForm && "cash-closing-field-card",
+                          isProfessionalWizardForm && "service-form-wizard-field-card sm:p-8"
                         )}>
                           <div className="mb-5 space-y-2">
                             <span className="inline-flex rounded-full bg-slate-200/50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -2319,7 +2334,10 @@ export function StaffFormsViewer({
                                     placeholder="Cerca per nome, codice fiscale o P.IVA..."
                                     className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#A74758]"
                                   />
-                                  <div className="max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 rounded-2xl bg-white p-2">
+                                  <div className={cn(
+                                    "max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 rounded-2xl bg-white p-2",
+                                    isProfessionalWizardForm && "service-form-wizard-customer-list"
+                                  )}>
                                     {(() => {
                                       const filtered = pastCustomers.filter(c => 
                                         c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
@@ -2334,7 +2352,10 @@ export function StaffFormsViewer({
                                           key={cust.name}
                                           type="button"
                                           onClick={() => handleSelectCustomer(cust)}
-                                          className="flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-slate-50 border border-transparent hover:border-slate-100"
+                                          className={cn(
+                                            "flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-slate-50 border border-transparent hover:border-slate-100",
+                                            isProfessionalWizardForm && "service-form-wizard-customer-row"
+                                          )}
                                         >
                                           <div>
                                             <p className="text-sm font-black text-slate-900">{cust.name}</p>
@@ -2362,10 +2383,12 @@ export function StaffFormsViewer({
                                           onClick={() => handleSelectChange(field.id, opt)}
                                           className={cn(
                                             "flex min-h-14 w-full items-center justify-between rounded-2xl border p-4 text-left text-sm font-bold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                                            isProfessionalWizardForm && "service-form-wizard-option",
                                             isSelected
                                               ? "bg-[#A74758]/10 border-[#A74758] text-[#A74758] shadow-sm shadow-[#A74758]/5"
                                               : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                                           )}
+                                          data-state={isSelected ? "selected" : "idle"}
                                         >
                                           <span>{opt}</span>
                                           <div className={cn(
@@ -2899,8 +2922,8 @@ export function StaffFormsViewer({
                   "sticky bottom-0 mt-6 flex items-center justify-between border-t border-slate-100 bg-white/95 px-5 pt-4 backdrop-blur",
                   isCashClosingForm
                     ? "cash-closing-footer z-20 -mx-4 pb-4 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
-                    : isSelectedOrderForm
-                      ? "z-20 -mx-5 px-5 pb-5 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-8 sm:px-8"
+                    : isProfessionalWizardForm
+                      ? "service-form-wizard-footer z-20 -mx-5 gap-2 px-5 pb-5 shadow-[0_-12px_35px_rgba(45,30,38,0.06)] sm:-mx-8 sm:px-8"
                       : "-mx-5 sm:-mx-7 sm:px-7"
                 )}>
                   <div>
@@ -2915,7 +2938,10 @@ export function StaffFormsViewer({
                           setSelectedForm(null);
                         }
                       }}
-                      className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      className={cn(
+                        "rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200",
+                        isProfessionalWizardForm && "service-form-wizard-secondary"
+                      )}
                     >
                       Indietro
                     </Button>
@@ -2927,7 +2953,10 @@ export function StaffFormsViewer({
                       variant="soft"
                       disabled={submitting}
                       onClick={() => setSelectedForm(null)}
-                      className="rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      className={cn(
+                        "rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200",
+                        isProfessionalWizardForm && "service-form-wizard-secondary"
+                      )}
                     >
                       Annulla
                     </Button>
@@ -2963,6 +2992,7 @@ export function StaffFormsViewer({
             )}
           </div>
         </div>
+        </GlobalFullscreenLayer>
       )}
 
       {/* HISTORY / SUBMISSIONS LIST MODAL */}

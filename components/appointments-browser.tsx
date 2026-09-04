@@ -399,15 +399,19 @@ const appointmentStatusOptions: Array<{
 }> = [
   { value: "PRENOTATO", label: "Confermato" },
   { value: "NON_PRESENTATO", label: "Non presentato" },
-  { value: "INIZIATO", label: "Iniziato" },
-  { value: "IN_ATTESA", label: "In attesa" },
+  { value: "IN_ATTESA", label: "Arrivata" },
   { value: "COMPLETATO", label: "Completato" },
-  { value: "ARRIVATO_IN_RITARDO", label: "Arrivato in ritardo" },
 ];
 
-const appointmentStatusLabels = Object.fromEntries(
-  appointmentStatusOptions.map((option) => [option.value, option.label]),
-) as Record<AppointmentStatusValue, string>;
+const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
+  PRENOTATO: "Confermato",
+  NON_PRESENTATO: "Non presentato",
+  INIZIATO: "Arrivata",
+  IN_ATTESA: "Arrivata",
+  COMPLETATO: "Completato",
+  ARRIVATO_IN_RITARDO: "Arrivata",
+  PAGATO: "Confermato",
+};
 
 const appointmentStatusClasses: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "border-sky-100 bg-sky-50 text-sky-700",
@@ -649,10 +653,14 @@ function normalizeAppointmentStatus(
 
   if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW")
     return "NON_PRESENTATO";
-  if (normalized === "ARRIVATO_IN_RITARDO" || normalized === "IN_RITARDO")
-    return "ARRIVATO_IN_RITARDO";
+  // I vecchi stati di ingresso confluiscono nell'unico stato operativo "Arrivata".
+  if (
+    normalized === "ARRIVATO_IN_RITARDO" ||
+    normalized === "IN_RITARDO" ||
+    normalized === "INIZIATO"
+  )
+    return "IN_ATTESA";
   if (normalized === "IN_ATTESA" || normalized === "ATTESA") return "IN_ATTESA";
-  if (normalized === "INIZIATO") return "INIZIATO";
   if (normalized === "COMPLETATO" || normalized === "COMPLETA")
     return "COMPLETATO";
   // Payment is not an operational appointment state. Legacy PAGATO/PAID
