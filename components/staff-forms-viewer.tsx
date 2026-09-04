@@ -293,23 +293,6 @@ export function StaffFormsViewer({
     address: string;
   }>;
 }) {
-  const openShopifyOrders = () => {
-    const width = Math.max(1024, window.screen.availWidth || window.innerWidth);
-    const height = Math.max(700, window.screen.availHeight || window.innerHeight);
-    const shopifyWindow = window.open(
-      "https://admin.shopify.com/store/c1uzax-u0/orders",
-      "paradise-shopify-orders",
-      `popup=yes,width=${width},height=${height},left=0,top=0`,
-    );
-
-    if (shopifyWindow) {
-      shopifyWindow.focus();
-      return;
-    }
-
-    window.open("https://admin.shopify.com/store/c1uzax-u0/orders", "_blank");
-  };
-
   const [selectedForm, setSelectedForm] = useState<FormTemplate | null>(null);
   const [selectedFormForHistory, setSelectedFormForHistory] = useState<FormTemplate | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
@@ -321,6 +304,7 @@ export function StaffFormsViewer({
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [showPickupModal, setShowPickupModal] = useState(false);
   const [showPosTerminal, setShowPosTerminal] = useState(false);
+  const [showPaymentLink, setShowPaymentLink] = useState(false);
   const [pickupQuery, setPickupQuery] = useState("");
   const [pickupName, setPickupName] = useState("");
   const [pickupPin, setPickupPin] = useState("");
@@ -1331,10 +1315,9 @@ export function StaffFormsViewer({
           </button>
 
           {/* Card: Pagamento Link */}
-          <a
-            href="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => setShowPaymentLink(true)}
             className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#FFC56E]/35 bg-gradient-to-br from-[#FFC56E] to-[#FFE3AD] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
             style={{ boxShadow: "0 10px 30px rgba(253,203,130,0.15)" }}
           >
@@ -1345,7 +1328,7 @@ export function StaffFormsViewer({
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6d4615] opacity-80">FORNITORI</p>
               <h2 className="mt-1 text-xl font-black text-[#211407] leading-tight">Pagamento Link</h2>
             </div>
-          </a>
+          </button>
 
           {/* Card: Richiesta Fattura Italiana */}
           {italianInvoiceForm && (
@@ -1435,9 +1418,8 @@ export function StaffFormsViewer({
           </Link>
 
           {/* Card: Shopify Orders */}
-          <button
-            type="button"
-            onClick={openShopifyOrders}
+          <Link
+            href="/shopify-orders"
             className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#7ED6A5]/40 bg-gradient-to-br from-[#7ED6A5] to-[#D8F5E4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
             style={{ boxShadow: "0 10px 30px rgba(126,214,165,0.17)" }}
             aria-label="Apri gli ordini Shopify a schermo completo"
@@ -1449,7 +1431,7 @@ export function StaffFormsViewer({
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534]/70">SHOPIFY</p>
               <h2 className="mt-1 text-xl font-black leading-tight text-[#14532d]">Ordini Shopify</h2>
             </div>
-          </button>
+          </Link>
 
           {/* Render any other dynamic forms from database */}
           {regularForms.map((form, idx) => {
@@ -1507,6 +1489,39 @@ export function StaffFormsViewer({
               title="Terminale POS"
               loading="eager"
               allow="clipboard-read; clipboard-write"
+              className="min-h-0 flex-1 border-0 bg-white"
+            />
+          </section>
+        </GlobalFullscreenLayer>
+      )}
+
+      {showPaymentLink && (
+        <GlobalFullscreenLayer className="bg-[#f6f9fc]">
+          <section className="flex h-full w-full flex-col overflow-hidden bg-[#f6f9fc]">
+            <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#d8dee9] bg-white px-4 text-[#1f2937] shadow-sm sm:px-6">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-2xl bg-[#635bff]/10 text-[#635bff]">
+                  <CreditCard className="size-7" />
+                </span>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#635bff]">Pagamento sicuro</p>
+                  <h2 className="text-lg font-black leading-tight">Pagamento Link</h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentLink(false)}
+                className="grid size-11 place-items-center rounded-2xl border border-black/10 bg-[#f6f9fc] text-[#4b5563] transition hover:bg-[#eef1f6] hover:text-black"
+                aria-label="Chiudi Pagamento Link"
+              >
+                <X className="size-6" />
+              </button>
+            </header>
+            <iframe
+              src="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
+              title="Pagamento Link Stripe"
+              loading="eager"
+              allow="payment"
               className="min-h-0 flex-1 border-0 bg-white"
             />
           </section>
