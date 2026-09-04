@@ -1501,13 +1501,13 @@ export function StaffFormsViewer({
 
       {/* PICKUP MODAL */}
       {showPickupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5">
+        <div className="fixed inset-0 z-50 bg-[#0b0b0c]">
           <form
             onSubmit={handlePickupSubmit}
-            className="max-h-[92dvh] w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#0b0b0c] text-white shadow-[0_35px_120px_rgba(0,0,0,0.35)]"
+            className="flex h-dvh w-full flex-col overflow-hidden bg-[#0b0b0c] text-white"
           >
-            <div className="border-b border-white/10 bg-white/[0.03] px-5 py-5 sm:px-7">
-              <div className="flex items-start justify-between gap-4">
+            <div className="flex-none border-b border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
+              <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-4">
                 <div className="flex gap-3">
                   <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-400/15 text-emerald-300">
                     <PackageCheck className="size-6" />
@@ -1522,26 +1522,14 @@ export function StaffFormsViewer({
                   type="button"
                   onClick={() => !pickupSubmitting && setShowPickupModal(false)}
                   className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/50 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Chiudi consegna al cliente"
                 >
                   <X className="size-5" />
                 </button>
               </div>
             </div>
 
-            <div className="max-h-[calc(92dvh-170px)] space-y-5 overflow-y-auto px-5 py-6 sm:px-7">
-              {pickupMessage && (
-                <div
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-sm font-bold",
-                    pickupMessage.type === "success"
-                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-                      : "border-red-400/25 bg-red-400/10 text-red-200"
-                  )}
-                >
-                  {pickupMessage.text}
-                </div>
-              )}
-
+            <div className="mx-auto min-h-0 w-full max-w-7xl flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-6 sm:px-7">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Cerca ordine</span>
@@ -1608,7 +1596,7 @@ export function StaffFormsViewer({
                   </button>
                 </div>
 
-                <div className="grid max-h-72 gap-3 overflow-y-auto pr-1">
+                <div className="grid gap-3">
                   {pickupLoadingOrders ? (
                     <div className="flex min-h-24 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 text-sm font-bold text-white/50">
                       <Loader2 className="size-4 animate-spin" />
@@ -1843,36 +1831,38 @@ export function StaffFormsViewer({
               </label>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
-              {pickupMessage ? (
-                <div
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-sm font-black",
-                    pickupMessage.type === "success"
-                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-                      : "border-red-400/25 bg-red-400/10 text-red-200"
-                  )}
-                >
-                  {pickupMessage.text}
+            <div className="flex-none border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
+              <div className="mx-auto flex w-full max-w-7xl flex-col gap-3">
+                {pickupMessage ? (
+                  <div
+                    className={cn(
+                      "rounded-2xl border px-4 py-3 text-sm font-black",
+                      pickupMessage.type === "success"
+                        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                        : "border-red-400/25 bg-red-400/10 text-red-200"
+                    )}
+                  >
+                    {pickupMessage.text}
+                  </div>
+                ) : null}
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+                  <button
+                    type="button"
+                    disabled={pickupSubmitting}
+                    onClick={() => setShowPickupModal(false)}
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/70 transition hover:bg-white/10 disabled:opacity-50 sm:w-auto"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={pickupSubmitting || (!!pickupSelectedOrder && pickupSelectedOrder.status !== "READY")}
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-5 py-3 text-sm font-black text-black transition hover:scale-[1.02] disabled:opacity-50 sm:w-auto"
+                  >
+                    {pickupSubmitting ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />}
+                    Completa ritiro
+                  </button>
                 </div>
-              ) : null}
-              <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                disabled={pickupSubmitting}
-                onClick={() => setShowPickupModal(false)}
-                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/70 transition hover:bg-white/10 disabled:opacity-50"
-              >
-                Annulla
-              </button>
-              <button
-                type="submit"
-                disabled={pickupSubmitting || (!!pickupSelectedOrder && pickupSelectedOrder.status !== "READY")}
-                className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-emerald-300 px-5 py-3 text-sm font-black text-black transition hover:scale-[1.02] disabled:opacity-50"
-              >
-                {pickupSubmitting ? <Loader2 className="size-4 animate-spin" /> : <PackageCheck className="size-4" />}
-                Completa ritiro
-              </button>
               </div>
             </div>
           </form>
