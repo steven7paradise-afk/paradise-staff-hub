@@ -6,6 +6,7 @@ import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upl
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
+import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { cn } from "@/lib/utils";
 
 function serviceFormFileUrl(answer: any) {
@@ -1501,10 +1502,10 @@ export function StaffFormsViewer({
 
       {/* PICKUP MODAL */}
       {showPickupModal && (
-        <div className="fixed inset-0 z-50 bg-[#0b0b0c]">
+        <GlobalFullscreenLayer className="bg-[#0b0b0c]">
           <form
             onSubmit={handlePickupSubmit}
-            className="flex h-dvh w-full flex-col overflow-hidden bg-[#0b0b0c] text-white"
+            className="flex h-full w-full flex-col overflow-hidden bg-[#0b0b0c] text-white"
           >
             <div className="flex-none border-b border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
               <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-4">
@@ -1529,8 +1530,10 @@ export function StaffFormsViewer({
               </div>
             </div>
 
-            <div className="mx-auto min-h-0 w-full max-w-7xl flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-6 sm:px-7">
-              <div className="grid gap-4 sm:grid-cols-2">
+            <div className="mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-7 xl:overflow-hidden">
+              <div className="grid min-h-full gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(380px,0.85fr)_minmax(0,1.55fr)]">
+                <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pr-2">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Cerca ordine</span>
                   <input
@@ -1596,7 +1599,7 @@ export function StaffFormsViewer({
                   </button>
                 </div>
 
-                <div className="grid gap-3">
+                <div className="grid max-h-[26rem] gap-3 overflow-y-auto overscroll-contain pr-1">
                   {pickupLoadingOrders ? (
                     <div className="flex min-h-24 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/20 text-sm font-bold text-white/50">
                       <Loader2 className="size-4 animate-spin" />
@@ -1657,6 +1660,9 @@ export function StaffFormsViewer({
                 </div>
               </div>
 
+                </div>
+
+                <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pl-1 xl:pr-2">
               {pickupSelectedOrder ? (
                 <div className="space-y-3 rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1788,7 +1794,15 @@ export function StaffFormsViewer({
                     </div>
                   </div>
                 </div>
-              ) : null}
+              ) : (
+                <div className="grid min-h-56 place-items-center rounded-3xl border border-dashed border-white/15 bg-white/[0.025] p-8 text-center">
+                  <div>
+                    <PackageCheck className="mx-auto size-10 text-white/20" />
+                    <p className="mt-3 text-base font-black text-white/65">Seleziona un ordine pronto</p>
+                    <p className="mt-1 text-sm font-semibold text-white/35">Tutti i dettagli compariranno qui a destra.</p>
+                  </div>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -1829,6 +1843,8 @@ export function StaffFormsViewer({
                   <span className="mt-1 text-[11px] font-semibold text-white/35">Facoltativo se il saldo e gia stato verificato. Foto o PDF, massimo 12 MB.</span>
                 </div>
               </label>
+                </div>
+              </div>
             </div>
 
             <div className="flex-none border-t border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
@@ -1866,7 +1882,7 @@ export function StaffFormsViewer({
               </div>
             </div>
           </form>
-        </div>
+        </GlobalFullscreenLayer>
       )}
 
       {/* FILL OUT MODAL */}
