@@ -104,6 +104,7 @@ const legacyAccessRouteMap: Record<string, string> = {
   transazioni: "/cash",
   "chiusure cassa": "/cash",
   "cassa live": "/cassa-live",
+  "terminale pos": "/cassa-live",
   fatture: "/invoices",
   invoices: "/invoices",
   rimborsi: "/refunds",

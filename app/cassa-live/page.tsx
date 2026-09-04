@@ -19,8 +19,8 @@ export default async function CassaLivePage() {
   if (pcAuth) {
     return (
       <AppShell
-        title="Cassa Live"
-        subtitle="Controllo Cashmatic in tempo reale"
+        title="Terminale POS"
+        subtitle="Controllo automatico dei pagamenti in tempo reale"
         role="RESPONSABILE"
         hideHeader
         edgeToEdgeMain
@@ -51,8 +51,8 @@ export default async function CassaLivePage() {
 
   return (
     <AppShell
-      title="Cassa Live"
-      subtitle="Controllo Cashmatic in tempo reale"
+      title="Terminale POS"
+      subtitle="Controllo automatico dei pagamenti in tempo reale"
       role={user.role as Role}
       hideHeader
       edgeToEdgeMain
@@ -68,7 +68,7 @@ function CashmaticLiveFrame() {
   return (
     <iframe
       src={CASHMATIC_LIVE_URL}
-      title="Cassa Live Cashmatic"
+      title="Terminale POS Cashmatic"
       loading="eager"
       allow="clipboard-read; clipboard-write"
       className="block h-[calc(100dvh-64px)] min-h-[640px] w-full border-0 bg-white xl:h-dvh"

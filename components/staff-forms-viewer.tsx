@@ -1202,8 +1202,8 @@ export function StaffFormsViewer({
                 href="/cassa-live"
                 className="inline-flex min-h-14 items-center gap-3 rounded-2xl border border-emerald-300/30 bg-gradient-to-r from-[#8DE0BD] to-[#c5f4df] px-5 text-sm font-black text-[#10251c] shadow-[0_14px_40px_rgba(141,224,189,0.18)] transition hover:-translate-y-0.5 active:scale-[0.98]"
               >
-                <span className="grid size-9 place-items-center rounded-xl bg-[#14532d]/15"><Banknote className="size-5" /></span>
-                Cassa Live
+                <span className="grid size-12 place-items-center rounded-2xl bg-[#14532d]/15"><DynamicIcon name="CashRegister" className="size-8" /></span>
+                TERMINALE POS
                 <ArrowUpRight className="size-4" aria-hidden="true" />
               </Link>
             </div>

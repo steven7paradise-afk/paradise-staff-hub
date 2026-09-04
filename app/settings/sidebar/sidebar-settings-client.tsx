@@ -63,7 +63,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/appointments": "Appuntamenti",
   "/consulenza-online": "Consulenza Online",
   "/cash": "Cassa",
-  "/cassa-live": "Cassa Live",
+  "/cassa-live": "Terminale POS",
   "/invoices": "Fatture",
   "/refunds": "Rimborsi",
   "/rimborsi": "Rimborsi vecchio link",
