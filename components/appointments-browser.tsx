@@ -51,6 +51,11 @@ import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appoin
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import {
+  allowsMissingFinalPaymentOrder,
+  CLIENT_CONTROL_SERVICE_OPTIONS,
+  type ClientControlService,
+} from "@/lib/client-control-service-rules";
 
 type ViewMode = "day" | "week" | "month";
 type SalonFilter = "tutti" | "duomo" | "buenos-aires" | "ufficio";
@@ -118,25 +123,17 @@ type ClientControlAppointmentForm = {
   bookingId?: string | null;
 };
 
-const SERVICE_DETAIL_OPTIONS = [
-  "Applicazione",
-  "Riapplicazione",
-  "Piega",
-  "Taglio",
-  "Microcheratina",
-  "Nanoplastia",
-  "Colore",
-] as const;
-
 function detectServiceDetails(serviceTitle?: string | null): string[] {
   const title = normalizeSearchValue(serviceTitle);
   const detected: string[] = [];
-  const add = (service: (typeof SERVICE_DETAIL_OPTIONS)[number]) => {
+  const add = (service: ClientControlService) => {
     if (!detected.includes(service)) detected.push(service);
   };
 
   if (/riapplicazione|riapplica/.test(title)) add("Riapplicazione");
   else if (/applicazione|applica/.test(title)) add("Applicazione");
+  if (/sistemazione\s+fasc(?:e|ia)/.test(title)) add("Sistemazione fasce");
+  if (/rimozione|rimuovi|rimuovere/.test(title)) add("Rimozione");
   if (/piega|messa in piega/.test(title)) add("Piega");
   if (/taglio|spuntata/.test(title)) add("Taglio");
   if (/micro\s?cheratina/.test(title)) add("Microcheratina");
@@ -149,7 +146,7 @@ function readStoredServiceDetails(value: unknown): string[] {
   const raw = Array.isArray(value) ? value : String(value || "").split(/[,;|]+/);
   return raw
     .map((item) => String(item).trim())
-    .filter((item) => SERVICE_DETAIL_OPTIONS.some((option) => option === item));
+    .filter((item) => CLIENT_CONTROL_SERVICE_OPTIONS.some((option) => option === item));
 }
 
 type ManualPaymentMethod = "CARTA" | "SHOPIFY" | "CONTANTI";
@@ -1805,6 +1802,7 @@ export function AppointmentsBrowser({
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
   const [selectedServiceDetails, setSelectedServiceDetails] = useState<string[]>([]);
+  const finalPaymentOptional = allowsMissingFinalPaymentOrder(selectedServiceDetails);
   const [isDepositUnlockedManually, setIsDepositUnlockedManually] = useState(false);
   const [isSecondUnlockedManually, setIsSecondUnlockedManually] = useState(false);
 
@@ -4881,7 +4879,9 @@ export function AppointmentsBrowser({
                                 {isSecondLocked ? "🔒 Bloccato" : "🔓 Sbloccato (Clicca per bloccare)"}
                               </button>
                             ) : (
-                              <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">Principale</span>
+                              <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">
+                                {finalPaymentOptional ? "Facoltativo per sistemazione fasce" : "Obbligatorio"}
+                              </span>
                             )}
                           </div>
                           <input
@@ -4906,7 +4906,7 @@ export function AppointmentsBrowser({
                                 ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
                                 : "border-[#D96B94]/50 bg-white text-[#1F1F1F] focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30"
                             }`}
-                            placeholder="N° Ordine Finale Salone (es. 25344)"
+                            placeholder={finalPaymentOptional ? "Facoltativo per sistemazione fasce" : "N° Ordine Finale Salone (es. 25344)"}
                           />
                           {secondShopifyLookupLoading ? (
                             <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[#B83D7F]">Verifica pagamento Shopify in corso...</p>
@@ -5129,7 +5129,9 @@ export function AppointmentsBrowser({
                       <span className="rounded-lg border border-[#D96B94] bg-[#D96B94] px-2 py-1 text-[10px] font-black text-white">
                         {clientControlForm.secondShopifyOrder
                           ? `Saldo #${clientControlForm.secondShopifyOrder.replace(/^#/, "")}`
-                          : "Saldo da collegare"}
+                          : finalPaymentOptional
+                            ? "Saldo facoltativo"
+                            : "Saldo da collegare"}
                       </span>
                       <span className="mt-1 text-[9px] font-extrabold tabular-nums text-[#655D61]">
                         {formatOrderDate(secondOrderDetails?.createdAt || suggestedSaldoOrder?.createdAt) || "Data non disponibile"}
@@ -5141,7 +5143,7 @@ export function AppointmentsBrowser({
                     value={clientControlForm.paid}
                     readOnly
                     className="h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black text-[#1F1F1F] outline-none shadow-2xs"
-                    placeholder="Importato dal 2° ordine"
+                    placeholder={finalPaymentOptional ? "Non obbligatorio per sistemazione fasce" : "Importato dal 2° ordine"}
                   />
                 </label>
 
@@ -5464,7 +5466,7 @@ export function AppointmentsBrowser({
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {SERVICE_DETAIL_OPTIONS.map((service) => {
+                    {CLIENT_CONTROL_SERVICE_OPTIONS.map((service) => {
                       const selected = selectedServiceDetails.includes(service);
                       return (
                         <button

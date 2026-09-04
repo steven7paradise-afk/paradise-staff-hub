@@ -7,6 +7,7 @@ import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName }
 import { appendShopifyOrderNote, updateShopifyOrderMetafields, extractShopifyOrderCodes, isFuzzyNameMatch } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
 import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
+import { allowsMissingFinalPaymentOrder } from "@/lib/client-control-service-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -248,6 +249,7 @@ export async function POST(request: NextRequest) {
   const form = await ensureClientControlForm(submitter.id);
   const shopifyOrder = textValue(body?.shopifyOrder);
   const secondShopifyOrder = textValue(body?.secondShopifyOrder);
+  const finalPaymentOptional = allowsMissingFinalPaymentOrder(body?.customServices);
   const isNoShow = !!body?.isNoShow;
   let productsListStr = "";
   let shopifyClientName: string | null = null;
@@ -311,7 +313,7 @@ export async function POST(request: NextRequest) {
   const trustedPaid = secondOrderDetails?.totalPrice
     ?? (moneyValue(body?.paid) || shopifyTotalPrice);
 
-  if (!isFinito && !isNoShow && !isDraft) {
+  if (!isFinito && !isNoShow && !isDraft && !finalPaymentOptional) {
     if (!secondShopifyOrder) {
       return NextResponse.json({ error: "Inserisci il 2° codice ordine del pagamento finale." }, { status: 400 });
     }
