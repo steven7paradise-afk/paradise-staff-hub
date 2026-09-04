@@ -1185,7 +1185,7 @@ export function StaffFormsViewer({
               <div className="size-1.5 rounded-full bg-yellow-400 animate-pulse" />
               Terminale operativo POS
             </div>
-            <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">Cassa & Moduli</h1>
+            <h1 className="mt-3 text-3xl font-black text-white tracking-tight sm:text-4xl">TERMINALE POS</h1>
             <p className="mt-2 text-xs font-semibold text-white/45">Interfaccia touch-friendly per la gestione rapida del salone.</p>
             <div className="mt-5 flex flex-wrap gap-3">
               {cashClosingForm && (
