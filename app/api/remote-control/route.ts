@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
@@ -28,7 +29,13 @@ type PointerState = { x: number; y: number; revision: number };
 type InputState = { selector: string; value: string; revision: number };
 type ClickState = { x: number; y: number; selector?: string; label?: string; tag?: string; revision: number };
 type ScrollState = { x: number; y: number; revision: number };
+type RemoteEvent =
+  | ({ kind: "click" } & ClickState)
+  | ({ kind: "input"; selector: string; value: string; checked?: boolean; fieldTag?: string; fieldType?: string } & { revision: number })
+  | ({ kind: "key"; selector: string; key: string; code?: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } & { revision: number })
+  | ({ kind: "scroll" } & ScrollState);
 type RemoteSession = {
+  sessionId?: string;
   targetCode: string;
   active: boolean;
   controllerId: string;
@@ -40,6 +47,8 @@ type RemoteSession = {
   input: InputState | null;
   click: ClickState | null;
   scroll: ScrollState | null;
+  events?: RemoteEvent[];
+  eventRevision?: number;
   revision: number;
   updatedAt: string;
   expiresAt: string;
@@ -302,6 +311,57 @@ export async function POST(request: NextRequest) {
         }
       : (previous as RemoteSession & { scroll?: ScrollState | null })?.scroll || null;
 
+    let eventRevision = action === "start" ? 0 : previous?.eventRevision || 0;
+    const events = action === "start" ? [] : [...(previous?.events || [])];
+    const incomingEvents = Array.isArray(body?.events) ? body.events.slice(0, 50) : [];
+    for (const candidate of incomingEvents) {
+      if (!candidate || typeof candidate !== "object") continue;
+      const kind = typeof candidate.kind === "string" ? candidate.kind : "";
+      eventRevision += 1;
+      if (kind === "click" && Number.isFinite(candidate.x) && Number.isFinite(candidate.y)) {
+        events.push({
+          kind: "click",
+          x: Math.max(0, Math.min(1, Number(candidate.x))),
+          y: Math.max(0, Math.min(1, Number(candidate.y))),
+          selector: typeof candidate.selector === "string" ? candidate.selector.slice(0, 500) : undefined,
+          label: typeof candidate.label === "string" ? candidate.label.slice(0, 160) : undefined,
+          tag: typeof candidate.tag === "string" ? candidate.tag.slice(0, 30) : undefined,
+          revision: eventRevision,
+        });
+      } else if (kind === "input" && typeof candidate.selector === "string" && typeof candidate.value === "string") {
+        events.push({
+          kind: "input",
+          selector: candidate.selector.slice(0, 500),
+          value: candidate.value.slice(0, 5000),
+          checked: typeof candidate.checked === "boolean" ? candidate.checked : undefined,
+          fieldTag: typeof candidate.fieldTag === "string" ? candidate.fieldTag.slice(0, 20) : undefined,
+          fieldType: typeof candidate.fieldType === "string" ? candidate.fieldType.slice(0, 30) : undefined,
+          revision: eventRevision,
+        });
+      } else if (kind === "key" && typeof candidate.selector === "string" && typeof candidate.key === "string") {
+        events.push({
+          kind: "key",
+          selector: candidate.selector.slice(0, 500),
+          key: candidate.key.slice(0, 50),
+          code: typeof candidate.code === "string" ? candidate.code.slice(0, 50) : undefined,
+          altKey: Boolean(candidate.altKey),
+          ctrlKey: Boolean(candidate.ctrlKey),
+          metaKey: Boolean(candidate.metaKey),
+          shiftKey: Boolean(candidate.shiftKey),
+          revision: eventRevision,
+        });
+      } else if (kind === "scroll" && Number.isFinite(candidate.x) && Number.isFinite(candidate.y)) {
+        events.push({
+          kind: "scroll",
+          x: Math.max(0, Math.min(1, Number(candidate.x))),
+          y: Math.max(0, Math.min(1, Number(candidate.y))),
+          revision: eventRevision,
+        });
+      } else {
+        eventRevision -= 1;
+      }
+    }
+
     if (action === "start") {
       for (const [code, item] of Object.entries(sessions)) {
         const otherPc = pcsFrom(pcsSetting?.value).find((candidate) => candidate.code === code);
@@ -311,6 +371,7 @@ export async function POST(request: NextRequest) {
       }
     }
     sessions[targetCode] = {
+      sessionId: action === "start" ? randomUUID() : previous?.sessionId || randomUUID(),
       targetCode,
       active: true,
       controllerId: session.user.id,
@@ -322,6 +383,10 @@ export async function POST(request: NextRequest) {
       input: action === "start" ? null : input,
       click: action === "start" ? null : click,
       scroll: action === "start" ? null : scroll,
+      // Keep an ordered, bounded event queue. Previously only the latest click
+      // or keystroke survived, so quick actions and modal openings were lost.
+      events: events.slice(-120),
+      eventRevision,
       revision: (previous?.revision || 0) + 1,
       updatedAt: now.toISOString(),
       // The controller sends a heartbeat while the remote view is open. A

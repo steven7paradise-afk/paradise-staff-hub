@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Link2, MousePointer2, Radio, X } from "lucide-react";
 
 type RemoteSession = {
+  sessionId?: string;
   targetCode: string;
   controllerName: string;
   workerId: string | null;
@@ -13,7 +15,21 @@ type RemoteSession = {
   input: { selector: string; value: string; revision: number } | null;
   click: { x: number; y: number; selector?: string; label?: string; tag?: string; revision: number } | null;
   scroll: { x: number; y: number; revision: number } | null;
+  events?: RemoteEvent[];
+  eventRevision?: number;
 };
+
+type RemoteEvent =
+  | { kind: "click"; x: number; y: number; selector?: string; label?: string; tag?: string; revision: number }
+  | { kind: "input"; selector: string; value: string; checked?: boolean; fieldTag?: string; fieldType?: string; revision: number }
+  | { kind: "key"; selector: string; key: string; code?: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; revision: number }
+  | { kind: "scroll"; x: number; y: number; revision: number };
+
+type OutgoingEvent =
+  | { kind: "click"; x: number; y: number; selector?: string; label?: string; tag?: string }
+  | { kind: "input"; selector: string; value: string; checked?: boolean; fieldTag?: string; fieldType?: string }
+  | { kind: "key"; selector: string; key: string; code?: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }
+  | { kind: "scroll"; x: number; y: number };
 
 function selectorFor(element: Element) {
   if (element.id) return `#${CSS.escape(element.id)}`;
@@ -41,7 +57,72 @@ function normalizedLabel(element: Element | null) {
   return String(element?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
+function resolveClickable(event: Extract<RemoteEvent, { kind: "click" }>) {
+  let selected = event.selector
+    ? document.querySelector(event.selector) as HTMLElement | null
+    : null;
+  const expectedLabel = event.label || "";
+  if (selected && expectedLabel && normalizedLabel(selected) !== expectedLabel) selected = null;
+  if (!selected && expectedLabel) {
+    const selector = event.tag && /^[a-z][a-z0-9-]*$/.test(event.tag)
+      ? event.tag
+      : "button,a,[role='button'],label,input,textarea,select";
+    selected = Array.from(document.querySelectorAll<HTMLElement>(selector))
+      .find((element) => normalizedLabel(element) === expectedLabel) || null;
+  }
+  const fallback = document.elementFromPoint(
+    event.x * window.innerWidth,
+    event.y * window.innerHeight,
+  ) as HTMLElement | null;
+  return selected || fallback?.closest<HTMLElement>("button,a,[role='button'],label,input,textarea,select") || fallback;
+}
+
+function applyInputEvent(event: Extract<RemoteEvent, { kind: "input" }>) {
+  const field = document.querySelector(event.selector) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+  if (!field || (field instanceof HTMLInputElement && ["password", "file"].includes(field.type))) return;
+  field.focus({ preventScroll: true });
+  if (field instanceof HTMLInputElement && typeof event.checked === "boolean") {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "checked")?.set;
+    if (setter) setter.call(field, event.checked);
+    else field.checked = event.checked;
+  } else {
+    const prototype = field instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : field instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+    if (setter) setter.call(field, event.value);
+    else field.value = event.value;
+  }
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  field.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function applyKeyEvent(event: Extract<RemoteEvent, { kind: "key" }>) {
+  const field = document.querySelector(event.selector) as HTMLElement | null;
+  if (!field) return;
+  field.focus({ preventScroll: true });
+  const options: KeyboardEventInit = {
+    bubbles: true,
+    cancelable: true,
+    key: event.key,
+    code: event.code,
+    altKey: event.altKey,
+    ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
+    shiftKey: event.shiftKey,
+  };
+  field.dispatchEvent(new KeyboardEvent("keydown", options));
+  field.dispatchEvent(new KeyboardEvent("keyup", options));
+  if (event.key === "Enter" && !(field instanceof HTMLTextAreaElement)) {
+    const form = field.closest("form") as HTMLFormElement | null;
+    if (form) form.requestSubmit();
+  }
+}
+
 export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
+  const router = useRouter();
   const [pcSession, setPcSession] = useState<RemoteSession | null>(null);
   const [controllerTarget, setControllerTarget] = useState("");
   const [reconnectRequest, setReconnectRequest] = useState<{ requestedBy: string } | null>(null);
@@ -50,12 +131,17 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
   const lastClickRevision = useRef(0);
   const lastPath = useRef("");
   const lastScrollRevision = useRef(0);
+  const lastEventRevision = useRef(0);
+  const activeSessionId = useRef("");
   const stopping = useRef(false);
 
   useEffect(() => {
     if (!pcMode) return;
     let cancelled = false;
+    let polling = false;
     const poll = async () => {
+      if (polling) return;
+      polling = true;
       try {
         const response = await fetch("/api/remote-control?mode=pc", { cache: "no-store" });
         if (!response.ok) return;
@@ -65,6 +151,16 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
         setPcSession(remote);
         setReconnectRequest(data?.reconnectRequest || null);
         if (!remote) return;
+
+        const sessionIdentity = remote.sessionId || `legacy:${remote.targetCode}`;
+        if (activeSessionId.current !== sessionIdentity) {
+          activeSessionId.current = sessionIdentity;
+          lastEventRevision.current = 0;
+          lastInputRevision.current = 0;
+          lastClickRevision.current = 0;
+          lastScrollRevision.current = 0;
+          lastPath.current = "";
+        }
 
         const params = new URLSearchParams(remote.search || "");
         params.delete("remoteTarget");
@@ -78,44 +174,52 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
           // Navigate before replaying the event. Otherwise a click belonging to
           // the next page is consumed against the old DOM and its popup is lost.
           lastPath.current = wanted;
-          window.location.assign(wanted);
+          router.replace(wanted);
           return;
+        }
+
+        const eventStorageKey = `paradise-remote-event:${remote.targetCode}:${sessionIdentity}`;
+        const storedEventRevision = Number(window.sessionStorage.getItem(eventStorageKey) || 0);
+        let appliedEventRevision = Math.max(lastEventRevision.current, Number.isFinite(storedEventRevision) ? storedEventRevision : 0);
+        const orderedEvents = (remote.events || [])
+          .filter((event) => event.revision > appliedEventRevision)
+          .sort((left, right) => left.revision - right.revision);
+        for (const event of orderedEvents) {
+          if (event.kind === "click") {
+            const clickable = resolveClickable(event);
+            if (clickable && !clickable.closest("[data-remote-stop]")) clickable.click();
+          } else if (event.kind === "input") {
+            applyInputEvent(event);
+          } else if (event.kind === "key") {
+            applyKeyEvent(event);
+          } else if (event.kind === "scroll") {
+            const maxX = Math.max(0, document.documentElement.scrollWidth - window.innerWidth);
+            const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            window.scrollTo({ left: event.x * maxX, top: event.y * maxY, behavior: "auto" });
+          }
+          appliedEventRevision = event.revision;
+          lastEventRevision.current = event.revision;
+          window.sessionStorage.setItem(eventStorageKey, String(event.revision));
         }
 
         const clickStorageKey = `paradise-remote-click:${remote.targetCode}`;
         const storedClickRevision = Number(window.sessionStorage.getItem(clickStorageKey) || 0);
         const appliedClickRevision = Math.max(lastClickRevision.current, Number.isFinite(storedClickRevision) ? storedClickRevision : 0);
-        if (remote.click && remote.click.revision > appliedClickRevision) {
+        if (!remote.events?.length && remote.click && remote.click.revision > appliedClickRevision) {
           lastClickRevision.current = remote.click.revision;
           window.sessionStorage.setItem(clickStorageKey, String(remote.click.revision));
-          let selected = remote.click.selector
-            ? document.querySelector(remote.click.selector) as HTMLElement | null
-            : null;
-          const expectedLabel = remote.click.label || "";
-          if (selected && expectedLabel && normalizedLabel(selected) !== expectedLabel) selected = null;
-          if (!selected && expectedLabel) {
-            const selector = remote.click.tag && /^[a-z][a-z0-9-]*$/.test(remote.click.tag)
-              ? remote.click.tag
-              : "button,a,[role='button'],label,input,textarea,select";
-            selected = Array.from(document.querySelectorAll<HTMLElement>(selector))
-              .find((element) => normalizedLabel(element) === expectedLabel) || null;
-          }
-          const fallback = document.elementFromPoint(
-            remote.click.x * window.innerWidth,
-            remote.click.y * window.innerHeight,
-          ) as HTMLElement | null;
-          const clickable = selected || fallback?.closest<HTMLElement>("button,a,[role='button'],label,input,textarea,select") || fallback;
+          const clickable = resolveClickable({ kind: "click", ...remote.click });
           if (clickable && !clickable.closest("[data-remote-stop]")) clickable.click();
         }
 
-        if (remote.scroll && remote.scroll.revision > lastScrollRevision.current) {
+        if (!remote.events?.length && remote.scroll && remote.scroll.revision > lastScrollRevision.current) {
           lastScrollRevision.current = remote.scroll.revision;
           const maxX = Math.max(0, document.documentElement.scrollWidth - window.innerWidth);
           const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-          window.scrollTo({ left: remote.scroll.x * maxX, top: remote.scroll.y * maxY, behavior: "smooth" });
+          window.scrollTo({ left: remote.scroll.x * maxX, top: remote.scroll.y * maxY, behavior: "auto" });
         }
 
-        if (remote.input && remote.input.revision > lastInputRevision.current) {
+        if (!remote.events?.length && remote.input && remote.input.revision > lastInputRevision.current) {
           lastInputRevision.current = remote.input.revision;
           const field = document.querySelector(remote.input.selector) as HTMLInputElement | HTMLTextAreaElement | null;
           if (field && field.type !== "password" && field.type !== "file") {
@@ -130,12 +234,14 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
 
       } catch {
         // A temporary network failure must not interrupt the cashier screen.
+      } finally {
+        polling = false;
       }
     };
     void poll();
-    const interval = window.setInterval(poll, 300);
+    const interval = window.setInterval(poll, 220);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [pcMode]);
+  }, [pcMode, router]);
 
   async function acknowledgeReconnect() {
     if (reconnecting) return;
@@ -159,28 +265,56 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     if (!targetCode) return;
     setControllerTarget(targetCode);
     let pending: Record<string, unknown> = {};
+    let pendingEvents: OutgoingEvent[] = [];
     let timer: number | null = null;
     let inFlight: Promise<void> | null = null;
+    let lastPointerSent = 0;
+    let lastKnownLocation = `${window.location.pathname}${window.location.search}`;
 
     const drain = async (): Promise<void> => {
       if (stopping.current) return;
       if (inFlight) {
         await inFlight;
-        if (Object.keys(pending).length) await drain();
+        if (Object.keys(pending).length || pendingEvents.length) await drain();
         return;
       }
-      if (!Object.keys(pending).length) return;
-      const payload = pending;
+      if (!Object.keys(pending).length && pendingEvents.length === 0) return;
+      const payloadFields = pending;
+      const payloadEvents = pendingEvents;
+      const payload = { ...payloadFields, events: payloadEvents };
       pending = {};
-      inFlight = fetch("/api/remote-control", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update", targetCode, pathname: window.location.pathname, search: window.location.search, ...payload }),
-        keepalive: true,
-      }).then(() => undefined).catch(() => undefined);
+      pendingEvents = [];
+      inFlight = (async () => {
+        try {
+          const response = await fetch("/api/remote-control", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "update", targetCode, pathname: window.location.pathname, search: window.location.search, ...payload }),
+            keepalive: true,
+          });
+          if (!response.ok) throw new Error("remote update failed");
+        } catch {
+          // Put unsent events back at the front, preserving the exact order.
+          pending = { ...payloadFields, ...pending };
+          pendingEvents = [...payloadEvents, ...pendingEvents].slice(-120);
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+      })();
       await inFlight;
       inFlight = null;
-      if (Object.keys(pending).length) await drain();
+      if (Object.keys(pending).length || pendingEvents.length) await drain();
+    };
+    const queueEvent = (event: OutgoingEvent, immediate = false) => {
+      const previousEvent = pendingEvents[pendingEvents.length - 1];
+      if (event.kind === "scroll" && previousEvent?.kind === "scroll") {
+        pendingEvents[pendingEvents.length - 1] = event;
+      } else if (event.kind === "input" && previousEvent?.kind === "input" && previousEvent.selector === event.selector) {
+        pendingEvents[pendingEvents.length - 1] = event;
+      } else {
+        pendingEvents.push(event);
+      }
+      pendingEvents = pendingEvents.slice(-120);
+      queue({}, immediate);
     };
     const queue = (payload: Record<string, unknown>, immediate = false) => {
       if (stopping.current) return;
@@ -195,19 +329,50 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     };
     queue({ sync: true }, true);
     const heartbeat = window.setInterval(() => queue({ sync: true }, true), 10_000);
+    const locationWatcher = window.setInterval(() => {
+      const current = `${window.location.pathname}${window.location.search}`;
+      if (current === lastKnownLocation) return;
+      lastKnownLocation = current;
+      queue({ pathname: window.location.pathname, search: window.location.search }, true);
+    }, 400);
 
     const onPointer = (event: PointerEvent) => {
+      const now = performance.now();
+      if (now - lastPointerSent < 120) return;
+      lastPointerSent = now;
       queue({ pointer: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
     };
     const onInput = (event: Event) => {
-      const field = event.target as HTMLInputElement | HTMLTextAreaElement | null;
-      if (!field || !["INPUT", "TEXTAREA"].includes(field.tagName) || field.type === "password" || field.type === "file") return;
-      queue({ input: { selector: selectorFor(field), value: field.value } });
+      const field = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+      if (!field || !["INPUT", "TEXTAREA", "SELECT"].includes(field.tagName) || (field instanceof HTMLInputElement && ["password", "file"].includes(field.type))) return;
+      queueEvent({
+        kind: "input",
+        selector: selectorFor(field),
+        value: field.value,
+        checked: field instanceof HTMLInputElement && ["checkbox", "radio"].includes(field.type) ? field.checked : undefined,
+        fieldTag: field.tagName.toLowerCase(),
+        fieldType: field instanceof HTMLInputElement ? field.type : undefined,
+      });
     };
     const onScroll = () => {
       const maxX = Math.max(1, document.documentElement.scrollWidth - window.innerWidth);
       const maxY = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      queue({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
+      queueEvent({ kind: "scroll", x: window.scrollX / maxX, y: window.scrollY / maxY });
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!["Enter", "Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const target = event.target as Element | null;
+      if (!target || !(target instanceof HTMLElement)) return;
+      queueEvent({
+        kind: "key",
+        selector: selectorFor(target),
+        key: event.key,
+        code: event.code,
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+      }, true);
     };
     const onClick = (event: MouseEvent) => {
       const target = event.target as Element | null;
@@ -222,12 +387,12 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       };
       const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target === "_blank" || anchor.origin !== window.location.origin) {
-        queue({ click }, true);
+        queueEvent({ kind: "click", ...click }, true);
         return;
       }
       const next = new URL(anchor.href);
       if (!["/appointments", "/service-forms", "/orders", "/client-control"].some((path) => next.pathname === path || next.pathname.startsWith(`${path}/`))) {
-        queue({ click }, true);
+        queueEvent({ kind: "click", ...click }, true);
         return;
       }
       next.searchParams.set("remoteTarget", targetCode);
@@ -236,22 +401,27 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       // old anchor after the PC reaches the new page would consume the event on
       // the wrong screen.
       pending = { ...pending, pathname: next.pathname, search: next.search };
-      delete pending.click;
-      void drain().then(() => window.location.assign(`${next.pathname}${next.search}${next.hash}`));
+      pendingEvents = [];
+      void drain().then(() => router.push(`${next.pathname}${next.search}${next.hash}`));
     };
     window.addEventListener("pointermove", onPointer, { passive: true });
     document.addEventListener("input", onInput, true);
+    document.addEventListener("change", onInput, true);
+    document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("click", onClick, true);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       if (timer !== null) window.clearTimeout(timer);
       window.clearInterval(heartbeat);
+      window.clearInterval(locationWatcher);
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("input", onInput, true);
+      document.removeEventListener("change", onInput, true);
+      document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("scroll", onScroll);
     };
-  }, [pcMode]);
+  }, [pcMode, router]);
 
   if (pcMode && reconnectRequest && !pcSession) {
     return (
@@ -298,7 +468,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       const stop = async () => {
         stopping.current = true;
         await fetch("/api/remote-control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop", targetCode }) });
-        window.location.href = "/remote";
+        router.push("/remote");
       };
       return (
         <div className="fixed bottom-5 right-5 z-[9999] flex items-center gap-3 rounded-2xl border border-fuchsia-300/30 bg-neutral-950 px-4 py-3 text-white shadow-2xl">
