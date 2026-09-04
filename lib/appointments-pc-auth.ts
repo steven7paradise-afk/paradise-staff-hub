@@ -3,7 +3,7 @@ import { prisma } from "./prisma";
 
 export const appointmentsPcCookieName = "appointments_pc_token";
 export const appointmentsPcWorkerCookieName = "appointments_pc_worker";
-export const appointmentsPcWorkerCookieMaxAgeSeconds = 10 * 60;
+export const appointmentsPcWorkerCookieMaxAgeSeconds = 3 * 24 * 60 * 60;
 export const appointmentsRemoteTargetCookieName = "appointments_remote_target";
 export const appointmentsRemoteWorkerCookieName = "appointments_remote_worker";
 export const appointmentsRemoteCookieMaxAgeSeconds = 2 * 60 * 60;

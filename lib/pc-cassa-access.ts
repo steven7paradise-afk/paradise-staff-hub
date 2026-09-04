@@ -1,6 +1,7 @@
 export const PC_CASSA_ALLOWED_PAGE_PATHS = [
   "/appointments/buenos-aires",
   "/service-forms",
+  "/cassa-live",
   "/orders",
 ] as const;
 
