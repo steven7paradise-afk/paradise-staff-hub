@@ -283,6 +283,7 @@ export function StaffFormsViewer({
   const [showPastCustomers, setShowPastCustomers] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
   const [showPickupModal, setShowPickupModal] = useState(false);
+  const [showPosTerminal, setShowPosTerminal] = useState(false);
   const [pickupQuery, setPickupQuery] = useState("");
   const [pickupName, setPickupName] = useState("");
   const [pickupPin, setPickupPin] = useState("");
@@ -1170,7 +1171,7 @@ export function StaffFormsViewer({
   };
 
   return (
-    <div className="space-y-6 dark staff-forms-page">
+    <div className="min-h-dvh space-y-6 bg-[#050506] px-4 pb-8 pt-20 dark staff-forms-page sm:px-6 xl:px-8 xl:pb-10 xl:pt-24">
       <style dangerouslySetInnerHTML={{__html: `
         body, main, #__next, .staff-forms-page {
           background-color: #050506 !important;
@@ -1185,11 +1186,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => void openDailyClosing()}
-              className="group flex aspect-square flex-col justify-between rounded-[32px] border border-[#A1B5FD]/30 bg-gradient-to-br from-[#A1B5FD] to-[#d8e1ff] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#A8B8FF]/35 bg-gradient-to-br from-[#A8B8FF] to-[#D8DFFF] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(161,181,253,0.2)" }}
             >
-              <span className="grid size-14 place-items-center rounded-2xl bg-[#172554]/15">
-                <Calculator className="size-8 text-[#172554]" />
+              <span className="grid size-24 place-items-center rounded-[30px] bg-[#172554]/15 shadow-inner">
+                <Calculator className="size-14 text-[#172554]" />
               </span>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#172554]/65">CONTANTI</p>
@@ -1198,30 +1199,31 @@ export function StaffFormsViewer({
             </button>
           )}
 
-          <Link
-            href="/cassa-live"
-            className="group flex aspect-square flex-col justify-between rounded-[32px] border border-[#8DE0BD]/30 bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
-            style={{ boxShadow: "0 10px 30px rgba(141,224,189,0.2)" }}
+          <button
+            type="button"
+            onClick={() => setShowPosTerminal(true)}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#70E1CE]/35 bg-gradient-to-br from-[#70E1CE] to-[#BDF5EA] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(112,225,206,0.2)" }}
           >
-            <span className="grid size-16 place-items-center rounded-2xl bg-[#14532d]/15">
-              <DynamicIcon name="CashRegister" className="size-10 text-[#14532d]" />
+            <span className="grid size-24 place-items-center rounded-[30px] bg-[#14532d]/15 shadow-inner">
+              <DynamicIcon name="CashRegister" className="size-14 text-[#14532d]" />
             </span>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#14532d]/65">PAGAMENTI</p>
               <h2 className="mt-1 text-xl font-black leading-tight text-[#10251c]">TERMINALE POS</h2>
             </div>
-          </Link>
+          </button>
 
           {/* Card: Nuovo Ordine */}
           {orderForm && (
             <button
               type="button"
               onClick={() => handleOpenForm(orderForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#8DE0BD] to-[#c5f4df] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#8DE0BD]/30"
-              style={{ boxShadow: "0 10px 30px rgba(141,224,189,0.15)" }}
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#8FE3B0]/35 bg-gradient-to-br from-[#8FE3B0] to-[#D2F6DE] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              style={{ boxShadow: "0 10px 30px rgba(143,227,176,0.16)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <ShoppingCart className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <ShoppingCart className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#204a37] opacity-80">ORDINI</p>
@@ -1239,11 +1241,11 @@ export function StaffFormsViewer({
               setPickupQuery("");
               setShowPickupModal(true);
             }}
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#C7F9CC] to-[#F0FFF4] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#C7F9CC]/40"
-            style={{ boxShadow: "0 10px 30px rgba(199,249,204,0.15)" }}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#CBEA7B]/40 bg-gradient-to-br from-[#CBEA7B] to-[#EFF8C9] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(203,234,123,0.16)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-              <PackageCheck className="size-6 text-white" />
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <PackageCheck className="size-14 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534] opacity-80">ORDINI</p>
@@ -1256,11 +1258,11 @@ export function StaffFormsViewer({
             href="https://buy.stripe.com/3cI4gAfeN2C27cjeQycIE01"
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDCB82] to-[#FFE8B9] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDCB82]/30"
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#FFC56E]/35 bg-gradient-to-br from-[#FFC56E] to-[#FFE3AD] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
             style={{ boxShadow: "0 10px 30px rgba(253,203,130,0.15)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-              <CreditCard className="size-6 text-white" />
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <CreditCard className="size-14 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6d4615] opacity-80">FORNITORI</p>
@@ -1273,11 +1275,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(italianInvoiceForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#7DD3FC] to-[#E0F2FE] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#7DD3FC]/30"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#79CFFF]/35 bg-gradient-to-br from-[#79CFFF] to-[#CAEFFF] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(125,211,252,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <ReceiptText className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <ReceiptText className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#0369A1] opacity-80">FATTURAZIONE</p>
@@ -1291,11 +1293,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(clientControlForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#E9D5FF] to-[#F3E8FF] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#E9D5FF]/30"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#CDB4FF]/35 bg-gradient-to-br from-[#CDB4FF] to-[#E9DDFF] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(233,213,255,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <ClipboardCheck className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <ClipboardCheck className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#581C87] opacity-80">QUALITÀ</p>
@@ -1309,11 +1311,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(candidaturaForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#F7A1C4] to-[#ffd5e7] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#F7A1C4]/30"
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#F49AC2]/35 bg-gradient-to-br from-[#F49AC2] to-[#FFD0E4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
               style={{ boxShadow: "0 10px 30px rgba(247,161,196,0.15)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <UserPlus className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <UserPlus className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#76274e] opacity-80">GENERALE</p>
@@ -1327,11 +1329,11 @@ export function StaffFormsViewer({
             <button
               type="button"
               onClick={() => handleOpenForm(refundForm)}
-              className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FDA4AF] to-[#FFE4E6] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FDA4AF]/30"
-              style={{ boxShadow: "0 10px 30px rgba(253,164,175,0.15)" }}
+              className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#FF9E86]/35 bg-gradient-to-br from-[#FF9E86] to-[#FFD0C4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+              style={{ boxShadow: "0 10px 30px rgba(255,158,134,0.16)" }}
             >
-              <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                <RotateCcw className="size-6 text-white" />
+              <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                <RotateCcw className="size-14 text-white" />
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#9F1239] opacity-80">AMMINISTRAZIONE</p>
@@ -1343,11 +1345,11 @@ export function StaffFormsViewer({
           {/* Card: Stato Ordini Link */}
           <Link
             href="/orders"
-            className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br from-[#FCA5A5] to-[#FEE2E2] p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-[#FCA5A5]/30"
-            style={{ boxShadow: "0 10px 30px rgba(252,165,165,0.15)" }}
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#9BB7D4]/35 bg-gradient-to-br from-[#9BB7D4] to-[#D6E4F0] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(155,183,212,0.16)" }}
           >
-            <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-              <ShoppingBag className="size-6 text-white" />
+            <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+              <ShoppingBag className="size-14 text-white" />
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#7F1D1D] opacity-80">ORDINI</p>
@@ -1358,9 +1360,9 @@ export function StaffFormsViewer({
           {/* Render any other dynamic forms from database */}
           {regularForms.map((form, idx) => {
             const colors = [
-              { bg: "from-[#F3F4F6] to-[#E5E7EB]", text: "text-[#374151]", iconColor: "text-[#4B5563]", accent: "GENERALE" },
-              { bg: "from-[#F0FDF4] to-[#DCFCE7]", text: "text-[#166534]", iconColor: "text-[#15803D]", accent: "INFO" },
-              { bg: "from-[#FFF5F5] to-[#FFE3E3]", text: "text-[#991B1B]", iconColor: "text-[#B91C1C]", accent: "DIVERSO" },
+              { from: "#F4D58D", to: "#FFF0C2", text: "#4F3511", accent: "GENERALE" },
+              { from: "#9ADBC5", to: "#D7F3E9", text: "#14533E", accent: "INFO" },
+              { from: "#B8A7E8", to: "#E5DDF8", text: "#40316C", accent: "DIVERSO" },
             ];
             const color = colors[idx % colors.length];
             return (
@@ -1368,14 +1370,14 @@ export function StaffFormsViewer({
                 key={form.id}
                 type="button"
                 onClick={() => handleOpenForm(form)}
-                className="group flex flex-col justify-between aspect-square rounded-[32px] bg-gradient-to-br p-6 text-left shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97] border border-black/5"
-                style={{ backgroundImage: `linear-gradient(to bottom right, ${color.bg.split(" ")[1]}, ${color.bg.split(" ")[3]})`, color: color.text }}
+                className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-black/5 p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+                style={{ backgroundImage: `linear-gradient(to bottom right, ${color.from}, ${color.to})`, color: color.text }}
               >
-                <div className="grid size-12 place-items-center rounded-2xl bg-black/25 shadow-inner">
-                  <ClipboardList className="size-6 text-white" />
+                <div className="grid size-24 place-items-center rounded-[30px] bg-black/20 shadow-inner">
+                  <ClipboardList className="size-14 text-white" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]" style={{ color: color.iconColor }}>{form.category.toUpperCase() || color.accent}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{form.category.toUpperCase() || color.accent}</p>
                   <h2 className="mt-1 text-xl font-black leading-tight truncate">{form.name}</h2>
                 </div>
               </button>
@@ -1383,6 +1385,39 @@ export function StaffFormsViewer({
           })}
         </div>
       </div>
+
+      {showPosTerminal && (
+        <GlobalFullscreenLayer className="bg-[#050506]">
+          <section className="flex h-full w-full flex-col overflow-hidden bg-[#050506]">
+            <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-[#0b0b0d] px-4 text-white sm:px-6">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-2xl bg-[#70E1CE]/15 text-[#70E1CE]">
+                  <DynamicIcon name="CashRegister" className="size-7" />
+                </span>
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#70E1CE]">Pagamenti</p>
+                  <h2 className="text-lg font-black leading-tight">Terminale POS</h2>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPosTerminal(false)}
+                className="grid size-11 place-items-center rounded-2xl border border-white/15 bg-white/5 text-white transition hover:bg-white/10"
+                aria-label="Chiudi Terminale POS"
+              >
+                <X className="size-6" />
+              </button>
+            </header>
+            <iframe
+              src="https://cashmatic-payment-production.up.railway.app/cassa-live"
+              title="Terminale POS"
+              loading="eager"
+              allow="clipboard-read; clipboard-write"
+              className="min-h-0 flex-1 border-0 bg-white"
+            />
+          </section>
+        </GlobalFullscreenLayer>
+      )}
 
       {dailyCloseOpen && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md sm:p-6">

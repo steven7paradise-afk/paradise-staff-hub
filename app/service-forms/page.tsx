@@ -306,6 +306,7 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
       title="Forms"
       role={role}
       hideHeader
+      edgeToEdgeMain
       pcMode={isPC}
       remoteController={isAdminRemoteController}
       pcDisplayUser={pcDisplayUser}
