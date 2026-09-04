@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, Store, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -1416,6 +1416,24 @@ export function StaffFormsViewer({
               <h2 className="mt-1 text-xl font-black text-[#7F1D1D] leading-tight">Stato Ordini</h2>
             </div>
           </Link>
+
+          {/* Card: Shopify Orders */}
+          <a
+            href="https://admin.shopify.com/store/c1uzax-u0/orders"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#7ED6A5]/40 bg-gradient-to-br from-[#7ED6A5] to-[#D8F5E4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
+            style={{ boxShadow: "0 10px 30px rgba(126,214,165,0.17)" }}
+            aria-label="Apri gli ordini Shopify in una nuova scheda"
+          >
+            <div className="grid size-24 place-items-center rounded-[30px] bg-[#14532d]/18 shadow-inner">
+              <Store className="size-14 text-[#14532d]" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534]/70">SHOPIFY</p>
+              <h2 className="mt-1 text-xl font-black leading-tight text-[#14532d]">Ordini Shopify</h2>
+            </div>
+          </a>
 
           {/* Render any other dynamic forms from database */}
           {regularForms.map((form, idx) => {
