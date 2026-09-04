@@ -6376,9 +6376,17 @@ export function AppointmentsBrowser({
                                 <span className="text-[10px] font-bold text-[#6B778C]">{column.bookings.length}</span>
                               </div>
                               <p className={`mt-0.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
-                                {column.id === "unassigned" ? "Da assegnare" : column.status === "BREAK" ? "In pausa" : column.status === "IN" ? "Attivo" : "Non timbrato"}
+                                {column.id === "unassigned"
+                                  ? "Da assegnare"
+                                  : column.status === "BREAK"
+                                    ? "In pausa"
+                                    : column.status === "IN"
+                                      ? "Attivo"
+                                      : column.clockedInAt
+                                        ? "Turno terminato"
+                                        : "Non timbrato"}
                               </p>
-                              {column.id !== "unassigned" && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
+                              {column.id !== "unassigned" && (column.status === "BREAK" || column.status === "IN") && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
                                 <p className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B778C]">
                                   Tempo trascorso {formatPcBreakTimer((column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) as string, boardNow)}
                                 </p>
