@@ -5,6 +5,7 @@ import { isAlwaysActiveAppointmentStaff } from "../lib/appointment-staff-access"
 test("Franci può usare gli appuntamenti da ogni tablet autorizzato", () => {
   assert.equal(isAlwaysActiveAppointmentStaff("Franci"), true);
   assert.equal(isAlwaysActiveAppointmentStaff("  FRANCI  "), true);
+  assert.equal(isAlwaysActiveAppointmentStaff("Profilo rinominato", "cmqf02qgq0001jx0913ddfys1"), true);
 });
 
 test("gli altri profili continuano a dipendere da sede e timbratura", () => {

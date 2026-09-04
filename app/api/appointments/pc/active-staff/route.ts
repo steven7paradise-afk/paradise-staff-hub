@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     const clockedInWorkers = workers
       .map((worker) => {
         const state = deriveAttendanceState(worker.attendance_logs);
-        const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name);
+        const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
         return {
           id: worker.id,
           name: worker.name,

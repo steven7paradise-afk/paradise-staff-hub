@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
 
-  const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name);
+  const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
   if (!alwaysActive && worker.sede_id !== null && worker.sede_id !== pcAuth.locationId) {
     return NextResponse.json({ error: "Profilo non disponibile per questo PC." }, { status: 403 });
   }
