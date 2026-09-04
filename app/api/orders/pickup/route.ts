@@ -70,13 +70,13 @@ function moneyFieldValue(order: any, includes: string[]) {
 }
 
 function orderNumber(order: any) {
-  const title = answerById(order, "order_title") || fieldValue(order, ["numero ordine", "ordine shopify", "nome ordine", "ordine", "titolo"]);
+  const title = answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["numero ordine", "ordine shopify", "nome ordine", "ordine", "titolo"]);
   if (title) return title;
   return `#${String(order.id).substring(0, 5).toUpperCase()}`;
 }
 
 function orderClientName(order: any) {
-  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  const clientName = answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
   if (clientName) return clientName;
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title && Number.isNaN(Number(String(title).replace("#", "").trim()))) return title;
@@ -84,7 +84,7 @@ function orderClientName(order: any) {
 }
 
 function orderPhone(order: any) {
-  return fieldValue(order, ["telefono", "phone", "numero di"]);
+  return answerById(order, "order_client_phone") || answerById(order, "field_1782212690129") || fieldValue(order, ["telefono", "phone", "numero di"]);
 }
 
 function orderPaymentSummary(order: any) {

@@ -41,6 +41,8 @@ function fieldValue(order: OrderForPhoto, includes: string[]) {
 
 function orderClientName(order: OrderForPhoto) {
   return (
+    answerById(order, "order_client_name") ||
+    answerById(order, "field_1782212649889") ||
     answerById(order, "client_name") ||
     fieldValue(order, ["nome cliente", "cliente", "nome e cognome", "nome"]) ||
     "Cliente"
@@ -49,6 +51,8 @@ function orderClientName(order: OrderForPhoto) {
 
 function orderNumber(order: OrderForPhoto) {
   return (
+    answerById(order, "order_shopify_order") ||
+    answerById(order, "field_1782221517924") ||
     answerById(order, "order_title") ||
     fieldValue(order, ["numero ordine", "ordine shopify", "codice ordine", "ordine"]) ||
     order.id.slice(0, 8)

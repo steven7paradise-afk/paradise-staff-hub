@@ -172,13 +172,13 @@ function isSartaOrder(order: OrderResponse) {
 function orderTitle(order: OrderResponse) {
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title) return title;
-  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  const clientName = answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
   if (clientName) return clientName;
   return "Ordine senza titolo";
 }
 
 function orderClientName(order: OrderResponse) {
-  const clientName = fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
+  const clientName = answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]);
   if (clientName) return clientName;
   const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title && isNaN(Number(title.replace("#", "").trim()))) {
@@ -188,7 +188,7 @@ function orderClientName(order: OrderResponse) {
 }
 
 function orderNumber(order: OrderResponse) {
-  const title = answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
+  const title = answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]);
   if (title) return title;
   return `#${order.id.substring(0, 5).toUpperCase()}`;
 }
@@ -1542,7 +1542,7 @@ export function OrderManager({
                         f.label?.toLowerCase().includes("codice")
                       );
                       const shopifyOrderVal = shopifyOrderField ? selected.answers?.[shopifyOrderField.id] : null;
-                      const finalOrderVal = selected.answers?.field_1782221517924 || shopifyOrderVal;
+                      const finalOrderVal = selected.answers?.order_shopify_order || selected.answers?.field_1782221517924 || shopifyOrderVal;
                       return (
                         <p>
                           <span className="text-black/40">Ordine Shopify:</span>{" "}

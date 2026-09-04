@@ -69,11 +69,11 @@ function fieldValue(order: OrderLabelResponse, terms: string[]) {
 }
 
 function orderClientName(order: OrderLabelResponse) {
-  return fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]) || "Cliente non indicato";
+  return answerById(order, "order_client_name") || answerById(order, "field_1782212649889") || fieldValue(order, ["cliente", "nome cliente", "nome del cliente", "nome"]) || "Cliente non indicato";
 }
 
 function orderNumber(order: OrderLabelResponse) {
-  return answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || `#${order.id.substring(0, 5).toUpperCase()}`;
+  return answerById(order, "order_shopify_order") || answerById(order, "field_1782221517924") || answerById(order, "order_title") || fieldValue(order, ["nome ordine", "ordine", "titolo"]) || `#${order.id.substring(0, 5).toUpperCase()}`;
 }
 
 function orderItems(order: OrderLabelResponse) {

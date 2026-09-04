@@ -137,7 +137,7 @@ export async function POST(req: Request) {
           }
 
           // Hardcode Nome cognome since it is filtered out from raw rows
-          if (field.id === "field_1782212649889") {
+          if (field.id === "order_client_name" || field.id === "field_1782212649889") {
             answers[field.id] = order.clientName;
             continue;
           }
@@ -148,9 +148,12 @@ export async function POST(req: Request) {
 
           // Define aliases for matching common synonyms
           const aliases: Record<string, string[]> = {
+            "order_client_email": ["email", "mail", "email address"],
             "field_1782212680362": ["email", "mail", "email address"],
+            "order_client_phone": ["telefono", "cellulare", "phone"],
             "field_1782212690129": ["telefono", "cellulare", "phone"],
             "field_1782212712780": ["disponibilita", "sono::"],
+            "order_shopify_order": ["ordine shopify", "numero ordine shopify", "shopify"],
             "field_1782221517924": ["ordine shopify", "numero ordine shopify", "shopify"]
           };
 
