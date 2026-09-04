@@ -34,6 +34,14 @@ function cleanTeamName(value?: string | null) {
     .trim();
 }
 
+function isUnassignedTeamName(value?: string | null) {
+  const normalized = normalizeName(cleanTeamName(value));
+  return normalized === "staff disponibile" ||
+    normalized === "staff assente paradise" ||
+    normalized === "non assegnato" ||
+    normalized === "non assegnati";
+}
+
 function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: string) {
   const normalizedTeamName = normalizeName(teamName);
   if (!normalizedTeamName) return null;
@@ -501,16 +509,17 @@ export default async function AppointmentsPage({
       const bookingDate = new Date(booking.start_date);
 
       const cowlendarBookingTeammates = (booking.teammates ?? [])
-        .map((mate) => {
+        .flatMap((mate) => {
           const rawName = `${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim();
           const cleanedName = cleanTeamName(rawName);
+          if (isUnassignedTeamName(cleanedName)) return [];
           const matchedUser = matchUserByTeamName(localUsers, cleanedName);
 
-          return {
+          return [{
             id: matchedUser?.id || mate.id,
             name: matchedUser?.name || cleanedName,
             photoUrl: matchedUser?.photo_url || mate.thumbnail || null,
-          };
+          }];
         })
         .filter((mate) => mate.name);
       const overrideTeammates = teamOverrides[String(booking.id)]?.teammates;

@@ -49,6 +49,12 @@ function isFranci(value?: string | null) {
   return String(value || "").trim().toLocaleLowerCase("it") === "franci";
 }
 
+function isGenericStaffPlaceholder(value?: string | null) {
+  return /^(staff disponibile|staff assente paradise|non assegnat[oi])$/i.test(
+    String(value || "").replace(/\|.*$/g, "").replace(/\s+/g, " ").trim(),
+  );
+}
+
 export async function POST(request: NextRequest) {
   const operationalUser = await getOperationalUser(request);
   const isAuthorized = Boolean(operationalUser?.id);
@@ -167,7 +173,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (sourceTeammates.length === 1 && teammates.length === 1) {
+    if (sourceTeammates.length === 1 && teammates.length === 1 && !isGenericStaffPlaceholder(sourceTeammates[0].name)) {
       const source = sourceTeammates[0];
       const sourceIsLocalUser = await prisma.user.findUnique({
         where: { id: source.id },

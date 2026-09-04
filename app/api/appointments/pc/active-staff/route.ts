@@ -101,12 +101,15 @@ export async function GET(request: NextRequest) {
             ? new Date(state.activePause.timestamp).toISOString()
             : null,
           externalIds: Object.entries(staffAliases)
-            .filter(([, alias]) => alias.userId === worker.id)
+            .filter(([, alias]) =>
+              alias.userId === worker.id &&
+              !/^(staff disponibile|staff assente paradise|non assegnat[oi])$/i.test(String(alias.externalName || "").trim())
+            )
             .map(([externalId]) => externalId),
         };
       })
       .filter((worker) => includeAllSalonStaff
-        ? (!locationId || worker.sede_id === locationId)
+        ? worker.alwaysActive || (!locationId || worker.sede_id === locationId)
         : worker.alwaysActive || (
             (worker.status === "IN" || worker.status === "BREAK") &&
             (!locationId || worker.sede_id === locationId)
