@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  Palette, Folder, ArrowUp, ArrowDown, Trash2, Plus, 
-  Settings, Save, Sparkles, AlertCircle, CheckCircle2, ChevronRight,
+import {
+  Folder, ArrowUp, ArrowDown, Trash2, Plus,
+  Save, Sparkles, AlertCircle, CheckCircle2,
   FolderPlus, Edit3
 } from "lucide-react";
-import { Card, Button } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { routePermissions } from "@/lib/roles";
 
 type SidebarFolder = {
@@ -15,11 +15,6 @@ type SidebarFolder = {
   title: string;
   routes: string[];
   labels?: Record<string, string>;
-};
-
-type BrandingTheme = {
-  sidebar_color: string;
-  dark_sidebar_color: string;
 };
 
 const PAGE_LABELS: Record<string, string> = {
@@ -77,31 +72,15 @@ const ALL_PAGES = Object.keys(routePermissions).map((path) => ({
   name: PAGE_LABELS[path] || path.split("/").filter(Boolean).join(" / ") || "Home",
 }));
 
-const PRESETS = [
-  { name: "Brand Classico", sidebar: "#FFFFFF", dark: "#1B1A1F" },
-  { name: "Midnight Luxury", sidebar: "#0F172A", dark: "#0B121F" },
-  { name: "Rose Gold", sidebar: "#FAF1F2", dark: "#201F24" },
-  { name: "Smeraldo Soft", sidebar: "#EBF2EF", dark: "#1C2E24" },
-  { name: "Sunny Lime", sidebar: "#E2F952", dark: "#1A2208" },
-  { name: "Luxury Dark", sidebar: "#1F1F1F", dark: "#121114" },
-];
-
 export function SidebarSettingsClient({
-  initialBranding,
   initialLayout
 }: {
-  initialBranding: BrandingTheme;
   initialLayout: SidebarFolder[] | null;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-
-  // Color state
-  const [sidebarColor, setSidebarColor] = useState(initialBranding.sidebar_color || "#FFFFFF");
-  const [darkSidebarColor, setDarkSidebarColor] = useState(initialBranding.dark_sidebar_color || "#1B1A1F");
 
   // Layout state
   const [folders, setFolders] = useState<SidebarFolder[]>(
@@ -126,12 +105,6 @@ export function SidebarSettingsClient({
       setActiveFolderForAdd(folders[0].id);
     }
   }, [folders, activeFolderForAdd]);
-
-  // Apply visual preset colors
-  const handleApplyPreset = (sidebar: string, dark: string) => {
-    setSidebarColor(sidebar);
-    setDarkSidebarColor(dark);
-  };
 
   // Move a folder position up or down
   const handleMoveFolder = (index: number, direction: "up" | "down") => {
@@ -217,31 +190,13 @@ export function SidebarSettingsClient({
     );
   };
 
-  // Save changes to colors and layout configuration
-  const handleSaveAll = async () => {
+  // Save sidebar layout configuration
+  const handleSaveLayout = async () => {
     setLoading(true);
-    setStatus("saving");
     setErrorMsg("");
     setSuccessMsg("");
 
     try {
-      // 1. Save branding colors
-      const brandingRes = await fetch("/api/settings/branding", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...initialBranding,
-          sidebar_color: sidebarColor,
-          dark_sidebar_color: darkSidebarColor,
-        }),
-      });
-
-      if (!brandingRes.ok) {
-        const err = await brandingRes.json();
-        throw new Error(err.error || "Errore nel salvataggio dei colori.");
-      }
-
-      // 2. Save sidebar layouts configuration
       const layoutRes = await fetch("/api/settings/roles/menu-layout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -255,12 +210,10 @@ export function SidebarSettingsClient({
         throw new Error(err.error || "Errore nel salvataggio dell'ordine dei tasti.");
       }
 
-      setSuccessMsg("Configurazione salvata con successo! Ricarica o aggiorna per vedere il nuovo ordinamento.");
-      setStatus("success");
+      setSuccessMsg("Ordine della barra laterale salvato. Ricarica la pagina per vedere il nuovo ordinamento.");
       router.refresh();
     } catch (err: any) {
       setErrorMsg(err.message || "Errore imprevisto.");
-      setStatus("error");
     } finally {
       setLoading(false);
     }
@@ -273,11 +226,11 @@ export function SidebarSettingsClient({
       <div className="flex items-center justify-between gap-4 bg-zinc-50 border border-zinc-200 p-4 shadow-xs">
         <div className="flex items-center gap-2 text-xs font-black uppercase text-zinc-600">
           <Sparkles size={16} className="text-pink-500" />
-          <span>Configura Look & Ordine Barra Laterale</span>
+          <span>Configura l'ordine della barra laterale</span>
         </div>
 
         <button
-          onClick={handleSaveAll}
+          onClick={handleSaveLayout}
           disabled={loading}
           className="bg-zinc-900 hover:bg-black text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 flex items-center gap-2 transition disabled:opacity-50 shrink-0 shadow-sm"
         >
@@ -286,7 +239,7 @@ export function SidebarSettingsClient({
           ) : (
             <>
               <Save size={15} />
-              <span>Salva Modifiche</span>
+              <span>Salva ordine</span>
             </>
           )}
         </button>
@@ -307,89 +260,15 @@ export function SidebarSettingsClient({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* LEFT COLUMN: COLORS CUSTOMIZER */}
-        <div className="space-y-6 lg:col-span-1">
-          <Card className="p-6 bg-white border border-zinc-200 shadow-xs space-y-5">
-            <div className="flex items-center gap-2 border-b border-zinc-100 pb-3">
-              <Palette className="text-pink-500" size={18} />
-              <h2 className="text-xs font-black uppercase tracking-wider text-black">
-                1. Colore Barra Laterale
-              </h2>
-            </div>
-
-            {/* Presets Grid */}
-            <div className="space-y-2">
-              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block">
-                Combinazioni Rapide
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {PRESETS.map((preset) => (
-                  <button
-                    key={preset.name}
-                    type="button"
-                    onClick={() => handleApplyPreset(preset.sidebar, preset.dark)}
-                    className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-2 text-left hover:bg-zinc-100 transition duration-150"
-                  >
-                    <span className="flex size-5 shrink-0 overflow-hidden rounded-full border border-zinc-300">
-                      <span className="h-full w-1/2" style={{ backgroundColor: preset.sidebar }} />
-                      <span className="h-full w-1/2" style={{ backgroundColor: preset.dark }} />
-                    </span>
-                    <span className="text-[10px] font-bold text-zinc-700 truncate">{preset.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Manual Color Pickers */}
-            <div className="space-y-4 pt-3 border-t border-zinc-100">
-              {/* Light Mode Sidebar */}
-              <div className="flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 p-3 rounded-xl">
-                <div>
-                  <span className="text-[11px] font-black text-zinc-700 block">Sfondo Light Mode</span>
-                  <span className="text-[9px] text-zinc-400 block">Desktop & Mobile Header</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase">{sidebarColor}</span>
-                  <input
-                    type="color"
-                    value={sidebarColor}
-                    onChange={(e) => setSidebarColor(e.target.value)}
-                    className="size-8 cursor-pointer rounded-xl border-0 bg-transparent p-0"
-                  />
-                </div>
-              </div>
-
-              {/* Dark Mode Sidebar */}
-              <div className="flex items-center justify-between gap-3 bg-zinc-50 border border-zinc-200 p-3 rounded-xl">
-                <div>
-                  <span className="text-[11px] font-black text-zinc-700 block">Sfondo Dark Mode</span>
-                  <span className="text-[9px] text-zinc-400 block">Desktop & Mobile Header</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase">{darkSidebarColor}</span>
-                  <input
-                    type="color"
-                    value={darkSidebarColor}
-                    onChange={(e) => setDarkSidebarColor(e.target.value)}
-                    className="size-8 cursor-pointer rounded-xl border-0 bg-transparent p-0"
-                  />
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* RIGHT COLUMN: BUTTONS LAYOUT REORDER (SPAN 2) */}
-        <div className="space-y-6 lg:col-span-2">
+      <div className="space-y-6">
+        <div className="space-y-6">
           <Card className="p-6 bg-white border border-zinc-200 shadow-xs space-y-6">
             
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 pb-4">
               <div className="flex items-center gap-2">
                 <Folder className="text-[#2563eb]" size={18} />
                 <h2 className="text-xs font-black uppercase tracking-wider text-black">
-                  2. Ordine dei Tasti & Sezioni
+                  Ordine dei tasti e delle sezioni
                 </h2>
               </div>
 
@@ -517,7 +396,7 @@ export function SidebarSettingsClient({
             <div className="pt-5 border-t border-zinc-100 space-y-3">
               <div className="space-y-1">
                 <span className="text-xs font-black uppercase tracking-wider text-black block">
-                  3. Aggiungi Tasti Disponibili
+                  Aggiungi tasti disponibili
                 </span>
                 <p className="text-[10px] text-zinc-500">
                   Queste pagine non sono visibili nella barra. Scegli una sezione e clicca "+" per aggiungerle.

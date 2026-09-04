@@ -3,7 +3,6 @@ import { AppShell } from "@/components/app-shell";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
-import { getBrandingTheme } from "@/lib/branding";
 import { SidebarSettingsClient } from "./sidebar-settings-client";
 
 export const dynamic = "force-dynamic";
@@ -31,20 +30,13 @@ export default async function SidebarSettingsPage() {
     where: { key: "sidebar_configuration" }
   });
 
-  // Fetch current branding colors from DB
-  const branding = await getBrandingTheme();
-
   return (
     <AppShell
-      title="Personalizza Barra Laterale"
-      subtitle="Modifica il colore di sfondo e cambia l'ordine di visualizzazione dei tasti della barra."
+      title="Organizza Barra Laterale"
+      subtitle="Organizza le sezioni e modifica l'ordine dei tasti della barra laterale. I colori si gestiscono esclusivamente da Branding."
       role={role}
     >
       <SidebarSettingsClient
-        initialBranding={{
-          sidebar_color: branding.sidebar_color,
-          dark_sidebar_color: branding.dark_sidebar_color,
-        }}
         initialLayout={layoutSetting ? (layoutSetting.value as any) : null}
       />
     </AppShell>
