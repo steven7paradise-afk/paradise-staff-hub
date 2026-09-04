@@ -293,6 +293,23 @@ export function StaffFormsViewer({
     address: string;
   }>;
 }) {
+  const openShopifyOrders = () => {
+    const width = Math.max(1024, window.screen.availWidth || window.innerWidth);
+    const height = Math.max(700, window.screen.availHeight || window.innerHeight);
+    const shopifyWindow = window.open(
+      "https://admin.shopify.com/store/c1uzax-u0/orders",
+      "paradise-shopify-orders",
+      `popup=yes,width=${width},height=${height},left=0,top=0`,
+    );
+
+    if (shopifyWindow) {
+      shopifyWindow.focus();
+      return;
+    }
+
+    window.open("https://admin.shopify.com/store/c1uzax-u0/orders", "_blank");
+  };
+
   const [selectedForm, setSelectedForm] = useState<FormTemplate | null>(null);
   const [selectedFormForHistory, setSelectedFormForHistory] = useState<FormTemplate | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
@@ -1418,13 +1435,12 @@ export function StaffFormsViewer({
           </Link>
 
           {/* Card: Shopify Orders */}
-          <a
-            href="https://admin.shopify.com/store/c1uzax-u0/orders"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={openShopifyOrders}
             className="group flex aspect-square flex-col items-center justify-center gap-7 rounded-[32px] border border-[#7ED6A5]/40 bg-gradient-to-br from-[#7ED6A5] to-[#D8F5E4] p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 active:scale-[0.97]"
             style={{ boxShadow: "0 10px 30px rgba(126,214,165,0.17)" }}
-            aria-label="Apri gli ordini Shopify in una nuova scheda"
+            aria-label="Apri gli ordini Shopify a schermo completo"
           >
             <div className="grid size-24 place-items-center rounded-[30px] bg-[#14532d]/18 shadow-inner">
               <Store className="size-14 text-[#14532d]" />
@@ -1433,7 +1449,7 @@ export function StaffFormsViewer({
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#166534]/70">SHOPIFY</p>
               <h2 className="mt-1 text-xl font-black leading-tight text-[#14532d]">Ordini Shopify</h2>
             </div>
-          </a>
+          </button>
 
           {/* Render any other dynamic forms from database */}
           {regularForms.map((form, idx) => {
