@@ -359,7 +359,7 @@ export default async function AppointmentsPage({
   const [localUsers, locations] = await Promise.all([
     prisma.user.findMany({
       where: { active: true },
-      select: { id: true, name: true, photo_url: true, location: { select: { name: true } } },
+      select: { id: true, name: true, role: true, photo_url: true, mansione: true, location: { select: { name: true } } },
     }),
     prisma.location.findMany({
       where: { active: true },
@@ -689,9 +689,9 @@ export default async function AppointmentsPage({
         pageTitle={pageTitle}
         pageSubtitle={pageSubtitle}
         canManageParadiseNotes={canManageAppointmentOfficeNotes({
-          role,
-          mansione: accessUser?.mansione,
-          locationName: accessUser?.location?.name,
+          role: pcDisplayUser?.role || role,
+          mansione: pcDisplayUser?.mansione || accessUser?.mansione,
+          locationName: pcDisplayUser?.location?.name || accessUser?.location?.name,
           isPC,
         })}
       />

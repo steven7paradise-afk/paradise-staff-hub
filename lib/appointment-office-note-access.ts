@@ -10,13 +10,12 @@ export function canManageAppointmentOfficeNotes(input: {
   locationName?: string | null;
   isPC?: boolean;
 }) {
-  if (input.isPC) return false;
-  if (OFFICE_NOTE_ADMIN_ROLES.has(String(input.role || ""))) return true;
+  if (!input.isPC && OFFICE_NOTE_ADMIN_ROLES.has(String(input.role || ""))) return true;
 
   const job = normalized(input.mansione);
   const location = normalized(input.locationName);
-  const isCustomerAssistance = job.includes("assistenza") || job.includes("customer care");
   const belongsToOffice = location.includes("ufficio") || job.includes("ufficio");
+  const belongsToBuenosAires = location.includes("buenos aires") || location.includes("corso");
 
-  return belongsToOffice && !isCustomerAssistance;
+  return belongsToOffice || belongsToBuenosAires;
 }

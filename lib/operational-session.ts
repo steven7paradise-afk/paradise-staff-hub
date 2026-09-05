@@ -10,6 +10,7 @@ import {
 } from "@/lib/appointments-pc-auth";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 export type OperationalUser = {
   id: string;
@@ -35,16 +36,19 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
   const pcAuth = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value).catch(() => null);
   if (pcAuth) {
     const workerIdentity = selectedWorkerIdentity(request);
-    const worker = workerIdentity
+    const workerCandidate = workerIdentity
       ? await prisma.user.findFirst({
         where: {
           active: true,
-          sede_id: pcAuth.locationId,
           OR: [{ id: workerIdentity }, { name: workerIdentity }],
         },
         select: { id: true, name: true, email: true, role: true, sede_id: true },
         })
       : null;
+    const worker = workerCandidate && (
+      workerCandidate.sede_id === pcAuth.locationId ||
+      isAlwaysActiveAppointmentStaff(workerCandidate.name, workerCandidate.id)
+    ) ? workerCandidate : null;
 
     if (worker) {
       return {

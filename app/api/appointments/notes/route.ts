@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     locationName: userAccess?.location?.name,
     isPC: operationalUser.isPC,
   })) {
-    return NextResponse.json({ error: "Solo l'ufficio può modificare questa nota" }, { status: 403 });
+    return NextResponse.json({ error: "Solo il personale di Ufficio Paradise o Corso Buenos Aires può modificare questa nota" }, { status: 403 });
   }
 
   try {

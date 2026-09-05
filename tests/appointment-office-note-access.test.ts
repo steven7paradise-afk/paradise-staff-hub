@@ -17,24 +17,28 @@ test("office workers can manage appointment office notes", () => {
   );
 });
 
-test("customer assistance cannot manage appointment office notes", () => {
+test("customer assistance in the office can manage appointment office notes", () => {
   assert.equal(
     canManageAppointmentOfficeNotes({
       role: "DIPENDENTE",
       locationName: "Ufficio Paradise",
       mansione: "Assistenza clienti",
     }),
-    false,
+    true,
   );
 });
 
-test("salon PCs cannot manage appointment office notes", () => {
+test("workers selected on the Buenos Aires tablet can manage appointment office notes", () => {
   assert.equal(
     canManageAppointmentOfficeNotes({
-      role: "ADMIN",
-      locationName: "Ufficio Paradise",
+      role: "DIPENDENTE",
+      locationName: "Corso Buenos Aires",
       isPC: true,
     }),
-    false,
+    true,
   );
+});
+
+test("an unassigned salon PC cannot manage appointment office notes", () => {
+  assert.equal(canManageAppointmentOfficeNotes({ role: "RESPONSABILE", isPC: true }), false);
 });

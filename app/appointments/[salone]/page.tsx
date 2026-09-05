@@ -6,6 +6,7 @@ import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthor
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -29,16 +30,19 @@ export default async function SalonAppointmentsPage({
   const isAdminRemote = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
   const selectedWorkerIdentity = selectedWorker ? decodeURIComponent(selectedWorker) : "";
-  const selectedWorkerRecord = pcAuth && selectedWorkerIdentity
+  const selectedWorkerCandidate = pcAuth && selectedWorkerIdentity
     ? await prisma.user.findFirst({
         where: {
           active: true,
-          sede_id: pcAuth.locationId,
           OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
         },
-        select: { name: true },
+        select: { id: true, name: true, sede_id: true },
       }).catch(() => null)
     : null;
+  const selectedWorkerRecord = selectedWorkerCandidate && pcAuth && (
+    selectedWorkerCandidate.sede_id === pcAuth.locationId ||
+    isAlwaysActiveAppointmentStaff(selectedWorkerCandidate.name, selectedWorkerCandidate.id)
+  ) ? selectedWorkerCandidate : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
 
   if (!pcAuth && !isAdminRemote) {
