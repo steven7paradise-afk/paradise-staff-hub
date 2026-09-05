@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ShopifyOrdersConsole } from "@/components/shopify-orders-console";
-import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
+import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { auth } from "@/lib/auth";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
@@ -15,8 +15,16 @@ export default async function ShopifyOrdersPage() {
   const cookieStore = await cookies();
   const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
   const isPC = Boolean(pcAuth);
+  const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
 
   if (!session?.user?.id && !isPC) redirect("/login");
+
+  const selectedPcWorker = isPC && selectedWorkerId
+    ? await prisma.user.findFirst({
+        where: { id: selectedWorkerId, active: true },
+        select: { name: true, photo_url: true },
+      }).catch(() => null)
+    : null;
 
   let role: Role = isPC ? "RESPONSABILE" : (session!.user.role as Role);
   if (!isPC) {
@@ -45,6 +53,7 @@ export default async function ShopifyOrdersPage() {
       hideHeader
       edgeToEdgeMain
       pcMode={isPC}
+      pcDisplayUser={selectedPcWorker}
       hideDesktopControls
       hideAdminAssistant
     >
@@ -52,4 +61,3 @@ export default async function ShopifyOrdersPage() {
     </AppShell>
   );
 }
-

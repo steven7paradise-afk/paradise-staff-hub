@@ -69,7 +69,7 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
   const [dbUser] = await Promise.all([
     prisma.user.findUnique({
       where: { id: remoteWorker?.id || (isPC ? (selectedWorkerId || "PC_CASSA") : session!.user.id) },
-      select: { mansione: true, role: true, location: { select: { name: true } } },
+      select: { id: true, name: true, photo_url: true, mansione: true, role: true, location: { select: { name: true } } },
     }),
     ensureOrderForm(isPC ? "u-super-admin" : session!.user.id),
   ]);
@@ -80,6 +80,9 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
 
   const isSarta =
     dbUser?.mansione?.trim().toLowerCase() === "sarta";
+  const selectedPcWorker = pcAuth && selectedWorkerId && dbUser
+    ? { name: dbUser.name, photo_url: dbUser.photo_url }
+    : null;
 
   const responses = await prisma.serviceFormResponse.findMany({
     where: {
@@ -121,13 +124,13 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
       hideHeader
       pcMode={isPC}
       remoteController={isAdminRemoteController}
-      pcDisplayUser={remoteWorker ? { name: remoteWorker.name, photo_url: remoteWorker.photo_url } : null}
+      pcDisplayUser={remoteWorker ? { name: remoteWorker.name, photo_url: remoteWorker.photo_url } : selectedPcWorker}
       pcProfileChooserHrefOverride={isAdminRemoteController ? `/appointments/buenos-aires?choose=1&remoteTarget=${encodeURIComponent(remoteTarget)}` : undefined}
     >
       <OrderManager
         initialOrders={orders as any}
         canManage={canManageOrders}
-        currentUserName={remoteWorker?.name || (isPC ? "PC Cassa" : session?.user?.name ?? "Staff")}
+        currentUserName={remoteWorker?.name || selectedPcWorker?.name || (isPC ? "PC Cassa" : session?.user?.name ?? "Staff")}
         currentUserRole={role}
       />
     </AppShell>

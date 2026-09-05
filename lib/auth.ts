@@ -7,6 +7,7 @@ import { pinLookup } from "@/lib/pin";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { FORMER_EMPLOYEE_STATUS, hasFormerEmployeeDocumentAccess, isFormerEmployeeAllowedPath } from "@/lib/former-employee";
+import { isPcCassaAllowedPath } from "@/lib/pc-cassa-access";
 
 function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/login" || pathname === "/login/") return true;
@@ -153,33 +154,7 @@ export const authConfig = {
       const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
       const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
       if (pcAuth) {
-        const isAllowedPage = 
-          pathname === "/appointments" || 
-          pathname.startsWith("/appointments/") ||
-          pathname === "/client-control" ||
-          pathname.startsWith("/client-control/") ||
-          pathname === "/orders" ||
-          pathname.startsWith("/orders/") ||
-          pathname === "/service-forms" || 
-          pathname.startsWith("/service-forms/") ||
-          pathname === "/cassa-live" ||
-          pathname.startsWith("/cassa-live/");
-          
-        const isAllowedApi = 
-          pathname.startsWith("/api/appointments") || 
-          pathname.startsWith("/api/client-control") ||
-          pathname.startsWith("/api/orders") ||
-          pathname.startsWith("/api/service-forms") ||
-          pathname.startsWith("/api/remote-control") ||
-          pathname.startsWith("/api/shopify-order-lookup") ||
-          pathname.startsWith("/api/vat-lookup") ||
-          pathname.startsWith("/api/drive-image") ||
-          pathname.startsWith("/api/auth");
-
-        if (isAllowedPage || isAllowedApi) {
-          return true;
-        }
-        return false;
+        return isPcCassaAllowedPath(pathname);
       }
       
       if (!auth?.user?.id) return false;
