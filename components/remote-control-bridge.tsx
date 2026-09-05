@@ -316,34 +316,36 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       if (snapshotting || document.visibilityState !== "visible") return;
       snapshotting = true;
       try {
-        const { toJpeg } = await import("html-to-image");
         const sourceWidth = Math.max(320, window.innerWidth);
         const sourceHeight = Math.max(320, window.innerHeight);
-        const outputWidth = Math.min(1280, sourceWidth);
-        const outputHeight = Math.round(sourceHeight * (outputWidth / sourceWidth));
-        const snapshot = await toJpeg(document.body, {
-          quality: 0.42,
-          width: sourceWidth,
-          height: sourceHeight,
-          canvasWidth: outputWidth,
-          canvasHeight: outputHeight,
-          pixelRatio: 1,
-          skipFonts: true,
-          style: {
-            transform: `translate(${-window.scrollX}px, ${-window.scrollY}px)`,
-            transformOrigin: "top left",
-          },
-          filter: (node) => {
-            if (!(node instanceof Element)) return true;
-            if (node.matches("input, textarea, select, iframe, video, [contenteditable='true'], [data-remote-status], [data-remote-private]")) return false;
-            const ownText = node.children.length === 0 ? String(node.textContent || "") : "";
-            return !/password|parola chiave|\bpin\b|codice di accesso/i.test(ownText);
-          },
+        const clone = document.documentElement.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll("script, noscript, iframe, video, canvas, meta[http-equiv], [data-remote-status], [data-remote-private]").forEach((node) => node.remove());
+        clone.querySelectorAll("input, textarea, select, [contenteditable='true']").forEach((node) => {
+          const replacement = document.createElement("span");
+          replacement.setAttribute("style", "display:block;min-height:42px;border:1px solid rgba(120,120,120,.22);border-radius:12px;background:rgba(255,255,255,.55)");
+          replacement.setAttribute("aria-hidden", "true");
+          node.replaceWith(replacement);
         });
-        queue({ snapshot, viewport: { width: sourceWidth, height: sourceHeight } }, true);
+        clone.querySelectorAll("*").forEach((node) => {
+          if (node.children.length > 0) return;
+          if (/password|parola chiave|\bpin\b|codice di accesso/i.test(String(node.textContent || ""))) node.textContent = "••••";
+        });
+        const head = clone.querySelector("head");
+        if (head) {
+          const base = document.createElement("base");
+          base.href = `${window.location.origin}/`;
+          head.prepend(base);
+        }
+        const htmlSnapshot = `<!doctype html>${clone.outerHTML}`;
+        const maxX = Math.max(1, document.documentElement.scrollWidth - window.innerWidth);
+        const maxY = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+        queue({
+          htmlSnapshot,
+          viewport: { width: sourceWidth, height: sourceHeight },
+          scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY },
+        }, true);
       } catch {
-        // Some third-party images cannot be copied; activity and pointer data
-        // continue to work even when an individual frame cannot be rendered.
+        // Activity and pointer data continue even if a single visual frame fails.
       } finally {
         snapshotting = false;
       }

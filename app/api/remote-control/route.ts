@@ -43,6 +43,7 @@ type ObservationState = {
   lastAction: string | null;
   events: ObservationEvent[];
   snapshot: string | null;
+  htmlSnapshot: string | null;
   viewport: { width: number; height: number } | null;
   updatedAt: string;
 };
@@ -211,7 +212,7 @@ export async function GET(request: NextRequest) {
   }
   const activeRemote = activeSession(remote) ? remote : null;
   const pcRemote = activeRemote?.mode === "observe" && activeRemote.observation
-    ? { ...activeRemote, observation: { ...activeRemote.observation, snapshot: null } }
+    ? { ...activeRemote, observation: { ...activeRemote.observation, snapshot: null, htmlSnapshot: null } }
     : activeRemote;
   const response = NextResponse.json({
     session: pcRemote,
@@ -286,6 +287,11 @@ export async function POST(request: NextRequest) {
       && body.snapshot.length <= 900_000
       ? body.snapshot
       : previousObservation?.snapshot || null;
+    const htmlSnapshot = typeof body?.htmlSnapshot === "string" && body.htmlSnapshot.length <= 1_500_000
+      ? body.htmlSnapshot
+          .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+          .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*')/gi, "")
+      : previousObservation?.htmlSnapshot || null;
     previous.observation = {
       pathname: cleanPath(body?.pathname ?? previousObservation?.pathname),
       search: typeof body?.search === "string" ? body.search.slice(0, 1000) : previousObservation?.search || "",
@@ -299,6 +305,7 @@ export async function POST(request: NextRequest) {
       lastAction: newEvent?.label || previousObservation?.lastAction || null,
       events: [...(previousObservation?.events || []), ...(newEvent ? [newEvent] : [])].slice(-20),
       snapshot,
+      htmlSnapshot,
       viewport: body?.viewport && Number.isFinite(body.viewport.width) && Number.isFinite(body.viewport.height)
         ? {
             width: Math.max(320, Math.min(5000, Number(body.viewport.width))),
