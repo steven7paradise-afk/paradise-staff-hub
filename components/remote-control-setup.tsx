@@ -221,7 +221,14 @@ export function RemoteControlSetup() {
           </header>
           <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
             {activeView.mode === "observe" && observation?.htmlSnapshot ? (
-              <iframe ref={iframeRef} srcDoc={observation.htmlSnapshot} sandbox="allow-same-origin" title={`Schermata di ${observedWorker?.name || activeView.target.name}`} className="pointer-events-none size-full select-none border-0" />
+              <iframe
+                ref={iframeRef}
+                key={`${observation.pathname}:${observation.search}:${observation.updatedAt}`}
+                srcDoc={observation.htmlSnapshot}
+                sandbox="allow-same-origin"
+                title={`Schermata di ${observedWorker?.name || activeView.target.name}`}
+                className="pointer-events-none size-full select-none border-0"
+              />
             ) : activeView.mode === "observe" && observation?.snapshot ? (
               <img src={observation.snapshot} alt={`Schermata di ${observedWorker?.name || activeView.target.name}`} className="size-full select-none object-fill" draggable={false} />
             ) : (

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
   const response = NextResponse.json({
     success: true,
-    appointmentUrl: appointmentSalonUrl(salone),
+    appointmentUrl: `${appointmentSalonUrl(salone)}?worker=${encodeURIComponent(worker.name)}`,
     workerName: worker.name,
   });
 

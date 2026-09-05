@@ -83,11 +83,19 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
 
   function addPinDigit(digit: string) {
     if (!selectedWorkerId || selectingWorkerId) return;
-    setPinPrefix((current) => `${current}${digit}`.replace(/\D/g, "").slice(0, 2));
+    const nextPinPrefix = `${pinPrefix}${digit}`.replace(/\D/g, "").slice(0, 2);
+    setPinPrefix(nextPinPrefix);
     setError("");
+    if (nextPinPrefix.length === 2 && selectedWorker) {
+      // On a two-digit kiosk PIN there is no extra decision to make: submit as
+      // soon as the second digit is entered so the user cannot remain stuck on
+      // an apparently enabled "Continua" button.
+      setSelectingWorkerId(selectedWorker.id);
+      window.setTimeout(() => void enter(selectedWorker, nextPinPrefix), 120);
+    }
   }
 
-  async function enter(worker: ActiveWorker) {
+  async function enter(worker: ActiveWorker, enteredPinPrefix = pinPrefix) {
     if (remoteTarget) {
       setSelectingWorkerId(worker.id);
       setError("");
@@ -107,7 +115,7 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
       }
       return;
     }
-    const cleanPinPrefix = pinPrefix.replace(/\D/g, "").slice(0, 2);
+    const cleanPinPrefix = enteredPinPrefix.replace(/\D/g, "").slice(0, 2);
     if (!/^\d{2}$/.test(cleanPinPrefix)) {
       setError("Inserisci le prime 2 cifre del PIN.");
       return;
@@ -122,7 +130,10 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
-      window.location.href = data?.appointmentUrl || appointmentSalonUrl(salone);
+      const destination = data?.appointmentUrl || appointmentSalonUrl(salone);
+      // A full replace guarantees that the server reads the freshly-issued
+      // worker cookie and also removes `choose=1` from the address.
+      window.location.replace(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
       setSelectingWorkerId("");
