@@ -45,6 +45,7 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/profile": { name: "Profilo", description: "Dati personali, foto, password e impostazioni account.", group: "Base" },
   "/schedules": { name: "Planning", description: "Turnistica mensile dei saloni.", group: "Planning & Saloni" },
   "/orders": { name: "Ordini", description: "Kanban ordini, stati, foto e stampa etichette.", group: "Planning & Saloni" },
+  "/shopify-orders": { name: "Ordini Shopify", description: "Elenco completo degli ordini e relativi dettagli Shopify.", group: "Planning & Saloni" },
   "/ordine": { name: "Scheda ordine diretta", description: "Pagina aperta da barcode o link diretto ordine.", group: "Planning & Saloni" },
   "/appointments": { name: "Appuntamenti", description: "Prenotazioni clienti e stato appuntamento.", group: "Planning & Saloni" },
   "/consulenza-online": { name: "Consulenza online", description: "Richieste e appuntamenti consulenze online.", group: "Planning & Saloni" },

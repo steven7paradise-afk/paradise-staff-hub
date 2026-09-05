@@ -37,6 +37,7 @@ export const routePermissions: Record<string, Role[]> = {
   "/service-forms": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/tables": ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"],
   "/orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
+  "/shopify-orders": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/shipping": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/ordine": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/points": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
@@ -74,7 +75,7 @@ export const routePermissions: Record<string, Role[]> = {
 export function defaultEditRolesForPath(pathname: string): Role[] {
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
-  if (pathname === "/orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
+  if (pathname === "/orders" || pathname === "/shopify-orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
   if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname.startsWith("/settings")) return ["ZERO"];
   return ["ZERO", "SUPER_ADMIN", "ADMIN"];
@@ -96,6 +97,8 @@ const legacyAccessRouteMap: Record<string, string> = {
   social: "/social-calendar",
   ordini: "/orders",
   orders: "/orders",
+  "ordini shopify": "/shopify-orders",
+  "shopify orders": "/shopify-orders",
   appuntamenti: "/appointments",
   appointments: "/appointments",
   "consulenza online": "/consulenza-online",

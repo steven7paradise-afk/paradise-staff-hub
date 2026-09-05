@@ -33,7 +33,7 @@ export default async function ShopifyOrdersPage() {
       select: { id: true, role: true, mansione: true, access_list: true, active: true },
     });
     if (!user?.active) redirect("/login");
-    if (!(await canAccessForUser(prisma, "/orders", user))) redirect("/dashboard");
+    if (!(await canAccessForUser(prisma, "/shopify-orders", user))) redirect("/dashboard");
     role = user.role as Role;
   }
 

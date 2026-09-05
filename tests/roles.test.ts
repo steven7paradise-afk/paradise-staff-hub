@@ -19,6 +19,12 @@ test("la matrice Zero resta completa", () => {
   assert.equal(permissions.edit.includes("/shipping"), true);
 });
 
+test("Ordini Shopify ha un permesso separato configurabile", () => {
+  assert.equal(canAccess("/shopify-orders", "RESPONSABILE", undefined, { view: ["/shopify-orders"], edit: [] }), true);
+  assert.equal(canAccess("/shopify-orders", "RESPONSABILE", undefined, { view: ["/orders"], edit: ["/orders"] }), false);
+  assert.equal(defaultRolePermissions().ZERO.view.includes("/shopify-orders"), true);
+});
+
 test("la mansione aggiunge permessi senza nascondere quelli del ruolo", () => {
   const permissions = mergePermissionSets(
     { view: ["/dashboard", "/tasks"], edit: ["/tasks"] },
