@@ -22,3 +22,9 @@ test("the outer cashier lock allows Shopify orders without opening administrativ
   assert.equal(isPcCassaProxyAllowedPath("/api/orders/import"), false);
   assert.equal(isPcCassaProxyAllowedPath("/settings"), false);
 });
+
+test("the authorized cashier PC can receive a live screen-share request", () => {
+  assert.equal(isPcCassaAllowedPath("/api/remote-video"), true);
+  assert.equal(isPcCassaAllowedPath("/api/remote-video?mode=pc"), true);
+  assert.equal(isPcCassaProxyAllowedPath("/api/remote-video"), true);
+});

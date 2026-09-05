@@ -14,6 +14,7 @@ export const PC_CASSA_ALLOWED_API_PREFIXES = [
   "/api/orders",
   "/api/service-forms",
   "/api/remote-control",
+  "/api/remote-video",
   "/api/shopify-order-lookup",
   "/api/shopify-orders-dashboard",
   "/api/vat-lookup",
@@ -61,6 +62,7 @@ export function isPcCassaProxyAllowedPath(pathname: string) {
     pathname.startsWith("/api/vat-lookup") ||
     pathname.startsWith("/api/drive-image") ||
     pathname.startsWith("/api/remote-control") ||
+    pathname.startsWith("/api/remote-video") ||
     pathname.startsWith("/api/auth");
 
   return isAllowedPage || isAllowedApi;
