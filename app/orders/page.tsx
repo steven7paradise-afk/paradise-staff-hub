@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { ensureOrderForm, ORDER_FORM_CATEGORY } from "@/lib/order-form";
+import { resolveOrderConfirmer } from "@/lib/order-confirmation";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
@@ -84,7 +85,7 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
     ? { name: dbUser.name, photo_url: dbUser.photo_url }
     : null;
 
-  const responses = await prisma.serviceFormResponse.findMany({
+  const [responses, orderStaff] = await Promise.all([prisma.serviceFormResponse.findMany({
     where: {
       status: { not: "ARCHIVED" },
       form: {
@@ -102,11 +103,15 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
     },
     orderBy: { created_at: "desc" },
     take: 300,
-  });
+  }), prisma.user.findMany({
+    where: { active: true },
+    select: { id: true, name: true, photo_url: true },
+  })]);
 
   const allOrders = responses
     .map((response) => ({
       ...response,
+      confirmed_by: resolveOrderConfirmer(response, orderStaff),
       created_at: response.created_at.toISOString(),
       updated_at: response.updated_at.toISOString(),
     }));

@@ -9,6 +9,7 @@ import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 function serviceFormFileUrl(answer: any) {
   return answer?.driveFileUrl || answer?.webViewLink || answer?.url || (answer?.storagePath ? `/api/service-forms/responses/file?path=${encodeURIComponent(answer.storagePath)}` : "#");
@@ -36,9 +37,30 @@ type OrderResponse = {
   created_at: string;
   updated_at: string;
   user_location_name?: string | null;
-  user?: { name?: string | null };
+  user?: { name?: string | null; photo_url?: string | null };
+  confirmed_by?: { id?: string; name?: string | null; photo_url?: string | null } | null;
   form?: { name?: string | null; fields?: Array<{ id: string; label: string; type: string }> };
 };
+
+function OrderActor({ order, detail = false }: { order: OrderResponse; detail?: boolean }) {
+  const actor = order.confirmed_by;
+  const name = actor?.name?.trim() || order.user?.name?.trim() || "Staff";
+  const photoUrl = actor?.photo_url || (!actor ? order.user?.photo_url : null);
+  const label = actor ? "Confermato da" : "Creato da";
+  const initials = name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className={cn("grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#f7dce8] font-black text-[#a83f6d]", detail ? "size-10 text-xs" : "size-6 text-[8px]")}>
+        {photoUrl ? <img src={resolveDrivePhotoUrl(photoUrl)} alt={`Foto di ${name}`} className="size-full object-cover" /> : initials}
+      </span>
+      <span className="min-w-0">
+        <span className={cn("block truncate font-black uppercase tracking-[0.08em] text-black/35", detail ? "text-[10px]" : "text-[8px]")}>{label}</span>
+        <span className={cn("block truncate font-bold text-black/70", detail ? "mt-0.5 text-sm" : "text-[10px]")}>{name}</span>
+      </span>
+    </div>
+  );
+}
 
 const ORDER_COLUMNS = [
   { id: "NEW", label: "Da ordinare", helper: "Invia l’ordine al fornitore", icon: ShoppingCart, color: "bg-pink-50 text-[#C66170] border-pink-100" },
@@ -610,6 +632,7 @@ export function OrderManager({
           orderNumber(order),
           orderItems(order),
           order.user?.name ?? "",
+          order.confirmed_by?.name ?? "",
           order.user_location_name ?? "",
           JSON.stringify(order.answers ?? {}),
         ].join(" ").toLowerCase();
@@ -1085,7 +1108,7 @@ export function OrderManager({
                 <div className="flex min-w-0 items-center gap-1.5 border-t border-black/[0.05] px-3 py-2.5 text-[10px] font-bold text-black/38">
                   <span className="truncate">{order.user_location_name ?? "Sede non indicata"}</span>
                   <span className="text-black/20">•</span>
-                  <span className="truncate">{order.user?.name ?? "Staff"}</span>
+                  <OrderActor order={order} />
                   <span className="ml-auto grid size-7 shrink-0 place-items-center rounded-full bg-[#faf3f7] text-[#b24f7a]">
                     <ChevronRight className="size-4" />
                   </span>
@@ -1188,7 +1211,10 @@ export function OrderManager({
                           <Badge tone={orderPriority(order).toLowerCase().includes("urgent") || orderPriority(order).toLowerCase().includes("bloc") ? "pink" : "gold"}>{orderPriority(order)}</Badge>
                           {order.user_location_name ? <span className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-black/45">{order.user_location_name}</span> : null}
                         </div>
-                        <p className="mt-3 text-[11px] font-semibold text-black/35">{order.user?.name ?? "Staff"} · {orderStatusDate(order)}</p>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <OrderActor order={order} />
+                          <span className="shrink-0 text-[10px] font-semibold text-black/35">{orderStatusDate(order)}</span>
+                        </div>
                       </div>
                     </button>
                   );
@@ -1267,11 +1293,8 @@ export function OrderManager({
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><Clock3 className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Ultima modifica</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{formatDateTime(selected.updated_at)}</p>
-                </div>
+                <OrderActor order={selected} detail />
+                <p className="ml-auto text-right text-[10px] font-semibold leading-4 text-black/35">Ultima modifica<br />{formatDateTime(selected.updated_at)}</p>
               </div>
             </div>
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">

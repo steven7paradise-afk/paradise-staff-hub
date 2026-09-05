@@ -61,6 +61,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     if (status) {
       dataToUpdate.status = status;
+      if (user.id !== "PC_CASSA") {
+        dataToUpdate.assigned_to_id = user.id;
+      }
 
       // Track status changes in the activity log field
       const currentLog = Array.isArray(response.activity_log) ? (response.activity_log as any[]) : [];
@@ -130,6 +133,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         form: true,
       }
     });
+
+    const confirmedBy = status
+      ? user.id === "PC_CASSA"
+        ? { name: user.name || "Staff", photo_url: null }
+        : await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { id: true, name: true, photo_url: true },
+          })
+      : updatedResponse.assigned_to_id
+        ? await prisma.user.findUnique({
+            where: { id: updatedResponse.assigned_to_id },
+            select: { id: true, name: true, photo_url: true },
+          })
+        : null;
 
     // Automatically sync status change notes to the matching Shopify order
     if (status) {
@@ -201,7 +218,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json(updatedResponse);
+    return NextResponse.json({ ...updatedResponse, confirmed_by: confirmedBy });
   } catch (error) {
     console.error("Failed to update form response:", error);
     return NextResponse.json({ error: "Errore durante l'aggiornamento della risposta" }, { status: 500 });

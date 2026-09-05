@@ -1474,14 +1474,18 @@ export function StaffFormsViewer({
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#70E1CE]">Pagamenti</p>
                   <h2 className="text-lg font-black leading-tight">Terminale POS</h2>
                 </div>
+                <span className="inline-flex rounded-full border border-[#70E1CE]/25 bg-[#70E1CE]/10 px-2.5 py-1.5 text-[10px] font-black tracking-wide text-[#9af0df] sm:px-3 sm:text-xs">
+                  <span className="sm:hidden">PIN: 1234</span>
+                  <span className="hidden sm:inline">PIN di accesso: 1234</span>
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPosTerminal(false)}
-                className="grid size-11 place-items-center rounded-2xl border border-white/15 bg-white/5 text-white transition hover:bg-white/10"
+                className="grid size-14 place-items-center rounded-2xl border border-white/20 bg-white/10 text-white shadow-sm transition hover:scale-105 hover:bg-white/15"
                 aria-label="Chiudi Terminale POS"
               >
-                <X className="size-6" />
+                <X className="size-8" strokeWidth={2.5} />
               </button>
             </header>
             <iframe
