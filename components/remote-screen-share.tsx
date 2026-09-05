@@ -94,10 +94,12 @@ export function RemoteScreenShare() {
     setStarting(true);
     handledRequestRef.current = signal.requestId;
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 12, max: 15 } },
-        audio: false,
-      });
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        throw new DOMException("Questo browser non supporta la condivisione dello schermo.", "NotSupportedError");
+      }
+      // `video: true` is accepted by older Safari versions too. Detailed
+      // frame-rate constraints caused the share request to fail on some Macs.
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const peer = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.cloudflare.com:3478" },
@@ -136,6 +138,10 @@ export function RemoteScreenShare() {
       if (!response.ok) throw new Error("Collegamento non riuscito");
     } catch (error) {
       const denied = error instanceof DOMException && ["NotAllowedError", "AbortError"].includes(error.name);
+      const unsupported = error instanceof DOMException && error.name === "NotSupportedError";
+      const diagnostic = error instanceof Error
+        ? `${error.name}: ${error.message}`.replace(/\s+/g, " ").trim().slice(0, 120)
+        : "Errore sconosciuto";
       setStarting(false);
       setSharing(false);
       handledRequestRef.current = "";
@@ -151,7 +157,11 @@ export function RemoteScreenShare() {
           targetCode: signal.targetCode,
           requestId: signal.requestId,
           status: denied ? "denied" : "ended",
-          message: denied ? "Condivisione non autorizzata." : "Collegamento video non riuscito.",
+          message: denied
+            ? "Condivisione annullata o non autorizzata."
+            : unsupported
+              ? "Questo browser non supporta la condivisione. Apri Paradise con Chrome o Safari aggiornato."
+              : `Collegamento video non riuscito (${diagnostic}).`,
         }),
       }).catch(() => null);
     }

@@ -111,7 +111,6 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || "Impossibile selezionare il profilo remoto.");
         router.replace(`/appointments${search}`);
-        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Impossibile selezionare il profilo remoto.");
         setSelectingWorkerId("");
@@ -137,7 +136,6 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
       // Keep the root layout mounted so an active screen-share stream survives
       // the transition from profile selection to the appointments board.
       router.replace(destination);
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
       setSelectingWorkerId("");

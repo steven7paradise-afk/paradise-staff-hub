@@ -49,9 +49,10 @@ function cleanDescription(value: unknown, expectedType: "offer" | "answer"): RTC
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as { type?: unknown; sdp?: unknown };
   if (candidate.type !== expectedType || typeof candidate.sdp !== "string") return null;
-  const sdp = candidate.sdp.trim();
-  if (!sdp || sdp.length > 120_000) return null;
-  return { type: expectedType, sdp };
+  // Keep the original CRLF line endings. Safari is stricter than Chromium
+  // when parsing an SDP description without its final line terminator.
+  if (!candidate.sdp.trim() || candidate.sdp.length > 120_000) return null;
+  return { type: expectedType, sdp: candidate.sdp };
 }
 
 async function readSignal(targetCode: string) {
