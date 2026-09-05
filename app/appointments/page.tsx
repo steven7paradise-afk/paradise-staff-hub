@@ -80,6 +80,18 @@ function toIsoBoundary(date: Date, endOfDay = false) {
   return copy.toISOString();
 }
 
+async function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function parseLocalDateParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
@@ -378,13 +390,17 @@ export default async function AppointmentsPage({
   if (hasCowlendarToken()) {
     try {
       [bookings, services] = await Promise.all([
-        getCowlendarBookingsForRange({
-          startDate: toIsoBoundary(appointmentRange.start),
-          endDate: toIsoBoundary(appointmentRange.end, true),
-          limit: 5000,
-          forceRefresh,
-        }),
-        getCowlendarServices(forceRefresh),
+        resolveWithin(
+          getCowlendarBookingsForRange({
+            startDate: toIsoBoundary(appointmentRange.start),
+            endDate: toIsoBoundary(appointmentRange.end, true),
+            limit: 5000,
+            forceRefresh,
+          }),
+          [],
+          9_000,
+        ),
+        resolveWithin(getCowlendarServices(forceRefresh), [], 9_000),
       ]);
     } catch (error) {
       loadError = error instanceof Error ? error.message : "Errore nel caricamento appuntamenti.";
@@ -435,24 +451,28 @@ export default async function AppointmentsPage({
     prisma.setting.findUnique({ where: { key: "appointment_status_overrides" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_bot_updates" } }).catch(() => null),
     prisma.setting.findUnique({ where: { key: "appointment_team_overrides" } }).catch(() => null),
-    getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
-      id: String(booking.id),
-      customerName:
-        booking.customer?.name?.trim() ||
-        [booking.form_data?.firstname, booking.form_data?.lastname]
-          .map((value: unknown) => String(value || "").trim())
-          .filter(Boolean)
-          .join(" ") ||
-        booking.booking_str ||
-        "",
-      customerPhone:
-        booking.customer?.phone ||
-        booking.form_data?.["Numero telefono"] ||
-        booking.form_data?.phone ||
-        booking.form_data?.telefono ||
-        null,
-      startDate: booking.start_date,
-    }))).catch(() => ({})),
+    resolveWithin(
+      getAppointmentStatusesFromGoogleSheet(safeBookings.map((booking: any) => ({
+        id: String(booking.id),
+        customerName:
+          booking.customer?.name?.trim() ||
+          [booking.form_data?.firstname, booking.form_data?.lastname]
+            .map((value: unknown) => String(value || "").trim())
+            .filter(Boolean)
+            .join(" ") ||
+          booking.booking_str ||
+          "",
+        customerPhone:
+          booking.customer?.phone ||
+          booking.form_data?.["Numero telefono"] ||
+          booking.form_data?.phone ||
+          booking.form_data?.telefono ||
+          null,
+        startDate: booking.start_date,
+      }))).catch(() => ({})),
+      {},
+      4_000,
+    ),
     prisma.setting.findMany({
       where: { key: { startsWith: "appointment_office_note:" } },
       select: { key: true, value: true },

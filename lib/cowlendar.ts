@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
 const COWLENDAR_API_BASE = "https://app.cowlendar.com/public-api/v1";
+const COWLENDAR_READ_TIMEOUT_MS = 8_000;
+const COWLENDAR_WRITE_TIMEOUT_MS = 12_000;
 
 type CowlendarResponse<T> = {
   data: T[];
@@ -162,6 +164,7 @@ async function cowlendarFetch<T>(pathname: string, init?: RequestInit): Promise<
 
   const response = await fetch(`${COWLENDAR_API_BASE}${pathname}`, {
     ...init,
+    signal: init?.signal || AbortSignal.timeout(COWLENDAR_READ_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
@@ -185,6 +188,7 @@ async function cowlendarRawFetch(pathname: string, init?: RequestInit) {
 
   return fetch(`${COWLENDAR_API_BASE}${pathname}`, {
     ...init,
+    signal: init?.signal || AbortSignal.timeout(COWLENDAR_WRITE_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
