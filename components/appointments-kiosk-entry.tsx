@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, LockKeyhole, X } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { RemoteControlBridge } from "@/components/remote-control-bridge";
+import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 
 type ActiveWorker = {
   id: string;
@@ -149,11 +150,9 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex h-full flex-col items-center px-5 py-8 md:px-10 lg:px-14">
         <div className="mx-auto max-w-4xl space-y-4 text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
-            <LockKeyhole className="size-7" strokeWidth={1.45} />
-          </div>
+          {remoteTarget ? null : <AppointmentsAdminUnlock salone={salone} />}
           <h1 className="font-serif text-5xl font-light leading-tight tracking-normal text-neutral-950 md:text-6xl xl:text-7xl">
-            Chi vuole usare il gestionale?
+            Gestionale Paradise
           </h1>
           <p className="text-sm font-medium uppercase tracking-[0.36em] text-neutral-700 md:text-base">
             Seleziona il tuo profilo per continuare.

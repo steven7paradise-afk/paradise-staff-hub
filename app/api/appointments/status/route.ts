@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { updateCowlendarBookingStatus, type CowlendarAppointmentStatus } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { getOperationalUser } from "@/lib/operational-session";
+import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 
 const SETTING_KEY = "appointment_status_overrides";
 
@@ -47,6 +48,34 @@ function formatElapsedTime(totalSeconds: number) {
     .join(":");
 }
 
+async function hasConfirmedClientControl(bookingId: string) {
+  const forms = await prisma.serviceForm.findMany({
+    where: { active: true },
+    select: { id: true, name: true, category: true },
+  });
+  const formIds = forms
+    .filter((form) => isClientControlFormName(form.name, form.category))
+    .map((form) => form.id);
+  if (!formIds.length) return false;
+
+  const response = await prisma.serviceFormResponse.findFirst({
+    where: {
+      form_id: { in: formIds },
+      answers: { path: ["booking_id"], equals: bookingId },
+    },
+    orderBy: { updated_at: "desc" },
+    select: { answers: true },
+  });
+  const answers = (response?.answers || {}) as Record<string, unknown>;
+  return Boolean(
+    response &&
+      answers.client_control_is_draft !== true &&
+      String(answers[CLIENT_CONTROL_FIELD_IDS.correctness] || "")
+        .trim()
+        .toLowerCase() === "controllato",
+  );
+}
+
 export async function POST(request: NextRequest) {
   const operationalUser = await getOperationalUser(request);
   const isAuthorized = Boolean(operationalUser?.id);
@@ -65,6 +94,16 @@ export async function POST(request: NextRequest) {
 
     if (!bookingId || !allowedStatuses.has(status)) {
       return NextResponse.json({ error: "Stato appuntamento non valido." }, { status: 400 });
+    }
+
+    if (status === "COMPLETATO" && !(await hasConfirmedClientControl(bookingId))) {
+      return NextResponse.json(
+        {
+          code: "CLIENT_CONTROL_REQUIRED",
+          error: "Prima di completare l’appuntamento devi confermare il Controllo Cliente.",
+        },
+        { status: 409 },
+      );
     }
 
     const currentSetting = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });

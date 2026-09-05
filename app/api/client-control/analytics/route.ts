@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
     select: {
       id: true,
       name: true,
+      photo_url: true,
       sede_id: true,
       location: { select: { id: true, name: true } },
     },
@@ -203,6 +204,7 @@ export async function GET(request: NextRequest) {
     employees: employees.map((employee) => ({
       id: employee.id,
       name: employee.name,
+      photoUrl: employee.photo_url,
       locationId: employee.sede_id,
       locationName: employee.location?.name ?? "Senza sede",
     })),

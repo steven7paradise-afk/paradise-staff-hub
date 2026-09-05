@@ -134,6 +134,7 @@ export async function POST(request: NextRequest) {
     staffIds?: string[];
     shopifyOrder?: string;
     secondShopifyOrder?: string;
+    shopifyNoteOrder?: string;
     instagramTag?: string;
     notes?: boolean;
     customNoteText?: string;
@@ -249,6 +250,7 @@ export async function POST(request: NextRequest) {
   const form = await ensureClientControlForm(submitter.id);
   const shopifyOrder = textValue(body?.shopifyOrder);
   const secondShopifyOrder = textValue(body?.secondShopifyOrder);
+  const shopifyNoteOrder = textValue(body?.shopifyNoteOrder);
   const finalPaymentOptional = allowsMissingFinalPaymentOrder(body?.customServices);
   const isNoShow = !!body?.isNoShow;
   let productsListStr = "";
@@ -449,6 +451,8 @@ export async function POST(request: NextRequest) {
     photo_dopo_fronte: answerPhotoDopoFronte || undefined,
     photo_dopo_dietro: answerPhotoDopoDietro || undefined,
     booking_id: textValue(body?.bookingId),
+    second_shopify_order: secondShopifyOrder,
+    shopify_note_order: shopifyNoteOrder,
     client_control_created_from: isNoShow ? "Tablet Clock No Show" : "Tablet Clock Finito",
     client_control_notes_text: isNoShow ? "Cliente non si è presentata (No Show)" : undefined,
     client_control_shopify_order_note: shopifyOrderNote || "",
@@ -490,6 +494,7 @@ export async function POST(request: NextRequest) {
     photo_dopo_fronte: answerPhotoDopoFronte || undefined,
     photo_dopo_dietro: answerPhotoDopoDietro || undefined,
     second_shopify_order: secondShopifyOrder,
+    shopify_note_order: shopifyNoteOrder,
     custom_services: Array.isArray(body?.customServices)
       ? body.customServices.map((value: unknown) => textValue(value)).filter(Boolean)
       : [],
@@ -616,7 +621,9 @@ export async function POST(request: NextRequest) {
   }
 
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
-  const targetOrders = extractShopifyOrderCodes(body?.shopifyOrder, body?.secondShopifyOrder);
+  const targetOrders = shopifyNoteOrder
+    ? extractShopifyOrderCodes(shopifyNoteOrder)
+    : extractShopifyOrderCodes(body?.shopifyOrder, body?.secondShopifyOrder);
 
   if (!isDraft && targetOrders.length > 0) {
     const writerName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(" e ") || "Staff");

@@ -25,8 +25,11 @@ export default async function SalonAppointmentsPage({
   const cookieStore = await cookies();
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
   const pcAuth = await checkPCAuthorization(pcToken);
-  const session = pcAuth ? null : await auth();
+  const session = await auth();
   const remoteTarget = typeof resolvedSearchParams.remoteTarget === "string" ? resolvedSearchParams.remoteTarget : "";
+  const isAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
   const isAdminRemote = Boolean(remoteTarget && session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
   const selectedWorker = cookieStore.get(appointmentsPcWorkerCookieName)?.value;
   const selectedWorkerIdentity = selectedWorker ? decodeURIComponent(selectedWorker) : "";
@@ -44,6 +47,12 @@ export default async function SalonAppointmentsPage({
     isAlwaysActiveAppointmentStaff(selectedWorkerCandidate.name, selectedWorkerCandidate.id)
   ) ? selectedWorkerCandidate : null;
   const forceProfileChoice = resolvedSearchParams.choose === "1";
+
+  if (isAdministratorSession && !remoteTarget) {
+    return await AppointmentsPage({
+      searchParams: Promise.resolve({ ...resolvedSearchParams, salone }),
+    });
+  }
 
   if (!pcAuth && !isAdminRemote) {
     return (

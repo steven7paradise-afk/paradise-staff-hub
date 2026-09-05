@@ -25,7 +25,6 @@ import {
   MessageCircle,
   X,
   Loader2,
-  LockKeyhole,
   RefreshCw,
   Cloud,
   Instagram,
@@ -50,6 +49,7 @@ import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import {
   allowsMissingFinalPaymentOrder,
@@ -80,6 +80,7 @@ type TeamOption = BookingTeammate;
 type ClientControlEmployee = {
   id: string;
   name: string;
+  photoUrl?: string | null;
   locationName?: string | null;
 };
 
@@ -100,6 +101,7 @@ type ShopifyClientOrder = {
   serviceTitle: string;
   note: string;
   createdAt: string;
+  financialStatus?: string | null;
 };
 
 type ClientControlAppointmentForm = {
@@ -147,6 +149,29 @@ function readStoredServiceDetails(value: unknown): string[] {
   return raw
     .map((item) => String(item).trim())
     .filter((item) => CLIENT_CONTROL_SERVICE_OPTIONS.some((option) => option === item));
+}
+
+function detectDetailsFromOfficeNote(serviceTitle?: string | null, officeNote?: string | null) {
+  const note = normalizeSearchValue(officeNote);
+  const services = detectServiceDetails(`${serviceTitle || ""} ${officeNote || ""}`);
+  if (/\bapp\.?\s*(?:\d|$)/.test(note) && !services.includes("Riapplicazione")) {
+    services.push("Applicazione");
+  }
+
+  const gramsMatch = note.match(/\b(\d{2,3})\s*(?:grammi?|gr|g)\b/);
+  const lengthMatch = note.match(/\b(\d{2,3})\s*cm\b/);
+  const bandsMatch = note.match(/\b(\d{1,2})\s*fasc(?:e|ia)\b/);
+  const attitude = ["Tranquilla", "Simpatica", "Esigente", "Pretenziosa"].find(
+    (value) => note.includes(value.toLowerCase()),
+  ) || "";
+
+  return {
+    services,
+    grams: gramsMatch ? `${gramsMatch[1]}g` : "",
+    length: lengthMatch ? `${lengthMatch[1]}cm` : "",
+    bands: bandsMatch ? bandsMatch[1] : "",
+    attitude,
+  };
 }
 
 type ManualPaymentMethod = "CARTA" | "SHOPIFY" | "CONTANTI";
@@ -1017,11 +1042,9 @@ function PcStaffLockScreen({
       <div className="pointer-events-none absolute -right-32 bottom-[-36%] h-[78vh] w-[52vw] rounded-full border border-[#D8B7A7]/30 shadow-[inset_22px_28px_45px_rgba(195,159,139,0.10)]" />
       <section className="relative flex h-full min-h-0 flex-col items-center px-5 py-5 md:px-10 lg:px-14">
         <div className="mx-auto max-w-4xl space-y-2 text-center">
-          <div className="mx-auto grid size-12 place-items-center rounded-full border border-[#D8B7A7]/40 bg-white/35 text-neutral-950 shadow-[0_14px_40px_rgba(120,82,64,0.08)]">
-            <LockKeyhole className="size-6" strokeWidth={1.45} />
-          </div>
+          <AppointmentsAdminUnlock salone={salon} compact />
           <h2 className="font-serif text-4xl font-light leading-tight tracking-normal text-neutral-950 md:text-5xl xl:text-6xl">
-            Chi vuole usare il gestionale?
+            Gestionale Paradise
           </h2>
           <p className="text-xs font-medium uppercase tracking-[0.32em] text-neutral-700 md:text-sm">
             Seleziona il tuo profilo per continuare.
@@ -1626,6 +1649,55 @@ export function AppointmentsBrowser({
     if (options?.replace) router.replace(target, { scroll: false });
     else router.push(target, { scroll: false });
   }
+
+  useEffect(() => {
+    if (!isPC) return;
+
+    let inactivityTimer: number | undefined;
+    const returnToFullDayView = () => {
+      const day = localDateKey(anchorDate);
+      setSearchTerm("");
+      setShowCanceled(false);
+      setFilterStaff("all");
+      setFilterPayment("all");
+      setFilterStatus("all");
+      setSelectedBookingId(null);
+      setIsFilterModalOpen(false);
+      setIsDatePickerOpen(false);
+      setLayoutMode("board");
+      setView("day");
+      setDateFilter({ mode: "custom", from: day, to: day });
+
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", "day");
+      params.set("focus", day);
+      params.set("from", day);
+      params.set("to", day);
+      params.delete("scope");
+      params.delete("booking");
+      params.delete("order");
+      params.delete("worker");
+      params.delete("choose");
+      params.delete("refresh");
+      const targetSalon = salon !== "tutti" ? salon : initialSalon !== "tutti" ? initialSalon : null;
+      const base = navigationBasePath || appointmentSalonUrl(targetSalon);
+      router.replace(`${base}?${params.toString()}`, { scroll: false });
+    };
+    const restartTimer = () => {
+      if (inactivityTimer !== undefined) window.clearTimeout(inactivityTimer);
+      inactivityTimer = window.setTimeout(returnToFullDayView, 60_000);
+    };
+
+    const activityEvents: Array<keyof WindowEventMap> = ["pointerdown", "keydown", "wheel"];
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, restartTimer, { passive: true }));
+    restartTimer();
+
+    return () => {
+      if (inactivityTimer !== undefined) window.clearTimeout(inactivityTimer);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, restartTimer));
+    };
+  }, [anchorDate, initialSalon, isPC, navigationBasePath, router, salon, searchParams]);
+
   const [statusByBooking, setStatusByBooking] = useState<
     Record<string, AppointmentStatusValue>
   >(() =>
@@ -1763,8 +1835,7 @@ export function AppointmentsBrowser({
   >([]);
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
-  const [clientControlExistingId, setClientControlExistingId] = useState<string | null>(null);
-  const [clientControlIsDraft, setClientControlIsDraft] = useState(false);
+  const [clientControlLastVisitAt, setClientControlLastVisitAt] = useState<string | null>(null);
   const [clientControlHistoryLoaded, setClientControlHistoryLoaded] = useState(false);
   const [serviceDetailsModalOpen, setServiceDetailsModalOpen] = useState(false);
 
@@ -1772,6 +1843,7 @@ export function AppointmentsBrowser({
     setClientControlOpen(false);
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
+    setSelectedShopifyNoteOrder("");
     setIsStaffDropdownOpen(false);
     setServiceDetailsModalOpen(false);
     // Refresh the appointment list only after the editor has been closed.
@@ -2084,6 +2156,8 @@ export function AppointmentsBrowser({
   const [showShopifyOrdersPanel, setShowShopifyOrdersPanel] = useState(false);
   const [todayOrdersList, setTodayOrdersList] = useState<ShopifyClientOrder[]>([]);
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
+  const [selectedShopifyNoteOrder, setSelectedShopifyNoteOrder] = useState("");
+  const [showManualShopifyCorrection] = useState(false);
 
   async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string }) {
     setLoadingTodayOrders(true);
@@ -2111,6 +2185,7 @@ export function AppointmentsBrowser({
     forceTarget?: "first" | "second"
   ) {
     const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
+    setSelectedShopifyNoteOrder(cleanName);
     const isSecond = forceTarget
       ? forceTarget === "second"
       : Boolean(clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "");
@@ -2238,6 +2313,16 @@ export function AppointmentsBrowser({
     });
   }, [clientControlForm.clientName, clientControlForm.email, clientControlForm.phone, todayOrdersList]);
 
+  const latestClientPaymentOrder = useMemo(() => {
+    return [...clientMatchingOrders]
+      .filter((order) => String(order.financialStatus || "").toLowerCase() === "paid")
+      .sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      })[0] || null;
+  }, [clientMatchingOrders]);
+
   // Suggested 1° Ordine (Acconto)
   const suggestedAccontoOrder = useMemo(() => {
     if (!clientMatchingOrders.length) return null;
@@ -2271,14 +2356,22 @@ export function AppointmentsBrowser({
     );
   }, [clientMatchingOrders, suggestedAccontoOrder]);
 
-  const suggestedShopifyOrders = useMemo(() => {
+  const clientPaymentOrders = useMemo(() => {
     const uniqueOrders = new Map<string, ShopifyClientOrder>();
-    [suggestedSaldoOrder, suggestedAccontoOrder].forEach((order) => {
+    [
+      ...clientMatchingOrders,
+      ...(selectedOrderDetails ? [selectedOrderDetails as ShopifyClientOrder] : []),
+      ...(secondOrderDetails ? [secondOrderDetails as ShopifyClientOrder] : []),
+    ].forEach((order) => {
       if (!order) return;
       uniqueOrders.set(String(order.id || order.orderName), order);
     });
-    return Array.from(uniqueOrders.values());
-  }, [suggestedAccontoOrder, suggestedSaldoOrder]);
+    return Array.from(uniqueOrders.values()).sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [clientMatchingOrders, secondOrderDetails, selectedOrderDetails]);
 
   const clientShopifyNoteHistory = useMemo(() => {
     const uniqueOrders = new Map<string, ShopifyClientOrder>();
@@ -2362,6 +2455,7 @@ export function AppointmentsBrowser({
       rawList.push({
         id: employee.id,
         name: employee.name,
+        photoUrl: employee.photoUrl,
         locationName: "Salone Buenos Aires",
       });
     });
@@ -2527,26 +2621,61 @@ export function AppointmentsBrowser({
   async function openClientControlForBooking(
     booking: AppointmentRecord,
     preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
+    openServiceDetails = false,
   ) {
     setClientControlMessage(null);
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
+    setSelectedShopifyNoteOrder("");
     setIsStaffDropdownOpen(false);
-    setClientControlExistingId(null);
-    setClientControlIsDraft(false);
+    setClientControlLastVisitAt(null);
     setClientControlHistoryLoaded(false);
-    setServiceDetailsModalOpen(false);
+    setServiceDetailsModalOpen(openServiceDetails);
     setClientControlAppointmentComments([]);
     setManualPaymentMethod(null);
     setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
-    setSelectedGrammi("");
-    setCustomGrammiInput("");
-    setSelectedLunghezza("");
-    setSelectedFasce("");
-    setCustomFasceInput("");
-    setSelectedAtteggiamento("");
-    setExtraNoteText("");
-    const detectedServiceDetails = detectServiceDetails(booking.serviceTitle);
+    const officeNote = booking.inferredSalon === "buenos-aires"
+      ? String(paradiseNotes[booking.id] || booking.paradiseNote || "").trim()
+      : "";
+    const inferredOfficeDetails = detectDetailsFromOfficeNote(
+      booking.serviceTitle,
+      officeNote,
+    );
+    const inferredGrammi = inferredOfficeDetails.grams;
+    const inferredFasce = inferredOfficeDetails.bands;
+
+    setSelectedGrammi(
+      inferredGrammi
+        ? ["100g", "150g", "200g"].includes(inferredGrammi)
+          ? inferredGrammi
+          : "custom"
+        : "",
+    );
+    setCustomGrammiInput(
+      inferredGrammi && !["100g", "150g", "200g"].includes(inferredGrammi)
+        ? inferredGrammi
+        : "",
+    );
+    setSelectedLunghezza(
+      ["50cm", "55cm", "65cm", "75cm"].includes(inferredOfficeDetails.length)
+        ? inferredOfficeDetails.length
+        : "",
+    );
+    setSelectedFasce(
+      inferredFasce
+        ? ["1", "2", "3", "4", "5"].includes(inferredFasce)
+          ? inferredFasce
+          : "custom"
+        : "",
+    );
+    setCustomFasceInput(
+      inferredFasce && !["1", "2", "3", "4", "5"].includes(inferredFasce)
+        ? inferredFasce
+        : "",
+    );
+    setSelectedAtteggiamento(inferredOfficeDetails.attitude);
+    setExtraNoteText(officeNote);
+    const detectedServiceDetails = inferredOfficeDetails.services;
     setSelectedServiceDetails(detectedServiceDetails);
     setIsDepositUnlockedManually(false);
     setIsSecondUnlockedManually(false);
@@ -2581,10 +2710,15 @@ export function AppointmentsBrowser({
           ? booking.bookingStr.replace(/^#/, "")
           : "",
         instagramTag: "",
-        customNoteText: detectedServiceDetails.length
-          ? `Servizi: ${detectedServiceDetails.join(", ")}`
-          : "",
-        notes: false,
+        customNoteText: [
+          detectedServiceDetails.length ? `Servizi: ${detectedServiceDetails.join(", ")}` : "",
+          inferredGrammi ? `Grammi: ${inferredGrammi}` : "",
+          inferredOfficeDetails.length ? `Lunghezza: ${inferredOfficeDetails.length}` : "",
+          inferredFasce ? `Fasce: ${inferredFasce}` : "",
+          inferredOfficeDetails.attitude ? `Cliente: ${inferredOfficeDetails.attitude}` : "",
+          officeNote ? `Note: ${officeNote}` : "",
+        ].filter(Boolean).join(" • "),
+        notes: Boolean(officeNote),
         beforeMedia: false,
         afterMedia: false,
         products: false,
@@ -2625,17 +2759,27 @@ export function AppointmentsBrowser({
         return [] as ClientControlEmployee[];
       }),
       fetch(
-        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}`,
+        `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}&appointmentDate=${encodeURIComponent(booking.startDate)}`,
       )
         .then((response) => (response.ok ? response.json() : null))
         .catch(() => null),
     ]);
 
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
-    setClientControlExistingId(
-      bookingNotes?.existingControl?.id ? String(bookingNotes.existingControl.id) : null,
+    if (existingAnswers) {
+      setSelectedShopifyNoteOrder(
+        String(
+          existingAnswers.shopify_note_order ||
+            existingAnswers.second_shopify_order ||
+            existingAnswers.secondShopifyOrder ||
+            existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] ||
+            "",
+        ).replace(/^#/, ""),
+      );
+    }
+    setClientControlLastVisitAt(
+      typeof bookingNotes?.lastVisitAt === "string" ? bookingNotes.lastVisitAt : null,
     );
-    setClientControlIsDraft(Boolean(existingAnswers?.client_control_is_draft));
     setClientControlAppointmentComments(
       Array.isArray(bookingNotes?.comments) ? bookingNotes.comments : [],
     );
@@ -2653,6 +2797,12 @@ export function AppointmentsBrowser({
     setClientControlForm((current) => {
       if (current.bookingId !== booking.id) return current;
       if (existingAnswers) {
+        const storedControlNote = String(
+          existingAnswers.client_control_notes_text || current.customNoteText || bookingNotes?.shopifyNote || "",
+        ).trim();
+        const synchronizedControlNote = officeNote && !storedControlNote.includes(officeNote)
+          ? `${storedControlNote}${storedControlNote ? "\n" : ""}Nota ufficio: ${officeNote}`
+          : storedControlNote;
         return {
           ...current,
           staffIds: preferredEmployeeId
@@ -2673,8 +2823,8 @@ export function AppointmentsBrowser({
             : current.depositPaid,
           shopifyOrder: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.shopifyOrder] || current.shopifyOrder || ""),
           instagramTag: String(existingAnswers[CLIENT_CONTROL_FIELD_IDS.instagramTag] || ""),
-          customNoteText: String(existingAnswers.client_control_notes_text || current.customNoteText || bookingNotes?.shopifyNote || ""),
-          notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]),
+          customNoteText: synchronizedControlNote,
+          notes: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.notes]) || Boolean(officeNote),
           beforeMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.beforeMedia]),
           afterMedia: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.afterMedia]),
           products: Boolean(existingAnswers[CLIENT_CONTROL_FIELD_IDS.products]),
@@ -2731,10 +2881,15 @@ export function AppointmentsBrowser({
         setSelectedAtteggiamento(String(existingAnswers.custom_atteggiamento));
       }
       if (existingAnswers.custom_extra_note) {
-        setExtraNoteText(String(existingAnswers.custom_extra_note));
+        const storedExtraNote = String(existingAnswers.custom_extra_note).trim();
+        setExtraNoteText(
+          officeNote && !storedExtraNote.includes(officeNote)
+            ? `${storedExtraNote}\n${officeNote}`.trim()
+            : storedExtraNote,
+        );
       }
       const storedServices = readStoredServiceDetails(existingAnswers.custom_services);
-      const detectedServices = detectServiceDetails(booking.serviceTitle);
+      const detectedServices = inferredOfficeDetails.services;
       const combinedServices = Array.from(new Set([...storedServices, ...detectedServices]));
       setSelectedServiceDetails(combinedServices);
       if (combinedServices.length) {
@@ -2801,6 +2956,7 @@ export function AppointmentsBrowser({
 
       const payload = {
         ...formToSubmit,
+        shopifyNoteOrder: selectedShopifyNoteOrder,
         manualPaymentMethod: manualPaymentMethodOverride ?? manualPaymentMethod ?? undefined,
         secondShopifyOrder: formToSubmit.secondShopifyOrder || "",
         customGrammi: customGrammiVal || "",
@@ -2830,9 +2986,6 @@ export function AppointmentsBrowser({
         throw new Error(data?.error || "Errore durante il salvataggio.");
 
       const savedOperation = data?.operation === "updated" ? "updated" : "created";
-      if (data?.id) setClientControlExistingId(String(data.id));
-      setClientControlIsDraft(Boolean(data?.draft));
-
       const clientName = formToSubmit.clientName || "Cliente";
       const targetBookingId = formToSubmit.bookingId || selectedBooking?.id;
       const targetBooking = targetBookingId
@@ -3001,9 +3154,11 @@ export function AppointmentsBrowser({
     (filterStatus !== "all" ? 1 : 0);
 
   const filteredBookings = useMemo(() => {
-    const statusScoped = (initialBookings || []).filter((booking) =>
-      showCanceled ? booking.isCanceled : !booking.isCanceled,
-    );
+    const statusScoped = showCanceled
+      ? (initialBookings || []).filter((booking) => booking.isCanceled)
+      : filterStatus === "all"
+        ? (initialBookings || [])
+        : (initialBookings || []).filter((booking) => !booking.isCanceled);
     const base =
       salon === "tutti" || normalizedSearch
         ? statusScoped
@@ -3064,6 +3219,10 @@ export function AppointmentsBrowser({
         ? paymentScoped
         : paymentScoped.filter((booking) => {
             const status = getBookingStatus(booking);
+            if (filterStatus === "ANNULLATO") return booking.isCanceled;
+            if (filterStatus === "ARRIVATA") {
+              return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
+            }
             return status === filterStatus;
           });
 
@@ -3453,6 +3612,45 @@ export function AppointmentsBrowser({
     signedBy?: string,
   ) {
     const booking = initialBookings.find((item) => item.id === bookingId);
+    if (nextStatus === "COMPLETATO" && booking) {
+      setSavingStatusId(bookingId);
+      try {
+        const controlResponse = await fetch(
+          `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}`,
+          { cache: "no-store" },
+        );
+        const controlData = await controlResponse.json().catch(() => null);
+        const controlAnswers = (controlData?.existingControl?.answers || {}) as Record<string, unknown>;
+        const controlConfirmed = Boolean(
+          controlResponse.ok &&
+            controlData?.existingControl &&
+            controlAnswers.client_control_is_draft !== true &&
+            String(controlAnswers[CLIENT_CONTROL_FIELD_IDS.correctness] || "")
+              .trim()
+              .toLowerCase() === "controllato",
+        );
+
+        if (!controlConfirmed) {
+          showPushToast(
+            "Controllo Cliente richiesto",
+            "Conferma prima il Controllo Cliente; al termine l’appuntamento diventerà Completato.",
+            "error",
+          );
+          await openClientControlForBooking(booking);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to verify client control before completion:", error);
+        showPushToast(
+          "Verifica non riuscita",
+          "Non posso completare l’appuntamento finché il Controllo Cliente non è verificato.",
+          "error",
+        );
+        return;
+      } finally {
+        setSavingStatusId(null);
+      }
+    }
     const previousStatus = booking
       ? getBookingStatus(booking)
       : statusByBooking[bookingId];
@@ -4391,23 +4589,19 @@ export function AppointmentsBrowser({
   };
 
   const tableBookings = filteredBookings.slice(0, visibleCount);
-  const prenotateCount = initialBookings.filter(
-    (booking) => !booking.isCanceled,
+  const confirmedBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled && getBookingStatus(booking) === "PRENOTATO",
   ).length;
-  const inArrivoCount = initialBookings.filter(
-    (booking) =>
-      !booking.isCanceled &&
-      new Date(booking.startDate).getTime() >= Date.now(),
+  const noShowBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled && getBookingStatus(booking) === "NON_PRESENTATO",
   ).length;
-  const prePaymentCount = initialBookings.filter(
-    (booking) =>
-      normalizeSearchValue(booking.financialStatus).includes("paid") ||
-      normalizeSearchValue(booking.serviceTitle).includes("acconto"),
-  ).length;
-  const waitListCount = initialBookings.filter(
-    (booking) =>
-      normalizeSearchValue(booking.bookingType).includes("wait") ||
-      normalizeSearchValue(booking.notesText).includes("lista d attesa"),
+  const arrivedBookingsCount = initialBookings.filter((booking) => {
+    if (booking.isCanceled) return false;
+    const status = getBookingStatus(booking);
+    return status === "IN_ATTESA" || status === "INIZIATO" || status === "ARRIVATO_IN_RITARDO";
+  }).length;
+  const completedBookingsCount = initialBookings.filter(
+    (booking) => !booking.isCanceled && getBookingStatus(booking) === "COMPLETATO",
   ).length;
   const selectedStatus = selectedBooking
     ? getBookingStatus(selectedBooking)
@@ -4460,55 +4654,9 @@ export function AppointmentsBrowser({
       {clientControlOpen ? (
         <div className="fixed inset-0 z-[120] isolate bg-white text-[#171717]">
           <div className="relative z-10 flex h-dvh w-full flex-col overflow-hidden bg-white">
-            {/* Header */}
-            <div className="shrink-0 border-b border-neutral-200 bg-white px-6 pt-6 pb-5 shadow-[0_8px_24px_rgba(17,17,17,0.04)] sm:px-10 lg:px-14">
-              <div className="mx-auto flex w-full max-w-[1480px] items-start justify-between gap-4">
-                <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#B83D7F] px-3.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-white">
-                  Cassa · compilazione rapida
-                </span>
-                <h2 className="mt-2 text-3xl font-black tracking-tight text-[#1F1F1F] sm:text-4xl">
-                  {clientControlForm.clientName || "Sara Capelli Lisci"}
-                </h2>
-                <p className="mt-1 text-sm font-semibold text-black/45">
-                  {clientControlExistingId
-                    ? clientControlIsDraft
-                      ? "Bozza salvata · riprendi da dove avevi lasciato"
-                      : "Controllo già salvato · puoi correggerlo"
-                    : "3 passaggi · meno di 3 minuti · puoi salvare e riprendere dopo"}
-                </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeClientControl}
-                  className="grid size-11 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-black/70 shadow-sm transition hover:border-neutral-300 hover:bg-neutral-50 active:scale-95"
-                  aria-label="Torna agli appuntamenti"
-                >
-                  <X className="size-5" />
-                </button>
-              </div>
-            </div>
-
             {/* Scrollable Content */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
-              <div className="mx-auto w-full max-w-[1480px] space-y-6 px-5 py-7 sm:px-8 lg:px-12">
-              <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-[#F0D4E2] bg-white text-center shadow-sm">
-                {[
-                  ["1", "Controlla"],
-                  ["2", "Tocca le risposte"],
-                  ["3", "Conferma"],
-                ].map(([step, label]) => (
-                  <div key={step} className="border-r border-[#F0D4E2] px-2 py-3 last:border-r-0">
-                    <span className="mx-auto grid size-6 place-items-center rounded-full bg-[#FFF0F6] text-[11px] font-black text-[#B83D7F]">
-                      {step}
-                    </span>
-                    <p className="mt-1 text-[10px] font-black uppercase tracking-[0.08em] text-black/55">
-                      {label}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
+              <div className="mx-auto w-full max-w-[1480px] space-y-6 px-5 py-5 sm:px-8 lg:px-12">
               {/* Riepilogo ordinato della card appuntamento */}
               <section className="overflow-hidden rounded-[28px] border border-[#F0D4E2] bg-white shadow-[0_12px_34px_rgba(184,61,127,0.08)]">
                 <div className="flex flex-col gap-3 border-b border-[#F3E3EB] bg-[linear-gradient(100deg,#FFF4F9,#FCFAFF)] px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -4517,21 +4665,37 @@ export function AppointmentsBrowser({
                       <CalendarCheck className="size-5" />
                     </span>
                     <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
-                        Riepilogo appuntamento
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">Nome cliente</p>
                       <h3 className="mt-1 text-lg font-black text-[#1F1F1F]">
-                        Tutte le informazioni della scheda
+                        {clientControlForm.clientName || "Cliente non indicata"}
                       </h3>
+                      <p className="mt-1 text-xs font-bold text-black/50">
+                        {clientControlLastVisitAt
+                          ? `Ultima visita: ${formatDate(clientControlLastVisitAt)}`
+                          : clientControlHistoryLoaded
+                            ? "Prima visita registrata"
+                            : "Controllo storico visite…"}
+                      </p>
                     </div>
                   </div>
-                  {clientControlBookingStatus ? (
-                    <span
-                      className={`self-start rounded-full border px-3 py-1.5 text-[11px] font-black sm:self-auto ${appointmentStatusClasses[clientControlBookingStatus]}`}
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    {clientControlBookingStatus ? (
+                      <span
+                        className={`rounded-full border px-3 py-1.5 text-[11px] font-black ${appointmentStatusClasses[clientControlBookingStatus]}`}
+                      >
+                        {appointmentStatusLabels[clientControlBookingStatus]}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={closeClientControl}
+                      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#A82E6C] bg-[#B83D7F] px-4 text-white shadow-[0_8px_18px_rgba(184,61,127,0.24)] transition hover:bg-[#A83273] hover:shadow-[0_10px_22px_rgba(184,61,127,0.3)] active:scale-95"
+                      aria-label="Torna agli appuntamenti"
                     >
-                      {appointmentStatusLabels[clientControlBookingStatus]}
-                    </span>
-                  ) : null}
+                      <X className="size-5" />
+                      <span className="text-xs font-black uppercase tracking-[0.14em]">Chiudi</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid gap-px bg-[#F1E7EC] sm:grid-cols-2 xl:grid-cols-4">
@@ -4642,134 +4806,202 @@ export function AppointmentsBrowser({
                   </div>
                 </div>
 
-                <div className="grid gap-4 border-t border-[#F3E3EB] bg-[#FFFCFD] p-5 lg:grid-cols-[220px_1fr] lg:items-end sm:px-6">
-                  <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-[#FFF0F6] px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#D96B94]/25">
-                    <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
-                    <span className="min-w-0 flex-1">
-                      <input
-                        type="text"
-                        aria-label="Instagram cliente"
-                        value={clientControlForm.instagramTag}
-                        onChange={(event) =>
-                          setClientControlForm((prev) => ({
-                            ...prev,
-                            instagramTag: event.target.value,
-                          }))
-                        }
-                        placeholder="@usercliente"
-                        className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
-                      />
-                    </span>
-                  </label>
-
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
-                      Verifiche e controlli
-                    </span>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                    {[
-                      ["notes", "Note Shopify"],
-                      ["beforeMedia", "Prima foto/video"],
-                      ["afterMedia", "Dopo foto/video"],
-                      ["products", "Prodotti"],
-                      ["review", "Recensione"],
-                    ].map(([fieldKey, fieldLabel]) => {
-                      const checked = Boolean((clientControlForm as any)[fieldKey]);
-                      return (
-                        <label
-                          key={fieldKey}
-                          className={[
-                            "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
-                            checked
-                              ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
-                              : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
-                          ].join(" ")}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) =>
-                              updateClientControlCheck(
-                                fieldKey as "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
-                                event.target.checked,
-                              )
-                            }
-                            className="size-4 accent-[#D96B94]"
-                          />
-                          <span>{fieldLabel}</span>
-                        </label>
-                      );
-                    })}
-                    </div>
-                  </div>
-                </div>
               </section>
 
               {/* 1° e 2° Ordine Shopify Card */}
               <div className="rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_30px_rgba(17,17,17,0.04)]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowShopifyOrdersPanel((previous) => {
-                      const next = !previous;
-                      if (!next) setShowTodayOrdersDropdown(false);
-                      return next;
-                    });
-                  }}
-                  aria-expanded={showShopifyOrdersPanel}
-                  aria-controls="client-control-shopify-orders"
-                  className="flex w-full items-center gap-4 rounded-[28px] px-5 py-4 text-left transition hover:bg-[#FFF9FC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D96B94]/40 sm:px-6"
-                >
-                  <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F]">
-                    <ShoppingBag className="size-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
-                      Ordini e pagamenti
+                <div className="p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[#FFF0F6] text-[#B83D7F]">
+                      <ShoppingBag className="size-6" />
                     </span>
-                    <span className="mt-1 block text-sm font-black text-[#1F1F1F]">
-                      Apri solo se devi correggere un ordine
-                    </span>
-                    <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-bold text-black/50">
-                      <span>Acconto: {clientControlForm.shopifyOrder ? `#${clientControlForm.shopifyOrder}` : "da collegare"}</span>
-                      <span>Saldo: {clientControlForm.secondShopifyOrder ? `#${clientControlForm.secondShopifyOrder}` : "da collegare"}</span>
-                      {secondOrderDetails ? (
-                        <span className={String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" ? "text-emerald-700" : "text-amber-700"}>
-                          {String(secondOrderDetails.financialStatus || "").toLowerCase() === "paid" ? "Pagamento verificato" : "Pagamento da verificare"}
-                        </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#B83D7F]">
+                        Ultimo pagamento della cliente
+                      </p>
+                      {loadingTodayOrders && !latestClientPaymentOrder ? (
+                        <p className="mt-2 text-sm font-bold text-black/50">Cerco l’ultimo pagamento…</p>
+                      ) : latestClientPaymentOrder ? (
+                        <div className="mt-1 flex flex-wrap items-end gap-x-5 gap-y-1">
+                          <div>
+                            <p className="text-lg font-black text-[#1F1F1F]">
+                              {latestClientPaymentOrder.clientName || clientControlForm.clientName || "Cliente"}
+                            </p>
+                            <p className="text-sm font-bold text-black/45">
+                              #{latestClientPaymentOrder.orderName.replace(/^#/, "")} · {formatOrderDate(latestClientPaymentOrder.createdAt)}
+                            </p>
+                          </div>
+                          <p className="text-2xl font-black tracking-tight text-[#1F1F1F]">
+                            €{latestClientPaymentOrder.totalPrice.toFixed(2)}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-1">
+                          <p className="text-sm font-black text-[#1F1F1F]">Nessun pagamento trovato</p>
+                          <p className="mt-0.5 text-xs font-semibold text-black/45">Puoi cercare e collegare manualmente un ordine.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+                      {latestClientPaymentOrder ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectShopifyOrderFromList(latestClientPaymentOrder, "second");
+                            setShowShopifyOrdersPanel(true);
+                            setShowTodayOrdersDropdown(true);
+                          }}
+                          className={`inline-flex min-h-12 items-center justify-center rounded-2xl px-5 text-sm font-black transition active:scale-[0.98] ${
+                            selectedShopifyNoteOrder.replace(/^#/, "") === latestClientPaymentOrder.orderName.replace(/^#/, "")
+                              ? "bg-emerald-600 text-white shadow-[0_8px_22px_rgba(5,150,105,0.22)]"
+                              : "bg-[#B83D7F] text-white shadow-[0_8px_22px_rgba(184,61,127,0.24)] hover:bg-[#A93472]"
+                          }`}
+                        >
+                          {selectedShopifyNoteOrder.replace(/^#/, "") === latestClientPaymentOrder.orderName.replace(/^#/, "")
+                            ? "Selezionato ✓"
+                            : "Seleziona →"}
+                        </button>
                       ) : null}
-                    </span>
-                  </span>
-                  <span className="hidden rounded-full border border-neutral-200 bg-[#FAFAFA] px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-black/55 sm:inline-flex">
-                    {showShopifyOrdersPanel ? "Chiudi" : "Correggi"}
-                  </span>
-                  <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform duration-200 ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
-                </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowShopifyOrdersPanel((previous) => {
+                            const next = !previous;
+                            if (next) {
+                              setShowTodayOrdersDropdown(true);
+                              void fetchTodayShopifyOrders();
+                            }
+                            if (!next) setShowTodayOrdersDropdown(false);
+                            return next;
+                          });
+                        }}
+                        aria-expanded={showShopifyOrdersPanel}
+                        aria-controls="client-control-shopify-orders"
+                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-[#FAFAFA] px-4 text-xs font-black text-black/60 transition hover:border-[#F6C6DE] hover:bg-[#FFF7FB] hover:text-[#B83D7F] active:scale-[0.98]"
+                      >
+                        {showShopifyOrdersPanel ? "Chiudi ricerca" : "Cerca altro ordine"}
+                        <ChevronDown className={`size-4 transition-transform ${showShopifyOrdersPanel ? "rotate-180" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedShopifyNoteOrder ? (
+                    <div className="mt-4 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black text-emerald-800">
+                      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-emerald-600 text-[11px] text-white">✓</span>
+                      La nota Shopify verrà salvata solo nell’ordine #{selectedShopifyNoteOrder.replace(/^#/, "")}.
+                    </div>
+                  ) : null}
+                </div>
 
                 {showShopifyOrdersPanel ? (
                 <div id="client-control-shopify-orders" className="space-y-4 border-t border-neutral-200 px-4 pb-5 pt-4 sm:px-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-xs font-black text-[#1F1F1F]">Collega i due pagamenti della cliente</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-black/45">Apri lo storico soltanto se devi cercare o sostituire un ordine.</p>
+                      <p className="text-xs font-black text-[#1F1F1F]">Tutti i pagamenti della cliente</p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-black/45">Seleziona l’ordine nel quale deve essere salvata la nota Shopify.</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
-                        setShowTodayOrdersDropdown((prev) => !prev);
-                        if (!showTodayOrdersDropdown) void fetchTodayShopifyOrders();
+                        setShowTodayOrdersDropdown(true);
+                        void fetchTodayShopifyOrders();
                       }}
-                      aria-expanded={showTodayOrdersDropdown}
-                      aria-controls="client-control-shopify-order-history"
                       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#F6C6DE] bg-[#FFF7FB] px-4 text-[10px] font-black uppercase tracking-wider text-[#B83D7F] transition hover:bg-[#FCE5F3] active:scale-[0.98]"
                     >
-                      <Sparkles className="size-3.5" />
-                      <span>{loadingTodayOrders ? "Caricamento..." : `Cerca negli ordini${suggestedShopifyOrders.length ? ` (${suggestedShopifyOrders.length})` : ""}`}</span>
-                      <ChevronDown className={`size-4 transition-transform ${showTodayOrdersDropdown ? "rotate-180" : ""}`} />
+                      <RefreshCw className={`size-3.5 ${loadingTodayOrders ? "animate-spin" : ""}`} />
+                      <span>{loadingTodayOrders ? "Aggiornamento..." : `Aggiorna (${clientPaymentOrders.length})`}</span>
                     </button>
                   </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Elenco completo dei pagamenti della cliente */}
+                {showTodayOrdersDropdown && (
+                  <div
+                    id="client-control-shopify-order-history"
+                    className="rounded-2xl border border-[#F1D6E3] bg-[#FFFDFE] p-3.5 shadow-[0_12px_30px_rgba(184,61,127,0.08)]"
+                  >
+                    <div className="flex items-center justify-between border-b border-black/5 pb-3">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B83D7F]">
+                          Storico pagamenti
+                        </p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-black/45">
+                          Dal più recente al più vecchio
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[#FFF0F6] px-3 py-1.5 text-[10px] font-black text-[#B83D7F]">
+                        {clientPaymentOrders.length} {clientPaymentOrders.length === 1 ? "pagamento" : "pagamenti"}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-0.5">
+                      {loadingTodayOrders && clientPaymentOrders.length === 0 ? (
+                        <div className="flex items-center justify-center gap-2 p-5 text-xs font-bold text-black/45">
+                          <Loader2 className="size-4 animate-spin text-[#B83D7F]" />
+                          Caricamento pagamenti…
+                        </div>
+                      ) : clientPaymentOrders.length > 0 ? (
+                        clientPaymentOrders.map((order) => {
+                          const orderCode = order.orderName.replace(/^#/, "");
+                          const isSelected = selectedShopifyNoteOrder.replace(/^#/, "") === orderCode;
+                          const isPaid = String(order.financialStatus || "").toLowerCase() === "paid";
+                          return (
+                            <div
+                              key={order.id || order.orderName}
+                              className={`flex flex-col gap-3 rounded-2xl border p-3 transition sm:flex-row sm:items-center ${
+                                isSelected
+                                  ? "border-emerald-300 bg-emerald-50 ring-1 ring-emerald-200"
+                                  : "border-black/5 bg-white hover:border-[#EDB2CE]"
+                              }`}
+                            >
+                              <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                {isPaid ? <Check className="size-5 stroke-[3]" /> : <Receipt className="size-5" />}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-black text-[#1F1F1F]">#{orderCode}</span>
+                                  <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${isPaid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                    {isPaid ? "Pagato" : "Da verificare"}
+                                  </span>
+                                </div>
+                                <p className="mt-1 truncate text-[11px] font-semibold text-black/50">
+                                  {formatOrderDate(order.createdAt) || "Data non disponibile"}
+                                  {order.serviceTitle ? ` · ${order.serviceTitle}` : ""}
+                                </p>
+                              </div>
+                              <p className="shrink-0 text-lg font-black tabular-nums text-[#1F1F1F]">
+                                {formatMoney(order.totalPrice)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => selectShopifyOrderFromList(order, "second")}
+                                className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl px-4 text-xs font-black transition active:scale-[0.98] ${
+                                  isSelected
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-[#B83D7F] text-white hover:bg-[#A93472]"
+                                }`}
+                              >
+                                {isSelected ? "Selezionato ✓" : "Seleziona"}
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="p-5 text-center text-xs font-semibold text-black/40">
+                          Nessun pagamento trovato per questa cliente.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {showManualShopifyCorrection ? <details className="group rounded-2xl border border-neutral-200 bg-[#FAFAFA]">
+                  <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-xs font-black text-black/55 marker:content-none">
+                    <span>Correzione manuale dei codici ordine</span>
+                    <ChevronDown className="size-4 text-[#B83D7F] transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="grid grid-cols-1 gap-3.5 border-t border-neutral-200 p-3 sm:grid-cols-2">
                   {/* Codice Ordine Acconto */}
                   <div className="rounded-2xl border border-neutral-200 bg-[#FAFAFA] p-3 shadow-2xs">
                     {(() => {
@@ -4968,192 +5200,144 @@ export function AppointmentsBrowser({
                       );
                     })()}
                   </div>
-                </div>
-
-                {/* Dropdown list for today's orders */}
-                {showTodayOrdersDropdown && (
-                  <div
-                    id="client-control-shopify-order-history"
-                    className="rounded-2xl border border-[#F6E1EB] bg-[#FFFDFE] p-3.5 shadow-[0_12px_30px_rgba(184,61,127,0.08)] animate-in fade-in slide-in-from-top-2 duration-150"
-                  >
-                    <div className="flex items-center justify-between pb-2 border-b border-black/5">
-                      <p className="text-[10px] font-black uppercase tracking-wider text-[#D96B94]">
-                        ORDINI SUGGERITI ({suggestedShopifyOrders.length})
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setShowTodayOrdersDropdown(false)}
-                        className="text-[10px] font-extrabold text-neutral-400 hover:text-black"
-                      >
-                        Chiudi ✕
-                      </button>
-                    </div>
-                    <div className="max-h-80 overflow-y-auto mt-3 space-y-2 pr-0.5">
-                      {loadingTodayOrders ? (
-                        <p className="p-4 text-center text-xs text-neutral-400 font-semibold animate-pulse">
-                          Caricamento ordini cliente...
-                        </p>
-                      ) : suggestedShopifyOrders.length > 0 ? (
-                        suggestedShopifyOrders.map((order) => {
-                          const isAccontoSuggested = Boolean(
-                            suggestedAccontoOrder &&
-                              (order.id === suggestedAccontoOrder.id || order.orderName === suggestedAccontoOrder.orderName)
-                          );
-                          const isSaldoSuggested = Boolean(
-                            suggestedSaldoOrder &&
-                              (order.id === suggestedSaldoOrder.id || order.orderName === suggestedSaldoOrder.orderName)
-                          );
-                          return (
-                            <div
-                              key={order.id}
-                              className={`w-full p-3 rounded-2xl border transition flex flex-col gap-2 ${
-                                isAccontoSuggested || isSaldoSuggested
-                                  ? "border-[#D96B94] bg-[#FFF0F6] shadow-sm"
-                                  : "border-black/5 bg-[#FFF8FB] hover:bg-[#FCE5F3]"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-black text-[#1F1F1F] flex items-center gap-1.5 flex-wrap">
-                                  {isAccontoSuggested && (
-                                    <span className="rounded-md bg-[#D96B94] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
-                                      Suggerito Acconto
-                                    </span>
-                                  )}
-                                  {isSaldoSuggested && (
-                                    <span className="rounded-md bg-[#B83D7F] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">
-                                      Suggerito Saldo
-                                    </span>
-                                  )}
-                                </span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {order.createdAt && (
-                                    <span className="text-[10px] font-extrabold text-[#B83D7F]/80 bg-white/90 px-2 py-0.5 rounded-md border border-[#F6C6DE]/60">
-                                      {formatOrderDate(order.createdAt)}
-                                    </span>
-                                  )}
-                                  <span className="text-xs font-black text-[#D96B94]">
-                                    #{order.orderName.replace(/^#/, "")}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between text-xs font-bold text-neutral-600 pt-1 border-t border-black/5">
-                                <span className="truncate max-w-[260px] text-black/80">{order.serviceTitle || "Servizio Shopify"}</span>
-                                <span className="text-sm font-black text-[#D96B94] shrink-0">
-                                  €{order.totalPrice.toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-end gap-2 pt-1 border-t border-black/5">
-                                <button
-                                  type="button"
-                                  onClick={() => selectShopifyOrderFromList(order, "first")}
-                                  className="rounded-xl bg-white border border-[#F6C6DE] px-3 py-1.5 text-[10px] font-black text-[#D96B94] hover:bg-[#FFF0F6] active:scale-95 transition shadow-2xs"
-                                  title="Inserisci nel 1° Codice Ordine (Acconto)"
-                                >
-                                  + 1° Acconto
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => selectShopifyOrderFromList(order, "second")}
-                                  className="rounded-xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-3.5 py-1.5 text-[10px] font-black text-white hover:opacity-95 active:scale-95 transition shadow-2xs"
-                                  title="Inserisci nel 2° Codice Ordine (Saldo Finale)"
-                                >
-                                  + 2° Saldo
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="p-3 text-center text-xs text-neutral-400 font-semibold">
-                          Nessun ordine suggerito per questa cliente.
-                        </p>
-                      )}
-                    </div>
                   </div>
-                )}
+                </details> : null}
+
                 </div>
                 ) : null}
               </div>
 
-              {/* Acconto, Pagato & Collaboratrice - Griglia a 3 Colonne Perfettamente Bilanciata */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <label className="block">
-                  <span className="mb-1 flex min-h-10 items-start justify-between gap-2">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
-                      <Coins className="size-3.5 text-[#D96B94]" /> ACCONTO PAGATO (€)
-                    </span>
-                    <span className="flex shrink-0 flex-col items-end">
-                      <span className="rounded-lg border border-[#F3B5D4] bg-[#FFF0F6] px-2 py-1 text-[10px] font-black text-[#B83D7F]">
-                        {clientControlForm.shopifyOrder
-                          ? `Acconto #${clientControlForm.shopifyOrder.replace(/^#/, "")}`
-                          : "Acconto da collegare"}
-                      </span>
-                      <span className="mt-1 text-[9px] font-extrabold tabular-nums text-[#655D61]">
-                        {formatOrderDate(selectedOrderDetails?.createdAt || suggestedAccontoOrder?.createdAt) || "Data non disponibile"}
-                      </span>
-                    </span>
-                  </span>
-                  <input
-                    type="text"
-                    value={clientControlForm.depositPaid}
-                    readOnly
-                    aria-readonly="true"
-                    title="Importo acquisito automaticamente dall'ordine acconto"
-                    className="h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black text-[#1F1F1F] outline-none shadow-2xs"
-                    placeholder="Importato dall'ordine acconto"
-                  />
-                </label>
+              {/* Acconto e collaboratrice */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {(() => {
+                  const hasVerifiedDeposit = Boolean(
+                    clientControlForm.shopifyOrder && clientControlForm.depositPaid,
+                  );
+                  const rawDepositAmount = String(clientControlForm.depositPaid || "0")
+                    .replace(/[^\d,.-]/g, "");
+                  const depositAmount = Number(
+                    rawDepositAmount.includes(",")
+                      ? rawDepositAmount.replace(/\./g, "").replace(",", ".")
+                      : rawDepositAmount,
+                  );
 
-                <label className="block">
-                  <span className="mb-1 flex min-h-10 items-start justify-between gap-2">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
-                      <CreditCard className="size-3.5 text-[#D96B94]" /> SALDO PAGATO (€)
-                    </span>
-                    <span className="flex shrink-0 flex-col items-end">
-                      <span className="rounded-lg border border-[#D96B94] bg-[#D96B94] px-2 py-1 text-[10px] font-black text-white">
-                        {clientControlForm.secondShopifyOrder
-                          ? `Saldo #${clientControlForm.secondShopifyOrder.replace(/^#/, "")}`
-                          : finalPaymentOptional
-                            ? "Saldo facoltativo"
-                            : "Saldo da collegare"}
-                      </span>
-                      <span className="mt-1 text-[9px] font-extrabold tabular-nums text-[#655D61]">
-                        {formatOrderDate(secondOrderDetails?.createdAt || suggestedSaldoOrder?.createdAt) || "Data non disponibile"}
-                      </span>
-                    </span>
-                  </span>
-                  <input
-                    type="text"
-                    value={clientControlForm.paid}
-                    readOnly
-                    className="h-12 w-full cursor-not-allowed rounded-2xl border border-[#F4D3E2] bg-[#FFF0F6] px-4 text-sm font-black text-[#1F1F1F] outline-none shadow-2xs"
-                    placeholder={finalPaymentOptional ? "Non obbligatorio per sistemazione fasce" : "Importato dal 2° ordine"}
-                  />
-                </label>
+                  return (
+                    <div
+                      className={`rounded-2xl border p-4 shadow-2xs ${
+                        hasVerifiedDeposit
+                          ? "border-emerald-200 bg-emerald-50/70"
+                          : "border-amber-200 bg-amber-50/70"
+                      }`}
+                      aria-label={hasVerifiedDeposit ? "Acconto verificato su Shopify" : "Acconto da verificare"}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={`grid size-10 shrink-0 place-items-center rounded-xl ${
+                              hasVerifiedDeposit
+                                ? "bg-emerald-600 text-white"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {hasVerifiedDeposit ? <Check className="size-5 stroke-[3]" /> : <Coins className="size-5" />}
+                          </span>
+                          <div className="min-w-0">
+                            <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${hasVerifiedDeposit ? "text-emerald-800" : "text-amber-800"}`}>
+                              {hasVerifiedDeposit ? "Acconto verificato" : "Acconto da verificare"}
+                            </p>
+                            <p className="mt-0.5 text-2xl font-black tabular-nums tracking-tight text-[#1F1F1F]">
+                              {clientControlForm.depositPaid && Number.isFinite(depositAmount)
+                                ? formatMoney(depositAmount)
+                                : "Importo non disponibile"}
+                            </p>
+                          </div>
+                        </div>
+                        {hasVerifiedDeposit ? (
+                          <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                            Shopify ✓
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3 text-[11px] font-bold ${hasVerifiedDeposit ? "border-emerald-200 text-emerald-900/70" : "border-amber-200 text-amber-900/70"}`}>
+                        <span>
+                          {clientControlForm.shopifyOrder
+                            ? `Ordine #${clientControlForm.shopifyOrder.replace(/^#/, "")}`
+                            : "Nessun ordine collegato"}
+                        </span>
+                        <span aria-hidden="true">•</span>
+                        <span>
+                          {formatOrderDate(selectedOrderDetails?.createdAt || suggestedAccontoOrder?.createdAt) || "Data non disponibile"}
+                        </span>
+                        {hasVerifiedDeposit ? (
+                          <span className="basis-full text-[10px] font-semibold text-emerald-800/70">
+                            Importato automaticamente: non è un valore inserito a mano.
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="relative block">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50 mb-1">
+                  <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.18em] text-black/50">
                     <User className="size-3.5 text-[#D96B94]" /> COLLABORATRICE
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
-                    className="flex h-12 w-full items-center justify-between rounded-2xl border border-[#F4D3E2] bg-white px-4 text-xs font-bold text-[#1F1F1F] outline-none focus:border-[#D96B94] shadow-2xs"
+                    aria-expanded={isStaffDropdownOpen}
+                    className="flex min-h-[76px] w-full items-center justify-between gap-3 rounded-2xl border border-[#F4D3E2] bg-white px-3.5 py-2.5 text-left outline-none shadow-2xs transition hover:border-[#E99CBD] hover:bg-[#FFF9FC] focus-visible:border-[#D96B94] focus-visible:ring-2 focus-visible:ring-[#D96B94]/20"
                   >
-                    <span className="truncate">
-                      {clientControlForm.staffIds.length
-                        ? filteredClientControlEmployees
-                            .filter((e) => clientControlForm.staffIds.includes(e.id))
-                            .map((e) => e.name)
-                            .join(", ")
-                        : "Seleziona..."}
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex shrink-0 -space-x-2">
+                        {filteredClientControlEmployees
+                          .filter((employee) => clientControlForm.staffIds.includes(employee.id))
+                          .slice(0, 3)
+                          .map((employee) => (
+                            <span
+                              key={employee.id}
+                              className="grid size-11 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm"
+                            >
+                              {employee.photoUrl ? (
+                                <img
+                                  src={resolveDrivePhotoUrl(employee.photoUrl)}
+                                  alt={employee.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                getInitials(employee.name) || "?"
+                              )}
+                            </span>
+                          ))}
+                        {!clientControlForm.staffIds.length ? (
+                          <span className="grid size-11 place-items-center rounded-full bg-[#FFF0F6] text-[#B83D7F]">
+                            <User className="size-5" />
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-black text-[#1F1F1F]">
+                          {clientControlForm.staffIds.length
+                            ? filteredClientControlEmployees
+                                .filter((employee) => clientControlForm.staffIds.includes(employee.id))
+                                .map((employee) => employee.name)
+                                .join(", ")
+                            : "Seleziona collaboratrice"}
+                        </span>
+                        <span className="mt-0.5 block text-[10px] font-bold text-black/45">
+                          {clientControlForm.staffIds.length
+                            ? `${clientControlForm.staffIds.length} ${clientControlForm.staffIds.length === 1 ? "persona selezionata" : "persone selezionate"}`
+                            : "Tocca per vedere le foto del personale"}
+                        </span>
+                      </span>
                     </span>
-                    <ChevronDown className={`size-4 text-black/50 transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`size-5 shrink-0 text-[#B83D7F] transition-transform ${isStaffDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {/* Dropdown Popover */}
                   {isStaffDropdownOpen ? (
-                    <div className="absolute left-0 right-0 top-18 z-50 max-h-56 overflow-y-auto rounded-2xl border border-black/10 bg-white p-2.5 shadow-2xl space-y-1">
+                    <div className="absolute left-0 right-0 top-[102px] z-50 max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-[#F0D4E2] bg-white p-2.5 shadow-[0_18px_50px_rgba(58,30,44,0.18)]">
                       {filteredClientControlEmployees.map((employee) => {
                         const selected = clientControlForm.staffIds.includes(employee.id);
                         return (
@@ -5169,21 +5353,39 @@ export function AppointmentsBrowser({
                               }))
                             }
                             className={[
-                              "flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold transition",
+                              "flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition",
                               selected
-                                ? "bg-[#FCE5F3] text-[#B83D7F]"
-                                : "text-black/75 hover:bg-black/5",
+                                ? "bg-[#FCE5F3] text-[#8F315F] ring-1 ring-[#EDB2CE]"
+                                : "text-black/75 hover:bg-[#FFF9FC]",
                             ].join(" ")}
                           >
-                            <span className="truncate">{employee.name}</span>
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-white bg-[#F7DCE3] text-xs font-black text-[#8F315F] shadow-sm">
+                                {employee.photoUrl ? (
+                                  <img
+                                    src={resolveDrivePhotoUrl(employee.photoUrl)}
+                                    alt={employee.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  getInitials(employee.name) || "?"
+                                )}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-black">{employee.name}</span>
+                                <span className="mt-0.5 block truncate text-[9px] font-bold uppercase tracking-wider text-black/40">
+                                  {employee.locationName || "Personale"}
+                                </span>
+                              </span>
+                            </span>
                             <span
-                              className={`grid size-4 shrink-0 place-items-center rounded-md border ${
+                              className={`grid size-6 shrink-0 place-items-center rounded-full border ${
                                 selected
                                   ? "border-[#B83D7F] bg-[#B83D7F] text-white"
                                   : "border-black/20 bg-white"
                               }`}
                             >
-                              {selected && <Check className="size-3" strokeWidth={3} />}
+                              {selected && <Check className="size-3.5" strokeWidth={3} />}
                             </span>
                           </button>
                         );
@@ -5194,7 +5396,7 @@ export function AppointmentsBrowser({
               </div>
 
               {/* Details for 1° Ordine (Acconto) if available */}
-              {showShopifyOrdersPanel && selectedOrderDetails && (
+              {showManualShopifyCorrection && showShopifyOrdersPanel && selectedOrderDetails && (
                 <div className="rounded-[24px] border border-[#F6C6DE] bg-gradient-to-r from-[#FFF0F6] to-[#FFEBF4] p-4 sm:p-5 shadow-2xs space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -5233,7 +5435,7 @@ export function AppointmentsBrowser({
               )}
 
               {/* Details for 2° Ordine (Saldo Finale) if available */}
-              {showShopifyOrdersPanel && secondOrderDetails && (
+              {showManualShopifyCorrection && showShopifyOrdersPanel && secondOrderDetails && (
                 <div className="rounded-[24px] border border-[#B83D7F] bg-gradient-to-r from-[#FFEBF4] to-[#FFF0F6] p-4 sm:p-5 shadow-sm space-y-2.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -5666,27 +5868,103 @@ export function AppointmentsBrowser({
                   </div>
                 </div>
 
-                {/* 5. Note Extra (con limite di caratteri) */}
+                <div className="rounded-2xl border border-[#E5B9CE] bg-[linear-gradient(110deg,#FFF0F6,#FFFFFF)] p-4 shadow-[0_6px_18px_rgba(83,44,63,0.06)] md:col-span-2">
+                  <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-end">
+                    <label className="flex h-12 items-center gap-3 rounded-2xl border-2 border-[#D96B94] bg-white px-3.5 shadow-[0_3px_10px_rgba(184,61,127,0.10)] transition focus-within:border-[#A52E6B] focus-within:ring-2 focus-within:ring-[#D96B94]/25">
+                      <Instagram className="size-5 shrink-0 text-[#C93F83]" strokeWidth={2.5} />
+                      <span className="min-w-0 flex-1">
+                        <input
+                          type="text"
+                          aria-label="Instagram cliente"
+                          value={clientControlForm.instagramTag}
+                          onChange={(event) =>
+                            setClientControlForm((prev) => ({
+                              ...prev,
+                              instagramTag: event.target.value,
+                            }))
+                          }
+                          placeholder="@usercliente"
+                          className="h-8 w-full border-0 bg-transparent p-0 text-base font-black leading-none text-[#7D2154] outline-none placeholder:font-black placeholder:text-[#9B3668] placeholder:opacity-100"
+                        />
+                      </span>
+                    </label>
+
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">
+                        Verifiche e controlli
+                      </span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {[
+                          ["beforeMedia", "Prima foto/video"],
+                          ["afterMedia", "Dopo foto/video"],
+                          ["products", "Prodotti"],
+                          ["review", "Recensione"],
+                        ].map(([fieldKey, fieldLabel]) => {
+                          const checked = Boolean((clientControlForm as any)[fieldKey]);
+                          return (
+                            <label
+                              key={fieldKey}
+                              className={[
+                                "flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black shadow-2xs transition active:scale-95",
+                                checked
+                                  ? "border-[#D96B94] bg-gradient-to-r from-[#D96B94] to-[#B83D7F] text-white shadow-xs"
+                                  : "border-neutral-200 bg-white text-black/70 hover:bg-neutral-50",
+                              ].join(" ")}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) =>
+                                  updateClientControlCheck(
+                                    fieldKey as "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
+                                    event.target.checked,
+                                  )
+                                }
+                                className="size-4 accent-[#D96B94]"
+                              />
+                              <span>{fieldLabel}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Note Extra */}
                 <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
                   <div className="flex items-center justify-between mb-1">
                     <span className="block text-[11px] font-black uppercase tracking-[0.12em] text-[#49363F]">
                       Note extra <span className="text-black/35">· facoltative</span>
                     </span>
                     <span className="text-[10px] font-extrabold text-black/40">
-                      {extraNoteText.length}/250
+                      {extraNoteText.length}/600
                     </span>
                   </div>
-                  <input
-                    type="text"
-                    maxLength={250}
+                  <textarea
+                    rows={3}
+                    maxLength={600}
                     value={extraNoteText}
                     onChange={(e) => {
                       const text = e.target.value;
                       setExtraNoteText(text);
                       updateShopifyNote({ extraNote: text });
                     }}
-                    className="mt-2 h-12 w-full rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 text-sm font-bold text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
+                    className="mt-2 min-h-24 w-full resize-y rounded-xl border-2 border-[#E8C3D4] bg-[#FFFDFE] px-4 py-3 text-sm font-bold leading-relaxed text-[#1F1F1F] outline-none placeholder:text-black/35 focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/15"
                     placeholder="Scrivi qui eventuali note extra per la cliente..."
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-[#EDD5E0] bg-white p-4 shadow-[0_5px_16px_rgba(83,44,63,0.05)] md:col-span-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#8E536F]">
+                    <FileText className="size-4 text-[#D96B94]" /> Nota Shopify compilata
+                  </span>
+                  <textarea
+                    value={clientControlForm.customNoteText}
+                    readOnly={true}
+                    rows={3}
+                    className="mt-2 w-full cursor-not-allowed select-none rounded-xl border border-[#F4D3E2] bg-[#FFF9FC] p-4 text-xs font-bold text-[#1F1F1F] outline-none"
+                    placeholder="La nota per Shopify viene generata automaticamente dalle selezioni del servizio."
                   />
                 </div>
                     </section>
@@ -5707,28 +5985,14 @@ export function AppointmentsBrowser({
                 </GlobalFullscreenLayer>
               ) : null}
 
-              {/* NOTA SHOPIFY (Read-only) */}
-              <div>
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-black/50">
-                  <FileText className="size-4 text-[#D96B94]" /> NOTA SHOPIFY COMPILATA
-                </span>
-                <textarea
-                  value={clientControlForm.customNoteText}
-                  readOnly={true}
-                  rows={3}
-                  className="mt-1.5 w-full rounded-2xl border border-[#F4D3E2] bg-neutral-50 p-4 text-xs font-bold text-[#1F1F1F] shadow-2xs outline-none cursor-not-allowed select-none"
-                  placeholder="La nota formattata per Shopify viene generata automaticamente dalle selezioni sopra..."
-                />
-              </div>
-
-              <details className="rounded-[24px] border border-neutral-200 bg-white shadow-sm">
+              <details className="rounded-[24px] border border-[#EBC7D8] bg-[#FFF9FC] shadow-sm">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-black text-[#1F1F1F] marker:content-none">
                   <span className="inline-flex items-center gap-2">
-                    <Clock3 className="size-4 text-[#D96B94]" />
-                    Vedi storico del processo
+                    <History className="size-4 text-[#D96B94]" />
+                    Storico e modifiche
                   </span>
-                  <span className="rounded-full bg-[#FFF0F6] px-2.5 py-1 text-[10px] text-[#B83D7F]">
-                    {clientControlProcessComments.length}
+                  <span className="rounded-full bg-[#F6D7E6] px-2.5 py-1 text-[10px] text-[#B83D7F]">
+                    {clientControlProcessComments.length + clientControlChangeComments.length}
                   </span>
                 </summary>
               <section className="border-t border-neutral-200 p-5 sm:p-6">
@@ -5783,18 +6047,6 @@ export function AppointmentsBrowser({
                   </p>
                 )}
               </section>
-              </details>
-
-              <details className="rounded-[24px] border border-[#EBC7D8] bg-[#FFF9FC] shadow-sm">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-black text-[#1F1F1F] marker:content-none">
-                  <span className="inline-flex items-center gap-2">
-                    <History className="size-4 text-[#D96B94]" />
-                    Vedi modifiche precedenti
-                  </span>
-                  <span className="rounded-full bg-[#F6D7E6] px-2.5 py-1 text-[10px] text-[#B83D7F]">
-                    {clientControlChangeComments.length}
-                  </span>
-                </summary>
               <section className="border-t border-[#EBC7D8] p-5 sm:p-6">
                 <div className="flex items-center justify-between gap-3 border-b border-[#F0D6E2] pb-4">
                   <div>
@@ -5995,49 +6247,50 @@ export function AppointmentsBrowser({
               <div className="flex min-w-max gap-1">
                 {[
                   {
-                    label: "Tutte",
+                    value: "all",
+                    label: "Tutti",
                     count: initialBookings.length,
-                    active: !showCanceled,
-                    onClick: () => setShowCanceled(false),
                   },
                   {
-                    label: "Prenotate",
-                    count: prenotateCount,
-                    active: !showCanceled,
-                    onClick: () => setShowCanceled(false),
+                    value: "PRENOTATO",
+                    label: "Confermato",
+                    count: confirmedBookingsCount,
                   },
                   {
-                    label: "In arrivo",
-                    count: inArrivoCount,
-                    active: false,
-                    onClick: () => setShowCanceled(false),
+                    value: "NON_PRESENTATO",
+                    label: "Non presentato",
+                    count: noShowBookingsCount,
                   },
                   {
-                    label: "Annullate",
+                    value: "ANNULLATO",
+                    label: "Annullato",
                     count: canceledBookingsCount,
-                    active: showCanceled,
-                    onClick: () => setShowCanceled(true),
                   },
                   {
-                    label: "Pre-pagamento",
-                    count: prePaymentCount,
-                    active: false,
-                    onClick: () => setShowCanceled(false),
+                    value: "ARRIVATA",
+                    label: "Arrivata",
+                    count: arrivedBookingsCount,
                   },
                   {
-                    label: "Lista d'attesa",
-                    count: waitListCount,
-                    active: false,
-                    onClick: () => setShowCanceled(false),
+                    value: "COMPLETATO",
+                    label: "Completate",
+                    count: completedBookingsCount,
                   },
                 ].map((tab) => (
                   <button
-                    key={tab.label}
+                    key={tab.value}
                     type="button"
-                    onClick={tab.onClick}
+                    onClick={() => {
+                      const isCanceledTab = tab.value === "ANNULLATO";
+                      const isAlreadyActive = filterStatus === tab.value;
+                      const nextValue = isAlreadyActive && tab.value !== "all" ? "all" : tab.value;
+                      setShowCanceled(nextValue === "ANNULLATO" && isCanceledTab);
+                      setFilterStatus(nextValue);
+                    }}
+                    aria-pressed={filterStatus === tab.value}
                     className={[
                       "inline-flex min-h-9 items-center gap-1.5 rounded-[13px] px-3 py-2 text-[11px] font-black transition sm:min-h-11 sm:gap-2.5 sm:rounded-[15px] sm:px-4 sm:py-3 sm:text-xs",
-                      tab.active
+                      filterStatus === tab.value
                         ? "border border-white bg-white text-[#9E3262] shadow-[0_6px_18px_rgba(89,45,65,0.10)]"
                         : "border border-transparent text-black/55 hover:bg-white/70 hover:text-black/75",
                     ].join(" ")}
@@ -6051,17 +6304,37 @@ export function AppointmentsBrowser({
               </div>
             </div>
 
-            <div className="mt-3 grid items-stretch gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 xl:grid-cols-[minmax(320px,1fr)_210px_190px_120px_150px]">
-              <div className="relative h-11 sm:h-[52px]">
-                <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-12 place-items-center text-[#B44D79]">
-                  <Search className="size-5" />
+            <div className="mt-3 grid items-stretch gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 xl:grid-cols-[minmax(430px,1.5fr)_210px_190px_120px_150px]">
+              <div className="relative min-h-14 rounded-[18px] border border-white bg-white/95 shadow-[0_8px_24px_rgba(81,43,60,0.08)] transition focus-within:border-[#D86B9B] focus-within:ring-4 focus-within:ring-[#F7D9E7]">
+                <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-14 place-items-center">
+                  <span className="grid size-9 place-items-center rounded-xl bg-[#FFF0F7] text-[#B44D79]">
+                    <Search className="size-5" strokeWidth={2.4} />
+                  </span>
                 </span>
+                <label htmlFor="appointments-client-search" className="pointer-events-none absolute left-14 top-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#A93469]">
+                  Cerca cliente
+                </label>
                 <input
+                  id="appointments-client-search"
+                  type="search"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Cerca per nome cliente, email o servizio..."
-                  className="h-11 w-full rounded-[14px] border border-white bg-white/90 pl-12 pr-4 text-xs font-semibold text-black shadow-[0_6px_18px_rgba(81,43,60,0.06)] outline-none transition placeholder:text-black/35 focus:border-[#D86B9B] focus:ring-4 focus:ring-[#F7D9E7] sm:h-[52px] sm:rounded-[17px] sm:text-sm"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setSearchTerm("");
+                  }}
+                  placeholder="Nome, telefono, email o numero ordine…"
+                  className="h-14 w-full appearance-none rounded-[18px] bg-transparent pb-1 pl-14 pr-12 pt-4 text-sm font-bold text-[#24171D] outline-none placeholder:text-black/35 [&::-webkit-search-cancel-button]:hidden"
                 />
+                {searchTerm ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-xl bg-[#F5EAF0] text-[#8E536F] transition hover:bg-[#F0D7E3] active:scale-95"
+                    aria-label="Cancella ricerca"
+                  >
+                    <X className="size-4" />
+                  </button>
+                ) : null}
               </div>
               <div className="relative h-11 sm:h-[52px]">
                 <button
@@ -6603,34 +6876,54 @@ export function AppointmentsBrowser({
                                 {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
-                                      canManageParadiseNotes ? (
+                                      <div className="relative overflow-hidden rounded-lg bg-[#FFF7E6] transition hover:bg-[#FFF0C2]">
                                         <button
                                           type="button"
                                           onClick={(event) => {
                                             event.preventDefault();
                                             event.stopPropagation();
-                                            openQuickNote(booking);
+                                            void openClientControlForBooking(booking, undefined, true);
                                           }}
-                                          className="w-full rounded-lg bg-[#FFF7E6] p-2 text-left transition hover:bg-[#FFF0C2]"
+                                          className={`w-full p-2 text-left ${canManageParadiseNotes ? "pr-10" : ""}`}
+                                          aria-label={`Apri i dettagli del servizio di ${booking.customerName}`}
                                         >
                                           <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
                                             <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" /> Nota ufficio</span>
-                                            <Pencil className="size-3" />
+                                            <span>Apri</span>
                                           </span>
-                                          <span className="mt-1 block line-clamp-2 text-[9px] font-semibold leading-snug text-[#59451C]">{paradiseNote}</span>
+                                          <span
+                                            className="mt-1 block max-h-[2.5em] overflow-hidden text-[9px] font-semibold leading-[1.25em] text-[#59451C]"
+                                            style={{
+                                              display: "-webkit-box",
+                                              WebkitBoxOrient: "vertical",
+                                              WebkitLineClamp: 2,
+                                            }}
+                                          >
+                                            {paradiseNote}
+                                          </span>
                                         </button>
-                                      ) : (
-                                        <div className="w-full rounded-lg bg-[#FFF7E6] p-2 text-left">
-                                          <span className="block line-clamp-2 text-[9px] font-semibold leading-snug text-[#59451C]">{paradiseNote}</span>
-                                        </div>
-                                      )
+                                        {canManageParadiseNotes ? (
+                                          <button
+                                            type="button"
+                                            onClick={(event) => {
+                                              event.preventDefault();
+                                              event.stopPropagation();
+                                              openQuickNote(booking);
+                                            }}
+                                            className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-lg bg-white text-[#8A5A00] shadow-sm transition hover:bg-[#FFE9AE] active:scale-95"
+                                            aria-label={`Modifica nota ufficio di ${booking.customerName}`}
+                                          >
+                                            <Pencil className="size-3.5" />
+                                          </button>
+                                        ) : null}
+                                      </div>
                                     ) : (
                                     <button
                                       type="button"
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        openQuickNote(booking);
+                                        void openClientControlForBooking(booking, undefined, true);
                                       }}
                                       className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
                                     >
@@ -8141,7 +8434,6 @@ export function AppointmentsBrowser({
 
                 <div className="mt-5 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {[
-                    ["notes", "Note Shopify"],
                     ["beforeMedia", "Prima foto/video"],
                     ["afterMedia", "Dopo foto/video"],
                     ["products", "Prodotti"],

@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
   const cleanOrder = orderName ? orderName.replace(/^#/, "").trim() : "";
   const cleanBookingId = bookingId ? bookingId.trim() : "";
   const cleanClientName = clientNameParam ? clientNameParam.trim().toLowerCase() : "";
+  const appointmentDateParam = searchParams.get("appointmentDate");
+  const appointmentDate = appointmentDateParam ? new Date(appointmentDateParam) : null;
+  const appointmentTimestamp = appointmentDate && Number.isFinite(appointmentDate.getTime())
+    ? appointmentDate.getTime()
+    : Number.POSITIVE_INFINITY;
 
   try {
     const [comments, shopifyNote, cowlendarOrderNote, responseByBooking, rawResponses] = await Promise.all([
@@ -48,23 +53,36 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const existingControl = responseByBooking || rawResponses.find((r) => {
+    const responseByOrder = rawResponses.find((r) => {
       const ans = (r.answers || {}) as Record<string, any>;
       const rBookingId = String(ans.booking_id || "").trim();
       const rOrder = String(ans.client_control_shopify_order || "").replace(/^#/, "").trim();
-      const rName = String(ans.client_control_client_name || "").trim().toLowerCase();
 
       if (cleanBookingId && rBookingId === cleanBookingId) return true;
       if (cleanOrder && rOrder === cleanOrder) return true;
-      if (cleanClientName && rName === cleanClientName) return true;
       return false;
     });
+    const existingControl = responseByBooking || responseByOrder || null;
+    const lastVisit = cleanClientName
+      ? rawResponses.find((response) => {
+          if (response.id === existingControl?.id) return false;
+          const answers = (response.answers || {}) as Record<string, any>;
+          const responseClientName = String(answers.client_control_client_name || "").trim().toLowerCase();
+          const isDraft = Boolean(answers.client_control_is_draft);
+          const correctness = String(answers.client_control_correctness || "");
+          return responseClientName === cleanClientName
+            && !isDraft
+            && !/no\s*show|non presentat/i.test(correctness)
+            && response.created_at.getTime() < appointmentTimestamp;
+        })
+      : null;
 
     return NextResponse.json({
       comments,
       shopifyNote,
       cowlendarOrderNote,
       existingControl: existingControl ? { id: existingControl.id, answers: existingControl.answers } : null,
+      lastVisitAt: lastVisit?.created_at.toISOString() || null,
     });
   } catch (error) {
     console.error("Failed to fetch appointment comments:", error);

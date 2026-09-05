@@ -13,14 +13,19 @@ export const dynamic = "force-dynamic";
 export default async function ShopifyOrdersPage() {
   const session = await auth();
   const cookieStore = await cookies();
-  const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+  const hasAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const pcAuth = hasAdministratorSession
+    ? null
+    : await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
   const isPC = Boolean(pcAuth);
   const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
 
   if (!session?.user?.id && !isPC) redirect("/login");
 
   const selectedPcWorker = isPC && selectedWorkerId
-    ? await prisma.user.findFirst({
+      ? await prisma.user.findFirst({
         where: { id: selectedWorkerId, active: true },
         select: { name: true, photo_url: true },
       }).catch(() => null)

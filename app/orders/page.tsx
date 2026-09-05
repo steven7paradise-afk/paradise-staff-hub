@@ -49,7 +49,12 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
   const remoteTarget = typeof searchParams.remoteTarget === "string" ? searchParams.remoteTarget.trim() : "";
   const session = await auth();
   const cookieStore = await cookies();
-  const pcAuth = await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
+  const hasAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const pcAuth = hasAdministratorSession
+    ? null
+    : await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value);
   const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
   const isAdminRemoteController = Boolean(
     !pcAuth &&
@@ -63,10 +68,6 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
   const isPC = Boolean(pcAuth || remoteWorker);
   if (!session?.user?.id && !pcAuth) redirect("/login");
 
-  const role = (isPC ? "RESPONSABILE" : session!.user.role) as Role;
-  const canManageOrders =
-    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
-
   const [dbUser] = await Promise.all([
     prisma.user.findUnique({
       where: { id: remoteWorker?.id || (isPC ? (selectedWorkerId || "PC_CASSA") : session!.user.id) },
@@ -74,6 +75,10 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
     }),
     ensureOrderForm(isPC ? "u-super-admin" : session!.user.id),
   ]);
+
+  const role = (isPC ? "RESPONSABILE" : session!.user.role) as Role;
+  const canManageOrders =
+    isPC || ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
 
   if (!isPC && dbUser && requiresBuenosAiresPcCassa(dbUser.role, dbUser.location?.name)) {
     redirect("/pc-non-autorizzato");

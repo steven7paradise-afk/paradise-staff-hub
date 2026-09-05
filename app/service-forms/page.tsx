@@ -41,7 +41,10 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   const cookieStore = await cookies();
 
   const pcToken = cookieStore.get(appointmentsPcCookieName)?.value;
-  const pcAuth = await checkPCAuthorization(pcToken);
+  const hasAdministratorSession = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  const pcAuth = hasAdministratorSession ? null : await checkPCAuthorization(pcToken);
   if (pcAuth) {
       isPC = true;
       sessionUser = {

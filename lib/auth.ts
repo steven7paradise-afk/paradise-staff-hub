@@ -150,10 +150,16 @@ export const authConfig = {
         ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(auth?.user?.role ?? "");
       if (isAdminRemoteAccess) return true;
 
+      // A full administrator login from an authorized cashier PC is a real
+      // authenticated session and must use the administrator permission set.
+      const isAdministratorSession =
+        Boolean(auth?.user?.id) &&
+        ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(auth?.user?.role ?? "");
+
       // Strict lockdown for Cashier PCs with the operational APIs needed after profile selection.
       const pcToken = request.cookies.get(appointmentsPcCookieName)?.value;
       const pcAuth = pcToken ? await checkPCAuthorization(pcToken).catch(() => null) : null;
-      if (pcAuth) {
+      if (pcAuth && !isAdministratorSession) {
         return isPcCassaAllowedPath(pathname);
       }
       
