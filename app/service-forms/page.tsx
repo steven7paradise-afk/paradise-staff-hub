@@ -19,6 +19,7 @@ import {
   SERVICE_FORMS_VISIBILITY_KEY,
 } from "@/lib/service-form-visibility";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
+import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   const session = await auth();
   let sessionUser = session?.user;
   let isPC = false;
-  let pcLocationId = "";
   let pcDisplayUser: { name: string; photo_url?: string | null } | null = null;
   const cookieStore = await cookies();
 
@@ -44,7 +44,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
   const pcAuth = await checkPCAuthorization(pcToken);
   if (pcAuth) {
       isPC = true;
-      pcLocationId = pcAuth.locationId;
       sessionUser = {
         id: "PC_CASSA",
         name: pcAuth.name,
@@ -59,12 +58,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         const selectedWorker = await prisma.user.findFirst({
           where: {
             active: true,
-            sede_id: pcAuth.locationId,
             OR: [{ id: selectedWorkerIdentity }, { name: selectedWorkerIdentity }],
           },
           select: { id: true, name: true, email: true, role: true, sede_id: true, photo_url: true },
         }).catch(() => null);
-        if (selectedWorker) {
+        const canUseSelectedProfile = selectedWorker && (
+          selectedWorker.sede_id === pcAuth.locationId ||
+          isAlwaysActiveAppointmentStaff(selectedWorker.name, selectedWorker.id)
+        );
+        if (selectedWorker && canUseSelectedProfile) {
           sessionUser = {
             id: selectedWorker.id,
             name: selectedWorker.name,
@@ -87,7 +89,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     const remoteWorker = await resolveRemoteControllerWorker(session!.user.id, remoteTarget);
     if (remoteWorker) {
       isPC = true;
-      pcLocationId = remoteWorker.sede_id || "";
       sessionUser = {
         id: remoteWorker.id,
         name: remoteWorker.name,
