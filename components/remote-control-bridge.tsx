@@ -8,6 +8,7 @@ type RemoteSession = {
   sessionId?: string;
   targetCode: string;
   controllerName: string;
+  mode?: "control" | "observe";
   workerId: string | null;
   pathname: string;
   search: string;
@@ -162,6 +163,8 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
           lastPath.current = "";
         }
 
+        if (remote.mode === "observe") return;
+
         const params = new URLSearchParams(remote.search || "");
         params.delete("remoteTarget");
         const salone = params.get("salone") || "buenos-aires";
@@ -242,6 +245,95 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     const interval = window.setInterval(poll, 220);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [pcMode, router]);
+
+  useEffect(() => {
+    if (!pcMode || pcSession?.mode !== "observe" || !pcSession.targetCode) return;
+    const targetCode = pcSession.targetCode;
+    let timer: number | null = null;
+    let pending: Record<string, unknown> = {};
+    let lastPointerSent = 0;
+    let lastLocation = `${window.location.pathname}${window.location.search}`;
+    const send = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+      const payload = pending;
+      pending = {};
+      void fetch("/api/remote-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "observe_update",
+          targetCode,
+          pathname: window.location.pathname,
+          search: window.location.search,
+          ...payload,
+        }),
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    const queue = (payload: Record<string, unknown>, immediate = false) => {
+      pending = { ...pending, ...payload };
+      if (immediate) send();
+      else if (timer === null) timer = window.setTimeout(send, 180);
+    };
+    const safeLabel = (element: Element | null, fallback: string) => {
+      if (!element) return fallback;
+      const field = element.closest("input,textarea,select") as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+      if (field instanceof HTMLInputElement && ["password", "file"].includes(field.type)) return "";
+      const identifyingText = `${field?.getAttribute("name") || ""} ${field?.getAttribute("autocomplete") || ""} ${field?.getAttribute("aria-label") || ""}`;
+      if (/password|pin|passcode|file|allegat/i.test(identifyingText)) return "";
+      const label = field
+        ? field.getAttribute("aria-label") || field.getAttribute("placeholder") || field.labels?.[0]?.textContent || fallback
+        : normalizedLabel(element) || element.getAttribute("aria-label") || fallback;
+      return String(label).replace(/\s+/g, " ").trim().slice(0, 120);
+    };
+    const onPointer = (event: PointerEvent) => {
+      const now = performance.now();
+      if (now - lastPointerSent < 140) return;
+      lastPointerSent = now;
+      queue({ pointer: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
+    };
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest("[data-remote-status],[data-remote-stop]")) return;
+      const actionable = target?.closest("button,a,[role='button'],label,input,textarea,select") || target;
+      const label = safeLabel(actionable, "Azione selezionata");
+      if (label) queue({ event: { kind: "click", label } }, true);
+    };
+    const onField = (event: Event) => {
+      const target = event.target as Element | null;
+      const label = safeLabel(target, "Compilazione campo");
+      if (label) queue({ event: { kind: "field", label: `Sta compilando: ${label}` } });
+    };
+    const onScroll = () => {
+      const maxX = Math.max(1, document.documentElement.scrollWidth - window.innerWidth);
+      const maxY = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      queue({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
+    };
+    const heartbeat = window.setInterval(() => queue({}, true), 8_000);
+    const locationWatcher = window.setInterval(() => {
+      const current = `${window.location.pathname}${window.location.search}`;
+      if (current === lastLocation) return;
+      lastLocation = current;
+      queue({ event: { kind: "navigation", label: `Ha aperto ${document.title || window.location.pathname}` } }, true);
+    }, 400);
+    queue({ event: { kind: "navigation", label: `Pagina aperta: ${document.title || window.location.pathname}` } }, true);
+    window.addEventListener("pointermove", onPointer, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("input", onField, true);
+    document.addEventListener("change", onField, true);
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+      window.clearInterval(heartbeat);
+      window.clearInterval(locationWatcher);
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("input", onField, true);
+      document.removeEventListener("change", onField, true);
+    };
+  }, [pcMode, pcSession?.mode, pcSession?.sessionId, pcSession?.targetCode]);
 
   async function acknowledgeReconnect() {
     if (reconnecting) return;
@@ -443,16 +535,16 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     const y = `${(pcSession.pointer?.y || 0.25) * 100}vh`;
     return (
       <>
-        <div className="pointer-events-none fixed left-1/2 top-3 z-[9998] -translate-x-1/2 rounded-full border border-fuchsia-200 bg-neutral-950/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-white shadow-2xl backdrop-blur">
-          <span className="mr-2 inline-block size-2 animate-pulse rounded-full bg-fuchsia-400" />Controllo remoto attivo · {pcSession.controllerName}
+        <div data-remote-status className="pointer-events-none fixed right-5 top-16 z-[9998] inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white/95 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-emerald-800 shadow-sm backdrop-blur">
+          <span className="size-2 rounded-full bg-emerald-500" />Attivo
         </div>
-        {pcSession.pointer ? (
+        {pcSession.mode !== "observe" && pcSession.pointer ? (
           <div className="pointer-events-none fixed z-[9999] transition-[left,top] duration-75 ease-out" style={{ left: x, top: y }}>
             <MousePointer2 className="size-8 -translate-x-1 -translate-y-1 fill-[#F12D83] text-white drop-shadow-[0_3px_4px_rgba(0,0,0,0.55)]" />
             <span className="ml-5 -mt-1 block whitespace-nowrap rounded-full bg-[#F12D83] px-2.5 py-1 text-[10px] font-black text-white shadow-lg">{pcSession.controllerName}</span>
           </div>
         ) : null}
-        {pcSession.click ? (
+        {pcSession.mode !== "observe" && pcSession.click ? (
           <span
             key={pcSession.click.revision}
             className="pointer-events-none fixed z-[9997] size-12 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full border-4 border-[#F12D83]"
@@ -460,6 +552,14 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
           />
         ) : null}
       </>
+    );
+  }
+
+  if (pcMode) {
+    return (
+      <div data-remote-status className="pointer-events-none fixed right-5 top-16 z-[9998] inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-white/95 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.12em] text-red-700 shadow-sm backdrop-blur">
+        <span className="size-2 rounded-full bg-red-500" />Stop
+      </div>
     );
   }
 
