@@ -6276,31 +6276,49 @@ export function AppointmentsBrowser({
                     label: "Completate",
                     count: completedBookingsCount,
                   },
-                ].map((tab) => (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    onClick={() => {
-                      const isCanceledTab = tab.value === "ANNULLATO";
-                      const isAlreadyActive = filterStatus === tab.value;
-                      const nextValue = isAlreadyActive && tab.value !== "all" ? "all" : tab.value;
-                      setShowCanceled(nextValue === "ANNULLATO" && isCanceledTab);
-                      setFilterStatus(nextValue);
-                    }}
-                    aria-pressed={filterStatus === tab.value}
-                    className={[
-                      "inline-flex min-h-9 items-center gap-1.5 rounded-[13px] px-3 py-2 text-[11px] font-black transition sm:min-h-11 sm:gap-2.5 sm:rounded-[15px] sm:px-4 sm:py-3 sm:text-xs",
-                      filterStatus === tab.value
-                        ? "border border-white bg-white text-[#9E3262] shadow-[0_6px_18px_rgba(89,45,65,0.10)]"
-                        : "border border-transparent text-black/55 hover:bg-white/70 hover:text-black/75",
-                    ].join(" ")}
-                  >
-                    {tab.label}
-                    <span className="min-w-6 rounded-full bg-[#F5D5E4] px-2 py-0.5 text-center text-[10px] text-[#8D2E59]">
-                      {tab.count}
-                    </span>
-                  </button>
-                ))}
+                ].map((tab) => {
+                  const isDangerTab = tab.value === "NON_PRESENTATO" || tab.value === "ANNULLATO";
+                  const isActive = filterStatus === tab.value;
+
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => {
+                        const isCanceledTab = tab.value === "ANNULLATO";
+                        const isAlreadyActive = filterStatus === tab.value;
+                        const nextValue = isAlreadyActive && tab.value !== "all" ? "all" : tab.value;
+                        setShowCanceled(nextValue === "ANNULLATO" && isCanceledTab);
+                        setFilterStatus(nextValue);
+                      }}
+                      aria-pressed={isActive}
+                      className={[
+                        "inline-flex min-h-9 items-center gap-1.5 rounded-[13px] border px-3 py-2 text-[11px] font-black transition sm:min-h-11 sm:gap-2.5 sm:rounded-[15px] sm:px-4 sm:py-3 sm:text-xs",
+                        isDangerTab
+                          ? isActive
+                            ? "border-red-600 bg-red-600 text-white shadow-[0_6px_18px_rgba(220,38,38,0.24)]"
+                            : "border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100"
+                          : isActive
+                            ? "border-white bg-white text-[#9E3262] shadow-[0_6px_18px_rgba(89,45,65,0.10)]"
+                            : "border-transparent text-black/55 hover:bg-white/70 hover:text-black/75",
+                      ].join(" ")}
+                    >
+                      {tab.label}
+                      <span
+                        className={[
+                          "min-w-6 rounded-full px-2 py-0.5 text-center text-[10px]",
+                          isDangerTab
+                            ? isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-red-200 text-red-800"
+                            : "bg-[#F5D5E4] text-[#8D2E59]",
+                        ].join(" ")}
+                      >
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -6804,9 +6822,11 @@ export function AppointmentsBrowser({
                                   );
                                 }}
                                 className={`w-full touch-[pan-x_pan-y] select-none rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
-                                  !booking.isCanceled && status === "COMPLETATO"
+                                  booking.isCanceled || status === "NON_PRESENTATO"
+                                    ? "border-red-200 bg-red-50"
+                                    : status === "COMPLETATO"
                                     ? "border-[#A9D8B8] bg-[#EAF7EE]"
-                                    : !booking.isCanceled && status === "IN_ATTESA"
+                                    : status === "IN_ATTESA"
                                       ? "border-[#E8CE78] bg-[#FFF4CC]"
                                     : "border-[#DFE1E6] bg-white"
                                 } ${
