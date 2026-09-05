@@ -209,8 +209,12 @@ export async function GET(request: NextRequest) {
       create: { key: PRESENCE_KEY, value: presence as any },
     }).catch(() => null);
   }
+  const activeRemote = activeSession(remote) ? remote : null;
+  const pcRemote = activeRemote?.mode === "observe" && activeRemote.observation
+    ? { ...activeRemote, observation: { ...activeRemote.observation, snapshot: null } }
+    : activeRemote;
   const response = NextResponse.json({
-    session: activeSession(remote) ? remote : null,
+    session: pcRemote,
     target: { code: pcAuth!.code, name: pcAuth!.name, locationId: pcAuth!.locationId },
     reconnectRequest: reconnectRequest && Date.parse(reconnectRequest.expiresAt) > Date.now() ? reconnectRequest : null,
   });

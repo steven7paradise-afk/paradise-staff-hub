@@ -275,7 +275,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     const queue = (payload: Record<string, unknown>, immediate = false) => {
       pending = { ...pending, ...payload };
       if (immediate) send();
-      else if (timer === null) timer = window.setTimeout(send, 180);
+      else if (timer === null) timer = window.setTimeout(send, 260);
     };
     const safeLabel = (element: Element | null, fallback: string) => {
       if (!element) return fallback;
@@ -290,7 +290,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
     };
     const onPointer = (event: PointerEvent) => {
       const now = performance.now();
-      if (now - lastPointerSent < 140) return;
+      if (now - lastPointerSent < 450) return;
       lastPointerSent = now;
       queue({ pointer: { x: event.clientX / Math.max(1, window.innerWidth), y: event.clientY / Math.max(1, window.innerHeight) } });
     };
