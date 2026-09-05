@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AppVersionWatcher } from "@/components/app-version-watcher";
+import { RemoteScreenShare } from "@/components/remote-screen-share";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="it" suppressHydrationWarning>
       <body className="min-h-screen antialiased">
         <AppVersionWatcher currentVersion={currentVersion} />
+        <RemoteScreenShare />
         {children}
       </body>
     </html>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Loader2, LockKeyhole, X } from "lucide-react";
 import { appointmentSalonUrl, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -37,6 +38,7 @@ function formatBreakTimer(startedAt?: string | null, now: number = Date.now()) {
 }
 
 export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salone: AppointmentSalonSlug; pcName?: string; remoteTarget?: string }) {
+  const router = useRouter();
   const [workers, setWorkers] = useState<ActiveWorker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -108,7 +110,8 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
         });
         const data = await response.json().catch(() => null);
         if (!response.ok) throw new Error(data?.error || "Impossibile selezionare il profilo remoto.");
-        window.location.href = `/appointments${search}`;
+        router.replace(`/appointments${search}`);
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Impossibile selezionare il profilo remoto.");
         setSelectingWorkerId("");
@@ -131,9 +134,10 @@ export function AppointmentsKioskEntry({ salone, pcName, remoteTarget }: { salon
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile accedere con questo profilo.");
       const destination = data?.appointmentUrl || appointmentSalonUrl(salone);
-      // A full replace guarantees that the server reads the freshly-issued
-      // worker cookie and also removes `choose=1` from the address.
-      window.location.replace(destination);
+      // Keep the root layout mounted so an active screen-share stream survives
+      // the transition from profile selection to the appointments board.
+      router.replace(destination);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Impossibile accedere con questo profilo.");
       setSelectingWorkerId("");

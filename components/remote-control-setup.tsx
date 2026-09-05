@@ -18,6 +18,29 @@ type Observation = {
   updatedAt: string;
 };
 type ActiveView = { target: Target; mode: "control" | "observe"; src: string };
+type VideoSignal = {
+  requestId: string;
+  targetCode: string;
+  answer: RTCSessionDescriptionInit | null;
+  status: "requested" | "connecting" | "live" | "denied" | "ended";
+  message: string | null;
+};
+
+function waitForIce(peer: RTCPeerConnection, timeoutMs = 5_000) {
+  if (peer.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timeout = window.setTimeout(done, timeoutMs);
+    function done() {
+      window.clearTimeout(timeout);
+      peer.removeEventListener("icegatheringstatechange", onChange);
+      resolve();
+    }
+    function onChange() {
+      if (peer.iceGatheringState === "complete") done();
+    }
+    peer.addEventListener("icegatheringstatechange", onChange);
+  });
+}
 
 export function RemoteControlSetup() {
   const [targets, setTargets] = useState<Target[]>([]);
@@ -28,7 +51,11 @@ export function RemoteControlSetup() {
   const [activeView, setActiveView] = useState<ActiveView | null>(null);
   const [observation, setObservation] = useState<Observation | null>(null);
   const [observedWorker, setObservedWorker] = useState<{ name: string | null; photo_url: string | null } | null>(null);
+  const [videoState, setVideoState] = useState<"idle" | "requesting" | "waiting" | "connecting" | "live" | "fallback">("idle");
+  const [videoMessage, setVideoMessage] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const activeObservationTargetId = activeView?.mode === "observe" ? activeView.target.id : "";
 
   useEffect(() => {
     let active = true;
@@ -84,15 +111,114 @@ export function RemoteControlSetup() {
   }, [activeView]);
 
   useEffect(() => {
-    if (!activeView || activeView.mode !== "observe" || !observation) return;
+    if (!activeObservationTargetId) {
+      setVideoState("idle");
+      setVideoMessage("");
+      return;
+    }
+    let cancelled = false;
+    let answerApplied = false;
+    let pollTimer: number | null = null;
+    const targetCode = activeObservationTargetId;
+    const cleanupVideo = videoRef.current;
+    const requestId = crypto.randomUUID();
+    const peer = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.cloudflare.com:3478" },
+        { urls: "stun:stun.l.google.com:19302" },
+      ],
+    });
+    peer.addTransceiver("video", { direction: "recvonly" });
+    setVideoState("requesting");
+    setVideoMessage("");
+
+    peer.addEventListener("track", (event) => {
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        void videoRef.current.play().then(() => {
+          if (!cancelled) setVideoState("live");
+        }).catch(() => {
+          if (!cancelled) setVideoState("connecting");
+        });
+      }
+    });
+    peer.addEventListener("connectionstatechange", () => {
+      if (cancelled) return;
+      if (peer.connectionState === "connected") setVideoState("live");
+      if (["failed", "disconnected"].includes(peer.connectionState)) {
+        setVideoState("fallback");
+        setVideoMessage("Video interrotto: anteprima automatica attiva.");
+      }
+    });
+
+    const pollSignal = async () => {
+      const response = await fetch(`/api/remote-video?targetCode=${encodeURIComponent(targetCode)}`, { cache: "no-store" }).catch(() => null);
+      const data = response?.ok ? await response.json().catch(() => null) : null;
+      if (cancelled) return;
+      const signal = (data?.signal || null) as VideoSignal | null;
+      if (!signal || signal.requestId !== requestId) return;
+      if (signal.answer && !answerApplied) {
+        answerApplied = true;
+        setVideoState("connecting");
+        try {
+          await peer.setRemoteDescription(signal.answer);
+        } catch {
+          setVideoState("fallback");
+          setVideoMessage("Connessione video non riuscita: anteprima automatica attiva.");
+        }
+      }
+      if (signal.status === "denied") {
+        setVideoState("fallback");
+        setVideoMessage(signal.message || "Condivisione non autorizzata: anteprima automatica attiva.");
+      } else if (signal.status === "ended") {
+        setVideoState("fallback");
+        setVideoMessage(signal.message || "Condivisione terminata: anteprima automatica attiva.");
+      }
+    };
+
+    void (async () => {
+      try {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        await waitForIce(peer);
+        const response = await fetch("/api/remote-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "offer", targetCode, requestId, offer: peer.localDescription }),
+        });
+        if (!response.ok) throw new Error("Video non disponibile");
+        if (!cancelled) {
+          setVideoState("waiting");
+          pollTimer = window.setInterval(() => void pollSignal(), 800);
+          void pollSignal();
+        }
+      } catch {
+        if (!cancelled) {
+          setVideoState("fallback");
+          setVideoMessage("Video non disponibile: anteprima automatica attiva.");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer !== null) window.clearInterval(pollTimer);
+      peer.close();
+      if (cleanupVideo) cleanupVideo.srcObject = null;
+    };
+  }, [activeObservationTargetId]);
+
+  useEffect(() => {
+    if (!activeObservationTargetId || !observation) return;
     const params = new URLSearchParams(observation.search || "");
     params.delete("remoteTarget");
     params.delete("observeTarget");
     params.set("remotePreview", "1");
-    params.set("remoteTarget", activeView.target.id);
+    params.set("remoteTarget", activeObservationTargetId);
     const src = `${observation.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
     setActiveView((current) => current && current.src !== src ? { ...current, src } : current);
-  }, [observation]);
+  }, [activeObservationTargetId, observation]);
 
   async function openDevice(target: Target) {
     if (starting) return;
@@ -139,6 +265,8 @@ export function RemoteControlSetup() {
       if (!response.ok) throw new Error(data?.error || "Impossibile avviare l’osservazione.");
       setObservation(null);
       setObservedWorker(null);
+      setVideoState("requesting");
+      setVideoMessage("");
       setActiveView({ target, mode: "observe", src: `${pathname}?choose=1&remotePreview=1&remoteTarget=${encodeURIComponent(target.id)}` });
       setStarting("");
     } catch (reason) {
@@ -159,6 +287,8 @@ export function RemoteControlSetup() {
     setActiveView(null);
     setObservation(null);
     setObservedWorker(null);
+    setVideoState("idle");
+    setVideoMessage("");
     setStarting("");
   }
 
@@ -220,6 +350,15 @@ export function RemoteControlSetup() {
             </div>
           </header>
           <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
+            {activeView.mode === "observe" ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className={`absolute inset-0 z-10 size-full bg-neutral-950 object-contain transition-opacity ${videoState === "live" ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              />
+            ) : null}
             {activeView.mode === "observe" && observation?.htmlSnapshot ? (
               <iframe
                 ref={iframeRef}
@@ -239,6 +378,11 @@ export function RemoteControlSetup() {
             ) : null}
             {activeView.mode === "observe" && !observation ? (
               <div className="absolute inset-0 grid place-items-center bg-white/85 backdrop-blur-sm"><div className="flex items-center gap-3 rounded-2xl bg-neutral-950 px-5 py-4 text-sm font-black text-white shadow-xl"><Loader2 className="size-5 animate-spin" /> Collegamento…</div></div>
+            ) : null}
+            {activeView.mode === "observe" && videoState !== "live" ? (
+              <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-full border border-black/10 bg-white/95 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-neutral-700 shadow-lg">
+                {videoState === "requesting" ? "Preparazione video…" : videoState === "waiting" ? "In attesa di autorizzazione sul PC" : videoState === "connecting" ? "Connessione video…" : videoMessage || "Anteprima automatica attiva"}
+              </div>
             ) : null}
           </div>
         </div>

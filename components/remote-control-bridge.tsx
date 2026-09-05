@@ -313,7 +313,7 @@ export function RemoteControlBridge({ pcMode = false }: { pcMode?: boolean }) {
       queue({ scroll: { x: window.scrollX / maxX, y: window.scrollY / maxY } });
     };
     const captureSnapshot = async () => {
-      if (snapshotting || document.visibilityState !== "visible") return;
+      if (snapshotting || document.visibilityState !== "visible" || window.sessionStorage.getItem("paradise-live-video-active") === "1") return;
       snapshotting = true;
       try {
         const sourceWidth = Math.max(320, window.innerWidth);
