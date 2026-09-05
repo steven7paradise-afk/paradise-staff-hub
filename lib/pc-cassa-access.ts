@@ -30,6 +30,42 @@ export function isPcCassaAllowedPath(pathname: string) {
   return isAllowedPage || isAllowedApi;
 }
 
+export function isPcCassaProxyAllowedPath(pathname: string) {
+  const isAllowedPage =
+    pathname === "/appointments/buenos-aires" ||
+    pathname === "/orders" ||
+    pathname === "/shopify-orders" ||
+    pathname.startsWith("/shopify-orders/") ||
+    pathname === "/service-forms" ||
+    pathname.startsWith("/service-forms/");
+
+  const isOperationalServiceFormsApi =
+    pathname === "/api/service-forms/submit" ||
+    pathname.startsWith("/api/service-forms/responses/");
+  const isCashClosingReferenceApi =
+    pathname === "/api/cash/shopify-daily-summary" ||
+    pathname === "/api/cash/daily-close";
+  const isOperationalOrdersApi =
+    pathname.startsWith("/api/orders/") &&
+    !pathname.startsWith("/api/orders/import");
+  const isAllowedApi =
+    pathname.startsWith("/api/appointments") ||
+    pathname === "/api/client-control/analytics" ||
+    pathname === "/api/client-control/polish-note" ||
+    pathname === "/api/client-control/tablet-submit" ||
+    isOperationalOrdersApi ||
+    isOperationalServiceFormsApi ||
+    isCashClosingReferenceApi ||
+    pathname.startsWith("/api/shopify-order-lookup") ||
+    pathname.startsWith("/api/shopify-orders-dashboard") ||
+    pathname.startsWith("/api/vat-lookup") ||
+    pathname.startsWith("/api/drive-image") ||
+    pathname.startsWith("/api/remote-control") ||
+    pathname.startsWith("/api/auth");
+
+  return isAllowedPage || isAllowedApi;
+}
+
 const CENTRAL_MANAGEMENT_ROLES = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export function isBuenosAiresLocationName(value?: string | null) {

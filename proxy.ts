@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isPcCassaProxyAllowedPath } from "@/lib/pc-cassa-access";
 
 export const proxy = auth((request) => {
   const pathname = request.nextUrl.pathname;
@@ -10,36 +11,7 @@ export const proxy = auth((request) => {
     ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(request.auth?.user?.role ?? "");
 
   if (isPcCassa && !isAdminRemoteAccess) {
-    const isAllowedPage =
-      pathname === "/appointments/buenos-aires" ||
-      pathname === "/orders" ||
-      pathname === "/service-forms" ||
-      pathname.startsWith("/service-forms/");
-
-    const isOperationalServiceFormsApi =
-      pathname === "/api/service-forms/submit" ||
-      pathname.startsWith("/api/service-forms/responses/");
-    const isCashClosingReferenceApi =
-      pathname === "/api/cash/shopify-daily-summary" ||
-      pathname === "/api/cash/daily-close";
-    const isOperationalOrdersApi =
-      pathname.startsWith("/api/orders/") &&
-      !pathname.startsWith("/api/orders/import");
-    const isAllowedApi =
-      pathname.startsWith("/api/appointments") ||
-      pathname === "/api/client-control/analytics" ||
-      pathname === "/api/client-control/polish-note" ||
-      pathname === "/api/client-control/tablet-submit" ||
-      isOperationalOrdersApi ||
-      isOperationalServiceFormsApi ||
-      isCashClosingReferenceApi ||
-      pathname.startsWith("/api/shopify-order-lookup") ||
-      pathname.startsWith("/api/vat-lookup") ||
-      pathname.startsWith("/api/drive-image") ||
-      pathname.startsWith("/api/remote-control") ||
-      pathname.startsWith("/api/auth");
-
-    if (!isAllowedPage && !isAllowedApi && pathname !== "/pc-non-autorizzato") {
+    if (!isPcCassaProxyAllowedPath(pathname) && pathname !== "/pc-non-autorizzato") {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Funzione non disponibile sul PC Cassa." }, { status: 403 });
       }
