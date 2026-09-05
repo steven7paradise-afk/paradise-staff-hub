@@ -257,20 +257,23 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
     width: 800,
     color: { dark: "#000000", light: "#ffffff" },
   });
-  const logoDataUrl = await fetch("/logo-label-paradise.png")
+  const logoUrl = typeof window === "undefined"
+    ? "/logo-label-paradise.png"
+    : new URL("/logo-label-paradise.png", window.location.origin).toString();
+  const logoDataUrl = await fetch(logoUrl, { cache: "force-cache" })
     .then((response) => (response.ok ? response.blob() : null))
     .then((blob) => (blob ? blobToDataUrl(blob) : ""))
     .catch(() => "");
 
   const cleanOrderNo = `#${orderNo.replace(/^#/, "")}`;
-  const logoImage = logoDataUrl
-    ? `<image href="${logoDataUrl}" x="245" y="70" width="410" height="130" preserveAspectRatio="xMidYMid meet" />`
+  const logoFallback = logoDataUrl
+    ? ""
     : `<text x="450" y="150" text-anchor="middle" font-size="54" font-weight="800" fill="#111">Paradise Beauty</text>`;
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${ORDER_LABEL_CANVAS_WIDTH}" height="${ORDER_LABEL_CANVAS_HEIGHT}" viewBox="0 0 900 1020">
       <rect width="900" height="1020" fill="#ffffff"/>
       <rect x="55" y="35" width="790" height="190" rx="28" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
-      ${logoImage}
+      ${logoFallback}
 
       <rect x="55" y="260" width="790" height="395" rx="30" fill="#fff8fb" stroke="#ec5391" stroke-width="4"/>
       <line x1="455" y1="290" x2="455" y2="625" stroke="#ec5391" stroke-width="3" opacity="0.35"/>
@@ -302,6 +305,15 @@ async function buildOrderLabelPdf(order: OrderLabelResponse) {
   const imageX = (pageWidth - imageWidth) / 2;
   const imageY = (pageHeight - imageHeight) / 2;
   doc.addImage(labelImageDataUrl, "PNG", imageX, imageY, imageWidth, imageHeight, undefined, "FAST");
+  // Il logo viene aggiunto direttamente al PDF. Se resta annidato nello SVG,
+  // Safari e Chromium possono ometterlo durante la stampa immediata del nuovo ordine.
+  if (logoDataUrl) {
+    const logoX = imageX + imageWidth * (245 / 900);
+    const logoY = imageY + imageHeight * (70 / 1020);
+    const logoWidth = imageWidth * (410 / 900);
+    const logoHeight = imageHeight * (130 / 1020);
+    doc.addImage(logoDataUrl, "PNG", logoX, logoY, logoWidth, logoHeight, undefined, "FAST");
+  }
   // Add the QR directly to jsPDF. Embedding a data-URL image inside the SVG
   // and then rasterizing that SVG causes Chromium/WebKit to occasionally drop
   // the nested image, producing an empty QR box on newly-created labels.
