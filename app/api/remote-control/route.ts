@@ -42,6 +42,8 @@ type ObservationState = {
   workerId: string | null;
   lastAction: string | null;
   events: ObservationEvent[];
+  snapshot: string | null;
+  viewport: { width: number; height: number } | null;
   updatedAt: string;
 };
 type RemoteEvent =
@@ -275,6 +277,11 @@ export async function POST(request: NextRequest) {
       ? { kind: candidateKind, label: candidateLabel, at: now }
       : null;
     const workerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value?.trim() || null;
+    const snapshot = typeof body?.snapshot === "string"
+      && body.snapshot.startsWith("data:image/jpeg;base64,")
+      && body.snapshot.length <= 900_000
+      ? body.snapshot
+      : previousObservation?.snapshot || null;
     previous.observation = {
       pathname: cleanPath(body?.pathname ?? previousObservation?.pathname),
       search: typeof body?.search === "string" ? body.search.slice(0, 1000) : previousObservation?.search || "",
@@ -287,6 +294,13 @@ export async function POST(request: NextRequest) {
       workerId,
       lastAction: newEvent?.label || previousObservation?.lastAction || null,
       events: [...(previousObservation?.events || []), ...(newEvent ? [newEvent] : [])].slice(-20),
+      snapshot,
+      viewport: body?.viewport && Number.isFinite(body.viewport.width) && Number.isFinite(body.viewport.height)
+        ? {
+            width: Math.max(320, Math.min(5000, Number(body.viewport.width))),
+            height: Math.max(320, Math.min(5000, Number(body.viewport.height))),
+          }
+        : previousObservation?.viewport || null,
       updatedAt: now,
     };
     previous.updatedAt = now;

@@ -12,6 +12,8 @@ type Observation = {
   scroll: { x: number; y: number } | null;
   lastAction: string | null;
   events: Array<{ kind: string; label: string; at: string }>;
+  snapshot: string | null;
+  viewport: { width: number; height: number } | null;
   updatedAt: string;
 };
 type ActiveView = { target: Target; mode: "control" | "observe"; src: string };
@@ -86,6 +88,7 @@ export function RemoteControlSetup() {
     params.delete("remoteTarget");
     params.delete("observeTarget");
     params.set("remotePreview", "1");
+    params.set("remoteTarget", activeView.target.id);
     const src = `${observation.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
     setActiveView((current) => current && current.src !== src ? { ...current, src } : current);
   }, [observation]);
@@ -135,7 +138,7 @@ export function RemoteControlSetup() {
       if (!response.ok) throw new Error(data?.error || "Impossibile avviare l’osservazione.");
       setObservation(null);
       setObservedWorker(null);
-      setActiveView({ target, mode: "observe", src: `${pathname}?choose=1&remotePreview=1` });
+      setActiveView({ target, mode: "observe", src: `${pathname}?choose=1&remotePreview=1&remoteTarget=${encodeURIComponent(target.id)}` });
       setStarting("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Impossibile avviare l’osservazione.");
@@ -216,7 +219,11 @@ export function RemoteControlSetup() {
             </div>
           </header>
           <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
-            <iframe ref={iframeRef} key={activeView.src} src={activeView.src} title={`${activeView.mode === "observe" ? "Osservazione" : "Controllo"} ${activeView.target.name}`} className={`size-full border-0 ${activeView.mode === "observe" ? "pointer-events-none select-none" : ""}`} />
+            {activeView.mode === "observe" && observation?.snapshot ? (
+              <img src={observation.snapshot} alt={`Schermata di ${observedWorker?.name || activeView.target.name}`} className="size-full select-none object-fill" draggable={false} />
+            ) : (
+              <iframe ref={iframeRef} key={activeView.src} src={activeView.src} title={`${activeView.mode === "observe" ? "Osservazione" : "Controllo"} ${activeView.target.name}`} className={`size-full border-0 ${activeView.mode === "observe" ? "pointer-events-none select-none" : ""}`} />
+            )}
             {activeView.mode === "observe" && observation?.pointer ? (
               <span className="pointer-events-none absolute z-20 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[5px] border-white bg-[#F12D83] shadow-[0_2px_12px_rgba(0,0,0,0.45)]" style={{ left: `${observation.pointer.x * 100}%`, top: `${observation.pointer.y * 100}%` }} />
             ) : null}
