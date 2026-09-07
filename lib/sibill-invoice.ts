@@ -34,6 +34,15 @@ type BillingAddress = {
 type SibillAccount = {
   id: string;
   nickname?: string | null;
+  currency?: string | null;
+  current_balance?: {
+    amount?: string | number | null;
+    currency?: string | null;
+  } | null;
+  available_balance?: {
+    amount?: string | number | null;
+    currency?: string | null;
+  } | null;
 };
 
 export class SibillDraftError extends Error {
@@ -362,6 +371,28 @@ export function selectSibillAccountId(
       clean(account.nickname).toLowerCase().includes(match)
     );
     if (matchingAccounts.length === 1) return matchingAccounts[0].id;
+
+    if (matchingAccounts.length > 1) {
+      const euroAccounts = matchingAccounts.filter((account) => {
+        const currency = clean(
+          account.currency || account.current_balance?.currency || account.available_balance?.currency,
+        ).toUpperCase();
+        return currency === "EUR";
+      });
+      if (euroAccounts.length === 1) return euroAccounts[0].id;
+
+      const candidates = euroAccounts.length > 0 ? euroAccounts : matchingAccounts;
+      const ranked = candidates
+        .map((account) => ({
+          id: account.id,
+          balance: Number(account.current_balance?.amount ?? account.available_balance?.amount ?? Number.NaN),
+        }))
+        .filter((account) => Number.isFinite(account.balance))
+        .sort((left, right) => right.balance - left.balance);
+      if (ranked.length > 0 && (ranked.length === 1 || ranked[0].balance > ranked[1].balance)) {
+        return ranked[0].id;
+      }
+    }
   }
 
   // A single connected account is unambiguous. Never pick the first one when

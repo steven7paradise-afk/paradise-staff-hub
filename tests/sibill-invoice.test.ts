@@ -114,3 +114,22 @@ test("selects the configured card account ending in 5597", () => {
   assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), "account-card");
   assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "9999"), null);
 });
+
+test("selects the active EUR 5597 account when Sibill exposes duplicate masked accounts", () => {
+  const accounts = [
+    { id: "account-usd", nickname: "Main · ***85597", currency: "USD", current_balance: { amount: "0", currency: "USD" } },
+    { id: "account-empty-eur", nickname: "Main · ***85597", currency: "EUR", current_balance: { amount: "0", currency: "EUR" } },
+    { id: "account-active-eur", nickname: "Main · ***85597", currency: "EUR", current_balance: { amount: "145059.51", currency: "EUR" } },
+  ];
+
+  assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), "account-active-eur");
+});
+
+test("does not guess between duplicate 5597 accounts with the same balance", () => {
+  const accounts = [
+    { id: "account-one", nickname: "Main · ***85597", currency: "EUR", current_balance: { amount: "0", currency: "EUR" } },
+    { id: "account-two", nickname: "Main · ***85597", currency: "EUR", current_balance: { amount: "0", currency: "EUR" } },
+  ];
+
+  assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), null);
+});
