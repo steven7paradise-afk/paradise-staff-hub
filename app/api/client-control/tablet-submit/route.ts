@@ -8,6 +8,7 @@ import { appendShopifyOrderNote, updateShopifyOrderMetafields, extractShopifyOrd
 import { getOperationalUser } from "@/lib/operational-session";
 import { formatShopifyStaffNames } from "@/lib/shopify-staff-label";
 import { allowsMissingFinalPaymentOrder } from "@/lib/client-control-service-rules";
+import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 
 export const dynamic = "force-dynamic";
 
@@ -115,12 +116,27 @@ export async function POST(request: NextRequest) {
     ? await authorizedTablet(requestedDevice, cookieStore.get(tabletCookieName)?.value, requestIp(headerStore)).catch(() => null)
     : null;
   const canSubmitFromDashboard = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(String(session?.user?.role ?? ""));
+  const noteAccessUser = operationalUser?.id && operationalUser.id !== "PC_CASSA"
+    ? await prisma.user.findUnique({
+        where: { id: operationalUser.id },
+        select: { mansione: true, location: { select: { name: true } } },
+      }).catch(() => null)
+    : null;
+  const canSubmitAppointmentNote = Boolean(
+    operationalUser?.id &&
+    canManageAppointmentOfficeNotes({
+      role: operationalUser.role,
+      mansione: noteAccessUser?.mansione,
+      locationName: noteAccessUser?.location?.name,
+      isPC: operationalUser.isPC,
+    }),
+  );
   // Il PC cassa è già protetto dal link monouso della sede. Il salvataggio non
   // deve fallire se il cookie del profilo operatore tarda ad aggiornarsi o se
   // il nome della collaboratrice non coincide perfettamente con il database.
   const canSubmitFromAuthorizedPc = Boolean(operationalUser?.isPC);
 
-  if (!tabletDevice && !canSubmitFromDashboard && !canSubmitFromAuthorizedPc) {
+  if (!tabletDevice && !canSubmitFromDashboard && !canSubmitFromAuthorizedPc && !canSubmitAppointmentNote) {
     return NextResponse.json({ error: "Tablet non autorizzato" }, { status: 401 });
   }
 
