@@ -302,6 +302,7 @@ export function StaffFormsViewer({
   const [customSelectValue, setCustomSelectValue] = useState<string>("");
   const [showPastCustomers, setShowPastCustomers] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const customerSearchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [showPickupModal, setShowPickupModal] = useState(false);
   const [showPosTerminal, setShowPosTerminal] = useState(false);
   const [showPaymentLink, setShowPaymentLink] = useState(false);
@@ -637,6 +638,9 @@ export function StaffFormsViewer({
     : false;
   const isSelectedOrderForm = isOrderLabelForm(selectedForm);
   const isProfessionalWizardForm = Boolean(selectedForm) && !isCashClosingForm;
+  const isSelectedInvoiceForm = selectedForm
+    ? selectedForm.name.toUpperCase().includes("FATTURA") || selectedForm.category.toUpperCase().includes("FATTUR")
+    : false;
   const isSelectedClientControlForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
     : false;
@@ -644,6 +648,14 @@ export function StaffFormsViewer({
     CLIENT_CONTROL_FIELD_IDS.serviceOwner,
     CLIENT_CONTROL_FIELD_IDS.serviceStaff,
   ]);
+
+  React.useEffect(() => {
+    if (!isSelectedInvoiceForm || pastCustomers.length === 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      customerSearchInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isSelectedInvoiceForm, selectedForm?.id, pastCustomers.length]);
 
   const isDefaultParticipantField = (fieldLabel: string) => {
     const labelUpper = fieldLabel.toUpperCase();
@@ -934,6 +946,7 @@ export function StaffFormsViewer({
   const handleOpenForm = (form: FormTemplate) => {
     const isCashClosing = form.name.toUpperCase().includes("CHIUSURA CASSA") || form.category.toUpperCase().includes("CASSA");
     const isClientControl = form.name.toUpperCase().includes("CONTROLLO CLIENTE") || form.category.toUpperCase().includes("QUALITA");
+    const isInvoice = form.name.toUpperCase().includes("FATTURA") || form.category.toUpperCase().includes("FATTUR");
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(new Date());
     setSelectedForm(form);
     setAnswers(
@@ -955,7 +968,7 @@ export function StaffFormsViewer({
     setActiveFieldIndex(0);
     setCashOrderRows([{ id: `cash-order-${Date.now()}`, order: "", amount: "" }]);
     setActiveCashCustomerIndex(0);
-    setShowPastCustomers(false);
+    setShowPastCustomers(isInvoice && pastCustomers.length > 0);
     setCustomerSearchQuery("");
     setShopifyLookupStatus(null);
   };
@@ -2413,7 +2426,9 @@ export function StaffFormsViewer({
                                     <div className="relative">
                                       <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#A74758]" />
                                       <input
+                                        ref={customerSearchInputRef}
                                         type="search"
+                                        autoFocus
                                         value={customerSearchQuery}
                                         onFocus={() => setShowPastCustomers(true)}
                                         onClick={() => setShowPastCustomers(true)}
@@ -2423,10 +2438,14 @@ export function StaffFormsViewer({
                                         }}
                                         onKeyDown={(e) => {
                                           if (e.key === "Enter") e.preventDefault();
-                                          if (e.key === "Escape") setShowPastCustomers(false);
+                                          if (e.key === "Escape") {
+                                            setShowPastCustomers(false);
+                                            e.currentTarget.blur();
+                                          }
                                         }}
                                         placeholder="Nome, ragione sociale, Partita IVA o Codice Fiscale"
                                         aria-expanded={showPastCustomers}
+                                        aria-controls="invoice-customer-results"
                                         className="h-16 w-full rounded-2xl border border-[#A74758]/30 bg-white pl-12 pr-16 text-base font-bold text-slate-800 shadow-[0_10px_30px_rgba(167,71,88,0.08)] outline-none transition focus:border-[#A74758] focus:ring-4 focus:ring-[#A74758]/10"
                                       />
                                       <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-[#A74758] px-2.5 py-1 text-[10px] font-black text-white">
@@ -2435,7 +2454,7 @@ export function StaffFormsViewer({
                                     </div>
 
                                     {showPastCustomers && (
-                                      <div className={cn(
+                                      <div id="invoice-customer-results" className={cn(
                                         "max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10",
                                         isProfessionalWizardForm && "service-form-wizard-customer-list"
                                       )}>
