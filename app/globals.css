@@ -1809,8 +1809,7 @@ textarea {
   opacity: 1 !important;
 }
 
-/* Richiesta fattura: percorso chiaro e leggibile. La pagina generale rimane
-   scura, ma il modulo fiscale usa superfici bianche ad alto contrasto. */
+/* Tutti i formulari operativi usano superfici bianche ad alto contrasto. */
 .dark .service-form-wizard-workspace.service-form-wizard-light,
 .service-form-wizard-workspace.service-form-wizard-light {
   color: #172033 !important;

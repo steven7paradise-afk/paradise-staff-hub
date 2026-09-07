@@ -263,7 +263,6 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
         answers: true,
       },
       orderBy: { created_at: "desc" },
-      take: 400
     }),
   ]);
 
@@ -274,13 +273,15 @@ export default async function ServiceFormsPage(props: { searchParams: Promise<{ 
     if (!ans) continue;
     const name = String(ans.invoice_client_name || "").trim();
     if (!name) continue;
-    const key = name.toLowerCase();
+    const vatNumber = String(ans.invoice_vat_number || "").replace(/\D/g, "");
+    const fiscalCode = String(ans.invoice_fiscal_code || "").replace(/\s/g, "").toUpperCase();
+    const key = vatNumber ? `vat:${vatNumber}` : fiscalCode ? `cf:${fiscalCode}` : `name:${name.toLowerCase()}`;
     if (!pastCustomersMap.has(key)) {
       pastCustomersMap.set(key, {
         name,
         type: ans.invoice_client_type || "Privato (Codice Fiscale)",
-        fiscalCode: ans.invoice_fiscal_code || "",
-        vatNumber: ans.invoice_vat_number || "",
+        fiscalCode,
+        vatNumber,
         sdiCode: ans.invoice_sdi_code || "",
         pec: ans.invoice_pec || "",
         address: ans.invoice_address || "",

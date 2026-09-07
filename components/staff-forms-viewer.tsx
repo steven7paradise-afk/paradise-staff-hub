@@ -637,9 +637,6 @@ export function StaffFormsViewer({
     : false;
   const isSelectedOrderForm = isOrderLabelForm(selectedForm);
   const isProfessionalWizardForm = Boolean(selectedForm) && !isCashClosingForm;
-  const isInvoiceWizardForm = selectedForm
-    ? selectedForm.name.toUpperCase().includes("FATTURA") || selectedForm.category.toUpperCase().includes("FATTUR")
-    : false;
   const isSelectedClientControlForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
     : false;
@@ -2113,11 +2110,11 @@ export function StaffFormsViewer({
           "fixed inset-0 z-50",
           isCashClosingForm && "cash-closing-workspace",
           isProfessionalWizardForm && "service-form-wizard-workspace",
-          isInvoiceWizardForm && "service-form-wizard-light",
+          isProfessionalWizardForm && "service-form-wizard-light",
           isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
             : isProfessionalWizardForm
-              ? cn("flex items-center justify-center overflow-hidden p-0", isInvoiceWizardForm ? "bg-white" : "bg-[#090b0d]")
+              ? "flex items-center justify-center overflow-hidden bg-white p-0"
               : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
         )}>
           <div className={cn(
@@ -2126,10 +2123,7 @@ export function StaffFormsViewer({
               ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_15%_0%,rgba(167,71,88,0.12),transparent_32%),linear-gradient(180deg,#faf8f9,#f3eef1)]"
               : isProfessionalWizardForm
                 ? cn(
-                    "service-form-wizard-shell h-[100dvh] min-h-[100dvh] max-w-none overflow-hidden border-0 xl:!grid xl:grid-cols-[310px_minmax(0,1fr)]",
-                    isInvoiceWizardForm
-                      ? "border-slate-200 bg-white shadow-none"
-                      : "border-white/10 bg-[#1b1a1d] shadow-[0_32px_100px_rgba(0,0,0,0.55)]"
+                    "service-form-wizard-shell h-[100dvh] min-h-[100dvh] max-w-none overflow-hidden border-0 border-slate-200 bg-white shadow-none xl:!grid xl:grid-cols-[310px_minmax(0,1fr)]"
                   )
               : "max-h-[92vh] max-w-4xl overflow-hidden rounded-[32px] zoom-in-95"
           )}>
@@ -2237,10 +2231,7 @@ export function StaffFormsViewer({
                   isCashClosingForm
                     ? "w-full overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
                     : isProfessionalWizardForm
-                      ? cn(
-                          "service-form-wizard-body min-h-0 w-full max-w-none overflow-y-auto px-5 py-7 sm:px-8 lg:px-12 lg:py-10",
-                          isInvoiceWizardForm ? "bg-white" : "bg-[#1b1a1d]"
-                        )
+                      ? "service-form-wizard-body min-h-0 w-full max-w-none overflow-y-auto bg-white px-5 py-7 sm:px-8 lg:px-12 lg:py-10"
                     : "overflow-y-auto bg-white p-5 sm:p-7"
                 )}
               >
@@ -2413,67 +2404,91 @@ export function StaffFormsViewer({
 
                           {field.type === "select" && (
                             <div className="space-y-2.5 w-full">
-                              {field.id === "invoice_client_type" && showPastCustomers ? (
-                                <div className="space-y-3.5 w-full">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <h4 className="text-sm font-black text-slate-800">Seleziona Cliente Registrato</h4>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowPastCustomers(false);
-                                        setCustomerSearchQuery("");
-                                      }}
-                                      className="text-xs font-bold text-[#A74758] hover:underline"
-                                    >
-                                      Annulla
-                                    </button>
+                              <>
+                                {field.id === "invoice_client_type" && pastCustomers.length > 0 && (
+                                  <div className="mb-5 space-y-2">
+                                    <label className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                                      Cerca cliente registrato
+                                    </label>
+                                    <div className="relative">
+                                      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#A74758]" />
+                                      <input
+                                        type="search"
+                                        value={customerSearchQuery}
+                                        onFocus={() => setShowPastCustomers(true)}
+                                        onClick={() => setShowPastCustomers(true)}
+                                        onChange={(e) => {
+                                          setCustomerSearchQuery(e.target.value);
+                                          setShowPastCustomers(true);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") e.preventDefault();
+                                          if (e.key === "Escape") setShowPastCustomers(false);
+                                        }}
+                                        placeholder="Nome, ragione sociale, Partita IVA o Codice Fiscale"
+                                        aria-expanded={showPastCustomers}
+                                        className="h-16 w-full rounded-2xl border border-[#A74758]/30 bg-white pl-12 pr-16 text-base font-bold text-slate-800 shadow-[0_10px_30px_rgba(167,71,88,0.08)] outline-none transition focus:border-[#A74758] focus:ring-4 focus:ring-[#A74758]/10"
+                                      />
+                                      <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-[#A74758] px-2.5 py-1 text-[10px] font-black text-white">
+                                        {pastCustomers.length}
+                                      </span>
+                                    </div>
+
+                                    {showPastCustomers && (
+                                      <div className={cn(
+                                        "max-h-72 space-y-1.5 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-900/10",
+                                        isProfessionalWizardForm && "service-form-wizard-customer-list"
+                                      )}>
+                                        {(() => {
+                                          const normalize = (value: string) => value
+                                            .normalize("NFD")
+                                            .replace(/[\u0300-\u036f]/g, "")
+                                            .toLowerCase()
+                                            .replace(/[^a-z0-9]/g, "");
+                                          const query = normalize(customerSearchQuery);
+                                          const filtered = pastCustomers.filter((customer) =>
+                                            !query || normalize([
+                                              customer.name,
+                                              customer.vatNumber,
+                                              customer.fiscalCode,
+                                            ].join(" ")).includes(query)
+                                          );
+                                          if (filtered.length === 0) {
+                                            return <p className="py-6 text-center text-sm font-semibold text-slate-400">Nessun cliente registrato trovato.</p>;
+                                          }
+                                          return filtered.map((cust) => (
+                                            <button
+                                              key={`${cust.vatNumber || cust.fiscalCode || cust.name}-${cust.name}`}
+                                              type="button"
+                                              onClick={() => handleSelectCustomer(cust)}
+                                              className={cn(
+                                                "flex w-full items-center justify-between gap-4 rounded-xl border border-transparent p-3 text-left transition hover:border-[#A74758]/15 hover:bg-[#A74758]/5",
+                                                isProfessionalWizardForm && "service-form-wizard-customer-row"
+                                              )}
+                                            >
+                                              <div className="min-w-0">
+                                                <p className="truncate text-sm font-black text-slate-900">{cust.name}</p>
+                                                <p className="mt-0.5 font-mono text-[10px] text-slate-500">
+                                                  {cust.vatNumber ? `P.IVA: ${cust.vatNumber}` : `CF: ${cust.fiscalCode.toUpperCase()}`}
+                                                </p>
+                                              </div>
+                                              <span className="shrink-0 rounded-full bg-[#A74758]/10 px-2.5 py-1 text-[10px] font-black uppercase text-[#A74758]">
+                                                {cust.type.includes("Azienda") ? "Azienda" : "Privato"}
+                                              </span>
+                                            </button>
+                                          ));
+                                        })()}
+                                      </div>
+                                    )}
+
+                                    <div className="flex items-center gap-3 pt-2">
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                      <span className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">oppure nuovo cliente</span>
+                                      <div className="h-px flex-1 bg-slate-200" />
+                                    </div>
                                   </div>
-                                  <input
-                                    type="text"
-                                    value={customerSearchQuery}
-                                    onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                                    placeholder="Cerca per nome, codice fiscale o P.IVA..."
-                                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#A74758]"
-                                  />
-                                  <div className={cn(
-                                    "max-h-60 overflow-y-auto space-y-1.5 border border-slate-100 rounded-2xl bg-white p-2",
-                                    isProfessionalWizardForm && "service-form-wizard-customer-list"
-                                  )}>
-                                    {(() => {
-                                      const filtered = pastCustomers.filter(c => 
-                                        c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                                        c.fiscalCode.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
-                                        c.vatNumber.toLowerCase().includes(customerSearchQuery.toLowerCase())
-                                      );
-                                      if (filtered.length === 0) {
-                                        return <p className="text-xs text-slate-400 text-center py-4">Nessun cliente registrato corrisponde alla ricerca.</p>;
-                                      }
-                                      return filtered.map((cust) => (
-                                        <button
-                                          key={cust.name}
-                                          type="button"
-                                          onClick={() => handleSelectCustomer(cust)}
-                                          className={cn(
-                                            "flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-slate-50 border border-transparent hover:border-slate-100",
-                                            isProfessionalWizardForm && "service-form-wizard-customer-row"
-                                          )}
-                                        >
-                                          <div>
-                                            <p className="text-sm font-black text-slate-900">{cust.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                              {cust.vatNumber ? `P.IVA: ${cust.vatNumber}` : `CF: ${cust.fiscalCode.toUpperCase()}`}
-                                            </p>
-                                          </div>
-                                          <span className="text-[10px] font-black uppercase text-[#A74758] bg-[#A74758]/10 px-2.5 py-0.5 rounded-full">
-                                            {cust.type.includes("Azienda") ? "Azienda" : "Privato"}
-                                          </span>
-                                        </button>
-                                      ));
-                                    })()}
-                                  </div>
-                                </div>
-                              ) : (
-                                <>
+                                )}
+
                                   <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
                                     {field.options?.map((opt) => {
                                       const isSelected = answers[field.id] === opt;
@@ -2515,26 +2530,7 @@ export function StaffFormsViewer({
                                       className="mt-2 h-14 w-full rounded-2xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-800 outline-none transition focus:border-[#A74758] focus:ring-1 focus:ring-[#A74758]/20 focus:bg-white"
                                     />
                                   )}
-                                  {field.id === "invoice_client_type" && pastCustomers.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
-                                      <p className="text-xs font-bold text-slate-400">Cliente già registrato in passato?</p>
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowPastCustomers(true)}
-                                        className="flex h-14 w-full items-center justify-between rounded-2xl border border-dashed border-[#A74758]/30 bg-[#A74758]/5 px-4 text-left text-sm font-extrabold text-[#A74758] transition hover:bg-[#A74758]/10 hover:border-[#A74758]/50 active:scale-[0.99]"
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <Search className="size-4" />
-                                          Cerca tra i Clienti Registrati
-                                        </span>
-                                        <span className="rounded-full bg-[#A74758] px-2.5 py-0.5 text-[10px] text-white">
-                                          {pastCustomers.length}
-                                        </span>
-                                      </button>
-                                    </div>
-                                  )}
-                                </>
-                              )}
+                              </>
                             </div>
                           )}
 
