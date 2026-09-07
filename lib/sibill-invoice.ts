@@ -1,5 +1,4 @@
-import { lookupItalianVatCompany } from "@/lib/italian-vat-lookup";
-import { enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
+import { enrichCompanyInvoiceIdentity, enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
 
 const DEFAULT_SIBILL_BASE_URL = "https://integration.sibill.com";
 
@@ -498,24 +497,12 @@ export async function createSibillDraft(input: {
   } catch (error) {
     throw new SibillDraftError(error instanceof Error ? error.message : "Ordine Shopify non verificato.");
   }
-  const clientType = clean(preparedAnswers.invoice_client_type).toLowerCase();
-  const isCompany = clientType.includes("azienda") || clientType.includes("professionista");
-  if (isCompany) {
-    try {
-      const verifiedCompany = await lookupItalianVatCompany(preparedAnswers.invoice_vat_number);
-      preparedAnswers = {
-        ...preparedAnswers,
-        invoice_client_name: verifiedCompany.name,
-        invoice_address: verifiedCompany.address,
-      };
-    } catch (error) {
-      // VIES can be temporarily unavailable. Keep a complete manually entered
-      // address usable, but surface the lookup error when the historical data
-      // itself cannot produce a valid invoice.
-      if (!parseItalianBillingAddress(preparedAnswers.invoice_address)) {
-        throw error;
-      }
-    }
+  try {
+    preparedAnswers = await enrichCompanyInvoiceIdentity(preparedAnswers);
+  } catch (error) {
+    throw new SibillDraftError(
+      error instanceof Error ? error.message : "Ragione sociale non verificata dalla Partita IVA.",
+    );
   }
   const payload = buildSibillInvoiceDraft(preparedAnswers, company, input.createdAt);
   const reference = clean(preparedAnswers.invoice_receipt_ref || preparedAnswers.invoice_shopify_order) || input.responseId;

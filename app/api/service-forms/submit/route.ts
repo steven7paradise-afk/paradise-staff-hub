@@ -8,7 +8,7 @@ import { getOperationalUser } from "@/lib/operational-session";
 import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
 import { isServiceFormFieldVisible } from "@/lib/service-form-visibility";
 import { createSibillDraft, SIBILL_ANSWER_KEYS } from "@/lib/sibill-invoice";
-import { enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
+import { enrichCompanyInvoiceIdentity, enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
 
 type FormSessionUser = {
   id: string;
@@ -160,9 +160,10 @@ export async function POST(request: NextRequest) {
     if (form.name.toLowerCase().includes("fattura")) {
       try {
         answersObj = await enrichInvoiceAnswersFromShopify(answersObj);
+        answersObj = await enrichCompanyInvoiceIdentity(answersObj);
       } catch (error) {
         return NextResponse.json({
-          error: error instanceof Error ? error.message : "Ordine Shopify non verificato.",
+          error: error instanceof Error ? error.message : "Dati della fattura non verificati.",
         }, { status: 400 });
       }
     }

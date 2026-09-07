@@ -1,4 +1,5 @@
 import { getShopifyOrderDetails } from "@/lib/shopify";
+import { lookupItalianVatCompany } from "@/lib/italian-vat-lookup";
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -9,6 +10,22 @@ function invoicePaymentMethod(method: string) {
   if (method === "CONTANTI" || method === "CASHMATIC") return "Contanti";
   if (method === "MISTO") return "Altro";
   return "";
+}
+
+function isCompanyInvoice(answers: Record<string, unknown>) {
+  const clientType = clean(answers.invoice_client_type).toLowerCase();
+  return clientType.includes("azienda") || clientType.includes("professionista");
+}
+
+export async function enrichCompanyInvoiceIdentity(answers: Record<string, unknown>) {
+  if (!isCompanyInvoice(answers)) return answers;
+
+  const company = await lookupItalianVatCompany(answers.invoice_vat_number);
+  return {
+    ...answers,
+    invoice_client_name: company.name,
+    invoice_address: company.address,
+  };
 }
 
 /**
@@ -34,13 +51,20 @@ export async function enrichInvoiceAnswersFromShopify(answers: Record<string, un
 
   const detectedPaymentMethod = invoicePaymentMethod(order.paymentMethod);
   const existingPaymentMethod = clean(answers.invoice_payment_method);
+  const companyInvoice = isCompanyInvoice(answers);
 
   return {
     ...answers,
     invoice_shopify_order: order.orderName,
     invoice_receipt_ref: order.orderName,
-    invoice_client_name: clean(answers.invoice_client_name) || order.clientName || "",
-    invoice_address: clean(answers.invoice_address) || order.billingAddress || "",
+    // Shopify often stores the employee/contact name. For company invoices it
+    // must never replace the legal name and address obtained from the VAT check.
+    invoice_client_name: companyInvoice
+      ? clean(answers.invoice_client_name)
+      : clean(answers.invoice_client_name) || order.clientName || "",
+    invoice_address: companyInvoice
+      ? clean(answers.invoice_address)
+      : clean(answers.invoice_address) || order.billingAddress || "",
     invoice_amount: String(order.totalPrice),
     invoice_payment_method: detectedPaymentMethod || existingPaymentMethod,
     ...(order.paymentMethod === "MISTO" ? { invoice_payment_method_altro: "Pagamento misto" } : {}),

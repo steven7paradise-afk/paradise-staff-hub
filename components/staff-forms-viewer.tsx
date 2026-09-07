@@ -554,9 +554,11 @@ export function StaffFormsViewer({
           if (data.phone) nextAnswers["order_client_phone"] = data.phone;
           nextAnswers["order_paid_amount"] = String(data.paidAmount ?? 0);
         } else {
+          const isCompanyInvoice = String(prev.invoice_client_type || "").toLowerCase().includes("azienda") ||
+            String(prev.invoice_client_type || "").toLowerCase().includes("professionista");
           if (data.orderName) nextAnswers["invoice_shopify_order"] = data.orderName;
-          if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
-          if (data.billingAddress) nextAnswers["invoice_address"] = data.billingAddress;
+          if (!isCompanyInvoice && data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
+          if (!isCompanyInvoice && data.billingAddress) nextAnswers["invoice_address"] = data.billingAddress;
           if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
           if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
           if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
