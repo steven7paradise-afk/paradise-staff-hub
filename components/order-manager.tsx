@@ -4,7 +4,7 @@ import Papa from "papaparse";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Trash2, Truck, Upload, UserRound, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, Eye, ImagePlus, LinkIcon, Loader2, Mail, MapPin, PackageCheck, Phone, Printer, ScanBarcode, Search, ShoppingCart, Trash2, Truck, Upload, UserRound, X } from "lucide-react";
 import { Badge, Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { ResponseComments } from "@/components/response-comments";
@@ -16,7 +16,9 @@ function serviceFormFileUrl(answer: any) {
 }
 
 const ORDER_PHOTO_KEY = "__orderPhoto";
+const ORDER_PRODUCT_PHOTOS_KEY = "__orderProductPhotos";
 type OrderPhoto = {
+  id?: string;
   url: string;
   previewUrl?: string;
   name?: string;
@@ -25,6 +27,7 @@ type OrderPhoto = {
   driveFileUrl?: string;
   uploadedAt?: string;
   uploadedBy?: string;
+  stage?: string;
 };
 
 type OrderResponse = {
@@ -322,6 +325,33 @@ function orderPhoto(order: OrderResponse): OrderPhoto | null {
 
 function orderPhotoPreviewUrl(photo: OrderPhoto) {
   return photo.previewUrl || (photo.driveFileId ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(photo.driveFileId)}&sz=w1200` : photo.url);
+}
+
+function orderProductPhotos(order: OrderResponse): OrderPhoto[] {
+  const stored = order.answers?.[ORDER_PRODUCT_PHOTOS_KEY];
+  const photos = Array.isArray(stored)
+    ? stored.filter((photo): photo is OrderPhoto => Boolean(photo && typeof photo === "object" && typeof photo.url === "string"))
+    : [];
+  const legacy = orderPhoto(order);
+  if (!legacy) return photos;
+  const legacyKey = legacy.id || legacy.driveFileId || legacy.url;
+  return photos.some((photo) => (photo.id || photo.driveFileId || photo.url) === legacyKey) ? photos : [legacy, ...photos];
+}
+
+function orderTimeline(order: OrderResponse) {
+  const created = {
+    type: "CREATED",
+    action: "Ordine creato",
+    by: order.user?.name || "Staff",
+    at: order.created_at,
+    note: "La scheda ordine è stata aperta.",
+  };
+  const activity = Array.isArray(order.activity_log) ? order.activity_log.filter((event) => event && typeof event === "object") : [];
+  return [created, ...activity].sort((left, right) => {
+    const leftTime = new Date(left.at || left.date || 0).getTime();
+    const rightTime = new Date(right.at || right.date || 0).getTime();
+    return rightTime - leftTime;
+  });
 }
 
 function displayOrderFieldValue(value: any) {
@@ -694,31 +724,41 @@ export function OrderManager({
     setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
   }
 
-  async function uploadPhoto(order: OrderResponse, file?: File) {
-    if (!file) return;
+  async function uploadPhotos(order: OrderResponse, files?: FileList | null) {
+    if (!files?.length) return;
     setPhotoError("");
 
-    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.some((file) => !file.type.startsWith("image/") || file.size > 10 * 1024 * 1024)) {
       setPhotoError("Scegli una foto JPG, PNG o WEBP fino a 10 MB.");
+      return;
+    }
+
+    if (orderProductPhotos(order).length + selectedFiles.length > 30) {
+      setPhotoError("Puoi conservare al massimo 30 foto per ordine.");
       return;
     }
 
     setUploadingPhoto(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const response = await fetch(`/api/orders/${order.id}/photo`, {
-        method: "POST",
-        body: formData,
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || "Impossibile caricare la foto.");
+      let updatedOrder = order;
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("stage", updatedOrder.status || "NEW");
+        const response = await fetch(`/api/orders/${order.id}/photo`, {
+          method: "POST",
+          body: formData,
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Impossibile caricare la foto.");
+        }
+        updatedOrder = result.order as OrderResponse;
       }
 
-      const updated = result.order as OrderResponse;
-      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updated } : item));
-      setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updatedOrder } : item));
+      setSelected((current) => current?.id === order.id ? { ...current, ...updatedOrder } : current);
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : "Impossibile caricare la foto.");
     } finally {
@@ -1297,7 +1337,83 @@ export function OrderManager({
                 <p className="ml-auto text-right text-[10px] font-semibold leading-4 text-black/35">Ultima modifica<br />{formatDateTime(selected.updated_at)}</p>
               </div>
             </div>
+            <div className="mb-5 overflow-x-auto rounded-[22px] border border-black/10 bg-white px-4 py-5 shadow-sm">
+              <div className="flex min-w-[720px] items-start">
+                {ORDER_COLUMNS.map((column, index) => {
+                  const currentIndex = ORDER_COLUMNS.findIndex((item) => item.id === (selected.status || "NEW"));
+                  const complete = index < currentIndex;
+                  const active = index === currentIndex;
+                  const Icon = column.icon;
+                  return (
+                    <div key={column.id} className="relative flex flex-1 flex-col items-center text-center">
+                      {index > 0 ? (
+                        <span className={cn("absolute right-1/2 top-[17px] h-px w-full", index <= currentIndex ? "bg-slate-950" : "bg-black/15")} />
+                      ) : null}
+                      <span className={cn(
+                        "relative z-[1] grid size-9 place-items-center rounded-full border bg-white transition",
+                        complete && "border-slate-950 bg-slate-950 text-white",
+                        active && "border-[#C66170] bg-[#C66170] text-white shadow-[0_0_0_5px_rgba(198,97,112,0.12)]",
+                        !complete && !active && "border-black/15 text-black/35",
+                      )}>
+                        {complete ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
+                      </span>
+                      <span className={cn("mt-3 text-[11px] font-black uppercase tracking-[0.08em]", active ? "text-[#A83F6D]" : complete ? "text-slate-950" : "text-black/35")}>{column.label}</span>
+                      <span className="mt-1 max-w-[150px] text-[10px] leading-4 text-black/40">{column.helper}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="space-y-5">
+              <Card className="bg-white">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A83F6D]">Percorso ordine</p>
+                    <h3 className="mt-1 text-lg font-black text-slate-950">Timeline attività</h3>
+                    <p className="mt-1 text-sm text-black/45">Stati, note e foto restano nello stesso percorso.</p>
+                  </div>
+                  <span className="rounded-full bg-slate-950 px-3 py-1.5 text-[11px] font-black text-white">{orderTimeline(selected).length} eventi</span>
+                </div>
+                <div className="mt-6">
+                  {orderTimeline(selected).map((log: any, idx: number) => {
+                    const isPhoto = log.type === "PHOTO_ADDED";
+                    const isCreated = log.type === "CREATED";
+                    const destination = ORDER_COLUMNS.find((column) => column.id === log.to);
+                    const source = ORDER_COLUMNS.find((column) => column.id === log.from);
+                    const photo = isPhoto ? orderProductPhotos(selected).find((item) => (item.id || item.driveFileId) === log.photoId) : null;
+                    const title = isPhoto
+                      ? "Foto prodotto aggiunta"
+                      : isCreated
+                        ? "Ordine creato"
+                        : log.action || `Stato aggiornato: ${source?.label ?? log.from ?? "iniziale"} → ${destination?.label ?? log.to ?? "nuovo stato"}`;
+                    const EventIcon = isPhoto ? Camera : isCreated ? ShoppingCart : destination?.icon || Clock3;
+                    return (
+                      <div key={`${log.at || log.date || idx}-${idx}`} className="relative grid grid-cols-[38px_minmax(0,1fr)] gap-3 pb-6 last:pb-0">
+                        {idx < orderTimeline(selected).length - 1 ? <span className="absolute left-[18px] top-9 h-[calc(100%-18px)] w-px bg-black/10" /> : null}
+                        <span className={cn("relative z-[1] grid size-[38px] place-items-center rounded-full border", idx === 0 ? "border-[#C66170] bg-[#C66170] text-white" : "border-black/10 bg-white text-black/55")}>
+                          <EventIcon className="size-4" />
+                        </span>
+                        <div className="rounded-2xl border border-black/[0.07] bg-[#FCFAFB] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="font-black text-slate-950">{title}</p>
+                              <p className="mt-1 text-xs font-semibold text-black/40">{log.by || log.user || "Staff"}</p>
+                            </div>
+                            <time className="text-[11px] font-bold text-black/35">{formatDateTime(log.at || log.date)}</time>
+                          </div>
+                          {log.note ? <p className="mt-3 whitespace-pre-wrap rounded-xl bg-white p-3 text-sm leading-6 text-black/70 ring-1 ring-black/[0.05]">{log.note}</p> : null}
+                          {photo ? (
+                            <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="mt-3 block overflow-hidden rounded-xl border border-black/5 bg-white">
+                              <img src={orderPhotoPreviewUrl(photo)} alt="Foto prodotto nella timeline" className="h-40 w-full object-cover" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
               <Card className="bg-white">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-black uppercase tracking-[0.14em] text-black/55">Informazioni ordine</h3>
@@ -1331,66 +1447,6 @@ export function OrderManager({
                   })}
                 </div>
 
-                {/* Log attività / cambi di stato */}
-                {Array.isArray(selected.activity_log) && (selected.activity_log as any[]).length > 0 && (
-                  <div className="mt-6 space-y-4 border-t border-black/5 pt-6">
-                    <h3 className="text-sm font-bold uppercase tracking-[0.12em] text-black/40">Cronologia Stati e Note</h3>
-                    <div className="grid gap-3">
-                      {(selected.activity_log as any[]).map((log: any, idx: number) => {
-                        const logDate = log.at || log.date;
-                        let formattedDate = "";
-                        if (logDate) {
-                          try {
-                            formattedDate = new Intl.DateTimeFormat("it-IT", { 
-                              day: "2-digit", 
-                              month: "short", 
-                              hour: "2-digit", 
-                              minute: "2-digit" 
-                            }).format(new Date(logDate));
-                          } catch (e) {
-                            formattedDate = "";
-                          }
-                        }
-
-                        let title = "";
-                        if (log.action) {
-                          title = log.action;
-                        } else if (log.from !== undefined || log.to !== undefined) {
-                          const colFrom = ORDER_COLUMNS.find((c) => c.id === log.from);
-                          const colTo = ORDER_COLUMNS.find((c) => c.id === log.to);
-                          title = `Stato cambiato da ${colFrom?.label ?? log.from ?? 'sconosciuto'} a ${colTo?.label ?? log.to ?? 'sconosciuto'}`;
-                        } else {
-                          title = "Attività registrata";
-                        }
-
-                        const actor = log.by || log.user || "Staff";
-
-                        return (
-                          <div key={idx} className="rounded-2xl border border-black/5 bg-[#FAF7F9] p-4 text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-extrabold text-black/75">
-                                {title}
-                              </span>
-                              {formattedDate && (
-                                <span className="text-[11px] text-black/40">
-                                  {formattedDate}
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 text-xs text-black/45">Modificato da: {actor}</p>
-                            {log.note && (
-                              <div className="mt-3 rounded-xl bg-white p-3 border border-black/5">
-                                <p className="text-xs font-bold text-black/35 mb-1">Nota stato:</p>
-                                <p className="text-sm text-black/80 whitespace-pre-wrap">{log.note}</p>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 <ResponseComments
                   responseId={selected.id}
                   initialComments={selected.comments || []}
@@ -1408,37 +1464,40 @@ export function OrderManager({
                   }}
                 />
               </Card>
+              </div>
               <div className="space-y-4">
                 <Card className="bg-white">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Camera className="size-5 text-[#C66170]" />
-                      <h3 className="font-semibold">Foto ordine</h3>
+                      <ImagePlus className="size-5 text-[#C66170]" />
+                      <h3 className="font-black">Foto prodotto</h3>
                     </div>
-                    {orderPhoto(selected)?.driveFileUrl ? (
-                      <a href={orderPhoto(selected)!.driveFileUrl} target="_blank" rel="noreferrer" className="text-xs font-black text-[#C66170] hover:underline">
-                        Drive
-                      </a>
-                    ) : null}
+                    <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-black text-black/45">{orderProductPhotos(selected).length}</span>
                   </div>
-                  {orderPhoto(selected) ? (
-                    (() => {
-                      const photo = orderPhoto(selected)!;
-                      const previewUrl = orderPhotoPreviewUrl(photo);
-                      return (
-                    <div className="mt-4">
-                      <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="grid h-80 place-items-center overflow-hidden rounded-2xl border border-black/5 bg-[#F8F3F6]">
-                        <img src={previewUrl} alt={`Foto di ${orderTitle(selected)}`} className="max-h-80 w-full object-contain" />
-                      </a>
-                      <p className="mt-2 truncate text-center text-xs font-semibold text-black/45">{photo.name ?? "Foto ordine"}</p>
+                  <p className="mt-1 text-xs leading-5 text-black/45">Documenta il prodotto in ogni fase. Le foto non sostituiscono quelle precedenti.</p>
+                  {orderProductPhotos(selected).length ? (
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      {orderProductPhotos(selected).map((photo, index) => (
+                        <a
+                          key={photo.id || photo.driveFileId || `${photo.url}-${index}`}
+                          href={photo.driveFileUrl || photo.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={cn("group relative overflow-hidden rounded-2xl border border-black/[0.07] bg-[#F8F3F6]", index === 0 && "col-span-2")}
+                        >
+                          <img src={orderPhotoPreviewUrl(photo)} alt={`Foto prodotto ${index + 1}`} className={cn("w-full object-cover transition duration-300 group-hover:scale-[1.02]", index === 0 ? "h-56" : "h-32")} />
+                          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8 text-[10px] font-bold text-white">
+                            {statusLabel(photo.stage || "NEW")} · {photo.uploadedBy || "Staff"}
+                          </span>
+                        </a>
+                      ))}
                     </div>
-                      );
-                    })()
                   ) : (
-                    <div className="mt-4 grid h-48 place-items-center rounded-2xl border-2 border-dashed border-black/10 bg-black/[0.02] text-center text-sm text-black/40">
+                    <div className="mt-4 grid h-40 place-items-center rounded-2xl border border-dashed border-black/15 bg-[#FCFAFB] text-center text-sm text-black/40">
                       <div>
-                        <Camera className="mx-auto mb-2 size-7" />
-                        Nessuna foto caricata
+                        <ImagePlus className="mx-auto mb-2 size-7" />
+                        <p className="font-bold text-black/55">Nessuna foto prodotto</p>
+                        <p className="mt-1 text-xs">Aggiungi la prima immagine</p>
                       </div>
                     </div>
                   )}
@@ -1447,19 +1506,20 @@ export function OrderManager({
                     uploadingPhoto && "pointer-events-none opacity-60"
                   )}>
                     {uploadingPhoto ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                    {uploadingPhoto ? "Caricamento..." : orderPhoto(selected) ? "Sostituisci foto" : "Carica foto"}
+                    {uploadingPhoto ? "Caricamento..." : "Aggiungi foto prodotto"}
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       className="hidden"
                       disabled={uploadingPhoto}
                       onChange={(event) => {
-                        void uploadPhoto(selected, event.target.files?.[0]);
+                        void uploadPhotos(selected, event.target.files);
                         event.currentTarget.value = "";
                       }}
                     />
                   </label>
-                  <p className="mt-2 text-center text-[11px] text-black/35">JPG, PNG o WEBP · massimo 10 MB</p>
+                  <p className="mt-2 text-center text-[11px] text-black/35">Puoi scegliere più foto · massimo 10 MB ciascuna</p>
                   {photoError ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600">{photoError}</p> : null}
                 </Card>
                 <Card className="bg-white">
