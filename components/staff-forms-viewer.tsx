@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
-import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, Store, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
+import { ClipboardList, AlertCircle, CheckCircle2, ChevronRight, X, Loader2, Upload, Calendar, MapPin, User, Clock, Download, Plus, MessageSquare, Eye, Archive, ArrowUpRight, ShoppingCart, Check, Pencil, CreditCard, Calculator, Search, ScanLine, ReceiptText, ClipboardCheck, UserPlus, ShoppingBag, Store, FileText, History, Receipt, RotateCcw, PackageCheck, Banknote } from "lucide-react";
 import { Badge, Card, Button } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ResponseComments } from "@/components/response-comments";
@@ -317,6 +317,9 @@ export function StaffFormsViewer({
   const [pickupSelectedOrder, setPickupSelectedOrder] = useState<PickupReadyOrder | null>(null);
   const [pickupStatusNotice, setPickupStatusNotice] = useState<PickupStatusNotice | null>(null);
   const pickupDetailScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const pickupScannerRef = React.useRef<any>(null);
+  const [pickupScannerOpen, setPickupScannerOpen] = useState(false);
+  const [pickupScannerMessage, setPickupScannerMessage] = useState("");
   const [cashSummary, setCashSummary] = useState<CashDailySummary | null>(null);
   const [cashSummaryLoading, setCashSummaryLoading] = useState(false);
   const [cashSummaryError, setCashSummaryError] = useState("");
@@ -392,11 +395,64 @@ export function StaffFormsViewer({
     }
   }, []);
 
+  const stopPickupScanner = React.useCallback(async () => {
+    const scanner = pickupScannerRef.current;
+    pickupScannerRef.current = null;
+    if (scanner) {
+      try { await scanner.stop(); } catch { /* Scanner already stopped. */ }
+      try { scanner.clear(); } catch { /* Reader has already been removed. */ }
+    }
+    setPickupScannerOpen(false);
+  }, []);
+
+  const startPickupScanner = React.useCallback(async () => {
+    setPickupScannerMessage("");
+    setPickupScannerOpen(true);
+    try {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const scanner = new Html5Qrcode("pickup-qr-reader", {
+        verbose: false,
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128],
+      });
+      pickupScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 15, qrbox: (width, height) => ({ width: Math.floor(Math.min(width, height) * 0.72), height: Math.floor(Math.min(width, height) * 0.72) }) },
+        (decodedText) => {
+          let value = decodedText.trim();
+          try {
+            const decodedUrl = new URL(value);
+            value = decodedUrl.searchParams.get("ordine") || decodedUrl.searchParams.get("order") || decodeURIComponent(decodedUrl.pathname.split("/").filter(Boolean).pop() || value);
+          } catch { /* A plain order number is already valid. */ }
+          setPickupQuery(value);
+          setPickupScannerMessage(`Ordine ${value} letto correttamente.`);
+          void stopPickupScanner();
+        },
+        () => { /* Frames without a readable code are expected. */ },
+      );
+    } catch {
+      setPickupScannerMessage("Fotocamera non disponibile. Controlla il permesso oppure usa la ricerca manuale.");
+      await stopPickupScanner();
+    }
+  }, [stopPickupScanner]);
+
   React.useEffect(() => {
     if (showPickupModal) {
       void loadPickupReadyOrders();
+    } else {
+      void stopPickupScanner();
     }
-  }, [showPickupModal, loadPickupReadyOrders]);
+  }, [showPickupModal, loadPickupReadyOrders, stopPickupScanner]);
+
+  React.useEffect(() => () => {
+    const scanner = pickupScannerRef.current;
+    pickupScannerRef.current = null;
+    if (!scanner) return;
+    void scanner.stop().catch(() => null).finally(() => {
+      try { scanner.clear(); } catch { /* Component is already unmounted. */ }
+    });
+  }, []);
 
   React.useEffect(() => {
     if (!showPickupModal) return;
@@ -1743,18 +1799,29 @@ export function StaffFormsViewer({
               <div className="grid min-h-full gap-5 xl:h-full xl:min-h-0 xl:grid-cols-[minmax(420px,0.78fr)_minmax(0,1.42fr)]">
                 <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain xl:pr-2">
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                <label className="space-y-2">
+                <div className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Cerca ordine</span>
-                  <span className="relative block">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-emerald-200/55" />
-                    <input
-                      value={pickupQuery}
-                      onChange={(event) => setPickupQuery(event.target.value)}
-                      placeholder="Numero ordine, nome o telefono"
-                      className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-12 pr-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
-                    />
+                  <span className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                    <span className="relative block">
+                      <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-emerald-200/55" />
+                      <input
+                        value={pickupQuery}
+                        onChange={(event) => setPickupQuery(event.target.value)}
+                        placeholder="Numero ordine, nome o telefono"
+                        aria-label="Cerca ordine"
+                        className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] pl-12 pr-4 text-base font-black text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/50 focus:bg-white/[0.09]"
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => pickupScannerOpen ? void stopPickupScanner() : void startPickupScanner()}
+                      className="pickup-qr-button inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
+                    >
+                      <ScanLine className="size-5" />
+                      <span className="hidden 2xl:inline">Leggi QR</span>
+                    </button>
                   </span>
-                </label>
+                </div>
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">Chi ritira</span>
                   <span className="relative block">
@@ -1768,6 +1835,21 @@ export function StaffFormsViewer({
                   </span>
                 </label>
               </div>
+
+              {pickupScannerOpen ? (
+                <div className="rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-950">Inquadra il QR dell’ordine</p>
+                      <p className="mt-0.5 text-xs text-slate-500">La ricerca partirà automaticamente.</p>
+                    </div>
+                    <button type="button" onClick={() => void stopPickupScanner()} className="grid size-9 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500" aria-label="Chiudi lettore QR"><X className="size-4" /></button>
+                  </div>
+                  <div id="pickup-qr-reader" className="min-h-56 overflow-hidden rounded-2xl bg-slate-950" />
+                </div>
+              ) : pickupScannerMessage ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{pickupScannerMessage}</div>
+              ) : null}
 
               {pickupStatusNotice?.found && pickupStatusNotice.ready === false ? (
                 <div className="rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100">

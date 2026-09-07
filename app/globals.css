@@ -1960,6 +1960,11 @@ textarea {
   -webkit-text-fill-color: #172033 !important;
 }
 
+.pickup-workspace-light .pickup-qr-button {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 .pickup-workspace-light [class*="text-white/"] {
   color: #64748b !important;
   -webkit-text-fill-color: #64748b !important;
