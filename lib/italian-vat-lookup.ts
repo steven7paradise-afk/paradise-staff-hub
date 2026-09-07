@@ -7,6 +7,16 @@ export type ItalianVatCompany = {
   province: string;
 };
 
+export class ItalianVatLookupError extends Error {
+  constructor(
+    message: string,
+    public readonly status = 400,
+  ) {
+    super(message);
+    this.name = "ItalianVatLookupError";
+  }
+}
+
 function clean(value: unknown) {
   return String(value ?? "").replace(/!+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -52,4 +62,47 @@ export function normalizeItalianViesCompany(input: { name?: unknown; address?: u
     province,
     address: `${street}, ${postalCode} ${city} (${province})`,
   };
+}
+
+export async function lookupItalianVatCompany(value: unknown) {
+  const vat = String(value ?? "").replace(/\D/g, "");
+  if (!/^\d{11}$/.test(vat)) {
+    throw new ItalianVatLookupError("Partita IVA non valida. Deve essere di 11 cifre.");
+  }
+  if (!hasValidItalianVatChecksum(vat)) {
+    throw new ItalianVatLookupError("Partita IVA non valida: controlla le cifre inserite.");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`https://ec.europa.eu/taxation_customs/vies/rest-api/ms/IT/vat/${vat}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new ItalianVatLookupError("Il registro europeo VIES non è raggiungibile. Riprova tra poco.", 503);
+  }
+
+  if (!response.ok) {
+    throw new ItalianVatLookupError("Impossibile contattare il servizio VIES europeo.", response.status);
+  }
+
+  const data = await response.json();
+  if (!data?.isValid) {
+    throw new ItalianVatLookupError(
+      "Partita IVA non presente nel registro europeo VIES. Verifica il numero inserito.",
+      404,
+    );
+  }
+
+  const company = normalizeItalianViesCompany(data);
+  if (!company) {
+    throw new ItalianVatLookupError(
+      "Partita IVA valida, ma il registro non ha restituito un indirizzo completo. Completa manualmente via, CAP, città e provincia.",
+      422,
+    );
+  }
+
+  return { ...company, vat, source: "VIES" as const };
 }

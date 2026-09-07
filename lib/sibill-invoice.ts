@@ -1,3 +1,5 @@
+import { lookupItalianVatCompany } from "@/lib/italian-vat-lookup";
+
 const DEFAULT_SIBILL_BASE_URL = "https://integration.sibill.com";
 
 export const SIBILL_ANSWER_KEYS = {
@@ -286,7 +288,27 @@ export async function createSibillDraft(input: {
   createdAt?: Date;
 }) {
   const { config, company } = await loadSibillCompany();
-  const payload = buildSibillInvoiceDraft(input.answers, company, input.createdAt);
+  let preparedAnswers = input.answers;
+  const clientType = clean(input.answers.invoice_client_type).toLowerCase();
+  const isCompany = clientType.includes("azienda") || clientType.includes("professionista");
+  if (isCompany) {
+    try {
+      const verifiedCompany = await lookupItalianVatCompany(input.answers.invoice_vat_number);
+      preparedAnswers = {
+        ...input.answers,
+        invoice_client_name: verifiedCompany.name,
+        invoice_address: verifiedCompany.address,
+      };
+    } catch (error) {
+      // VIES can be temporarily unavailable. Keep a complete manually entered
+      // address usable, but surface the lookup error when the historical data
+      // itself cannot produce a valid invoice.
+      if (!parseItalianBillingAddress(input.answers.invoice_address)) {
+        throw error;
+      }
+    }
+  }
+  const payload = buildSibillInvoiceDraft(preparedAnswers, company, input.createdAt);
   const reference = clean(input.answers.invoice_receipt_ref || input.answers.invoice_shopify_order) || input.responseId;
   const query = new URLSearchParams({
     issue: "false",
