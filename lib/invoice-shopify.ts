@@ -1,5 +1,5 @@
 import { getShopifyOrderDetails } from "@/lib/shopify";
-import { lookupItalianVatCompany } from "@/lib/italian-vat-lookup";
+import { lookupVerifiedItalianVatCompany } from "@/lib/sibill-vat-lookup";
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -20,11 +20,13 @@ function isCompanyInvoice(answers: Record<string, unknown>) {
 export async function enrichCompanyInvoiceIdentity(answers: Record<string, unknown>) {
   if (!isCompanyInvoice(answers)) return answers;
 
-  const company = await lookupItalianVatCompany(answers.invoice_vat_number);
+  const company = await lookupVerifiedItalianVatCompany(answers.invoice_vat_number);
   return {
     ...answers,
     invoice_client_name: company.name,
     invoice_address: company.address,
+    ...(company.taxNumber ? { invoice_fiscal_code: company.taxNumber } : {}),
+    invoice_vat_verified_by: company.source,
   };
 }
 

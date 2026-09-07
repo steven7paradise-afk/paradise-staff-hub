@@ -505,6 +505,8 @@ export function StaffFormsViewer({
         invoice_vat_number: vat,
         invoice_client_name: data.name,
         invoice_address: data.address,
+        invoice_fiscal_code: data.taxNumber || prev.invoice_fiscal_code || "",
+        invoice_vat_verified_by: data.source,
         invoice_sdi_code: savedCustomer?.sdiCode || prev.invoice_sdi_code || "",
         invoice_pec: savedCustomer?.pec || prev.invoice_pec || "",
       }));
@@ -514,7 +516,7 @@ export function StaffFormsViewer({
         : "";
       setVatLookupStatus({
         success: true,
-        message: `✓ DATI AZIENDALI VERIFICATI\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}`
+        message: `✓ DATI VERIFICATI CON VIES + SIBILL\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}`
       });
     } catch (err: any) {
       setVatLookupStatus({

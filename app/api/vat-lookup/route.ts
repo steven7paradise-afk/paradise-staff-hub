@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
-import { ItalianVatLookupError, lookupItalianVatCompany } from "@/lib/italian-vat-lookup";
+import { ItalianVatLookupError } from "@/lib/italian-vat-lookup";
+import { lookupVerifiedItalianVatCompany } from "@/lib/sibill-vat-lookup";
 
 export async function GET(request: NextRequest) {
   // The invoice form is also used from an authorized salon PC, where there is
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
   const vat = searchParams.get("vat")?.replace(/\D/g, ""); // Strip non-digits
 
   try {
-    const company = await lookupItalianVatCompany(vat);
+    const company = await lookupVerifiedItalianVatCompany(vat);
     return NextResponse.json({ ...company, isValid: true });
   } catch (error) {
     if (error instanceof ItalianVatLookupError) {
