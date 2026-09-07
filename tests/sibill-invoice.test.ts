@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSibillInvoiceDraft, parseItalianBillingAddress, SibillDraftError } from "../lib/sibill-invoice";
+import { buildSibillInvoiceDraft, parseItalianBillingAddress, selectSibillAccountId, SibillDraftError } from "../lib/sibill-invoice";
 
 const company = {
   id: "company-1",
@@ -103,4 +103,14 @@ test("requires a complete address before creating a Sibill draft", () => {
     }, company),
     (error) => error instanceof SibillDraftError && error.message.includes("CAP Città"),
   );
+});
+
+test("selects the configured card account ending in 5597", () => {
+  const accounts = [
+    { id: "account-one", nickname: "Banca principale •••• 1020" },
+    { id: "account-card", nickname: "Conto carta •••• 5597" },
+  ];
+
+  assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), "account-card");
+  assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "9999"), null);
 });

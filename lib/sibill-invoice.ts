@@ -32,6 +32,11 @@ type BillingAddress = {
   province: string;
 };
 
+type SibillAccount = {
+  id: string;
+  nickname?: string | null;
+};
+
 export class SibillDraftError extends Error {
   constructor(
     message: string,
@@ -341,6 +346,71 @@ async function updateSibillDocumentNotes(input: {
   }
 }
 
+export function selectSibillAccountId(
+  accounts: SibillAccount[],
+  paymentMethod: string,
+  configuredId?: string,
+  accountMatch?: string,
+) {
+  const explicitId = clean(configuredId);
+  if (explicitId) {
+    return accounts.some((account) => account.id === explicitId) ? explicitId : null;
+  }
+
+  const match = clean(accountMatch).toLowerCase();
+  if (match) {
+    const matchingAccounts = accounts.filter((account) =>
+      clean(account.nickname).toLowerCase().includes(match)
+    );
+    if (matchingAccounts.length === 1) return matchingAccounts[0].id;
+  }
+
+  // A single connected account is unambiguous. Never pick the first one when
+  // Sibill exposes multiple accounts, because that could misclassify an income.
+  if (accounts.length === 1) return accounts[0].id;
+  return null;
+}
+
+async function resolveSibillPaymentAccountId(input: {
+  config: ReturnType<typeof sibillConfig>;
+  companyId: string;
+  paymentMethod: string;
+}) {
+  const response = await fetch(
+    `${input.config.baseUrl}/api/v1/companies/${encodeURIComponent(input.companyId)}/accounts?page_size=100`,
+    {
+      headers: {
+        Authorization: `Bearer ${input.config.token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  const data = await sibillJson(response);
+  if (!response.ok) {
+    throw new SibillDraftError(sibillErrorMessage(data, "Conti Sibill non disponibili."), response.status);
+  }
+
+  const accounts = Array.isArray(data?.data) ? data.data as SibillAccount[] : [];
+  const isCard = input.paymentMethod === "CARD";
+  const configuredId = isCard ? process.env.SIBILL_CARD_ACCOUNT_ID : process.env.SIBILL_DEFAULT_ACCOUNT_ID;
+  const accountMatch = isCard
+    ? process.env.SIBILL_CARD_ACCOUNT_MATCH?.trim() || "5597"
+    : process.env.SIBILL_DEFAULT_ACCOUNT_MATCH;
+  const accountId = selectSibillAccountId(accounts, input.paymentMethod, configuredId, accountMatch);
+
+  if (!accountId) {
+    throw new SibillDraftError(
+      isCard
+        ? "Conto carta 5597 non trovato in Sibill: collega il conto o configura il suo identificativo."
+        : "Conto predefinito non identificato in Sibill.",
+      422,
+    );
+  }
+  return accountId;
+}
+
 async function markSibillDocumentPaid(input: {
   config: ReturnType<typeof sibillConfig>;
   companyId: string;
@@ -368,13 +438,34 @@ async function markSibillDocumentPaid(input: {
 
   const flows = Array.isArray(listData?.data) ? listData.data : [];
   const existingFlow = flows[0];
-  const body = existingFlow?.id
+  const accountId = await resolveSibillPaymentAccountId({
+    config: input.config,
+    companyId: input.companyId,
+    paymentMethod: input.paymentMethod,
+  });
+
+  if (existingFlow?.id && existingFlow.account_id !== accountId) {
+    const deleteResponse = await fetch(`${baseUrl}/${encodeURIComponent(existingFlow.id)}`, {
+      method: "DELETE",
+      headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!deleteResponse.ok) {
+      const deleteData = await sibillJson(deleteResponse);
+      throw new SibillDraftError(sibillErrorMessage(deleteData, "Scadenza Sibill senza conto non sostituibile."), deleteResponse.status);
+    }
+  }
+
+  const canUpdateExisting = existingFlow?.id && existingFlow.account_id === accountId;
+  const body = canUpdateExisting
     ? {
         payment_date: input.paymentDate,
         payment_method: input.paymentMethod,
         payment_status: "PAID",
       }
     : {
+        account_id: accountId,
         amount: { amount: money(input.amount), currency: "EUR" },
         expected_payment_date: input.paymentDate,
         external_id: `paradise-${input.responseId}`,
@@ -382,8 +473,8 @@ async function markSibillDocumentPaid(input: {
         payment_method: input.paymentMethod,
         payment_status: "PAID",
       };
-  const response = await fetch(existingFlow?.id ? `${baseUrl}/${encodeURIComponent(existingFlow.id)}` : baseUrl, {
-    method: existingFlow?.id ? "PATCH" : "POST",
+  const response = await fetch(canUpdateExisting ? `${baseUrl}/${encodeURIComponent(existingFlow.id)}` : baseUrl, {
+    method: canUpdateExisting ? "PATCH" : "POST",
     headers,
     body: JSON.stringify(body),
     cache: "no-store",
