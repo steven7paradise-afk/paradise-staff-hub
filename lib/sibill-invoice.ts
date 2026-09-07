@@ -345,3 +345,33 @@ export async function createSibillDraft(input: {
     companyId: company.id,
   };
 }
+
+export async function deleteSibillDraft(documentId: string) {
+  const id = clean(documentId);
+  if (!id) throw new SibillDraftError("Bozza Sibill non trovata.", 404);
+
+  const { config, company } = await loadSibillCompany();
+  const response = await fetch(
+    `${config.baseUrl}/api/v1/companies/${encodeURIComponent(company.id)}/documents/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+
+  // A missing remote document is already in the desired state, so the local
+  // link can be removed safely as well.
+  if (response.status === 404) return;
+  if (!response.ok) {
+    const data = await sibillJson(response);
+    throw new SibillDraftError(
+      sibillErrorMessage(data, "Sibill non ha permesso di eliminare questa bozza."),
+      response.status,
+    );
+  }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ExternalLink, FilePlus2, Loader2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, FilePlus2, Loader2, Trash2 } from "lucide-react";
 
 const SIBILL_WEB_APP_URL = "https://app.sibill.com/cashflow";
 
@@ -20,7 +20,9 @@ export function CreateSibillDraftButton({
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
 
   const createDraft = async () => {
     if (draft || loading) return;
@@ -31,11 +33,35 @@ export function CreateSibillDraftButton({
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Bozza non creata. Riprova.");
       setDraft(data.draft);
+      setMessageTone("success");
       setMessage(data.alreadyCreated ? "Bozza già presente su Sibill." : "Bozza creata: non è stata inviata allo SdI.");
     } catch (error) {
+      setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Bozza non creata. Riprova.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteDraft = async () => {
+    if (!draft || deleting) return;
+    const confirmed = window.confirm("Eliminare questa bozza da Sibill? La richiesta di fattura resterà nel gestionale.");
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/invoices/${responseId}/sibill-draft`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Bozza non eliminata. Riprova.");
+      setDraft(null);
+      setMessageTone("success");
+      setMessage("Bozza eliminata da Sibill. Ora puoi crearne una nuova.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(error instanceof Error ? error.message : "Bozza non eliminata. Riprova.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -56,7 +82,16 @@ export function CreateSibillDraftButton({
           Controlla in Sibill
           <ExternalLink className="size-3.5" aria-hidden="true" />
         </a>
-        {message && <span className="max-w-48 text-center text-[10px] leading-4 text-emerald-700 dark:text-emerald-300">{message}</span>}
+        <button
+          type="button"
+          onClick={deleteDraft}
+          disabled={deleting}
+          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-black text-rose-600 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 dark:text-rose-300 dark:hover:bg-rose-950/30"
+        >
+          {deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+          {deleting ? "Elimino…" : "Elimina bozza"}
+        </button>
+        {message && <span className={`max-w-48 text-center text-[10px] leading-4 ${messageTone === "success" ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>{message}</span>}
       </div>
     );
   }
@@ -72,7 +107,7 @@ export function CreateSibillDraftButton({
         {loading ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />}
         {loading ? "Creo la bozza…" : "Crea bozza Sibill"}
       </button>
-      {message && <span className="max-w-52 text-center text-[10px] font-semibold leading-4 text-rose-600 dark:text-rose-300">{message}</span>}
+      {message && <span className={`max-w-52 text-center text-[10px] font-semibold leading-4 ${messageTone === "success" ? "text-emerald-700 dark:text-emerald-300" : "text-rose-600 dark:text-rose-300"}`}>{message}</span>}
     </div>
   );
 }
