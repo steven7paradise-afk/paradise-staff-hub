@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToGoogleDrive } from "@/lib/google-drive";
 import { appendFormResponseToGoogleSheet } from "@/lib/google-sheet";
-import { cashDateFromInput, moneyNumber } from "@/lib/cash-records";
+import { cashClosingLocationOverride, cashDateFromInput, moneyNumber } from "@/lib/cash-records";
 import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closing-form";
 import { getOperationalUser } from "@/lib/operational-session";
 import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
@@ -180,9 +180,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Il campo "${missingRequired.label}" è obbligatorio.` }, { status: 400 });
     }
 
-    const location = sessionUser.sedeId
+    let location = sessionUser.sedeId
       ? await prisma.location.findUnique({ where: { id: sessionUser.sedeId } })
       : null;
+
+    if (isCashClosing && location) {
+      const overrideName = cashClosingLocationOverride(sessionUser.name, location.name);
+      if (overrideName) {
+        location = await prisma.location.findFirst({ where: { name: overrideName, active: true } }) || location;
+      }
+    }
 
     if (isCashClosing) {
       const signingUser = await prisma.user.findUnique({
@@ -232,7 +239,7 @@ export async function POST(request: NextRequest) {
       const cashClosing = await prisma.cashClosing.create({
         data: {
           user_id: signingUser.id,
-          location_id: sessionUser.sedeId,
+          location_id: location.id,
           date: accountingDate,
           withdrawn,
           fund,

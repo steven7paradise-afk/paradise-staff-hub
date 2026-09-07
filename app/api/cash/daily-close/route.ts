@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { automaticDailyCashSummary, isBeforeDailyClosingTime, romeDateKey } from "@/lib/daily-cash-closing";
 import { auth } from "@/lib/auth";
+import { cashClosingLocationOverride } from "@/lib/cash-records";
 import { getOperationalUser } from "@/lib/operational-session";
 import { prisma } from "@/lib/prisma";
 
@@ -27,15 +28,25 @@ async function dailyClosingContext(request: NextRequest, requestedDate?: string 
   const accountingDate = new Date(`${date}T00:00:00.000Z`);
   const nextDate = new Date(accountingDate);
   nextDate.setUTCDate(nextDate.getUTCDate() + 1);
-  const [location, existing] = await Promise.all([
-    prisma.location.findFirst({ where: { id: operationalUser.sedeId, active: true }, select: { id: true, name: true } }),
-    prisma.cashClosing.findFirst({
-      where: { location_id: operationalUser.sedeId, date: { gte: accountingDate, lt: nextDate } },
-      include: { user: { select: { name: true } } },
-      orderBy: { created_at: "desc" },
-    }),
-  ]);
+  let location = await prisma.location.findFirst({
+    where: { id: operationalUser.sedeId, active: true },
+    select: { id: true, name: true },
+  });
+  if (location) {
+    const overrideName = cashClosingLocationOverride(operationalUser.name, location.name);
+    if (overrideName) {
+      location = await prisma.location.findFirst({
+        where: { name: overrideName, active: true },
+        select: { id: true, name: true },
+      }) || location;
+    }
+  }
   if (!location) return null;
+  const existing = await prisma.cashClosing.findFirst({
+    where: { location_id: location.id, date: { gte: accountingDate, lt: nextDate } },
+    include: { user: { select: { name: true } } },
+    orderBy: { created_at: "desc" },
+  });
   return { operationalUser, location, existing, date, accountingDate };
 }
 

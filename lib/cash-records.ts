@@ -12,3 +12,20 @@ export function cashDateFromInput(value: unknown) {
 export function cashDateInput(date: Date) {
   return date.toISOString().slice(0, 10);
 }
+
+function normalizeCashIdentity(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+export function cashClosingLocationOverride(userName: unknown, assignedLocationName: unknown) {
+  const user = normalizeCashIdentity(userName);
+  const location = normalizeCashIdentity(assignedLocationName);
+  if (user === "franci" && location === "ufficio paradise") {
+    return "Salone Buenos Aires";
+  }
+  return null;
+}
