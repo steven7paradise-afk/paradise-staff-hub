@@ -530,7 +530,7 @@ export function StaffFormsViewer({
     const queryFieldId = isOrderFormLookup ? "order_shopify_order" : "invoice_shopify_order";
     const query = String(answers[queryFieldId] || "").trim();
 
-    if (isOrderFormLookup && !query) {
+    if (!query) {
       setShopifyLookupStatus({ success: false, message: "Inserisci il numero dell'ordine Shopify." });
       return;
     }
@@ -539,7 +539,7 @@ export function StaffFormsViewer({
     setShopifyLookupStatus(null);
 
     try {
-      const res = await fetch(`/api/shopify-order-lookup?query=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/shopify-order-lookup?strict=1&query=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Errore di caricamento.");
@@ -554,10 +554,26 @@ export function StaffFormsViewer({
           if (data.phone) nextAnswers["order_client_phone"] = data.phone;
           nextAnswers["order_paid_amount"] = String(data.paidAmount ?? 0);
         } else {
+          if (data.orderName) nextAnswers["invoice_shopify_order"] = data.orderName;
           if (data.clientName) nextAnswers["invoice_client_name"] = data.clientName;
+          if (data.billingAddress) nextAnswers["invoice_address"] = data.billingAddress;
           if (data.totalPrice !== null && data.totalPrice !== undefined) nextAnswers["invoice_amount"] = String(data.totalPrice);
           if (data.orderName) nextAnswers["invoice_receipt_ref"] = data.orderName;
           if (data.lineItems) nextAnswers["invoice_shopify_items"] = data.lineItems;
+          if (data.netAmount !== null && data.netAmount !== undefined) nextAnswers["invoice_shopify_net_amount"] = String(data.netAmount);
+          if (data.totalTax !== null && data.totalTax !== undefined) nextAnswers["invoice_shopify_tax_amount"] = String(data.totalTax);
+          nextAnswers["invoice_shopify_financial_status"] = data.financialStatus || "";
+          nextAnswers["invoice_shopify_paid_amount"] = String(data.paidAmount ?? 0);
+          nextAnswers["invoice_shopify_verified"] = true;
+
+          if (data.paymentMethod === "CARTA") {
+            nextAnswers["invoice_payment_method"] = "Carta di Credito / Bancomat";
+          } else if (data.paymentMethod === "CONTANTI" || data.paymentMethod === "CASHMATIC") {
+            nextAnswers["invoice_payment_method"] = "Contanti";
+          } else if (data.paymentMethod === "MISTO") {
+            nextAnswers["invoice_payment_method"] = "Altro";
+            nextAnswers["invoice_payment_method_altro"] = "Pagamento misto";
+          }
         }
         
         const titles = Array.isArray(data.lineItems) ? data.lineItems.map((it: any) => it.title) : [];
@@ -578,7 +594,7 @@ export function StaffFormsViewer({
         success: true,
         message: isOrderFormLookup
           ? `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "Da completare"}\n• Ha pagato: € ${Number(data.paidAmount ?? 0).toFixed(2)}\n• Totale ordine: € ${Number(data.totalPrice ?? 0).toFixed(2)}`
-          : `✓ ORDINE TROVATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "N/A"}\n• Totale: € ${data.totalPrice !== null ? data.totalPrice.toFixed(2) : "0.00"}\n• Prodotti: ${prodList}`
+          : `✓ ORDINE VERIFICATO (${data.orderName || ""})\n• Cliente: ${data.clientName || "Da completare"}\n• Totale: € ${Number(data.totalPrice ?? 0).toFixed(2)}\n• Imponibile: € ${Number(data.netAmount ?? 0).toFixed(2)} · IVA: € ${Number(data.totalTax ?? 0).toFixed(2)}\n• Pagamento: ${data.paymentMethod === "DA_VERIFICARE" ? "da verificare" : data.paymentMethod}\n• Prodotti: ${prodList}`
       });
       if (isOrderFormLookup) setActiveFieldIndex(1);
     } catch (err: any) {
@@ -683,7 +699,7 @@ export function StaffFormsViewer({
   }).length;
 
   const isCurrentFieldValid = (field: FormField) => {
-    if (field.id === "order_shopify_order") {
+    if (field.id === "order_shopify_order" || field.id === "invoice_shopify_order") {
       return Boolean(String(answers[field.id] || "").trim()) && shopifyLookupStatus?.success === true;
     }
     if (!field.required) return true;
@@ -730,7 +746,7 @@ export function StaffFormsViewer({
 
     if (!isCurrentFieldValid(currentField)) {
       setErrorMsg(
-        currentField.id === "order_shopify_order"
+        currentField.id === "order_shopify_order" || currentField.id === "invoice_shopify_order"
           ? "Cerca e verifica l'ordine Shopify prima di continuare."
           : "Per favore, compila questo campo obbligatorio prima di procedere."
       );
@@ -1063,15 +1079,24 @@ export function StaffFormsViewer({
   }, [autoFillFormId, autoFillFormName, forms]);
 
   const handleTextChange = (fieldId: string, value: string) => {
-    if (fieldId === "order_shopify_order") {
+    if (fieldId === "order_shopify_order" || fieldId === "invoice_shopify_order") {
       setShopifyLookupStatus(null);
       setAnswers((prev) => ({
         ...prev,
         [fieldId]: value,
-        order_client_name: "",
-        order_client_email: "",
-        order_client_phone: "",
-        order_paid_amount: "",
+        ...(fieldId === "order_shopify_order" ? {
+          order_client_name: "",
+          order_client_email: "",
+          order_client_phone: "",
+          order_paid_amount: "",
+        } : {
+          invoice_shopify_verified: false,
+          invoice_shopify_items: [],
+          invoice_shopify_net_amount: "",
+          invoice_shopify_tax_amount: "",
+          invoice_shopify_financial_status: "",
+          invoice_shopify_paid_amount: "",
+        }),
       }));
       return;
     }
@@ -2281,7 +2306,7 @@ export function StaffFormsViewer({
                                       void handleVatLookup();
                                       return;
                                     }
-                                    if (field.id === "order_shopify_order" && e.key === "Enter") {
+                                    if ((field.id === "order_shopify_order" || field.id === "invoice_shopify_order") && e.key === "Enter") {
                                       e.preventDefault();
                                       void handleShopifyOrderLookup();
                                       return;
@@ -2321,7 +2346,7 @@ export function StaffFormsViewer({
                                     ) : (
                                       <Download className="size-3.5" />
                                     )}
-                                    {field.id === "order_shopify_order" ? "Cerca ordine" : "Importa"}
+                                    {field.id === "order_shopify_order" ? "Cerca ordine" : "Verifica ordine"}
                                   </button>
                                 )}
                               </div>

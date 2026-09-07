@@ -73,6 +73,25 @@ test("does not send an invalid historical SDI code to Sibill", () => {
   assert.equal(payload.fattura_elettronica_header.dati_trasmissione.codice_destinatario, "0000000");
 });
 
+test("uses the Shopify net and VAT totals when they reconcile with the order total", () => {
+  const payload = buildSibillInvoiceDraft({
+    invoice_client_type: "Privato (Codice Fiscale)",
+    invoice_client_name: "Maria Rossi",
+    invoice_fiscal_code: "RSSMRA80A01F205X",
+    invoice_address: "Via Roma 10, 20100 Milano (MI)",
+    invoice_shopify_order: "#26964",
+    invoice_amount: "35",
+    invoice_shopify_net_amount: "28.69",
+    invoice_shopify_tax_amount: "6.31",
+    invoice_payment_method: "Carta di Credito / Bancomat",
+  }, company);
+
+  const summary = payload.fattura_elettronica_body[0].dati_beni_servizi.dati_riepilogo[0];
+  assert.equal(summary.imponibile_importo, "28.69");
+  assert.equal(summary.imposta, "6.31");
+  assert.equal(summary.aliquota_iva, "22.00");
+});
+
 test("requires a complete address before creating a Sibill draft", () => {
   assert.throws(
     () => buildSibillInvoiceDraft({

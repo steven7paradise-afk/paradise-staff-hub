@@ -1,4 +1,5 @@
 import { lookupItalianVatCompany } from "@/lib/italian-vat-lookup";
+import { enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
 
 const DEFAULT_SIBILL_BASE_URL = "https://integration.sibill.com";
 
@@ -133,9 +134,18 @@ export function buildSibillInvoiceDraft(
     throw new SibillDraftError("I dati fiscali dell’azienda su Sibill non sono completi.", 422);
   }
 
+  const importedNet = Number.parseFloat(clean(answers.invoice_shopify_net_amount).replace(",", "."));
+  const importedVat = Number.parseFloat(clean(answers.invoice_shopify_tax_amount).replace(",", "."));
+  const hasReconciledShopifyTax = Number.isFinite(importedNet) && importedNet > 0 &&
+    Number.isFinite(importedVat) && importedVat > 0 &&
+    Math.abs(importedNet + importedVat - grossAmount) < 0.011;
+  const netAmount = hasReconciledShopifyTax
+    ? importedNet
+    : Math.round((grossAmount / 1.22) * 100) / 100;
+  const vatAmount = hasReconciledShopifyTax
+    ? importedVat
+    : Math.round((grossAmount - netAmount) * 100) / 100;
   const vatRate = 22;
-  const netAmount = Math.round((grossAmount / (1 + vatRate / 100)) * 100) / 100;
-  const vatAmount = Math.round((grossAmount - netAmount) * 100) / 100;
   const invoiceDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(date);
   const requestedDestinationCode = clean(answers.invoice_sdi_code).toUpperCase().replace(/[^A-Z0-9]/g, "");
   // FPR12 accepts exactly seven characters. Old forms sometimes contain notes
@@ -391,14 +401,19 @@ export async function createSibillDraft(input: {
   createdAt?: Date;
 }) {
   const { config, company } = await loadSibillCompany();
-  let preparedAnswers = input.answers;
-  const clientType = clean(input.answers.invoice_client_type).toLowerCase();
+  let preparedAnswers: Record<string, unknown>;
+  try {
+    preparedAnswers = await enrichInvoiceAnswersFromShopify(input.answers);
+  } catch (error) {
+    throw new SibillDraftError(error instanceof Error ? error.message : "Ordine Shopify non verificato.");
+  }
+  const clientType = clean(preparedAnswers.invoice_client_type).toLowerCase();
   const isCompany = clientType.includes("azienda") || clientType.includes("professionista");
   if (isCompany) {
     try {
-      const verifiedCompany = await lookupItalianVatCompany(input.answers.invoice_vat_number);
+      const verifiedCompany = await lookupItalianVatCompany(preparedAnswers.invoice_vat_number);
       preparedAnswers = {
-        ...input.answers,
+        ...preparedAnswers,
         invoice_client_name: verifiedCompany.name,
         invoice_address: verifiedCompany.address,
       };
@@ -406,13 +421,13 @@ export async function createSibillDraft(input: {
       // VIES can be temporarily unavailable. Keep a complete manually entered
       // address usable, but surface the lookup error when the historical data
       // itself cannot produce a valid invoice.
-      if (!parseItalianBillingAddress(input.answers.invoice_address)) {
+      if (!parseItalianBillingAddress(preparedAnswers.invoice_address)) {
         throw error;
       }
     }
   }
   const payload = buildSibillInvoiceDraft(preparedAnswers, company, input.createdAt);
-  const reference = clean(input.answers.invoice_receipt_ref || input.answers.invoice_shopify_order) || input.responseId;
+  const reference = clean(preparedAnswers.invoice_receipt_ref || preparedAnswers.invoice_shopify_order) || input.responseId;
   const query = new URLSearchParams({
     issue: "false",
     automatic_number: "true",
@@ -455,21 +470,26 @@ export async function createSibillDraft(input: {
   }
 
   let paymentStatus = "TO_PAY";
-  try {
-    const grossAmount = Number.parseFloat(clean(preparedAnswers.invoice_amount).replace(",", "."));
-    const paymentDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(input.createdAt || new Date());
-    await markSibillDocumentPaid({
-      config,
-      companyId: company.id,
-      documentId,
-      responseId: input.responseId,
-      amount: grossAmount,
-      paymentDate,
-      paymentMethod: sibillPaymentMethod(preparedAnswers.invoice_payment_method),
-    });
-    paymentStatus = "PAID";
-  } catch (error) {
-    warnings.push(error instanceof Error ? error.message : "Stato Incassata non salvato su Sibill.");
+  const shopifyFinancialStatus = clean(preparedAnswers.invoice_shopify_financial_status).toLowerCase();
+  if (shopifyFinancialStatus === "paid") {
+    try {
+      const grossAmount = Number.parseFloat(clean(preparedAnswers.invoice_amount).replace(",", "."));
+      const paymentDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(input.createdAt || new Date());
+      await markSibillDocumentPaid({
+        config,
+        companyId: company.id,
+        documentId,
+        responseId: input.responseId,
+        amount: grossAmount,
+        paymentDate,
+        paymentMethod: sibillPaymentMethod(preparedAnswers.invoice_payment_method),
+      });
+      paymentStatus = "PAID";
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : "Stato Incassata non salvato su Sibill.");
+    }
+  } else {
+    warnings.push(`Ordine Shopify non completamente pagato (${shopifyFinancialStatus || "stato non disponibile"}): la bozza resta da incassare.`);
   }
 
   return {

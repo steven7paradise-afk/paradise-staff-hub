@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query")?.trim() || "";
   const mode = searchParams.get("mode")?.trim() || "";
+  const strictOrderNumber = searchParams.get("strict") === "1";
 
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -190,38 +191,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ orders: ordersList });
     }
 
-    // A. If query is empty: fetch the absolute most recent order
+    // A. The invoice/order flows require an explicit order number. Never guess
+    // which order should be invoiced by silently selecting the latest one.
     if (!query) {
-      const res = await fetch(`https://${shop}/admin/api/2024-04/orders.json?limit=1&status=any&fields=name`, {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        return NextResponse.json({ error: "Errore nel caricamento dell'ultimo ordine Shopify." }, { status: res.status });
-      }
-
-      const data = await res.json();
-      const latestOrder = data?.orders?.[0];
-      if (!latestOrder) {
-        return NextResponse.json({ error: "Nessun ordine trovato su Shopify." }, { status: 404 });
-      }
-
-      const details = await getShopifyOrderDetails(latestOrder.name);
-      if (!details) {
-        return NextResponse.json({ error: `Impossibile caricare i dettagli per l'ordine ${latestOrder.name}.` }, { status: 404 });
-      }
-
-      return NextResponse.json({
-        orderName: latestOrder.name,
-        ...details,
-      });
+      return NextResponse.json({ error: "Inserisci il numero dell'ordine Shopify." }, { status: 400 });
     }
 
     // B. If query is a specific order number (e.g. starts with # or is just numeric)
     const isOrderNumber = query.startsWith("#") || /^\d+$/.test(query);
+
+    if (strictOrderNumber && !isOrderNumber) {
+      return NextResponse.json({
+        error: "Inserisci un numero ordine Shopify valido, per esempio #26964.",
+      }, { status: 400 });
+    }
 
     if (isOrderNumber) {
       const details = await getShopifyOrderDetails(query);
@@ -229,7 +212,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: `Ordine ${query} non trovato su Shopify.` }, { status: 404 });
       }
       return NextResponse.json({
-        orderName: query.startsWith("#") ? query : `#${query}`,
         ...details,
       });
     }

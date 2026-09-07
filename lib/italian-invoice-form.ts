@@ -29,10 +29,10 @@ export const ITALIAN_INVOICE_FORM_FIELDS = [
   },
   {
     id: ITALIAN_INVOICE_FIELD_IDS.shopifyOrder,
-    label: "ORDINE SHOPIFY (OPZIONALE)",
+    label: "NUMERO ORDINE SHOPIFY",
     type: "text",
-    required: false,
-    description: "Inserisci il numero d'ordine (es. #12345) o il nome per importare i dati. Lascia vuoto e clicca 'Importa' per l'ordine più recente.",
+    required: true,
+    description: "Obbligatorio. Inserisci il numero dell'ordine (es. #12345) e premi “Verifica ordine” per importare importo, IVA e pagamento.",
   },
   {
     id: ITALIAN_INVOICE_FIELD_IDS.vatNumber,

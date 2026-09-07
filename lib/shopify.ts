@@ -739,8 +739,11 @@ export async function getRecentShopifyOrders(): Promise<{ customerNames: Set<str
  */
 export async function getShopifyOrderDetails(orderName: string): Promise<{
   id: string;
+  orderName: string;
   clientName: string | null;
   totalPrice: number | null;
+  totalTax: number | null;
+  netAmount: number | null;
   paidAmount: number;
   lineItems: Array<{ title: string; quantity: number; price: number }>;
   note: string | null;
@@ -760,6 +763,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
   paymentReference: string | null;
   transactionStatus: string | null;
   transactionProcessedAt: string | null;
+  billingAddress: string | null;
 } | null> {
   try {
     const shop = process.env.SHOPIFY_SHOP_DOMAIN;
@@ -836,6 +840,19 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       const clientName = fullName || null;
 
       const totalPrice = orderData.total_price ? parseFloat(orderData.total_price) : null;
+      const totalTax = orderData.total_tax !== null && orderData.total_tax !== undefined
+        ? Number.parseFloat(String(orderData.total_tax))
+        : null;
+      const netAmount = totalPrice !== null && totalTax !== null && Number.isFinite(totalTax)
+        ? Math.round((totalPrice - totalTax) * 100) / 100
+        : null;
+      const billing = orderData.billing_address || orderData.shipping_address || orderData.customer?.default_address || null;
+      const billingStreet = [billing?.address1, billing?.address2].filter(Boolean).join(", ");
+      const billingCity = [billing?.zip, billing?.city].filter(Boolean).join(" ");
+      const billingProvince = String(billing?.province_code || billing?.province || "").trim();
+      const billingAddress = [billingStreet, billingCity && `${billingCity}${billingProvince ? ` (${billingProvince})` : ""}`]
+        .filter(Boolean)
+        .join(", ") || null;
       
       const lineItems = Array.isArray(orderData.line_items) 
         ? orderData.line_items.map((item: any) => ({
@@ -911,8 +928,11 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
 
       return {
         id: String(orderData.id),
+        orderName: String(orderData.name || cleanName),
         clientName,
         totalPrice,
+        totalTax: Number.isFinite(totalTax) ? totalTax : null,
+        netAmount,
         paidAmount,
         lineItems,
         note,
@@ -926,6 +946,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
         paymentReference: paymentTransaction?.authorization ? String(paymentTransaction.authorization) : paymentTransaction?.id ? String(paymentTransaction.id) : null,
         transactionStatus: paymentTransaction?.status ? String(paymentTransaction.status) : null,
         transactionProcessedAt: paymentTransaction?.processed_at ? String(paymentTransaction.processed_at) : paymentTransaction?.created_at ? String(paymentTransaction.created_at) : null,
+        billingAddress,
       };
     }
   } catch (error) {
