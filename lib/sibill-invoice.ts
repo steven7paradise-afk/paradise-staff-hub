@@ -55,14 +55,15 @@ export function parseItalianBillingAddress(value: unknown): BillingAddress | nul
   if (!raw) return null;
 
   // Accept the common formats produced by VIES and Shopify, for example:
-  // "Via Roma 10, 20100 Milano (MI)" or "Via Roma 10, 20100 Milano, MI".
-  const match = raw.match(/^(.*?)[,\s]+(\d{5})\s+(.+?)(?:\s*\(([A-Za-z]{2})\)|\s*,\s*([A-Za-z]{2}))?$/);
+  // "Via Roma 10, 20100 Milano (MI)", "Via Roma 10, 20100 Milano, MI"
+  // and the historical VIES format "Via Roma 10, 20100 Milano MI".
+  const match = raw.match(/^(.*?)[,\s]+(\d{5})\s+(.+?)(?:\s*\(([A-Za-z]{2})\)|\s*,\s*([A-Za-z]{2})|\s+([A-Za-z]{2}))?$/);
   if (!match) return null;
 
   const address = clean(match[1]).replace(/,+$/, "").trim();
   const postalCode = match[2];
   const city = clean(match[3]).replace(/,+$/, "").trim();
-  const province = clean(match[4] || match[5]).toUpperCase();
+  const province = clean(match[4] || match[5] || match[6]).toUpperCase();
   if (!address || !postalCode || !city) return null;
 
   return { address, postalCode, city, province };
@@ -120,8 +121,11 @@ export function buildSibillInvoiceDraft(
   const netAmount = Math.round((grossAmount / (1 + vatRate / 100)) * 100) / 100;
   const vatAmount = Math.round((grossAmount - netAmount) * 100) / 100;
   const invoiceDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(date);
-  const destinationCode = isCompany
-    ? clean(answers.invoice_sdi_code).toUpperCase() || "0000000"
+  const requestedDestinationCode = clean(answers.invoice_sdi_code).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  // FPR12 accepts exactly seven characters. Old forms sometimes contain notes
+  // next to the code: never forward that invalid text to Sibill.
+  const destinationCode = isCompany && /^[A-Z0-9]{7}$/.test(requestedDestinationCode)
+    ? requestedDestinationCode
     : "0000000";
   const pec = clean(answers.invoice_pec).toLowerCase();
 

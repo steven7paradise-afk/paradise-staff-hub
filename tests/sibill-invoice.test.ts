@@ -25,6 +25,15 @@ test("parses a complete Italian billing address", () => {
   });
 });
 
+test("parses the historical VIES address format without parentheses", () => {
+  assert.deepEqual(parseItalianBillingAddress("VIALE ABRUZZI 92, 20131 MILANO MI"), {
+    address: "VIALE ABRUZZI 92",
+    postalCode: "20131",
+    city: "MILANO",
+    province: "MI",
+  });
+});
+
 test("builds a private-client draft with VAT included and no SDI issue flag", () => {
   const payload = buildSibillInvoiceDraft({
     invoice_client_type: "Privato (Codice Fiscale)",
@@ -40,6 +49,20 @@ test("builds a private-client draft with VAT included and no SDI issue flag", ()
   assert.equal(payload.fattura_elettronica_body[0].dati_beni_servizi.dati_riepilogo[0].imponibile_importo, "100.00");
   assert.equal(payload.fattura_elettronica_body[0].dati_beni_servizi.dati_riepilogo[0].imposta, "22.00");
   assert.equal(payload.fattura_elettronica_body[0].dati_pagamento[0].dettaglio_pagamento[0].modalita_pagamento, "MP08");
+});
+
+test("does not send an invalid historical SDI code to Sibill", () => {
+  const payload = buildSibillInvoiceDraft({
+    invoice_client_type: "Azienda / Libero Professionista (Partita IVA)",
+    invoice_client_name: "Azienda Test Srl",
+    invoice_vat_number: "09063910013",
+    invoice_sdi_code: "USAL8PV CF",
+    invoice_address: "VIALE ABRUZZI 92, 20131 MILANO MI",
+    invoice_amount: "35",
+    invoice_payment_method: "Carta di Credito / Bancomat",
+  }, company);
+
+  assert.equal(payload.fattura_elettronica_header.dati_trasmissione.codice_destinatario, "0000000");
 });
 
 test("requires a complete address before creating a Sibill draft", () => {
