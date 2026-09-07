@@ -635,6 +635,9 @@ export function StaffFormsViewer({
     : false;
   const isSelectedOrderForm = isOrderLabelForm(selectedForm);
   const isProfessionalWizardForm = Boolean(selectedForm) && !isCashClosingForm;
+  const isInvoiceWizardForm = selectedForm
+    ? selectedForm.name.toUpperCase().includes("FATTURA") || selectedForm.category.toUpperCase().includes("FATTUR")
+    : false;
   const isSelectedClientControlForm = selectedForm
     ? selectedForm.name.toUpperCase().includes("CONTROLLO CLIENTE") || selectedForm.category.toUpperCase().includes("QUALITA")
     : false;
@@ -2108,10 +2111,11 @@ export function StaffFormsViewer({
           "fixed inset-0 z-50",
           isCashClosingForm && "cash-closing-workspace",
           isProfessionalWizardForm && "service-form-wizard-workspace",
+          isInvoiceWizardForm && "service-form-wizard-light",
           isCashClosingForm
             ? "overflow-y-auto bg-[#f4eff2]"
             : isProfessionalWizardForm
-              ? "flex items-center justify-center overflow-hidden bg-[#090b0d] p-0"
+              ? cn("flex items-center justify-center overflow-hidden p-0", isInvoiceWizardForm ? "bg-white" : "bg-[#090b0d]")
               : "flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-5"
         )}>
           <div className={cn(
@@ -2119,7 +2123,12 @@ export function StaffFormsViewer({
             isCashClosingForm
               ? "min-h-screen overflow-visible border-0 bg-[radial-gradient(circle_at_15%_0%,rgba(167,71,88,0.12),transparent_32%),linear-gradient(180deg,#faf8f9,#f3eef1)]"
               : isProfessionalWizardForm
-                ? "service-form-wizard-shell h-[100dvh] min-h-[100dvh] max-w-none overflow-hidden border-0 border-white/10 bg-[#1b1a1d] shadow-[0_32px_100px_rgba(0,0,0,0.55)] xl:!grid xl:grid-cols-[310px_minmax(0,1fr)]"
+                ? cn(
+                    "service-form-wizard-shell h-[100dvh] min-h-[100dvh] max-w-none overflow-hidden border-0 xl:!grid xl:grid-cols-[310px_minmax(0,1fr)]",
+                    isInvoiceWizardForm
+                      ? "border-slate-200 bg-white shadow-none"
+                      : "border-white/10 bg-[#1b1a1d] shadow-[0_32px_100px_rgba(0,0,0,0.55)]"
+                  )
               : "max-h-[92vh] max-w-4xl overflow-hidden rounded-[32px] zoom-in-95"
           )}>
             <div className={cn(
@@ -2226,7 +2235,10 @@ export function StaffFormsViewer({
                   isCashClosingForm
                     ? "w-full overflow-visible bg-transparent p-4 sm:p-6 lg:p-8"
                     : isProfessionalWizardForm
-                      ? "service-form-wizard-body min-h-0 w-full max-w-none overflow-y-auto bg-[#1b1a1d] px-5 py-7 sm:px-8 lg:px-12 lg:py-10"
+                      ? cn(
+                          "service-form-wizard-body min-h-0 w-full max-w-none overflow-y-auto px-5 py-7 sm:px-8 lg:px-12 lg:py-10",
+                          isInvoiceWizardForm ? "bg-white" : "bg-[#1b1a1d]"
+                        )
                     : "overflow-y-auto bg-white p-5 sm:p-7"
                 )}
               >

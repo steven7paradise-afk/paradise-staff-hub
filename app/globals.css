@@ -1809,6 +1809,121 @@ textarea {
   opacity: 1 !important;
 }
 
+/* Richiesta fattura: percorso chiaro e leggibile. La pagina generale rimane
+   scura, ma il modulo fiscale usa superfici bianche ad alto contrasto. */
+.dark .service-form-wizard-workspace.service-form-wizard-light,
+.service-form-wizard-workspace.service-form-wizard-light {
+  color: #172033 !important;
+  background: #ffffff !important;
+  color-scheme: light !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-header,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-header,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-footer,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-footer {
+  color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-body,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-body {
+  color: #172033 !important;
+  background: #ffffff !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-field-card,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-field-card,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-description,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-description {
+  color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 14px 38px rgba(23, 32, 51, 0.07) !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary {
+  color: #475569 !important;
+  -webkit-text-fill-color: #475569 !important;
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step:hover,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step:hover,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option:hover,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option:hover,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary:hover,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-secondary:hover {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="active"],
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="active"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #a74758 !important;
+  border-color: #a74758 !important;
+  box-shadow: 0 10px 24px rgba(167, 71, 88, 0.2) !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="done"],
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-step[data-state="done"] {
+  color: #047857 !important;
+  -webkit-text-fill-color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option[data-state="selected"],
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-option[data-state="selected"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: #a74758 !important;
+  border-color: #a74758 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-list,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-list,
+.dark .service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-row,
+.service-form-wizard-workspace.service-form-wizard-light .service-form-wizard-customer-row {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]),
+.service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-900"], [class~="text-slate-800"], [class~="text-slate-700"]) {
+  color: #172033 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]),
+.service-form-wizard-workspace.service-form-wizard-light :is([class~="text-slate-600"], [class~="text-slate-500"], [class~="text-slate-400"]) {
+  color: #64748b !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is(input, textarea, select),
+.service-form-wizard-workspace.service-form-wizard-light :is(input, textarea, select) {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.dark .service-form-wizard-workspace.service-form-wizard-light :is(input, textarea)::placeholder,
+.service-form-wizard-workspace.service-form-wizard-light :is(input, textarea)::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
 @media (max-width: 639px) {
   .service-form-wizard-workspace .service-form-wizard-footer {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
