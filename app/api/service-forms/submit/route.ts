@@ -290,6 +290,7 @@ export async function POST(request: NextRequest) {
           [SIBILL_ANSWER_KEYS.documentId]: draft.id,
           [SIBILL_ANSWER_KEYS.documentStatus]: draft.status,
           [SIBILL_ANSWER_KEYS.documentNumber]: draft.number,
+          [SIBILL_ANSWER_KEYS.paymentStatus]: draft.paymentStatus,
           [SIBILL_ANSWER_KEYS.draftCreatedAt]: draftCreatedAt,
         };
         response = await prisma.serviceFormResponse.update({

@@ -6,6 +6,7 @@ export const SIBILL_ANSWER_KEYS = {
   documentId: "sibill_document_id",
   documentStatus: "sibill_document_status",
   documentNumber: "sibill_document_number",
+  paymentStatus: "sibill_payment_status",
   draftCreatedAt: "sibill_draft_created_at",
 } as const;
 
@@ -80,10 +81,23 @@ function paymentCode(value: unknown) {
 }
 
 function invoiceDescription(answers: Record<string, unknown>) {
-  const reference = clean(answers.invoice_receipt_ref || answers.invoice_shopify_order);
   const notes = clean(answers.invoice_notes).replace(/\s+/g, " ");
-  const base = notes || "Servizi e prodotti Paradise Beauty";
-  return `${base}${reference ? ` · Rif. ${reference}` : ""}`.slice(0, 1000);
+  return (notes || "Servizi e prodotti Paradise Beauty").slice(0, 1000);
+}
+
+function shopifyOrderDescription(answers: Record<string, unknown>) {
+  const value = clean(answers.invoice_shopify_order || answers.invoice_receipt_ref);
+  if (!value) return "";
+  const order = value.match(/#?\d+/)?.[0] || value;
+  return `Ordine Shopify ${order.startsWith("#") ? order : `#${order}`}`.slice(0, 1000);
+}
+
+function sibillPaymentMethod(value: unknown) {
+  const normalized = clean(value).toLowerCase();
+  if (normalized.includes("contant")) return "CASH";
+  if (normalized.includes("bonific")) return "TRANSFER";
+  if (normalized.includes("carta") || normalized.includes("bancomat")) return "CARD";
+  return "OTHER";
 }
 
 export function buildSibillInvoiceDraft(
@@ -130,6 +144,7 @@ export function buildSibillInvoiceDraft(
     ? requestedDestinationCode
     : "0000000";
   const pec = clean(answers.invoice_pec).toLowerCase();
+  const shopifyDescription = shopifyOrderDescription(answers);
 
   const customerTaxData: Record<string, unknown> = {
     anagrafica: { denominazione: clientName },
@@ -185,6 +200,7 @@ export function buildSibillInvoiceDraft(
             divisa: "EUR",
             data: invoiceDate,
             importo_totale_documento: money(grossAmount),
+            ...(shopifyDescription ? { causale: [shopifyDescription] } : {}),
           },
         },
         dati_beni_servizi: {
@@ -196,6 +212,12 @@ export function buildSibillInvoiceDraft(
               prezzo_unitario: money(netAmount),
               prezzo_totale: money(netAmount),
               aliquota_iva: money(vatRate),
+              ...(shopifyDescription ? {
+                altri_dati_gestionali: [{
+                  tipo_dato: "SHOPIFY",
+                  riferimento_testo: shopifyDescription,
+                }],
+              } : {}),
             },
           ],
           dati_riepilogo: [
@@ -282,6 +304,87 @@ async function loadSibillCompany() {
   return { config, company };
 }
 
+async function updateSibillDocumentNotes(input: {
+  config: ReturnType<typeof sibillConfig>;
+  companyId: string;
+  documentId: string;
+  notes: string;
+}) {
+  if (!input.notes) return;
+  const response = await fetch(
+    `${input.config.baseUrl}/api/v1/companies/${encodeURIComponent(input.companyId)}/documents/${encodeURIComponent(input.documentId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${input.config.token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ notes: input.notes }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (!response.ok) {
+    const data = await sibillJson(response);
+    throw new SibillDraftError(sibillErrorMessage(data, "Descrizione Shopify non salvata su Sibill."), response.status);
+  }
+}
+
+async function markSibillDocumentPaid(input: {
+  config: ReturnType<typeof sibillConfig>;
+  companyId: string;
+  documentId: string;
+  responseId: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+}) {
+  const baseUrl = `${input.config.baseUrl}/api/v1/companies/${encodeURIComponent(input.companyId)}/documents/${encodeURIComponent(input.documentId)}/flows`;
+  const headers = {
+    Authorization: `Bearer ${input.config.token}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  const listResponse = await fetch(baseUrl, {
+    headers,
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  const listData = await sibillJson(listResponse);
+  if (!listResponse.ok) {
+    throw new SibillDraftError(sibillErrorMessage(listData, "Stato del pagamento Sibill non disponibile."), listResponse.status);
+  }
+
+  const flows = Array.isArray(listData?.data) ? listData.data : [];
+  const existingFlow = flows[0];
+  const body = existingFlow?.id
+    ? {
+        payment_date: input.paymentDate,
+        payment_method: input.paymentMethod,
+        payment_status: "PAID",
+      }
+    : {
+        amount: { amount: money(input.amount), currency: "EUR" },
+        expected_payment_date: input.paymentDate,
+        external_id: `paradise-${input.responseId}`,
+        payment_date: input.paymentDate,
+        payment_method: input.paymentMethod,
+        payment_status: "PAID",
+      };
+  const response = await fetch(existingFlow?.id ? `${baseUrl}/${encodeURIComponent(existingFlow.id)}` : baseUrl, {
+    method: existingFlow?.id ? "PATCH" : "POST",
+    headers,
+    body: JSON.stringify(body),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    const data = await sibillJson(response);
+    throw new SibillDraftError(sibillErrorMessage(data, "Sibill non ha impostato la fattura come incassata."), response.status);
+  }
+}
+
 export async function createSibillDraft(input: {
   answers: Record<string, unknown>;
   responseId: string;
@@ -338,11 +441,44 @@ export async function createSibillDraft(input: {
     throw new SibillDraftError("Sibill ha risposto senza l’identificativo della bozza.", 502);
   }
 
+  const warnings: string[] = [];
+  const shopifyDescription = shopifyOrderDescription(preparedAnswers);
+  try {
+    await updateSibillDocumentNotes({
+      config,
+      companyId: company.id,
+      documentId,
+      notes: shopifyDescription,
+    });
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : "Descrizione Shopify non salvata su Sibill.");
+  }
+
+  let paymentStatus = "TO_PAY";
+  try {
+    const grossAmount = Number.parseFloat(clean(preparedAnswers.invoice_amount).replace(",", "."));
+    const paymentDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(input.createdAt || new Date());
+    await markSibillDocumentPaid({
+      config,
+      companyId: company.id,
+      documentId,
+      responseId: input.responseId,
+      amount: grossAmount,
+      paymentDate,
+      paymentMethod: sibillPaymentMethod(preparedAnswers.invoice_payment_method),
+    });
+    paymentStatus = "PAID";
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : "Stato Incassata non salvato su Sibill.");
+  }
+
   return {
     id: documentId,
     status: clean(document?.status) || "DRAFT",
     number: clean(document?.number),
     companyId: company.id,
+    paymentStatus,
+    warnings,
   };
 }
 

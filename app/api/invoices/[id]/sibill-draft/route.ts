@@ -49,6 +49,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           id: existingId,
           status: String(answers[SIBILL_ANSWER_KEYS.documentStatus] || "DRAFT"),
           number: String(answers[SIBILL_ANSWER_KEYS.documentNumber] || ""),
+          paymentStatus: String(answers[SIBILL_ANSWER_KEYS.paymentStatus] || ""),
         },
       });
     }
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           [SIBILL_ANSWER_KEYS.documentId]: draft.id,
           [SIBILL_ANSWER_KEYS.documentStatus]: draft.status,
           [SIBILL_ANSWER_KEYS.documentNumber]: draft.number,
+          [SIBILL_ANSWER_KEYS.paymentStatus]: draft.paymentStatus,
           [SIBILL_ANSWER_KEYS.draftCreatedAt]: createdAt,
         },
         activity_log: [
@@ -129,6 +131,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     delete nextAnswers[SIBILL_ANSWER_KEYS.documentId];
     delete nextAnswers[SIBILL_ANSWER_KEYS.documentStatus];
     delete nextAnswers[SIBILL_ANSWER_KEYS.documentNumber];
+    delete nextAnswers[SIBILL_ANSWER_KEYS.paymentStatus];
     delete nextAnswers[SIBILL_ANSWER_KEYS.draftCreatedAt];
     const deletedAt = new Date().toISOString();
     const currentLog = Array.isArray(response.activity_log) ? response.activity_log as any[] : [];

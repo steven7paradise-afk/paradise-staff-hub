@@ -9,6 +9,8 @@ type DraftState = {
   id: string;
   status: string;
   number?: string;
+  paymentStatus?: string;
+  warnings?: string[];
 } | null;
 
 export function CreateSibillDraftButton({
@@ -33,8 +35,13 @@ export function CreateSibillDraftButton({
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Bozza non creata. Riprova.");
       setDraft(data.draft);
-      setMessageTone("success");
-      setMessage(data.alreadyCreated ? "Bozza già presente su Sibill." : "Bozza creata: non è stata inviata allo SdI.");
+      const warnings = Array.isArray(data.draft?.warnings) ? data.draft.warnings : [];
+      setMessageTone(warnings.length ? "error" : "success");
+      setMessage(warnings.length
+        ? `Bozza creata. ${warnings.join(" ")}`
+        : data.alreadyCreated
+          ? "Bozza già presente su Sibill."
+          : "Bozza creata e registrata come incassata. Non è stata inviata allo SdI.");
     } catch (error) {
       setMessageTone("error");
       setMessage(error instanceof Error ? error.message : "Bozza non creata. Riprova.");
@@ -72,6 +79,11 @@ export function CreateSibillDraftButton({
           <CheckCircle2 className="size-4" />
           Bozza Sibill{draft.number ? ` ${draft.number}` : ""}
         </span>
+        {draft.paymentStatus === "PAID" && (
+          <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white">
+            Incassata
+          </span>
+        )}
         <a
           href={SIBILL_WEB_APP_URL}
           target="_blank"

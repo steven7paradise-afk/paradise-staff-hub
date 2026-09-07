@@ -300,6 +300,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                             id: String(answer(res, SIBILL_ANSWER_KEYS.documentId)),
                             status: String(answer(res, SIBILL_ANSWER_KEYS.documentStatus) || "DRAFT"),
                             number: String(answer(res, SIBILL_ANSWER_KEYS.documentNumber) || ""),
+                            paymentStatus: String(answer(res, SIBILL_ANSWER_KEYS.paymentStatus) || ""),
                           } : null}
                         />
                       </td>
@@ -402,6 +403,7 @@ export default async function InvoicesPage(props: { searchParams: Promise<{ mont
                         id: String(answer(res, SIBILL_ANSWER_KEYS.documentId)),
                         status: String(answer(res, SIBILL_ANSWER_KEYS.documentStatus) || "DRAFT"),
                         number: String(answer(res, SIBILL_ANSWER_KEYS.documentNumber) || ""),
+                        paymentStatus: String(answer(res, SIBILL_ANSWER_KEYS.paymentStatus) || ""),
                       } : null}
                     />
                     <DownloadInvoicePdfButton invoice={res as any} />
