@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOperationalUser } from "@/lib/operational-session";
+import { hasValidItalianVatChecksum, normalizeItalianViesCompany } from "@/lib/italian-vat-lookup";
 
 export async function GET(request: NextRequest) {
   // The invoice form is also used from an authorized salon PC, where there is
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest) {
 
   if (!vat || vat.length !== 11) {
     return NextResponse.json({ error: "Partita IVA non valida. Deve essere di 11 cifre." }, { status: 400 });
+  }
+  if (!hasValidItalianVatChecksum(vat)) {
+    return NextResponse.json({ error: "Partita IVA non valida: controlla le cifre inserite." }, { status: 400 });
   }
 
   try {
@@ -38,18 +42,18 @@ export async function GET(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // Clean address format: the VIES API often returns addresses containing newlines
-    let formattedAddress = data.address || "";
-    if (formattedAddress) {
-      formattedAddress = formattedAddress
-        .replace(/\n+/g, ", ") // Replace newlines with comma
-        .trim();
+    const company = normalizeItalianViesCompany(data);
+    if (!company) {
+      return NextResponse.json({
+        error: "Partita IVA valida, ma il registro non ha restituito un indirizzo completo. Completa manualmente via, CAP, città e provincia.",
+      }, { status: 422 });
     }
 
     return NextResponse.json({
-      name: data.name || "",
-      address: formattedAddress,
+      ...company,
+      vat,
       isValid: true,
+      source: "VIES",
     });
 
   } catch (error) {

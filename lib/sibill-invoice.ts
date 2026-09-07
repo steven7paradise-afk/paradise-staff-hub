@@ -138,7 +138,8 @@ export function buildSibillInvoiceDraft(
   return {
     versione: "FPR12",
     namespace: "http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2",
-    sistema_emittente: "Paradise Staff Hub",
+    // Sibill accepts at most 10 characters for SistemaEmittente.
+    sistema_emittente: "PARADISE",
     fattura_elettronica_header: {
       dati_trasmissione: {
         formato_trasmissione: "FPR12",

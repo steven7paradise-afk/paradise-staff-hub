@@ -488,24 +488,6 @@ export function StaffFormsViewer({
     const savedCustomer = pastCustomers.find((customer) =>
       String(customer.vatNumber || "").replace(/\D/g, "") === vat
     );
-    if (savedCustomer) {
-      setAnswers((prev) => ({
-        ...prev,
-        invoice_client_type: savedCustomer.type,
-        invoice_client_name: savedCustomer.name,
-        invoice_fiscal_code: savedCustomer.fiscalCode,
-        invoice_vat_number: vat,
-        invoice_sdi_code: savedCustomer.sdiCode,
-        invoice_pec: savedCustomer.pec,
-        invoice_address: savedCustomer.address,
-      }));
-      setVatLookupStatus({
-        success: true,
-        message: `✓ CLIENTE GIÀ REGISTRATO\n• Ragione Sociale: ${savedCustomer.name}\n• Indirizzo: ${savedCustomer.address || "da completare"}`,
-      });
-      return;
-    }
-
     setLoadingVat(true);
     setVatLookupStatus(null);
 
@@ -518,13 +500,20 @@ export function StaffFormsViewer({
 
       setAnswers(prev => ({
         ...prev,
-        "invoice_client_name": data.name,
-        "invoice_address": data.address,
+        invoice_client_type: "Azienda / Libero Professionista (Partita IVA)",
+        invoice_vat_number: vat,
+        invoice_client_name: data.name,
+        invoice_address: data.address,
+        invoice_sdi_code: savedCustomer?.sdiCode || prev.invoice_sdi_code || "",
+        invoice_pec: savedCustomer?.pec || prev.invoice_pec || "",
       }));
 
+      const savedDetails = savedCustomer?.sdiCode || savedCustomer?.pec
+        ? "\n• PEC / SDI recuperati dallo storico Paradise"
+        : "";
       setVatLookupStatus({
         success: true,
-        message: `✓ AZIENDA TROVATA\n• Ragione Sociale: ${data.name}\n• Indirizzo: ${data.address}`
+        message: `✓ DATI AZIENDALI VERIFICATI\n• Ragione sociale: ${data.name}\n• Sede: ${data.address}${savedDetails}`
       });
     } catch (err: any) {
       setVatLookupStatus({
@@ -2287,6 +2276,11 @@ export function StaffFormsViewer({
                                   value={answers[field.id] || ""}
                                   onChange={(e) => handleTextChange(field.id, e.target.value)}
                                   onKeyDown={(e) => {
+                                    if (field.id === "invoice_vat_number" && e.key === "Enter") {
+                                      e.preventDefault();
+                                      void handleVatLookup();
+                                      return;
+                                    }
                                     if (field.id === "order_shopify_order" && e.key === "Enter") {
                                       e.preventDefault();
                                       void handleShopifyOrderLookup();
@@ -2312,7 +2306,7 @@ export function StaffFormsViewer({
                                     ) : (
                                       <Search className="size-3.5" />
                                     )}
-                                    Cerca
+                                    Verifica azienda
                                   </button>
                                 )}
                                 {(field.id === "invoice_shopify_order" || field.id === "order_shopify_order") && (
