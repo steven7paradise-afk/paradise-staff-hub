@@ -360,6 +360,27 @@ export function selectSibillAccountId(
   configuredId?: string,
   accountMatch?: string,
 ) {
+  const selectUniqueHighestBalance = (candidates: SibillAccount[]) => {
+    const ranked = candidates
+      .map((account) => ({
+        id: account.id,
+        balance: Number(account.current_balance?.amount ?? account.available_balance?.amount ?? Number.NaN),
+      }))
+      .filter((account) => Number.isFinite(account.balance))
+      .sort((left, right) => right.balance - left.balance);
+    if (ranked.length > 0 && (ranked.length === 1 || ranked[0].balance > ranked[1].balance)) {
+      return ranked[0].id;
+    }
+    return null;
+  };
+
+  const euroAccounts = accounts.filter((account) => {
+    const currency = clean(
+      account.currency || account.current_balance?.currency || account.available_balance?.currency,
+    ).toUpperCase();
+    return currency === "EUR";
+  });
+
   const explicitId = clean(configuredId);
   if (explicitId) {
     return accounts.some((account) => account.id === explicitId) ? explicitId : null;
@@ -373,26 +394,28 @@ export function selectSibillAccountId(
     if (matchingAccounts.length === 1) return matchingAccounts[0].id;
 
     if (matchingAccounts.length > 1) {
-      const euroAccounts = matchingAccounts.filter((account) => {
+      const matchingEuroAccounts = matchingAccounts.filter((account) => {
         const currency = clean(
           account.currency || account.current_balance?.currency || account.available_balance?.currency,
         ).toUpperCase();
         return currency === "EUR";
       });
-      if (euroAccounts.length === 1) return euroAccounts[0].id;
+      if (matchingEuroAccounts.length === 1) return matchingEuroAccounts[0].id;
 
-      const candidates = euroAccounts.length > 0 ? euroAccounts : matchingAccounts;
-      const ranked = candidates
-        .map((account) => ({
-          id: account.id,
-          balance: Number(account.current_balance?.amount ?? account.available_balance?.amount ?? Number.NaN),
-        }))
-        .filter((account) => Number.isFinite(account.balance))
-        .sort((left, right) => right.balance - left.balance);
-      if (ranked.length > 0 && (ranked.length === 1 || ranked[0].balance > ranked[1].balance)) {
-        return ranked[0].id;
-      }
+      const rankedMatch = selectUniqueHighestBalance(
+        matchingEuroAccounts.length > 0 ? matchingEuroAccounts : matchingAccounts,
+      );
+      if (rankedMatch) return rankedMatch;
     }
+  }
+
+  // Sibill's account API can return only the nickname "Main", while the web
+  // interface separately displays the masked number. For card payments, use
+  // the single active EUR account with the uniquely highest balance.
+  if (paymentMethod === "CARD") {
+    if (euroAccounts.length === 1) return euroAccounts[0].id;
+    const rankedEuroAccount = selectUniqueHighestBalance(euroAccounts);
+    if (rankedEuroAccount) return rankedEuroAccount;
   }
 
   // A single connected account is unambiguous. Never pick the first one when

@@ -133,3 +133,13 @@ test("does not guess between duplicate 5597 accounts with the same balance", () 
 
   assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), null);
 });
+
+test("selects the active EUR card account when Sibill hides the masked number from the API", () => {
+  const accounts = [
+    { id: "account-usd", nickname: "Main", currency: "USD", current_balance: { amount: "0", currency: "USD" } },
+    { id: "account-empty-eur", nickname: "Main", currency: "EUR", current_balance: { amount: "0", currency: "EUR" } },
+    { id: "account-active-eur", nickname: "Main", currency: "EUR", current_balance: { amount: "145059.51", currency: "EUR" } },
+  ];
+
+  assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), "account-active-eur");
+});
