@@ -836,6 +836,8 @@ export function StaffFormsViewer({
   // Submission UI States
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [successTitle, setSuccessTitle] = useState("Inviato con successo");
+  const [successDetail, setSuccessDetail] = useState("Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.");
   const [errorMsg, setErrorMsg] = useState("");
 
   const handleArchiveResponse = async (responseId: string) => {
@@ -940,6 +942,8 @@ export function StaffFormsViewer({
     );
     setFiles({});
     setSuccess(false);
+    setSuccessTitle("Inviato con successo");
+    setSuccessDetail("Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.");
     setErrorMsg("");
     setActiveFieldIndex(0);
     setCashOrderRows([{ id: `cash-order-${Date.now()}`, order: "", amount: "" }]);
@@ -1217,11 +1221,22 @@ export function StaffFormsViewer({
         orderLabelPrintWindow?.close();
       }
 
+      const isInvoiceRequest = selectedForm.name.toLowerCase().includes("fattura");
+      if (isInvoiceRequest && result.sibillDraftSync?.success) {
+        setSuccessTitle("Bozza creata su Sibill");
+        setSuccessDetail("La richiesta è stata salvata come bozza. Non è stata inviata allo SdI.");
+      } else if (isInvoiceRequest) {
+        setSuccessTitle("Richiesta salvata");
+        setSuccessDetail("La bozza Sibill è in attesa. L’ufficio può riprovare dalla pagina Fatture senza ricompilare i dati.");
+      } else {
+        setSuccessTitle("Inviato con successo");
+        setSuccessDetail("Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.");
+      }
       setSuccess(true);
       setTimeout(() => {
         setSelectedForm(null);
         setSuccess(false);
-      }, 2000);
+      }, isInvoiceRequest ? 3500 : 2000);
     } catch (err) {
       orderLabelPrintWindow?.close();
       console.error("Submission failed:", err);
@@ -2183,8 +2198,8 @@ export function StaffFormsViewer({
                 <div className="grid size-20 place-items-center rounded-full border border-emerald-200 bg-emerald-50">
                   <CheckCircle2 className="size-10 text-emerald-500" />
                 </div>
-                <h3 className="mt-5 text-2xl font-black text-slate-900">Inviato con successo</h3>
-                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">Il modulo è stato salvato e sincronizzato. Puoi chiudere questa finestra.</p>
+                <h3 className="mt-5 text-2xl font-black text-slate-900">{successTitle}</h3>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-500">{successDetail}</p>
               </div>
             ) : (
               <form 

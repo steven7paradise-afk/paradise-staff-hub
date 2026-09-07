@@ -7,6 +7,7 @@ import { CASH_CLOSING_FIELD_IDS, isCashClosingFormName } from "@/lib/cash-closin
 import { getOperationalUser } from "@/lib/operational-session";
 import { buildServiceFormNotificationActionUrl } from "@/lib/notification-action-url";
 import { isServiceFormFieldVisible } from "@/lib/service-form-visibility";
+import { createSibillDraft, SIBILL_ANSWER_KEYS } from "@/lib/sibill-invoice";
 
 type FormSessionUser = {
   id: string;
@@ -258,7 +259,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const response = await prisma.serviceFormResponse.create({
+    let response = await prisma.serviceFormResponse.create({
       data: {
         form_id: formId,
         user_id: dbUserId,
@@ -272,6 +273,49 @@ export async function POST(request: NextRequest) {
         form: true,
       },
     });
+
+    // Invoice requests are mirrored to Sibill as drafts only. Failure here must
+    // never lose the form submitted by the salon: admins can retry from Fatture.
+    let sibillDraftSync: { success: boolean; documentId?: string; error?: string } | null = null;
+    if (form.name.toLowerCase().includes("fattura")) {
+      try {
+        const draft = await createSibillDraft({
+          answers: answersObj,
+          responseId: response.id,
+          createdAt: new Date(),
+        });
+        const draftCreatedAt = new Date().toISOString();
+        const linkedAnswers = {
+          ...answersObj,
+          [SIBILL_ANSWER_KEYS.documentId]: draft.id,
+          [SIBILL_ANSWER_KEYS.documentStatus]: draft.status,
+          [SIBILL_ANSWER_KEYS.documentNumber]: draft.number,
+          [SIBILL_ANSWER_KEYS.draftCreatedAt]: draftCreatedAt,
+        };
+        response = await prisma.serviceFormResponse.update({
+          where: { id: response.id },
+          data: {
+            answers: linkedAnswers,
+            activity_log: [{
+              type: "SIBILL_DRAFT_CREATED",
+              documentId: draft.id,
+              documentNumber: draft.number,
+              by: sessionUser.name || "Staff",
+              at: draftCreatedAt,
+            }],
+          },
+          include: { user: true, form: true },
+        });
+        answersObj = linkedAnswers;
+        sibillDraftSync = { success: true, documentId: draft.id };
+      } catch (draftError) {
+        sibillDraftSync = {
+          success: false,
+          error: draftError instanceof Error ? draftError.message : "Bozza Sibill non creata.",
+        };
+        console.error("Automatic Sibill draft creation failed:", sibillDraftSync.error);
+      }
+    }
 
     // Automatically create a Candidate record if the form is for candidatura
     if (form.name.toUpperCase().includes("CANDIDATURA")) {
@@ -445,7 +489,7 @@ export async function POST(request: NextRequest) {
       console.error("Failed to send form submission notifications:", notificationError);
     }
 
-    return NextResponse.json({ response, googleSheetSync });
+    return NextResponse.json({ response, googleSheetSync, sibillDraftSync });
   } catch (error) {
     console.error("Form submission failed:", error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invio del modulo fallito." }, { status: 500 });
