@@ -3,7 +3,13 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditForUser } from "@/lib/roles";
-import { createSibillDraft, deleteSibillDraft, SIBILL_ANSWER_KEYS, SibillDraftError } from "@/lib/sibill-invoice";
+import {
+  createSibillDraft,
+  deleteSibillDraft,
+  isValidParadiseInvoiceNumber,
+  SIBILL_ANSWER_KEYS,
+  SibillDraftError,
+} from "@/lib/sibill-invoice";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -58,6 +64,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       answers,
       responseId: response.id,
       createdAt: new Date(),
+      assignedNumber: isValidParadiseInvoiceNumber(answers[SIBILL_ANSWER_KEYS.documentNumber])
+        ? String(answers[SIBILL_ANSWER_KEYS.documentNumber])
+        : undefined,
     });
     const createdAt = new Date().toISOString();
     const currentLog = Array.isArray(response.activity_log) ? response.activity_log as any[] : [];
@@ -130,7 +139,11 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const nextAnswers = { ...answers };
     delete nextAnswers[SIBILL_ANSWER_KEYS.documentId];
     delete nextAnswers[SIBILL_ANSWER_KEYS.documentStatus];
-    delete nextAnswers[SIBILL_ANSWER_KEYS.documentNumber];
+    // The assigned number belongs to the invoice request, not to the remote
+    // draft. Recreating a deleted draft must therefore reuse the same number.
+    if (!isValidParadiseInvoiceNumber(nextAnswers[SIBILL_ANSWER_KEYS.documentNumber])) {
+      delete nextAnswers[SIBILL_ANSWER_KEYS.documentNumber];
+    }
     delete nextAnswers[SIBILL_ANSWER_KEYS.paymentStatus];
     delete nextAnswers[SIBILL_ANSWER_KEYS.draftCreatedAt];
     const deletedAt = new Date().toISOString();

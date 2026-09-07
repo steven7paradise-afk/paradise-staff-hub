@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSibillInvoiceDraft, parseItalianBillingAddress, selectSibillAccountId, SibillDraftError } from "../lib/sibill-invoice";
+import {
+  buildSibillInvoiceDraft,
+  isValidParadiseInvoiceNumber,
+  parseItalianBillingAddress,
+  selectSibillAccountId,
+  selectSibillInvoiceSectional,
+  SibillDraftError,
+} from "../lib/sibill-invoice";
 
 const company = {
   id: "company-1",
@@ -132,6 +139,24 @@ test("does not guess between duplicate 5597 accounts with the same balance", () 
   ];
 
   assert.equal(selectSibillAccountId(accounts, "CARD", undefined, "5597"), null);
+});
+
+test("selects only the configured current /001 invoice sectional", () => {
+  const sectionals = [
+    { id: "old", suffix: "/001", year: 2025 },
+    { id: "credit-notes", prefix: "NC/", suffix: "/001", year: 2026 },
+    { id: "invoices", suffix: "/001", year: 2026 },
+  ];
+
+  assert.equal(selectSibillInvoiceSectional(sectionals, 2026)?.id, "invoices");
+  assert.equal(selectSibillInvoiceSectional(sectionals, 2026, "invoices")?.id, "invoices");
+});
+
+test("accepts invoice 83/001 and later but rejects old or unsectioned numbers", () => {
+  assert.equal(isValidParadiseInvoiceNumber("83/001"), true);
+  assert.equal(isValidParadiseInvoiceNumber("84/001"), true);
+  assert.equal(isValidParadiseInvoiceNumber("82/001"), false);
+  assert.equal(isValidParadiseInvoiceNumber("3"), false);
 });
 
 test("selects the active EUR card account when Sibill hides the masked number from the API", () => {

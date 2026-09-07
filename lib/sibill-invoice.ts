@@ -1,6 +1,8 @@
 import { enrichCompanyInvoiceIdentity, enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
 
 const DEFAULT_SIBILL_BASE_URL = "https://integration.sibill.com";
+const DEFAULT_INVOICE_SECTIONAL_SUFFIX = "/001";
+const DEFAULT_FIRST_INVOICE_PROGRESSIVE = 83;
 
 export const SIBILL_ANSWER_KEYS = {
   documentId: "sibill_document_id",
@@ -45,6 +47,13 @@ type SibillAccount = {
   } | null;
 };
 
+export type SibillDocumentSectional = {
+  id: string;
+  prefix?: string | null;
+  suffix?: string | null;
+  year?: number | null;
+};
+
 export class SibillDraftError extends Error {
   constructor(
     message: string,
@@ -65,6 +74,43 @@ function digits(value: unknown) {
 
 function money(value: number) {
   return value.toFixed(2);
+}
+
+function invoiceNumberProgressive(value: unknown, suffix = DEFAULT_INVOICE_SECTIONAL_SUFFIX) {
+  const normalized = clean(value);
+  const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = normalized.match(new RegExp(`^(\\d+)${escapedSuffix}$`));
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+export function isValidParadiseInvoiceNumber(value: unknown) {
+  const minimum = Number.parseInt(process.env.SIBILL_INVOICE_FIRST_PROGRESSIVE || "", 10)
+    || DEFAULT_FIRST_INVOICE_PROGRESSIVE;
+  const suffix = process.env.SIBILL_INVOICE_SECTIONAL_SUFFIX?.trim() || DEFAULT_INVOICE_SECTIONAL_SUFFIX;
+  const progressive = invoiceNumberProgressive(value, suffix);
+  return progressive !== null && progressive >= minimum;
+}
+
+export function selectSibillInvoiceSectional(
+  sectionals: SibillDocumentSectional[],
+  year: number,
+  configuredId?: string,
+  suffix = DEFAULT_INVOICE_SECTIONAL_SUFFIX,
+) {
+  const explicitId = clean(configuredId);
+  if (explicitId) {
+    return sectionals.find((sectional) => sectional.id === explicitId) || null;
+  }
+
+  const matches = sectionals.filter((sectional) =>
+    Number(sectional.year) === year && clean(sectional.suffix) === suffix
+  );
+  if (matches.length === 1) return matches[0];
+
+  // Credit-note sectionals commonly share the suffix but have an NC/ prefix.
+  // A normal invoice sectional has no prefix, so it remains unambiguous.
+  const withoutPrefix = matches.filter((sectional) => !clean(sectional.prefix));
+  return withoutPrefix.length === 1 ? withoutPrefix[0] : null;
 }
 
 export function parseItalianBillingAddress(value: unknown): BillingAddress | null {
@@ -327,6 +373,51 @@ async function loadSibillCompany() {
   return { config, company };
 }
 
+async function resolveSibillInvoiceSectional(input: {
+  config: ReturnType<typeof sibillConfig>;
+  companyId: string;
+  date: Date;
+}) {
+  const year = Number.parseInt(
+    new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Europe/Rome" }).format(input.date),
+    10,
+  );
+  const suffix = process.env.SIBILL_INVOICE_SECTIONAL_SUFFIX?.trim() || DEFAULT_INVOICE_SECTIONAL_SUFFIX;
+  const response = await fetch(
+    `${input.config.baseUrl}/api/v1/companies/${encodeURIComponent(input.companyId)}/document-sectionals?page_size=100`,
+    {
+      headers: {
+        Authorization: `Bearer ${input.config.token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  const data = await sibillJson(response);
+  if (!response.ok) {
+    throw new SibillDraftError(
+      sibillErrorMessage(data, "Numerazione fatture Sibill non disponibile."),
+      response.status,
+    );
+  }
+
+  const sectionals = Array.isArray(data?.data) ? data.data as SibillDocumentSectional[] : [];
+  const sectional = selectSibillInvoiceSectional(
+    sectionals,
+    year,
+    process.env.SIBILL_INVOICE_SECTIONAL_ID,
+    suffix,
+  );
+  if (!sectional) {
+    throw new SibillDraftError(
+      `Sezionale fatture ${suffix} per il ${year} non trovato o non univoco su Sibill.`,
+      422,
+    );
+  }
+  return sectional;
+}
+
 async function updateSibillDocumentNotes(input: {
   config: ReturnType<typeof sibillConfig>;
   companyId: string;
@@ -543,6 +634,7 @@ export async function createSibillDraft(input: {
   answers: Record<string, unknown>;
   responseId: string;
   createdAt?: Date;
+  assignedNumber?: string;
 }) {
   const { config, company } = await loadSibillCompany();
   let preparedAnswers: Record<string, unknown>;
@@ -558,11 +650,27 @@ export async function createSibillDraft(input: {
       error instanceof Error ? error.message : "Ragione sociale non verificata dalla Partita IVA.",
     );
   }
-  const payload = buildSibillInvoiceDraft(preparedAnswers, company, input.createdAt);
+  const invoiceDate = input.createdAt || new Date();
+  const payload = buildSibillInvoiceDraft(preparedAnswers, company, invoiceDate);
+  const sectional = await resolveSibillInvoiceSectional({
+    config,
+    companyId: company.id,
+    date: invoiceDate,
+  });
+  const assignedNumber = clean(input.assignedNumber);
+  if (assignedNumber && !isValidParadiseInvoiceNumber(assignedNumber)) {
+    throw new SibillDraftError(`Numero fattura ${assignedNumber} non valido per il sezionale /001.`, 422);
+  }
+  if (assignedNumber) {
+    const documentData = payload.fattura_elettronica_body[0].dati_generali
+      .dati_generali_documento as Record<string, unknown>;
+    documentData.numero = assignedNumber;
+  }
   const reference = clean(preparedAnswers.invoice_receipt_ref || preparedAnswers.invoice_shopify_order) || input.responseId;
   const query = new URLSearchParams({
     issue: "false",
-    automatic_number: "true",
+    automatic_number: assignedNumber ? "false" : "true",
+    sectional_id: sectional.id,
     reconciliation_identifier: reference,
   });
 
@@ -586,6 +694,26 @@ export async function createSibillDraft(input: {
   const documentId = clean(document?.id);
   if (!documentId) {
     throw new SibillDraftError("Sibill ha risposto senza l’identificativo della bozza.", 502);
+  }
+  const documentNumber = clean(document?.number);
+  if (!isValidParadiseInvoiceNumber(documentNumber) || (assignedNumber && documentNumber !== assignedNumber)) {
+    // Never keep a newly-created remote draft with a wrong number.
+    await fetch(
+      `${config.baseUrl}/api/v1/companies/${encodeURIComponent(company.id)}/documents/${encodeURIComponent(documentId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      },
+    ).catch(() => undefined);
+    throw new SibillDraftError(
+      `Sibill ha proposto il numero ${documentNumber || "vuoto"}: atteso 83/001 o successivo. La bozza errata non è stata conservata.`,
+      422,
+    );
   }
 
   const warnings: string[] = [];
@@ -627,7 +755,7 @@ export async function createSibillDraft(input: {
   return {
     id: documentId,
     status: clean(document?.status) || "DRAFT",
-    number: clean(document?.number),
+    number: documentNumber,
     companyId: company.id,
     paymentStatus,
     warnings,
