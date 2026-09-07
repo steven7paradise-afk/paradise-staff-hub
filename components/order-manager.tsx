@@ -328,14 +328,18 @@ function orderPhotoPreviewUrl(photo: OrderPhoto) {
 }
 
 function orderProductPhotos(order: OrderResponse): OrderPhoto[] {
+  return orderProductPhotoSlots(order).filter((photo): photo is OrderPhoto => Boolean(photo));
+}
+
+function orderProductPhotoSlots(order: OrderResponse): Array<OrderPhoto | null> {
   const stored = order.answers?.[ORDER_PRODUCT_PHOTOS_KEY];
-  const photos = Array.isArray(stored)
-    ? stored.filter((photo): photo is OrderPhoto => Boolean(photo && typeof photo === "object" && typeof photo.url === "string"))
+  const photos: Array<OrderPhoto | null> = Array.isArray(stored)
+    ? stored.slice(0, 2).map((photo) => photo && typeof photo === "object" && typeof photo.url === "string" ? photo as OrderPhoto : null)
     : [];
+  while (photos.length < 2) photos.push(null);
   const legacy = orderPhoto(order);
-  if (!legacy) return photos;
-  const legacyKey = legacy.id || legacy.driveFileId || legacy.url;
-  return photos.some((photo) => (photo.id || photo.driveFileId || photo.url) === legacyKey) ? photos : [legacy, ...photos];
+  if (!photos[0] && legacy) photos[0] = legacy;
+  return photos;
 }
 
 function orderTimeline(order: OrderResponse) {
@@ -380,6 +384,31 @@ function labelIncludes(label: string, terms: string[]) {
 
 function findOrderField(fields: Array<{ label: string; value: any; id: string }>, terms: string[]) {
   return fields.find((field) => labelIncludes(field.label, terms));
+}
+
+type OrderInfoGroup = "CLIENT" | "PRODUCT" | "PAYMENT" | "DELIVERY" | "OTHER";
+
+const ORDER_INFO_GROUPS: Array<{ id: OrderInfoGroup; label: string; helper: string }> = [
+  { id: "CLIENT", label: "Cliente e ordine", helper: "Riferimenti principali" },
+  { id: "PRODUCT", label: "Prodotto e lavorazione", helper: "Cosa deve essere preparato" },
+  { id: "DELIVERY", label: "Tempi e indicazioni", helper: "Scadenze e richieste operative" },
+  { id: "PAYMENT", label: "Pagamento", helper: "Importi e conferme" },
+  { id: "OTHER", label: "Altre informazioni", helper: "Dettagli aggiuntivi" },
+];
+
+function orderInfoGroup(label: string): OrderInfoGroup {
+  const clean = label.toLowerCase();
+  if (["ordine shopify", "numero ordine", "nome e cognome", "cliente", "email", "telefono", "whatsapp"].some((term) => clean.includes(term))) return "CLIENT";
+  if (["cosa dobbiamo", "peso", "extension", "fasce", "prodotto", "colore", "lunghezza", "grammi"].some((term) => clean.includes(term))) return "PRODUCT";
+  if (["data", "disponibil", "informazioni", "note", "consegna", "indirizzo", "scadenza"].some((term) => clean.includes(term))) return "DELIVERY";
+  if (["pagamento", "pagato", "importo", "quanto manca", "chi conferma", "saldo"].some((term) => clean.includes(term))) return "PAYMENT";
+  return "OTHER";
+}
+
+function visibleOrderFields(order: OrderResponse) {
+  return (order.form?.fields ?? [])
+    .filter((field) => !field.id.startsWith("__") && order.answers?.[field.id] !== null && order.answers?.[field.id] !== undefined && order.answers?.[field.id] !== "")
+    .map((field) => ({ ...field, value: order.answers[field.id] }));
 }
 
 function orderPickup(order: OrderResponse) {
@@ -724,38 +753,30 @@ export function OrderManager({
     setSelected((current) => current?.id === order.id ? { ...current, ...updated } : current);
   }
 
-  async function uploadPhotos(order: OrderResponse, files?: FileList | null) {
-    if (!files?.length) return;
+  async function uploadPhotoSlot(order: OrderResponse, slot: number, file?: File) {
+    if (!file) return;
     setPhotoError("");
 
-    const selectedFiles = Array.from(files);
-    if (selectedFiles.some((file) => !file.type.startsWith("image/") || file.size > 10 * 1024 * 1024)) {
+    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
       setPhotoError("Scegli una foto JPG, PNG o WEBP fino a 10 MB.");
-      return;
-    }
-
-    if (orderProductPhotos(order).length + selectedFiles.length > 30) {
-      setPhotoError("Puoi conservare al massimo 30 foto per ordine.");
       return;
     }
 
     setUploadingPhoto(true);
     try {
-      let updatedOrder = order;
-      for (const file of selectedFiles) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("stage", updatedOrder.status || "NEW");
-        const response = await fetch(`/api/orders/${order.id}/photo`, {
-          method: "POST",
-          body: formData,
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || "Impossibile caricare la foto.");
-        }
-        updatedOrder = result.order as OrderResponse;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("stage", order.status || "NEW");
+      formData.append("slot", String(slot));
+      const response = await fetch(`/api/orders/${order.id}/photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Impossibile caricare la foto.");
       }
+      const updatedOrder = result.order as OrderResponse;
 
       setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...updatedOrder } : item));
       setSelected((current) => current?.id === order.id ? { ...current, ...updatedOrder } : current);
@@ -1266,14 +1287,12 @@ export function OrderManager({
       </div>
 
       {selected ? (
-        <GlobalFullscreenLayer className="bg-black/35 backdrop-blur-sm">
+        <GlobalFullscreenLayer className="bg-[#F7F5F6]">
         <div
-          className="grid h-full w-full place-items-end p-0 lg:place-items-center lg:p-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeSelectedOrder();
-          }}
+          className="h-full w-full"
         >
-          <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-[30px] bg-white p-3 shadow-2xl lg:max-w-7xl lg:rounded-[28px] lg:p-5">
+          <div className="h-full w-full overflow-y-auto bg-[#F7F5F6] p-3 lg:p-6">
+            <div className="mx-auto w-full max-w-[1500px]">
             <div className="sticky top-0 z-10 mb-4 flex items-center justify-between gap-3 border-b border-black/5 bg-white/95 pb-4 backdrop-blur">
               <div className="flex min-w-0 items-center gap-3">
                 <button onClick={closeSelectedOrder} className="grid size-11 shrink-0 place-items-center rounded-2xl border border-black/5 bg-white shadow-sm transition hover:bg-black/[0.03]"><ArrowLeft className="size-5" /></button>
@@ -1364,9 +1383,9 @@ export function OrderManager({
                 })}
               </div>
             </div>
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="space-y-5">
-              <Card className="bg-white">
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="flex flex-col gap-5">
+              <Card className="order-2 bg-white">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A83F6D]">Percorso ordine</p>
@@ -1414,35 +1433,66 @@ export function OrderManager({
                   })}
                 </div>
               </Card>
-              <Card className="bg-white">
+              <Card className="order-1 bg-white">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-black uppercase tracking-[0.14em] text-black/55">Informazioni ordine</h3>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A83F6D]">Scheda completa</p>
+                    <h3 className="mt-1 text-lg font-black text-slate-950">Riepilogo dell’ordine</h3>
+                  </div>
                   <span className="rounded-full bg-black/[0.04] px-3 py-1 text-[11px] font-bold text-black/40">
-                    {(selected.form?.fields ?? []).filter((field) => selected.answers?.[field.id] && !field.id.startsWith("__")).length} campi
+                    {visibleOrderFields(selected).length} campi
                   </span>
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {(selected.form?.fields ?? []).map((field) => {
-                    const value = selected.answers?.[field.id];
-                    if (!value) return null;
-                    if (field.id.startsWith("__")) return null;
-                    const isFile = typeof value === "object" && (value.storagePath || value.driveFileUrl || value.webViewLink || value.url);
-                    const displayValue = displayOrderFieldValue(value);
-                    const FieldIcon = orderFieldIcon(field.label);
+                <div className="mt-5 rounded-[22px] border border-[#E8DDE2] bg-[#FCF8FA] p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Ordine Shopify</p>
+                      <p className="mt-1 text-2xl font-black tracking-tight text-slate-950">{orderNumber(selected)}</p>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-black/35">Cliente</p>
+                      <p className="mt-1 text-lg font-black text-slate-950">{orderClientName(selected)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-black/[0.07] pt-4">
+                    <span className={cn("rounded-full px-3 py-1.5 text-[11px] font-black", statusPillClass(selected.status || "NEW"))}>{statusLabel(selected.status || "NEW")}</span>
+                    <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-black/55 ring-1 ring-black/[0.07]">Creato {orderDate(selected)}</span>
+                    <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-black/55 ring-1 ring-black/[0.07]">{selected.user_location_name || "Sede non indicata"}</span>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  {ORDER_INFO_GROUPS.map((group) => {
+                    const fields = visibleOrderFields(selected).filter((field) => orderInfoGroup(field.label) === group.id);
+                    if (!fields.length) return null;
                     return (
-                      <div key={field.id} className="rounded-2xl border border-black/5 bg-[#FBF8FA] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.12em] text-black/35">{field.label}</p>
-                          {FieldIcon ? <FieldIcon className="size-4 shrink-0 text-[#C66170]" /> : null}
+                      <section key={group.id} className={cn("overflow-hidden rounded-[20px] border bg-white", group.id === "DELIVERY" ? "border-[#E5B5C5]" : "border-black/[0.08]")}>
+                        <div className={cn("border-b px-4 py-3", group.id === "DELIVERY" ? "border-[#E5B5C5] bg-[#FFF4F7]" : "border-black/[0.07] bg-[#FAFAFA]")}>
+                          <h4 className="text-sm font-black text-slate-950">{group.label}</h4>
+                          <p className="mt-0.5 text-[11px] text-black/40">{group.helper}</p>
                         </div>
-                        {isFile ? (
-                          <a href={serviceFormFileUrl(value)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#8064D8]">
-                            <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
-                          </a>
-                        ) : (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-black/75">{displayValue}</p>
-                        )}
-                      </div>
+                        <dl className="divide-y divide-black/[0.07] px-4">
+                          {fields.map((field) => {
+                            const value = field.value;
+                            const isFile = typeof value === "object" && (value.storagePath || value.driveFileUrl || value.webViewLink || value.url);
+                            const FieldIcon = orderFieldIcon(field.label);
+                            return (
+                              <div key={field.id} className="py-3.5">
+                                <dt className="flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.12em] text-black/35">
+                                  {field.label}
+                                  {FieldIcon ? <FieldIcon className="size-3.5 shrink-0 text-[#C66170]" /> : null}
+                                </dt>
+                                <dd className="mt-1.5 whitespace-pre-wrap break-words text-sm font-bold leading-6 text-black/75">
+                                  {isFile ? (
+                                    <a href={serviceFormFileUrl(value)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[#8064D8]">
+                                      <LinkIcon className="size-4" /> {value.name ?? "Apri file"}
+                                    </a>
+                                  ) : displayOrderFieldValue(value)}
+                                </dd>
+                              </div>
+                            );
+                          })}
+                        </dl>
+                      </section>
                     );
                   })}
                 </div>
@@ -1475,51 +1525,41 @@ export function OrderManager({
                     <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-black text-black/45">{orderProductPhotos(selected).length}</span>
                   </div>
                   <p className="mt-1 text-xs leading-5 text-black/45">Documenta il prodotto in ogni fase. Le foto non sostituiscono quelle precedenti.</p>
-                  {orderProductPhotos(selected).length ? (
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      {orderProductPhotos(selected).map((photo, index) => (
-                        <a
-                          key={photo.id || photo.driveFileId || `${photo.url}-${index}`}
-                          href={photo.driveFileUrl || photo.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={cn("group relative overflow-hidden rounded-2xl border border-black/[0.07] bg-[#F8F3F6]", index === 0 && "col-span-2")}
-                        >
-                          <img src={orderPhotoPreviewUrl(photo)} alt={`Foto prodotto ${index + 1}`} className={cn("w-full object-cover transition duration-300 group-hover:scale-[1.02]", index === 0 ? "h-56" : "h-32")} />
-                          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8 text-[10px] font-bold text-white">
-                            {statusLabel(photo.stage || "NEW")} · {photo.uploadedBy || "Staff"}
-                          </span>
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid h-40 place-items-center rounded-2xl border border-dashed border-black/15 bg-[#FCFAFB] text-center text-sm text-black/40">
-                      <div>
-                        <ImagePlus className="mx-auto mb-2 size-7" />
-                        <p className="font-bold text-black/55">Nessuna foto prodotto</p>
-                        <p className="mt-1 text-xs">Aggiungi la prima immagine</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                    {orderProductPhotoSlots(selected).map((photo, index) => (
+                      <div key={index} className="overflow-hidden rounded-2xl border border-black/[0.08] bg-[#FCFAFB]">
+                        <div className="flex items-center justify-between border-b border-black/[0.07] bg-white px-3 py-2.5">
+                          <span className="text-xs font-black text-slate-950">Foto {index + 1}</span>
+                          <span className="text-[10px] font-bold text-black/35">{photo ? statusLabel(photo.stage || "NEW") : "Da aggiungere"}</span>
+                        </div>
+                        {photo ? (
+                          <a href={photo.driveFileUrl || photo.url} target="_blank" rel="noreferrer" className="group relative block overflow-hidden">
+                            <img src={orderPhotoPreviewUrl(photo)} alt={`Foto prodotto ${index + 1}`} className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+                            <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-8 text-[10px] font-bold text-white">{photo.uploadedBy || "Staff"}</span>
+                          </a>
+                        ) : (
+                          <div className="grid h-32 place-items-center text-center text-black/35">
+                            <div><ImagePlus className="mx-auto mb-2 size-6" /><span className="text-xs font-bold">Nessuna foto</span></div>
+                          </div>
+                        )}
+                        <label className={cn("m-2 flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#C66170] px-3 text-xs font-black text-white transition hover:bg-[#B45464]", uploadingPhoto && "pointer-events-none opacity-60")}>
+                          {uploadingPhoto ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                          {photo ? `Sostituisci Foto ${index + 1}` : `Carica Foto ${index + 1}`}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingPhoto}
+                            onChange={(event) => {
+                              void uploadPhotoSlot(selected, index, event.target.files?.[0]);
+                              event.currentTarget.value = "";
+                            }}
+                          />
+                        </label>
                       </div>
-                    </div>
-                  )}
-                  <label className={cn(
-                    "mt-3 flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#C66170] px-4 text-sm font-bold text-white transition hover:bg-[#B45464]",
-                    uploadingPhoto && "pointer-events-none opacity-60"
-                  )}>
-                    {uploadingPhoto ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                    {uploadingPhoto ? "Caricamento..." : "Aggiungi foto prodotto"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      disabled={uploadingPhoto}
-                      onChange={(event) => {
-                        void uploadPhotos(selected, event.target.files);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <p className="mt-2 text-center text-[11px] text-black/35">Puoi scegliere più foto · massimo 10 MB ciascuna</p>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-center text-[11px] text-black/35">Due foto · JPG, PNG o WEBP · massimo 10 MB ciascuna</p>
                   {photoError ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600">{photoError}</p> : null}
                 </Card>
                 <Card className="bg-white">
@@ -1640,6 +1680,7 @@ export function OrderManager({
                   </div>
                 </Card>
               </div>
+            </div>
             </div>
           </div>
         </div>

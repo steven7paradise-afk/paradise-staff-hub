@@ -6,7 +6,7 @@ import { getOperationalUser } from "@/lib/operational-session";
 const ORDER_PHOTO_KEY = "__orderPhoto";
 const ORDER_PRODUCT_PHOTOS_KEY = "__orderProductPhotos";
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-const MAX_PRODUCT_PHOTOS = 30;
+const PRODUCT_PHOTO_SLOTS = 2;
 
 type RouteParams = { params: Promise<{ id: string }> };
 type OrderField = { id: string; label?: string | null };
@@ -145,17 +145,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       stage: String(data.get("stage") || "NEW"),
     };
 
+    const requestedSlot = Number(data.get("slot"));
+    const slot = Number.isInteger(requestedSlot) && requestedSlot >= 0 && requestedSlot < PRODUCT_PHOTO_SLOTS ? requestedSlot : 0;
+    const legacyPhoto = currentAnswers[ORDER_PHOTO_KEY];
     const existingPhotos = Array.isArray(currentAnswers[ORDER_PRODUCT_PHOTOS_KEY])
-      ? (currentAnswers[ORDER_PRODUCT_PHOTOS_KEY] as unknown[]).filter((item) => item && typeof item === "object")
+      ? (currentAnswers[ORDER_PRODUCT_PHOTOS_KEY] as unknown[]).slice(0, PRODUCT_PHOTO_SLOTS)
       : [];
-    if (existingPhotos.length >= MAX_PRODUCT_PHOTOS) {
-      return NextResponse.json({ error: `Puoi conservare al massimo ${MAX_PRODUCT_PHOTOS} foto per ordine.` }, { status: 400 });
-    }
+    while (existingPhotos.length < PRODUCT_PHOTO_SLOTS) existingPhotos.push(null);
+    if (!existingPhotos[0] && legacyPhoto && typeof legacyPhoto === "object") existingPhotos[0] = legacyPhoto;
+    const nextPhotos = [...existingPhotos];
+    nextPhotos[slot] = photo;
     const currentLog = Array.isArray(response.activity_log) ? (response.activity_log as unknown[]) : [];
     const photoLogEntry = {
       type: "PHOTO_ADDED",
-      action: "Foto prodotto aggiunta",
+      action: `Foto prodotto ${slot + 1} aggiunta`,
       photoId: photo.id,
+      photoSlot: slot,
       stage: photo.stage,
       by: photo.uploadedBy,
       at: photo.uploadedAt,
@@ -166,8 +171,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: {
         answers: {
           ...currentAnswers,
-          [ORDER_PHOTO_KEY]: currentAnswers[ORDER_PHOTO_KEY] || photo,
-          [ORDER_PRODUCT_PHOTOS_KEY]: [...existingPhotos, photo],
+          [ORDER_PHOTO_KEY]: nextPhotos[0] || photo,
+          [ORDER_PRODUCT_PHOTOS_KEY]: nextPhotos,
         },
         activity_log: [...currentLog, photoLogEntry],
       },
@@ -177,7 +182,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    return NextResponse.json({ photo, photos: [...existingPhotos, photo], order: updated });
+    return NextResponse.json({ photo, photos: nextPhotos, order: updated });
   } catch (error) {
     console.error("Failed to upload order image:", error);
     return NextResponse.json({ error: uploadErrorMessage(error) }, { status: 500 });
