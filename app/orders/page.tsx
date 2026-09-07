@@ -7,6 +7,7 @@ import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthor
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { ensureOrderForm, ORDER_FORM_CATEGORY } from "@/lib/order-form";
 import { resolveOrderConfirmer } from "@/lib/order-confirmation";
+import { isOrderVisibleForOperationalLocation } from "@/lib/order-visibility";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
@@ -103,7 +104,16 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
       },
     },
     include: {
-      user: { select: { id: true, name: true, role: true, photo_url: true, sede_id: true } },
+      user: {
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          photo_url: true,
+          sede_id: true,
+          location: { select: { name: true } },
+        },
+      },
       form: true,
     },
     orderBy: { created_at: "desc" },
@@ -123,7 +133,7 @@ export default async function OrdersPage(props: { searchParams: Promise<{ remote
 
   const operationalLocationId = pcAuth?.locationId || remoteWorker?.sede_id || "";
   const orders = isPC && operationalLocationId
-    ? allOrders.filter((order) => order.user?.sede_id === operationalLocationId)
+    ? allOrders.filter((order) => isOrderVisibleForOperationalLocation(order, operationalLocationId))
     : allOrders;
 
   return (
