@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { uploadOrderPhotoToGoogleDrive } from "@/lib/google-drive";
 import { getOperationalUser } from "@/lib/operational-session";
@@ -173,8 +174,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ...currentAnswers,
           [ORDER_PHOTO_KEY]: nextPhotos[0] || photo,
           [ORDER_PRODUCT_PHOTOS_KEY]: nextPhotos,
-        },
-        activity_log: [...currentLog, photoLogEntry],
+        } as Prisma.InputJsonValue,
+        activity_log: [...currentLog, photoLogEntry] as Prisma.InputJsonValue,
       },
       include: {
         user: true,

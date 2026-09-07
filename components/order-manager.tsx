@@ -1329,34 +1329,29 @@ export function OrderManager({
                 <Button variant="soft" onClick={closeSelectedOrder}><X className="size-4" /> Chiudi</Button>
               </div>
             </div>
-            <div className="mb-4 grid gap-3 rounded-[22px] border border-black/5 bg-[#FBF8FA] p-3 md:grid-cols-4">
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><MapPin className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Salone</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{selected.user_location_name ?? "Non indicato"}</p>
+            <div className="mb-3 flex min-h-14 items-center overflow-x-auto rounded-2xl border border-black/[0.07] bg-white px-4 shadow-sm">
+              <div className="flex min-w-max items-center divide-x divide-black/[0.08]">
+                <div className="flex items-center gap-2.5 pr-5">
+                  <MapPin className="size-4 text-[#8064D8]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-black/35">Salone</span>
+                  <b className="text-sm text-black/75">{selected.user_location_name ?? "Non indicato"}</b>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><UserRound className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Creato da</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{selected.user?.name ?? "Staff"}</p>
+                <div className="flex items-center gap-2.5 px-5">
+                  <UserRound className="size-4 text-[#8064D8]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-black/35">Creato da</span>
+                  <b className="text-sm text-black/75">{selected.user?.name ?? "Staff"}</b>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-[#F2F0FF] text-[#8064D8]"><CalendarDays className="size-4" /></span>
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-black/35">Data creazione</p>
-                  <p className="mt-1 text-sm font-black text-black/80">{orderDate(selected)}</p>
+                <div className="flex items-center gap-2.5 px-5">
+                  <CalendarDays className="size-4 text-[#8064D8]" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-black/35">Creato</span>
+                  <b className="text-sm text-black/75">{orderDate(selected)}</b>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 rounded-2xl bg-white p-3">
-                <OrderActor order={selected} detail />
-                <p className="ml-auto text-right text-[10px] font-semibold leading-4 text-black/35">Ultima modifica<br />{formatDateTime(selected.updated_at)}</p>
+                <div className="flex items-center gap-2.5 pl-5 text-xs text-black/40">
+                  <Clock3 className="size-4" /> Ultima modifica {formatDateTime(selected.updated_at)}
+                </div>
               </div>
             </div>
-            <div className="mb-5 overflow-x-auto rounded-[22px] border border-black/10 bg-white px-4 py-5 shadow-sm">
+            <div className="mb-4 overflow-x-auto rounded-2xl border border-black/10 bg-white px-4 py-3.5 shadow-sm">
               <div className="flex min-w-[720px] items-start">
                 {ORDER_COLUMNS.map((column, index) => {
                   const currentIndex = ORDER_COLUMNS.findIndex((item) => item.id === (selected.status || "NEW"));
@@ -1366,18 +1361,17 @@ export function OrderManager({
                   return (
                     <div key={column.id} className="relative flex flex-1 flex-col items-center text-center">
                       {index > 0 ? (
-                        <span className={cn("absolute right-1/2 top-[17px] h-px w-full", index <= currentIndex ? "bg-slate-950" : "bg-black/15")} />
+                        <span className={cn("absolute right-1/2 top-[15px] h-px w-full", index <= currentIndex ? "bg-slate-950" : "bg-black/15")} />
                       ) : null}
                       <span className={cn(
-                        "relative z-[1] grid size-9 place-items-center rounded-full border bg-white transition",
+                        "relative z-[1] grid size-8 place-items-center rounded-full border bg-white transition",
                         complete && "border-slate-950 bg-slate-950 text-white",
                         active && "border-[#C66170] bg-[#C66170] text-white shadow-[0_0_0_5px_rgba(198,97,112,0.12)]",
                         !complete && !active && "border-black/15 text-black/35",
                       )}>
                         {complete ? <CheckCircle2 className="size-4" /> : <Icon className="size-4" />}
                       </span>
-                      <span className={cn("mt-3 text-[11px] font-black uppercase tracking-[0.08em]", active ? "text-[#A83F6D]" : complete ? "text-slate-950" : "text-black/35")}>{column.label}</span>
-                      <span className="mt-1 max-w-[150px] text-[10px] leading-4 text-black/40">{column.helper}</span>
+                      <span className={cn("mt-2 text-[10px] font-black uppercase tracking-[0.07em]", active ? "text-[#A83F6D]" : complete ? "text-slate-950" : "text-black/35")}>{column.label}</span>
                     </div>
                   );
                 })}

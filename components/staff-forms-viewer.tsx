@@ -1711,10 +1711,10 @@ export function StaffFormsViewer({
 
       {/* PICKUP MODAL */}
       {showPickupModal && (
-        <GlobalFullscreenLayer className="bg-[#0b0b0c]">
+        <GlobalFullscreenLayer className="bg-[#f6f4f5]">
           <form
             onSubmit={handlePickupSubmit}
-            className="flex h-full w-full flex-col overflow-hidden bg-[#0b0b0c] text-white"
+            className="pickup-workspace-light flex h-full w-full flex-col overflow-hidden bg-[#f6f4f5] text-slate-950"
           >
             <div className="flex-none border-b border-white/10 bg-white/[0.03] px-5 py-4 sm:px-7">
               <div className="mx-auto flex w-full max-w-[1900px] items-start justify-between gap-4">

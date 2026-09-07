@@ -1935,6 +1935,61 @@ textarea {
   }
 }
 
+/* Consegna ordine: il flusso resta compatto come una postazione operativa,
+   ma usa una superficie chiara coerente con le nuove schede ordine. */
+.pickup-workspace-light {
+  color-scheme: light;
+  color: #172033 !important;
+  background: #f6f4f5 !important;
+}
+
+.pickup-workspace-light [class*="bg-white/"] {
+  background: #ffffff !important;
+}
+
+.pickup-workspace-light [class*="bg-black/"] {
+  background: #f8fafc !important;
+}
+
+.pickup-workspace-light [class*="border-white/"] {
+  border-color: #e2e8f0 !important;
+}
+
+.pickup-workspace-light [class~="text-white"] {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+}
+
+.pickup-workspace-light [class*="text-white/"] {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+}
+
+.pickup-workspace-light [class*="text-emerald-"] {
+  color: #047857 !important;
+}
+
+.pickup-workspace-light [class*="text-amber-"] {
+  color: #92400e !important;
+}
+
+.pickup-workspace-light [class*="text-rose-"],
+.pickup-workspace-light [class*="text-red-"] {
+  color: #be123c !important;
+}
+
+.pickup-workspace-light :is(input, textarea, select) {
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033 !important;
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.pickup-workspace-light :is(input, textarea)::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
 /* Responsabile di turno: superficie operativa unica, bianca e opaca. Il
    canvas globale usa vetro e gradienti; questa pagina li disattiva per evitare
    stacchi di colore durante lo scorrimento del questionario. */
