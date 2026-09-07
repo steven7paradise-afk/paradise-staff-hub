@@ -1,4 +1,5 @@
 import { enrichCompanyInvoiceIdentity, enrichInvoiceAnswersFromShopify } from "@/lib/invoice-shopify";
+import { prisma } from "@/lib/prisma";
 
 const DEFAULT_SIBILL_BASE_URL = "https://integration.sibill.com";
 const DEFAULT_INVOICE_SECTIONAL_SUFFIX = "/001";
@@ -47,13 +48,6 @@ type SibillAccount = {
   } | null;
 };
 
-export type SibillDocumentSectional = {
-  id: string;
-  prefix?: string | null;
-  suffix?: string | null;
-  year?: number | null;
-};
-
 export class SibillDraftError extends Error {
   constructor(
     message: string,
@@ -91,26 +85,15 @@ export function isValidParadiseInvoiceNumber(value: unknown) {
   return progressive !== null && progressive >= minimum;
 }
 
-export function selectSibillInvoiceSectional(
-  sectionals: SibillDocumentSectional[],
-  year: number,
-  configuredId?: string,
-  suffix = DEFAULT_INVOICE_SECTIONAL_SUFFIX,
-) {
-  const explicitId = clean(configuredId);
-  if (explicitId) {
-    return sectionals.find((sectional) => sectional.id === explicitId) || null;
-  }
-
-  const matches = sectionals.filter((sectional) =>
-    Number(sectional.year) === year && clean(sectional.suffix) === suffix
-  );
-  if (matches.length === 1) return matches[0];
-
-  // Credit-note sectionals commonly share the suffix but have an NC/ prefix.
-  // A normal invoice sectional has no prefix, so it remains unambiguous.
-  const withoutPrefix = matches.filter((sectional) => !clean(sectional.prefix));
-  return withoutPrefix.length === 1 ? withoutPrefix[0] : null;
+export function nextParadiseInvoiceNumber(values: unknown[]) {
+  const minimum = Number.parseInt(process.env.SIBILL_INVOICE_FIRST_PROGRESSIVE || "", 10)
+    || DEFAULT_FIRST_INVOICE_PROGRESSIVE;
+  const suffix = process.env.SIBILL_INVOICE_SECTIONAL_SUFFIX?.trim() || DEFAULT_INVOICE_SECTIONAL_SUFFIX;
+  const highest = values.reduce<number>((current, value) => {
+    const progressive = invoiceNumberProgressive(value, suffix);
+    return progressive === null ? current : Math.max(current, progressive);
+  }, minimum - 1);
+  return `${highest + 1}${suffix}`;
 }
 
 export function parseItalianBillingAddress(value: unknown): BillingAddress | null {
@@ -373,18 +356,12 @@ async function loadSibillCompany() {
   return { config, company };
 }
 
-async function resolveSibillInvoiceSectional(input: {
+async function loadSibillInvoiceNumbers(input: {
   config: ReturnType<typeof sibillConfig>;
   companyId: string;
-  date: Date;
 }) {
-  const year = Number.parseInt(
-    new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Europe/Rome" }).format(input.date),
-    10,
-  );
-  const suffix = process.env.SIBILL_INVOICE_SECTIONAL_SUFFIX?.trim() || DEFAULT_INVOICE_SECTIONAL_SUFFIX;
   const response = await fetch(
-    `${input.config.baseUrl}/api/v1/companies/${encodeURIComponent(input.companyId)}/document-sectionals?page_size=100`,
+    `${input.config.baseUrl}/api/v1/companies/${encodeURIComponent(input.companyId)}/documents?page_size=100&sort=-created_at`,
     {
       headers: {
         Authorization: `Bearer ${input.config.token}`,
@@ -397,25 +374,21 @@ async function resolveSibillInvoiceSectional(input: {
   const data = await sibillJson(response);
   if (!response.ok) {
     throw new SibillDraftError(
-      sibillErrorMessage(data, "Numerazione fatture Sibill non disponibile."),
+      sibillErrorMessage(data, "Elenco fatture Sibill non disponibile."),
       response.status,
     );
   }
+  return (Array.isArray(data?.data) ? data.data : []).map((document: any) => document?.number);
+}
 
-  const sectionals = Array.isArray(data?.data) ? data.data as SibillDocumentSectional[] : [];
-  const sectional = selectSibillInvoiceSectional(
-    sectionals,
-    year,
-    process.env.SIBILL_INVOICE_SECTIONAL_ID,
-    suffix,
+async function loadReservedInvoiceNumbers() {
+  const responses = await prisma.serviceFormResponse.findMany({
+    where: { form: { name: { contains: "fattura", mode: "insensitive" } } },
+    select: { answers: true },
+  });
+  return responses.map((response) =>
+    (response.answers as Record<string, unknown> | null)?.[SIBILL_ANSWER_KEYS.documentNumber]
   );
-  if (!sectional) {
-    throw new SibillDraftError(
-      `Sezionale fatture ${suffix} per il ${year} non trovato o non univoco su Sibill.`,
-      422,
-    );
-  }
-  return sectional;
 }
 
 async function updateSibillDocumentNotes(input: {
@@ -652,25 +625,21 @@ export async function createSibillDraft(input: {
   }
   const invoiceDate = input.createdAt || new Date();
   const payload = buildSibillInvoiceDraft(preparedAnswers, company, invoiceDate);
-  const sectional = await resolveSibillInvoiceSectional({
-    config,
-    companyId: company.id,
-    date: invoiceDate,
-  });
-  const assignedNumber = clean(input.assignedNumber);
-  if (assignedNumber && !isValidParadiseInvoiceNumber(assignedNumber)) {
-    throw new SibillDraftError(`Numero fattura ${assignedNumber} non valido per il sezionale /001.`, 422);
+  const preservedNumber = clean(input.assignedNumber);
+  if (preservedNumber && !isValidParadiseInvoiceNumber(preservedNumber)) {
+    throw new SibillDraftError(`Numero fattura ${preservedNumber} non valido per la serie /001.`, 422);
   }
-  if (assignedNumber) {
-    const documentData = payload.fattura_elettronica_body[0].dati_generali
-      .dati_generali_documento as Record<string, unknown>;
-    documentData.numero = assignedNumber;
-  }
+  const assignedNumber = preservedNumber || nextParadiseInvoiceNumber([
+    ...await loadSibillInvoiceNumbers({ config, companyId: company.id }),
+    ...await loadReservedInvoiceNumbers(),
+  ]);
+  const documentData = payload.fattura_elettronica_body[0].dati_generali
+    .dati_generali_documento as Record<string, unknown>;
+  documentData.numero = assignedNumber;
   const reference = clean(preparedAnswers.invoice_receipt_ref || preparedAnswers.invoice_shopify_order) || input.responseId;
   const query = new URLSearchParams({
     issue: "false",
-    automatic_number: assignedNumber ? "false" : "true",
-    sectional_id: sectional.id,
+    automatic_number: "false",
     reconciliation_identifier: reference,
   });
 
