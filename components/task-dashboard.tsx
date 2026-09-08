@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Bell,
+  BookmarkCheck,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -34,6 +35,7 @@ import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
+import { TASK_VIEW_OPTIONS, type TaskViewPreference } from "@/lib/task-view";
 
 type Worker = { id: string; name: string; locationId: string | null; photoUrl: string | null; mansione?: string | null; role?: Role | string };
 type ChecklistItem = { text: string; done: boolean; completedBy?: string | null; completedAt?: string | null };
@@ -90,7 +92,7 @@ type TaskComment = {
   updatedAt: string;
   files?: { name: string; url?: string; previewUrl?: string; driveFileId?: string; driveFileUrl?: string; storagePath?: string; type?: string }[] | null;
 };
-type TaskView = "HOME" | "TABLE" | "BOARD" | "CALENDAR" | "LIST";
+type TaskView = TaskViewPreference;
 type TaskFilter = "TODAY" | "ACTIVE" | "NEW" | "WAITING" | "COMPLETED";
 type AttachmentPreview = { name: string; url: string; kind: "image" | "file" };
 type TodayAttendanceLog = { type: "ENTRATA" | "PAUSA" | "RIENTRO" | "USCITA"; timestamp: string; time: string };
@@ -519,13 +521,15 @@ function extractMentionedWorkers(value: string, workers: Worker[]) {
   return workers.filter((worker) => tags.includes(workerMentionSlug(worker.name).toLowerCase()));
 }
 
-export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null }) {
+export function TaskDashboard({ role, userId, userName, currentUserLocationId, workers, mentionableUsers, categories: initialCategories, initialTasks, canManageTasks = false, initialTaskId = null, initialView = "HOME" }: { role: Role; userId: string; userName: string; currentUserLocationId: string | null; workers: Worker[]; mentionableUsers: Worker[]; categories: string[]; initialTasks: Task[]; canManageTasks?: boolean; initialTaskId?: string | null; initialView?: TaskView }) {
   const canAssign = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN" || role === "RESPONSABILE";
   const canAssignAcrossTeam = canManageTasks || role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const initialAllowedWorkers = canAssignAcrossTeam ? workers : mentionableUsers;
 
   const [tasks, setTasks] = useState(initialTasks);
-  const [view, setView] = useState<TaskView>("HOME");
+  const [view, setView] = useState<TaskView>(initialView);
+  const [defaultView, setDefaultView] = useState<TaskView>(initialView);
+  const [defaultViewStatus, setDefaultViewStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [open, setOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Task | null>(null);
@@ -543,6 +547,26 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState<"updated" | "due" | "priority" | "title">("updated");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  async function saveDefaultView(nextView: TaskView) {
+    const previousView = defaultView;
+    setView(nextView);
+    setDefaultView(nextView);
+    setDefaultViewStatus("saving");
+    try {
+      const response = await fetch("/api/profile/task-view", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ view: nextView }),
+      });
+      if (!response.ok) throw new Error("Vista non salvata");
+      setDefaultViewStatus("saved");
+      window.setTimeout(() => setDefaultViewStatus("idle"), 2200);
+    } catch {
+      setDefaultView(previousView);
+      setDefaultViewStatus("error");
+    }
+  }
   const [calendarMode, setCalendarMode] = useState<"MONTH" | "WEEK">("MONTH");
   const [saving, setSaving] = useState(false);
   const [formStatus, setFormStatus] = useState("");
@@ -1460,6 +1484,26 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               </button>
             );
           })}
+          <label className="mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-black/10 bg-black/[0.025] px-3 text-xs font-bold text-black/55 sm:ml-auto sm:mt-0 sm:w-auto">
+            <span className="inline-flex items-center gap-2 whitespace-nowrap">
+              <BookmarkCheck className="size-4 text-[#C66170]" />
+              Vista iniziale
+            </span>
+            <select
+              value={defaultView}
+              disabled={defaultViewStatus === "saving"}
+              onChange={(event) => void saveDefaultView(event.target.value as TaskView)}
+              aria-label="Scegli la vista iniziale della pagina Task"
+              className="min-h-9 rounded-xl border border-black/10 bg-white px-3 text-xs font-black text-black outline-none focus:border-[#C66170] focus:ring-2 focus:ring-[#C66170]/15 disabled:opacity-60"
+            >
+              {TASK_VIEW_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <span role="status" className={`min-w-12 text-right text-[10px] font-black ${defaultViewStatus === "error" ? "text-red-600" : "text-emerald-600"}`}>
+              {defaultViewStatus === "saving" ? "Salvo…" : defaultViewStatus === "saved" ? "Salvata" : defaultViewStatus === "error" ? "Riprova" : ""}
+            </span>
+          </label>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">

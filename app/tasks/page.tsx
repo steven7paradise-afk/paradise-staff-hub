@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/roles";
 import { hasTaskAccess, isTaskOfficeUser, taskWorkerWhere } from "@/lib/task-access";
+import { normalizeTaskView } from "@/lib/task-view";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const role = session.user.role as Role;
   const currentUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, mansione: true, sede_id: true, location: { select: { name: true } } },
+    select: { id: true, mansione: true, sede_id: true, default_task_view: true, location: { select: { name: true } } },
   });
   if (!hasTaskAccess(role, currentUser?.mansione, currentUser?.location?.name)) redirect("/dashboard");
 
@@ -124,6 +125,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         userName={session.user.name ?? "Paradise"}
         currentUserLocationId={currentUser?.sede_id ?? null}
         canManageTasks={canSeeAllTasks}
+        initialView={normalizeTaskView(currentUser?.default_task_view)}
         initialTaskId={requestedTaskId}
         categories={taskCategories}
         workers={workers.map((worker) => ({ id: worker.id, name: worker.name, locationId: worker.sede_id, photoUrl: worker.photo_url, mansione: worker.mansione, role: worker.role }))}
