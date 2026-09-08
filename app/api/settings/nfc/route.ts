@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   const userId = String(payload.userId ?? "");
   let hash: string;
-  try { hash = nfcBadgeHash(payload.serialNumber); }
+  try { hash = nfcBadgeHash(payload.badgeToken); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Tessera non valida" }, { status: 400 }); }
 
   const worker = await prisma.user.findFirst({

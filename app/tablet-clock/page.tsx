@@ -60,7 +60,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function TabletClockPage({
   searchParams,
 }: {
-  searchParams: Promise<{ device?: string }>;
+  searchParams: Promise<{ device?: string; badge?: string }>;
 }) {
   const params = await searchParams;
   const [cookieStore, headerStore, session] = await Promise.all([
@@ -303,6 +303,7 @@ export default async function TabletClockPage({
       tabletBranding={tabletBranding}
       clientControlFormId={clientControlFormId}
       todayAppointments={todayAppointments}
+      badgeToken={params.badge ?? null}
     />
   );
 }

@@ -190,8 +190,6 @@ type IdentifiedWorker = {
   mansione: string | null;
   todayShift: any;
 };
-type NfcReader = EventTarget & { scan(options?: { signal?: AbortSignal }): Promise<void> };
-type NfcReaderConstructor = new () => NfcReader;
 
 const statusLabels: Record<ClockStatus, string> = {
   OUT: "Non entrato",
@@ -399,12 +397,14 @@ export function TabletClock({
   tabletBranding,
   clientControlFormId,
   todayAppointments = [],
+  badgeToken,
 }: {
   device: TabletDevice | null;
   branding?: BrandingTheme;
   tabletBranding?: TabletBranding | null;
   clientControlFormId: string | null;
   todayAppointments?: any[];
+  badgeToken?: string | null;
 }) {
   const router = useRouter();
 
@@ -418,9 +418,8 @@ export function TabletClock({
   const [now, setNow] = useState(new Date());
   const [pin, setPin] = useState("");
   const [nfcSerial, setNfcSerial] = useState("");
-  const [nfcSupported, setNfcSupported] = useState(false);
-  const [showPinFallback, setShowPinFallback] = useState(false);
-  const [nfcListening, setNfcListening] = useState(false);
+  const [showPinFallback, setShowPinFallback] = useState(true);
+  const badgeHandledRef = useRef(false);
   const [worker, setWorker] = useState<IdentifiedWorker | null>(null);
   const [imageError, setImageError] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
@@ -522,10 +521,14 @@ export function TabletClock({
     setSoundEnabled(window.localStorage.getItem("paradise-tablet-sound") !== "off");
     const savedPack = window.localStorage.getItem("paradise-tablet-sound-pack") as SoundPackId | null;
     if (savedPack && soundPacks.some((pack) => pack.id === savedPack)) setSoundPack(savedPack);
-    const canReadNfc = "NDEFReader" in window;
-    setNfcSupported(canReadNfc);
-    setShowPinFallback(!canReadNfc);
   }, []);
+
+  useEffect(() => {
+    if (!device || !badgeToken || badgeHandledRef.current) return;
+    badgeHandledRef.current = true;
+    window.history.replaceState({}, "", "/tablet-clock");
+    void identifyNfc(badgeToken);
+  }, [badgeToken, device]);
 
   const visibleActions = worker ? clockActions.filter((action) => allowedActionsByStatus[worker.status].includes(action.type)) : [];
 
@@ -1280,35 +1283,6 @@ export function TabletClock({
       sound("error");
     } finally {
       setIdentifying(false);
-      setNfcListening(false);
-    }
-  }
-
-  async function startNfcReader() {
-    const NDEFReader = (window as typeof window & { NDEFReader?: NfcReaderConstructor }).NDEFReader;
-    if (!NDEFReader || nfcListening) return;
-    setFeedback(null);
-    setNfcListening(true);
-    try {
-      const controller = new AbortController();
-      const reader = new NDEFReader();
-      await reader.scan({ signal: controller.signal });
-      setMessage("Avvicina la tessera al retro del tablet");
-      reader.addEventListener("reading", (event) => {
-        controller.abort();
-        const serialNumber = (event as Event & { serialNumber?: string }).serialNumber;
-        if (!serialNumber) {
-          setNfcListening(false);
-          showFeedback("error", "Tessera non leggibile. Prova una tessera NFC NDEF.");
-          sound("error");
-          return;
-        }
-        void identifyNfc(serialNumber);
-      }, { once: true });
-    } catch {
-      setNfcListening(false);
-      showFeedback("error", "Attiva NFC e consenti l'accesso al lettore.");
-      sound("error");
     }
   }
 
@@ -2171,15 +2145,14 @@ export function TabletClock({
               <div className="kiosk-panel-enter kiosk-entry-panel mx-auto flex w-full max-w-[470px] flex-col py-2">
                 <div className="kiosk-pin-heading mb-4 text-center sm:mb-5">
                   <h1 className="text-2xl font-black tracking-normal text-[#171717] sm:text-3xl lg:text-4xl">Chi sta timbrando?</h1>
-                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">{nfcSupported && !showPinFallback ? "Avvicina la tessera NFC" : "Inserisci il tuo PIN personale"}</p>
+                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">{!showPinFallback ? "Avvicina la tessera NFC" : "Inserisci il tuo PIN personale"}</p>
                 </div>
-                {nfcSupported && !showPinFallback ? <>
-                  <div className={cn("flex min-h-[250px] flex-col items-center justify-center rounded-[28px] border-2 p-6 text-center transition", nfcListening ? "border-emerald-300 bg-emerald-50" : "border-[color:var(--tablet-accent)]/30 bg-[color:var(--tablet-soft)]/25")}>
-                    <div className={cn("grid size-24 place-items-center rounded-full shadow-lg", nfcListening ? "animate-pulse bg-emerald-600 text-white" : "bg-[color:var(--tablet-dark)] text-white")}><Nfc className="size-12" /></div>
-                    <p className="mt-6 text-xl font-black">{nfcListening ? "Avvicina la tessera" : "Timbra con NFC"}</p>
-                    <p className="mt-2 max-w-xs text-sm text-black/55">{nfcListening ? "Appoggiala al retro del tablet e attendi la conferma." : "Premi il pulsante e avvicina la tessera personale."}</p>
+                {!showPinFallback ? <>
+                  <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[28px] border-2 border-[color:var(--tablet-accent)]/30 bg-[color:var(--tablet-soft)]/25 p-6 text-center">
+                    <div className="grid size-24 place-items-center rounded-full bg-[color:var(--tablet-dark)] text-white shadow-lg"><Nfc className="size-12" /></div>
+                    <p className="mt-6 text-xl font-black">Avvicina la tessera</p>
+                    <p className="mt-2 max-w-xs text-sm text-black/55">Non devi premere nulla. Appoggia la carta NFC al retro del tablet.</p>
                   </div>
-                  <button type="button" onClick={() => void startNfcReader()} disabled={nfcListening || identifying} className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50"><Nfc className="size-5 text-[color:var(--tablet-accent)]" />{nfcListening ? "Lettore attivo…" : "Attiva lettore NFC"}</button>
                   <button type="button" onClick={() => { setShowPinFallback(true); setFeedback(null); }} className="mt-2 h-11 text-sm font-semibold text-black/55 underline underline-offset-4">Usa il PIN invece</button>
                 </> : <>
                 <p className="kiosk-pin-label mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
@@ -2210,7 +2183,6 @@ export function TabletClock({
                   <LogIn className="size-4 text-[color:var(--tablet-accent)]" />
                   <span>{identifying ? "Lettura..." : "Invia PIN"}</span>
                 </button>
-                {nfcSupported && <button type="button" onClick={() => { setShowPinFallback(false); setPin(""); setFeedback(null); }} className="mt-2 h-9 text-sm font-semibold text-black/55 underline underline-offset-4">Torna alla tessera NFC</button>}
                 </>}
                 <div className="kiosk-pin-status mt-3 flex h-8 items-center justify-center" aria-live="polite">
                   {feedback ? (

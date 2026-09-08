@@ -5,7 +5,7 @@ import { CheckCircle2, Nfc, Loader2, PauseCircle, Search, ShieldCheck, Trash2, T
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Worker = { id: string; name: string; role: string; mansione: string | null; photoUrl: string | null; locationName: string | null; hasBadge: boolean; enabled: boolean; enrolledAt: string | null };
-type Reader = EventTarget & { scan(options?: { signal?: AbortSignal }): Promise<void> };
+type Reader = EventTarget & { write(message: { records: Array<{ recordType: "url"; data: string }> }, options?: { signal?: AbortSignal }): Promise<void> };
 type ReaderConstructor = new () => Reader;
 
 export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }) {
@@ -32,19 +32,15 @@ export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }
     const controller = new AbortController();
     try {
       const reader = new NDEFReader();
-      await reader.scan({ signal: controller.signal });
-      setMessage({ ok: true, text: `Avvicina ora la tessera da associare a ${worker.name}.` });
-      reader.addEventListener("reading", async (event) => {
-        controller.abort();
-        const serialNumber = (event as Event & { serialNumber?: string }).serialNumber;
-        if (!serialNumber) { setReadingId(null); setMessage({ ok: false, text: "Tessera non leggibile. Prova una tessera NFC NDEF." }); return; }
-        try {
-          const data = await api("POST", { userId: worker.id, serialNumber });
-          setWorkers((items) => items.map((item) => item.id === worker.id ? { ...item, hasBadge: true, enabled: true, enrolledAt: data.enrolledAt } : item));
-          setMessage({ ok: true, text: `Tessera associata a ${worker.name}.` });
-        } catch (error) { setMessage({ ok: false, text: error instanceof Error ? error.message : "Associazione non riuscita" }); }
-        finally { setReadingId(null); }
-      }, { once: true });
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      const badgeToken = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      const badgeUrl = `${window.location.origin}/tablet-clock?badge=${badgeToken}`;
+      setMessage({ ok: true, text: `Avvicina ora la tessera di ${worker.name}. Il vecchio link verrà sostituito.` });
+      await reader.write({ records: [{ recordType: "url", data: badgeUrl }] }, { signal: controller.signal });
+      const data = await api("POST", { userId: worker.id, badgeToken });
+      setWorkers((items) => items.map((item) => item.id === worker.id ? { ...item, hasBadge: true, enabled: true, enrolledAt: data.enrolledAt } : item));
+      setMessage({ ok: true, text: `Tessera pronta per ${worker.name}. Da ora basta avvicinarla al tablet.` });
+      setReadingId(null);
     } catch { setReadingId(null); setMessage({ ok: false, text: "Permesso NFC non concesso o lettore non disponibile." }); }
   }
 
@@ -66,7 +62,7 @@ export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }
   return <div className="space-y-5">
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="rounded-[28px] border border-pink-100 bg-gradient-to-br from-white to-pink-50 p-6 shadow-sm">
-        <div className="flex items-center gap-4"><div className="grid size-14 place-items-center rounded-2xl bg-black text-white"><Nfc className="size-7" /></div><div><h2 className="text-xl font-semibold">Configurazione semplice</h2><p className="mt-1 text-sm text-black/55">Scegli la persona, premi Associa e avvicina la tessera al retro del tablet.</p></div></div>
+        <div className="flex items-center gap-4"><div className="grid size-14 place-items-center rounded-2xl bg-black text-white"><Nfc className="size-7" /></div><div><h2 className="text-xl font-semibold">Configurazione semplice</h2><p className="mt-1 text-sm text-black/55">Scegli la persona, premi Associa e avvicina la tessera. Il link provvisorio già presente verrà sostituito con il link personale Paradise.</p></div></div>
       </div>
       <div className={`rounded-[28px] border p-5 ${supported ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
         <div className="flex gap-3">{supported ? <ShieldCheck className="size-6 text-emerald-700" /> : <TriangleAlert className="size-6 text-amber-700" />}<div><p className="font-semibold">{supported === null ? "Verifica lettore…" : supported ? "Lettore NFC disponibile" : "Lettore non disponibile in questo browser"}</p><p className="mt-1 text-sm opacity-70">{supported ? "Puoi associare le tessere da questo dispositivo." : "Usa Chrome su Android. Il PIN continua a funzionare."}</p></div></div>
