@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
-import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle, Palette, RotateCcw } from "lucide-react";
+import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle, Palette, RotateCcw, House } from "lucide-react";
 import { Button, Card, Field } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ export function ProfileSettings({
   calendarId = "",
   headerColor = "",
   sidebarColor = "",
+  defaultPage = "/dashboard",
+  defaultPageOptions = [],
 }: {
   photoUrl: string | null;
   name: string;
@@ -31,6 +33,8 @@ export function ProfileSettings({
   calendarId?: string | null;
   headerColor?: string | null;
   sidebarColor?: string | null;
+  defaultPage?: string;
+  defaultPageOptions?: { path: string; label: string }[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState(photoUrl);
@@ -43,6 +47,8 @@ export function ProfileSettings({
   const [headerColorVal, setHeaderColorVal] = useState(headerColor ?? "");
   const [sidebarColorVal, setSidebarColorVal] = useState(sidebarColor ?? "");
   const [themeStatus, setThemeStatus] = useState("");
+  const [defaultPageValue, setDefaultPageValue] = useState(defaultPage);
+  const [defaultPageStatus, setDefaultPageStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const canUseCalendar = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canManagePhoto = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
@@ -176,8 +182,65 @@ export function ProfileSettings({
     updateLivePreview("", "");
   }
 
+  async function saveDefaultPage() {
+    setLoading(true);
+    setDefaultPageStatus("");
+    const response = await fetch("/api/profile/default-page", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ defaultPage: defaultPageValue }),
+    });
+    const result = await response.json().catch(() => ({}));
+    setLoading(false);
+    if (!response.ok) {
+      return setDefaultPageStatus(result.error ?? "Pagina iniziale non salvata.");
+    }
+    setDefaultPageStatus("Pagina iniziale salvata. La vedrai al prossimo accesso.");
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      <Card className="border border-black/5 bg-white/95 p-5 shadow-soft dark:border-white/10 dark:bg-neutral-900 sm:p-6 lg:col-span-2">
+        <div className="mb-4 flex items-center gap-2 border-b border-black/5 pb-3 dark:border-white/5">
+          <House className="size-5 text-[#B85B68] dark:text-paradise-pink" />
+          <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Pagina iniziale</h2>
+        </div>
+        <p className="text-xs leading-relaxed text-black/50 dark:text-white/40">
+          Scegli la schermata che vuoi vedere per prima quando accedi. Sono disponibili solo le pagine che puoi aprire.
+        </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <label className="space-y-1.5">
+            <span className="block pl-1 text-[10px] font-bold uppercase tracking-wider text-black/50 dark:text-white/40">Schermata preferita</span>
+            <select
+              value={defaultPageValue}
+              onChange={(event) => {
+                setDefaultPageValue(event.target.value);
+                setDefaultPageStatus("");
+              }}
+              className="min-h-12 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold text-black outline-none transition focus:border-[#B85B68] focus:ring-2 focus:ring-[#B85B68]/15 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            >
+              {defaultPageOptions.map((option) => (
+                <option key={option.path} value={option.path}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <Button type="button" onClick={saveDefaultPage} disabled={loading || defaultPageOptions.length === 0} className="w-full sm:w-auto">
+            Salva pagina iniziale
+          </Button>
+        </div>
+        {defaultPageStatus ? (
+          <div className={cn(
+            "mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold",
+            defaultPageStatus.includes("salvata")
+              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : "border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-400",
+          )}>
+            {defaultPageStatus.includes("salvata") ? <CheckCircle2 className="size-4 shrink-0" /> : <AlertCircle className="size-4 shrink-0" />}
+            <span>{defaultPageStatus}</span>
+          </div>
+        ) : null}
+      </Card>
+
       {/* Photo settings card */}
       <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6 space-y-6">
         <div>

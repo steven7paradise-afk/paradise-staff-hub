@@ -9,13 +9,14 @@ import { Badge, Card } from "@/components/ui";
 import { auth } from "@/lib/auth";
 import { monthlyPersonalHours } from "@/lib/personal-hours";
 import { prisma } from "@/lib/prisma";
-import { canAccessForUser, type Role } from "@/lib/roles";
+import { canAccess, getEffectivePermissionSet, type Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { DASHBOARD_SETTINGS_KEY, DEFAULT_DASHBOARD_SETTINGS } from "@/lib/dashboard-settings";
 import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-control-form";
 import { resolveCanonicalStaffName } from "@/lib/client-control-normalize";
 import { attendanceActualMinutes } from "@/lib/scheduled-attendance";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
+import { DEFAULT_PAGE_OPTIONS, normalizeDefaultPage } from "@/lib/default-page";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,17 @@ export default async function ProfilePage() {
   if (!session?.user?.id) redirect("/login");
   const user = await prisma.user.findUnique({ where: { id: session.user.id }, include: { location: true } });
   if (!user) redirect("/login");
-  const canAccessPage = await canAccessForUser(prisma, "/profile", {
-    id: user.id,
-    role: user.role,
-    mansione: user.mansione,
-  });
+  const effectivePermissions = await getEffectivePermissionSet(prisma, user);
+  const canAccessPage = canAccess(
+    "/profile",
+    user.role as Role,
+    user.mansione ?? undefined,
+    effectivePermissions,
+  );
   if (!canAccessPage) redirect("/dashboard");
+  const defaultPageOptions = DEFAULT_PAGE_OPTIONS.filter((option) =>
+    canAccess(option.path, user.role as Role, user.mansione ?? undefined, effectivePermissions),
+  );
   
   const now = new Date();
   const month = now.getMonth();
@@ -311,6 +317,8 @@ export default async function ProfilePage() {
             calendarId={user.google_calendar_id}
             headerColor={user.header_color}
             sidebarColor={user.sidebar_color}
+            defaultPage={normalizeDefaultPage(user.default_page) ?? "/dashboard"}
+            defaultPageOptions={defaultPageOptions.map((option) => ({ ...option }))}
           />
         }
       />

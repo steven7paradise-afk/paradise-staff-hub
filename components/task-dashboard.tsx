@@ -209,6 +209,40 @@ function Avatar({ name, photoUrl, className = "size-8" }: { name: string; photoU
   );
 }
 
+function AssigneeStack({
+  assignees,
+  className = "size-6",
+  maxVisible = 4,
+}: {
+  assignees: Task["assignees"];
+  className?: string;
+  maxVisible?: number;
+}) {
+  const visibleAssignees = assignees.slice(0, maxVisible);
+  const remaining = Math.max(0, assignees.length - visibleAssignees.length);
+  const label = assignees.length
+    ? `Assegnata a ${assignees.map((assignee) => assignee.name).join(", ")}`
+    : "Nessun collaboratore assegnato";
+
+  return (
+    <div className="flex shrink-0 -space-x-1.5" aria-label={label} title={label}>
+      {visibleAssignees.length ? visibleAssignees.map((assignee) => (
+        <Avatar
+          key={assignee.id}
+          name={assignee.name}
+          photoUrl={assignee.photoUrl}
+          className={`${className} ring-2 ring-white`}
+        />
+      )) : <Avatar name="Nessuno" photoUrl={null} className={className} />}
+      {remaining > 0 ? (
+        <span className={`${className} relative grid shrink-0 place-items-center rounded-full bg-neutral-900 text-[9px] font-black text-white ring-2 ring-white`}>
+          +{remaining}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function priorityTone(priority: string): "pink" | "gold" | "green" {
   if (priority === "ALTA") return "pink";
   if (priority === "BASSA") return "green";
@@ -1327,15 +1361,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
         <div className="min-w-0">
           <p className="truncate font-semibold">{task.title}</p>
           <div className="mt-1 flex items-center gap-2 text-xs text-black/45">
-            <div className="flex -space-x-1 overflow-hidden">
-              {task.assignees && task.assignees.length > 0 ? (
-                task.assignees.map((assignee) => (
-                  <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-5 rounded-full ring-1 ring-white" />
-                ))
-              ) : (
-                <Avatar name="Nessuno" photoUrl={null} className="size-5" />
-              )}
-            </div>
+            <AssigneeStack assignees={task.assignees || []} className="size-5" />
             <span className="truncate">
               {task.assignees && task.assignees.length > 0 
                 ? task.assignees.length === 1 
@@ -1618,15 +1644,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                     <td className="px-4 py-4"><Badge tone={priorityTone(task.priority)}>{task.priority}</Badge></td>
                     <td className="px-4 py-4">
                       <span className="inline-flex items-center gap-2">
-                        <div className="flex -space-x-1.5 overflow-hidden">
-                          {task.assignees && task.assignees.length > 0 ? (
-                            task.assignees.map((assignee) => (
-                              <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-7 rounded-full ring-2 ring-white" />
-                            ))
-                          ) : (
-                            <Avatar name="Nessuno" photoUrl={null} className="size-7" />
-                          )}
-                        </div>
+                        <AssigneeStack assignees={task.assignees || []} className="size-7" />
                         <span className="truncate max-w-[150px]">
                           {task.assignees && task.assignees.length > 0 
                             ? task.assignees.length === 1 
@@ -1675,7 +1693,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 <div className="grid gap-3">
                   {column.tasks.length === 0 ? <p className="rounded-2xl bg-white/70 p-4 text-sm text-black/40">Nessuna task.</p> : null}
                   {column.tasks.map((task) => (
-                    <button key={task.id} onClick={() => void openTask(task)} className="rounded-2xl border border-black/5 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <button key={task.id} onClick={() => void openTask(task)} className="w-full min-w-0 overflow-hidden rounded-2xl border border-black/5 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                       <div className="flex items-start justify-between gap-3">
                         <h3 className="font-semibold leading-5">{task.title}</h3>
                         <span className="text-lg leading-none text-black/35">...</span>
@@ -1684,17 +1702,9 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                         <Badge tone={priorityTone(task.priority)}>{task.priority}</Badge>
                         <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-semibold text-black/50">{formatCategoryLabel(task.category)}</span>
                       </div>
-                      <div className="mt-4 flex items-center justify-between gap-3 text-xs text-black/45">
-                        <span className="inline-flex min-w-0 items-center gap-2">
-                          <div className="flex -space-x-1.5 overflow-hidden">
-                            {task.assignees && task.assignees.length > 0 ? (
-                              task.assignees.map((assignee) => (
-                                <Avatar key={assignee.id} name={assignee.name} photoUrl={assignee.photoUrl} className="inline-block size-6 rounded-full ring-2 ring-white" />
-                              ))
-                            ) : (
-                              <Avatar name="Nessuno" photoUrl={null} className="size-6" />
-                            )}
-                          </div>
+                      <div className="mt-4 flex min-w-0 items-center justify-between gap-3 text-xs text-black/45">
+                        <span className="inline-flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                          <AssigneeStack assignees={task.assignees || []} className="size-6" />
                           <span className="truncate">
                             {task.assignees && task.assignees.length > 0 
                               ? task.assignees.length === 1 
@@ -1703,7 +1713,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                               : task.assignedToName || "Nessuno"}
                           </span>
                         </span>
-                        <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" /> {formatTaskDate(task.dueDate)}</span>
+                        <span className="inline-flex shrink-0 items-center gap-1"><CalendarDays className="size-3.5" /> {formatTaskDate(task.dueDate)}</span>
                       </div>
                     </button>
                   ))}
@@ -1830,11 +1840,10 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                   {selected.assignees && selected.assignees.length === 1 ? (
                     <Avatar name={selected.assignees[0].name} photoUrl={selected.assignees[0].photoUrl} className="size-9" />
                   ) : (
-                    <div className="flex -space-x-2">
-                      {(selected.assignees.length > 0 ? selected.assignees : [{ id: selected.assignedToId, name: selected.assignedToName || "Nessuno", photoUrl: selected.assignedToPhoto }]).slice(0, 4).map((assignee) => (
-                        <Avatar key={assignee.id || assignee.name} name={assignee.name} photoUrl={assignee.photoUrl ?? null} className="size-9 ring-2 ring-white" />
-                      ))}
-                    </div>
+                    <AssigneeStack
+                      assignees={selected.assignees.length > 0 ? selected.assignees : [{ id: selected.assignedToId, name: selected.assignedToName || "Nessuno", photoUrl: selected.assignedToPhoto }]}
+                      className="size-9"
+                    />
                   )}
                   <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-[0.14em] text-black/35">Assegnata a</p>

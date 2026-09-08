@@ -6,7 +6,7 @@ import { signIn, signOut } from "next-auth/react";
 import { AlertCircle, Loader2, KeyRound, Mail } from "lucide-react";
 import { Button, Field } from "@/components/ui";
 
-const DEFAULT_LOGIN_DESTINATION = "/dashboard";
+const DEFAULT_LOGIN_DESTINATION = "/";
 
 function normalizeLoginDestination(value?: string | null, fallback = DEFAULT_LOGIN_DESTINATION) {
   if (!value) return fallback;
