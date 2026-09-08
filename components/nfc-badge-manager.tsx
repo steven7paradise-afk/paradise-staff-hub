@@ -5,7 +5,10 @@ import { CheckCircle2, Nfc, Loader2, PauseCircle, Search, ShieldCheck, Trash2, T
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Worker = { id: string; name: string; role: string; mansione: string | null; photoUrl: string | null; locationName: string | null; hasBadge: boolean; enabled: boolean; enrolledAt: string | null };
-type Reader = EventTarget & { write(message: { records: Array<{ recordType: "url"; data: string }> }, options?: { signal?: AbortSignal }): Promise<void> };
+type Reader = EventTarget & {
+  scan(options?: { signal?: AbortSignal }): Promise<void>;
+  write(message: { records: Array<{ recordType: "url"; data: string }> }, options?: { signal?: AbortSignal }): Promise<void>;
+};
 type ReaderConstructor = new () => Reader;
 
 export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }) {
@@ -14,6 +17,7 @@ export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }
   const [supported, setSupported] = useState<boolean | null>(null);
   const [readingId, setReadingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => setSupported("NDEFReader" in window), []);
   const filtered = useMemo(() => workers.filter((worker) => `${worker.name} ${worker.locationName ?? ""} ${worker.mansione ?? ""}`.toLowerCase().includes(query.toLowerCase())), [workers, query]);
@@ -44,6 +48,45 @@ export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }
     } catch { setReadingId(null); setMessage({ ok: false, text: "Permesso NFC non concesso o lettore non disponibile." }); }
   }
 
+  async function testReader() {
+    const NDEFReader = (window as typeof window & { NDEFReader?: ReaderConstructor }).NDEFReader;
+    if (!NDEFReader) {
+      setMessage({ ok: false, text: "Questo browser non può leggere NFC. Apri la pagina con Chrome sul tablet Android." });
+      return;
+    }
+    setTesting(true);
+    setMessage({ ok: true, text: "Lettore pronto: avvicina una carta NFC. Il test non salva e non timbra nulla." });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      setTesting(false);
+      setMessage({ ok: false, text: "Nessuna carta rilevata entro 30 secondi. Premi Testa e riprova." });
+    }, 30_000);
+    try {
+      const reader = new NDEFReader();
+      await reader.scan({ signal: controller.signal });
+      reader.addEventListener("reading", (event) => {
+        window.clearTimeout(timeout);
+        controller.abort();
+        const records = (event as Event & { message?: { records?: Array<{ recordType?: string }> } }).message?.records ?? [];
+        const hasLink = records.some((record) => record.recordType === "url" || record.recordType === "absolute-url");
+        setTesting(false);
+        setMessage({ ok: true, text: hasLink ? "Tessera rilevata correttamente. È presente un link NFC." : "Tessera rilevata correttamente. Il lettore NFC funziona." });
+      }, { once: true });
+      reader.addEventListener("readingerror", () => {
+        window.clearTimeout(timeout);
+        controller.abort();
+        setTesting(false);
+        setMessage({ ok: false, text: "Carta rilevata ma non leggibile. Riprova appoggiandola ferma sul retro del tablet." });
+      }, { once: true });
+    } catch (error) {
+      window.clearTimeout(timeout);
+      setTesting(false);
+      const timedOut = error instanceof DOMException && error.name === "AbortError";
+      setMessage({ ok: false, text: timedOut ? "Nessuna carta rilevata entro 30 secondi. Premi Testa e riprova." : "NFC bloccato: attivalo nelle impostazioni del tablet e consenti l’accesso a Chrome." });
+    }
+  }
+
   async function change(worker: Worker, action: "toggle" | "remove") {
     setBusyId(worker.id); setMessage(null);
     try {
@@ -65,7 +108,7 @@ export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }
         <div className="flex items-center gap-4"><div className="grid size-14 place-items-center rounded-2xl bg-black text-white"><Nfc className="size-7" /></div><div><h2 className="text-xl font-semibold">Configurazione semplice</h2><p className="mt-1 text-sm text-black/55">Scegli la persona, premi Associa e avvicina la tessera. Il link provvisorio già presente verrà sostituito con il link personale Paradise.</p></div></div>
       </div>
       <div className={`rounded-[28px] border p-5 ${supported ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-        <div className="flex gap-3">{supported ? <ShieldCheck className="size-6 text-emerald-700" /> : <TriangleAlert className="size-6 text-amber-700" />}<div><p className="font-semibold">{supported === null ? "Verifica lettore…" : supported ? "Lettore NFC disponibile" : "Lettore non disponibile in questo browser"}</p><p className="mt-1 text-sm opacity-70">{supported ? "Puoi associare le tessere da questo dispositivo." : "Usa Chrome su Android. Il PIN continua a funzionare."}</p></div></div>
+        <div className="flex gap-3">{supported ? <ShieldCheck className="size-6 text-emerald-700" /> : <TriangleAlert className="size-6 text-amber-700" />}<div className="min-w-0 flex-1"><p className="font-semibold">{supported === null ? "Verifica lettore…" : supported ? "Lettore NFC disponibile" : "Lettore non disponibile in questo browser"}</p><p className="mt-1 text-sm opacity-70">{supported ? "Puoi provare qualsiasi tessera prima di associarla." : "Usa Chrome su Android. Il PIN continua a funzionare."}</p><button type="button" onClick={() => void testReader()} disabled={!supported || testing || readingId !== null} className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-black px-4 text-sm font-semibold text-white disabled:opacity-40">{testing ? <Loader2 className="size-4 animate-spin" /> : <Nfc className="size-4" />}{testing ? "Avvicina la carta…" : "Testa lettore NFC"}</button></div></div>
       </div>
     </div>
     {message && <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium ${message.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}>{message.ok ? <CheckCircle2 className="size-5" /> : <TriangleAlert className="size-5" />}{message.text}</div>}
