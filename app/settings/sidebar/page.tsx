@@ -33,7 +33,7 @@ export default async function SidebarSettingsPage() {
   return (
     <AppShell
       title="Organizza Barra Laterale"
-      subtitle="Organizza le sezioni e modifica l'ordine dei tasti della barra laterale. I colori si gestiscono esclusivamente da Branding."
+      subtitle="Organizza le sezioni e personalizza ordine, nome e icona dei tasti. I colori si gestiscono da Branding."
       role={role}
     >
       <SidebarSettingsClient

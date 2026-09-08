@@ -21,15 +21,60 @@ import {
   PanelLeft,
   RotateCcw,
   Layers3,
+  X,
 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { DynamicIcon } from "@/components/dynamic-icon";
 import { routePermissions } from "@/lib/roles";
+import { SIDEBAR_ICON_OPTIONS } from "@/lib/sidebar-icons";
 
 type SidebarFolder = {
   id: string;
   title: string;
   routes: string[];
   labels?: Record<string, string>;
+  icons?: Record<string, string>;
+};
+
+const PAGE_ICONS: Record<string, string> = {
+  "/dashboard": "LayoutDashboard",
+  "/hub": "PanelsTopLeft",
+  "/my-shifts": "CalendarDays",
+  "/responsabile-di-turno": "UserRound",
+  "/programmazione-responsabile-di-turno": "CalendarDays",
+  "/tasks": "CheckSquare",
+  "/notifications": "Bell",
+  "/email": "Mail",
+  "/schedules": "CalendarDays",
+  "/social-calendar": "Share2",
+  "/locations": "Building2",
+  "/orders": "ShoppingCart",
+  "/shopify-orders": "Store",
+  "/shipping": "Truck",
+  "/appointments": "CalendarCheck",
+  "/consulenza-online": "Video",
+  "/cash": "DollarSign",
+  "/cassa-live": "CashRegister",
+  "/invoices": "ReceiptText",
+  "/refunds": "RotateCcw",
+  "/rimborsi": "RotateCcw",
+  "/client-control": "BarChart3",
+  "/fine-giornata": "ClipboardCheck",
+  "/tables": "Table2",
+  "/points": "Award",
+  "/tablet-clock": "Smartphone",
+  "/staff": "Users",
+  "/employees": "Users",
+  "/recruitment": "UserPlus",
+  "/attendance": "CalendarCheck",
+  "/work-hours": "Calculator",
+  "/requests": "ShieldCheck",
+  "/documents": "FileText",
+  "/cedolini": "FileCheck2",
+  "/malattie": "Heart",
+  "/team": "Users",
+  "/profile": "UserRound",
+  "/settings": "Settings",
 };
 
 const PAGE_LABELS: Record<string, string> = {
@@ -95,6 +140,7 @@ const ALL_PAGES = Object.keys(routePermissions).map((path) => ({
   path,
   name:
     PAGE_LABELS[path] || path.split("/").filter(Boolean).join(" / ") || "Home",
+  iconName: PAGE_ICONS[path] || "Settings",
 }));
 
 const DEFAULT_LAYOUT: SidebarFolder[] = [
@@ -148,6 +194,7 @@ export function SidebarSettingsClient({
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [editingRouteKey, setEditingRouteKey] = useState<string | null>(null);
 
   const assignedRouteHrefs = new Set(folders.flatMap((f) => f.routes));
   const unassignedPages = ALL_PAGES.filter(
@@ -273,9 +320,14 @@ export function SidebarSettingsClient({
     setFolders((prev) =>
       prev.map((f) => {
         if (f.id !== folderId) return f;
-        return { ...f, routes: f.routes.filter((r) => r !== routePath) };
+        const labels = { ...f.labels };
+        const icons = { ...f.icons };
+        delete labels[routePath];
+        delete icons[routePath];
+        return { ...f, routes: f.routes.filter((r) => r !== routePath), labels, icons };
       }),
     );
+    setEditingRouteKey((current) => current === `${folderId}:${routePath}` ? null : current);
   };
 
   // Add an unassigned route to the selected folder
@@ -298,6 +350,34 @@ export function SidebarSettingsClient({
     setFolders((prev) =>
       prev.map((f) => (f.id === folderId ? { ...f, title: trimmed } : f)),
     );
+  };
+
+  const handleSetRouteLabel = (folderId: string, routePath: string, value: string) => {
+    setFolders((current) => current.map((folder) => {
+      if (folder.id !== folderId) return folder;
+      const labels = { ...folder.labels };
+      const trimmed = value.slice(0, 48);
+      if (trimmed) labels[routePath] = trimmed;
+      else delete labels[routePath];
+      return { ...folder, labels };
+    }));
+  };
+
+  const handleSetRouteIcon = (folderId: string, routePath: string, iconName: string) => {
+    setFolders((current) => current.map((folder) => folder.id === folderId
+      ? { ...folder, icons: { ...folder.icons, [routePath]: iconName } }
+      : folder));
+  };
+
+  const handleResetRouteCustomization = (folderId: string, routePath: string) => {
+    setFolders((current) => current.map((folder) => {
+      if (folder.id !== folderId) return folder;
+      const labels = { ...folder.labels };
+      const icons = { ...folder.icons };
+      delete labels[routePath];
+      delete icons[routePath];
+      return { ...folder, labels, icons };
+    }));
   };
 
   // Save sidebar layout configuration
@@ -502,57 +582,83 @@ export function SidebarSettingsClient({
                         folder.routes.map((routeHref, routeIndex) => {
                           const page = ALL_PAGES.find(
                             (p) => p.path === routeHref,
-                          ) || { name: routeHref, path: routeHref };
+                          ) || { name: routeHref, path: routeHref, iconName: "Settings" };
+                          const customLabel = folder.labels?.[routeHref] || "";
+                          const displayedName = customLabel || page.name;
+                          const displayedIcon = folder.icons?.[routeHref] || page.iconName;
+                          const routeKey = `${folder.id}:${routeHref}`;
+                          const isEditing = editingRouteKey === routeKey;
                           return (
                             <div
                               key={routeHref}
                               title={routeHref}
-                              className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm"
+                              className={`overflow-hidden rounded-xl border bg-white shadow-sm transition ${isEditing ? "border-pink-300 ring-2 ring-pink-100" : "border-zinc-200"}`}
                             >
-                              <div className="flex min-w-0 items-center gap-3">
-                                <GripVertical
-                                  size={16}
-                                  className="shrink-0 text-zinc-300"
-                                />
-                                <span className="truncate text-sm font-bold text-zinc-700">
-                                  {page.name}
-                                </span>
+                              <div className="flex min-h-12 items-center justify-between gap-3 px-3 py-2">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <GripVertical size={16} className="shrink-0 text-zinc-300" />
+                                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-pink-50 text-pink-600">
+                                    <DynamicIcon name={displayedIcon} className="size-4" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-bold text-zinc-700">{displayedName}</p>
+                                    {customLabel || folder.icons?.[routeHref] ? <p className="text-[9px] font-black uppercase tracking-wide text-pink-500">Personalizzato</p> : null}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <ActionButton label={`Personalizza ${displayedName}`} onClick={() => setEditingRouteKey(isEditing ? null : routeKey)}>
+                                    {isEditing ? <X size={14} /> : <Edit3 size={14} />}
+                                  </ActionButton>
+                                  <ActionButton label={`Sposta ${displayedName} su`} disabled={routeIndex === 0} onClick={() => handleMoveRoute(folder.id, routeIndex, "up")}>
+                                    <ArrowUp size={14} />
+                                  </ActionButton>
+                                  <ActionButton label={`Sposta ${displayedName} giù`} disabled={routeIndex === folder.routes.length - 1} onClick={() => handleMoveRoute(folder.id, routeIndex, "down")}>
+                                    <ArrowDown size={14} />
+                                  </ActionButton>
+                                  <ActionButton label={`Rimuovi ${displayedName}`} danger onClick={() => handleRemoveRoute(folder.id, routeHref)}>
+                                    <Trash2 size={14} />
+                                  </ActionButton>
+                                </div>
                               </div>
-                              <div className="flex shrink-0 items-center gap-1">
-                                <ActionButton
-                                  label={`Sposta ${page.name} su`}
-                                  disabled={routeIndex === 0}
-                                  onClick={() =>
-                                    handleMoveRoute(folder.id, routeIndex, "up")
-                                  }
-                                >
-                                  <ArrowUp size={14} />
-                                </ActionButton>
-                                <ActionButton
-                                  label={`Sposta ${page.name} giù`}
-                                  disabled={
-                                    routeIndex === folder.routes.length - 1
-                                  }
-                                  onClick={() =>
-                                    handleMoveRoute(
-                                      folder.id,
-                                      routeIndex,
-                                      "down",
-                                    )
-                                  }
-                                >
-                                  <ArrowDown size={14} />
-                                </ActionButton>
-                                <ActionButton
-                                  label={`Rimuovi ${page.name}`}
-                                  danger
-                                  onClick={() =>
-                                    handleRemoveRoute(folder.id, routeHref)
-                                  }
-                                >
-                                  <Trash2 size={14} />
-                                </ActionButton>
-                              </div>
+                              {isEditing ? (
+                                <div className="border-t border-pink-100 bg-pink-50/40 p-3 sm:p-4">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                    <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-wider text-zinc-500">
+                                      Nome del tasto
+                                      <input
+                                        value={customLabel}
+                                        maxLength={48}
+                                        onChange={(event) => handleSetRouteLabel(folder.id, routeHref, event.target.value)}
+                                        placeholder={page.name}
+                                        className="mt-1.5 h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-bold normal-case tracking-normal text-zinc-800 outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                                      />
+                                    </label>
+                                    {(customLabel || folder.icons?.[routeHref]) ? (
+                                      <button type="button" onClick={() => handleResetRouteCustomization(folder.id, routeHref)} className="h-11 rounded-xl border border-zinc-200 bg-white px-4 text-xs font-black text-zinc-600 hover:bg-zinc-50">
+                                        Ripristina originale
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                  <fieldset className="mt-4">
+                                    <legend className="text-[10px] font-black uppercase tracking-wider text-zinc-500">Scegli icona</legend>
+                                    <div className="mt-2 grid max-h-48 grid-cols-6 gap-2 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-2 sm:grid-cols-9">
+                                      {SIDEBAR_ICON_OPTIONS.map((icon) => (
+                                        <button
+                                          key={icon.name}
+                                          type="button"
+                                          title={icon.label}
+                                          aria-label={`Usa icona ${icon.label}`}
+                                          aria-pressed={displayedIcon === icon.name}
+                                          onClick={() => handleSetRouteIcon(folder.id, routeHref, icon.name)}
+                                          className={`grid aspect-square min-h-10 place-items-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 ${displayedIcon === icon.name ? "bg-[#C84F89] text-white shadow-sm" : "bg-zinc-50 text-zinc-500 hover:bg-pink-50 hover:text-pink-600"}`}
+                                        >
+                                          <DynamicIcon name={icon.name} className="size-4" />
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </fieldset>
+                                </div>
+                              ) : null}
                             </div>
                           );
                         })
@@ -691,14 +797,16 @@ export function SidebarSettingsClient({
                           const page = ALL_PAGES.find(
                             (item) => item.path === routeHref,
                           );
+                          const previewLabel = folder.labels?.[routeHref] || page?.name || routeHref;
+                          const previewIcon = folder.icons?.[routeHref] || page?.iconName || "Settings";
                           return (
                             <div
                               key={routeHref}
                               className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] font-bold ${folderIndexIsFirst(folders, folder.id) && routeIndex === 0 ? "bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)]" : ""}`}
                             >
-                              <span className="size-1.5 rounded-full bg-current opacity-45" />
+                              <DynamicIcon name={previewIcon} className="size-3.5 shrink-0 opacity-70" />
                               <span className="truncate">
-                                {page?.name || routeHref}
+                                {previewLabel}
                               </span>
                             </div>
                           );
@@ -720,8 +828,8 @@ export function SidebarSettingsClient({
             </div>
             <div className="space-y-2 px-4 pb-4">
               <p className="text-xs leading-relaxed text-zinc-500">
-                L'anteprima usa i colori già impostati. Qui modifichi soltanto
-                ordine e sezioni.
+                L'anteprima usa i colori già impostati. Qui modifichi ordine,
+                sezioni, nomi e icone.
               </p>
               <Link
                 href="/settings/branding"

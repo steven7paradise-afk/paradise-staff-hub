@@ -50,7 +50,12 @@ import {
   ReceiptText,
   RotateCcw,
   Video,
-  MonitorCog
+  MonitorCog,
+  Store,
+  Truck,
+  BarChart3,
+  ClipboardCheck,
+  Award,
 } from "lucide-react";
 
 const iconMap = {
@@ -103,6 +108,11 @@ const iconMap = {
   RotateCcw,
   Video,
   MonitorCog,
+  Store,
+  Truck,
+  BarChart3,
+  ClipboardCheck,
+  Award,
   CashRegister
 } as const;
 

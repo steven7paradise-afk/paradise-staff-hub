@@ -25,6 +25,7 @@ import { RemoteControlBridge } from "@/components/remote-control-bridge";
 import pkg from "@/package.json";
 import { redirect } from "next/navigation";
 import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
+import { isSidebarIconName } from "@/lib/sidebar-icons";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -88,12 +89,12 @@ const permissionMenuOverrides = [
   { href: "/service-forms", label: "Moduli operativi", iconName: "ReceiptText", section: "Planning & Saloni" },
 ] satisfies { href: string; label: string; iconName: string; section?: string }[];
 
-type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string> };
+type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string>; icons?: Record<string, string> };
 
 function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
   if (!Array.isArray(value)) return [];
   return value
-    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown } => Boolean(folder) && typeof folder === "object")
+    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown; icons?: unknown } => Boolean(folder) && typeof folder === "object")
     .map((folder) => ({
       id: typeof folder.id === "string" ? folder.id : "folder",
       title: typeof folder.title === "string" ? folder.title : "Menu",
@@ -102,6 +103,12 @@ function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
         ? Object.fromEntries(
             Object.entries(folder.labels as Record<string, unknown>)
               .filter(([route, label]) => typeof route === "string" && typeof label === "string")
+          ) as Record<string, string>
+        : {},
+      icons: folder.icons && typeof folder.icons === "object" && !Array.isArray(folder.icons)
+        ? Object.fromEntries(
+            Object.entries(folder.icons as Record<string, unknown>)
+              .filter(([route, icon]) => typeof route === "string" && isSidebarIconName(icon))
           ) as Record<string, string>
         : {},
     }));
@@ -334,6 +341,10 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
     return folder?.labels?.[href] || fallback;
   };
+  const getSidebarIcon = (href: string, fallback: string) => {
+    const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
+    return folder?.icons?.[href] || fallback;
+  };
 
   const getStructuredMenuItems = <T extends { href: string }>(flatList: T[]): T[] => {
     if (!sidebarConfig || !Array.isArray(sidebarConfig) || sidebarConfig.length === 0) {
@@ -394,7 +405,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   let sidebarItems = getStructuredMenuItems(dedupeMenuItems(items)).map((item: any) => ({
     href: item.href,
     label: getSidebarLabel(item.href, item.label),
-    iconName: item.iconName,
+    iconName: getSidebarIcon(item.href, item.iconName),
     section: item.section,
     badge: item.href === "/requests" ? requestActions : undefined,
   }));
