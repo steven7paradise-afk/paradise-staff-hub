@@ -4590,16 +4590,20 @@ export function AppointmentsBrowser({
         : "Non trovato nel foglio conferme");
     if (!always && !booking.sheetNote) return null;
     const found = Boolean(booking.sheetMatched || booking.sheetNote);
+    const noteBlocks = message
+      .split(/\n\s*\n/g)
+      .map((block) => block.trim())
+      .filter(Boolean);
     return (
       <div
         className={[
-          "inline-flex max-w-full items-start gap-2 rounded-2xl border",
+          "group relative inline-flex max-w-full items-start gap-2 rounded-2xl border outline-none",
           found
             ? "border-emerald-100 bg-emerald-50 text-emerald-800"
             : "border-amber-100 bg-amber-50 text-amber-800",
           compact ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
         ].join(" ")}
-        title={message}
+        tabIndex={0}
       >
         <MessageCircle
           className={
@@ -4612,6 +4616,32 @@ export function AppointmentsBrowser({
             {compact ? compactValue(message, 42) : message}
           </span>
         </span>
+        {message ? (
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-[80] hidden w-[min(380px,calc(100vw-2rem))] -translate-x-1/2 space-y-2 rounded-2xl border border-black/10 bg-white p-3 text-left text-xs text-[#302B2D] shadow-[0_18px_50px_rgba(48,25,37,0.22)] group-hover:block group-focus:block"
+          >
+            {noteBlocks.map((block, index) => {
+              const [firstLine, ...contentLines] = block.split("\n");
+              const hasAuthor = /^staff\s*:/i.test(firstLine || "");
+              return (
+                <span
+                  key={`${booking.id}-sheet-note-${index}`}
+                  className="block rounded-xl bg-[#FFF8FB] px-3 py-2.5"
+                >
+                  {hasAuthor ? (
+                    <span className="block font-black text-[#B83D7F]">
+                      {firstLine}
+                    </span>
+                  ) : null}
+                  <span className="mt-1 block whitespace-pre-wrap break-words font-semibold leading-5 text-[#4A4145]">
+                    {(hasAuthor ? contentLines.join("\n") : block) || "Nota senza testo"}
+                  </span>
+                </span>
+              );
+            })}
+          </span>
+        ) : null}
       </div>
     );
   };
