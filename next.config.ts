@@ -4,6 +4,7 @@ const appBuildVersion = process.env.DEPLOY_ID || process.env.COMMIT_REF || `loca
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  deploymentId: appBuildVersion,
   typescript: { ignoreBuildErrors: true },
   serverExternalPackages: ["@prisma/client", "prisma", "bcryptjs", "googleapis"],
   env: {
