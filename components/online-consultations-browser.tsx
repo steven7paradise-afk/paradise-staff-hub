@@ -16,6 +16,7 @@ import {
   Save,
   Search,
   ShoppingBag,
+  TriangleAlert,
   UserRound,
   Video,
   X,
@@ -85,6 +86,12 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
   const [noteDraft, setNoteDraft] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteFeedback, setNoteFeedback] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!noteFeedback || noteFeedback.type === "error") return;
+    const timeout = window.setTimeout(() => setNoteFeedback(null), 6500);
+    return () => window.clearTimeout(timeout);
+  }, [noteFeedback]);
 
   const events = useMemo<ParsedEvent[]>(() => initialEvents.map((event) => {
     const description = event.description || "";
@@ -177,7 +184,7 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
           note: noteDraft,
         }),
       });
-      const payload = await response.json();
+      const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "Salvataggio non riuscito.");
 
       setInternalNotes((current) => {
@@ -205,6 +212,43 @@ export function OnlineConsultationsBrowser({ initialEvents, initialNotes = {}, s
 
   return (
     <section className="space-y-5">
+      {noteFeedback ? (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className={`fixed right-4 top-4 z-[120] flex w-[min(420px,calc(100vw-2rem))] items-start gap-3 rounded-2xl border bg-white p-4 shadow-[0_20px_60px_rgba(48,25,37,0.22)] ${
+            noteFeedback.type === "error"
+              ? "border-red-200"
+              : noteFeedback.type === "warning"
+                ? "border-amber-200"
+                : "border-emerald-200"
+          }`}
+        >
+          <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${
+            noteFeedback.type === "error"
+              ? "bg-red-50 text-red-600"
+              : noteFeedback.type === "warning"
+                ? "bg-amber-50 text-amber-700"
+                : "bg-emerald-50 text-emerald-600"
+          }`}>
+            {noteFeedback.type === "success" ? <CheckCircle2 className="size-5" /> : <TriangleAlert className="size-5" />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black text-[#171319]">
+              {noteFeedback.type === "error" ? "Nota non salvata" : noteFeedback.type === "warning" ? "Nota salvata con avviso" : "Nota salvata"}
+            </span>
+            <span className="mt-1 block text-xs font-semibold leading-5 text-black/55">{noteFeedback.message}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setNoteFeedback(null)}
+            aria-label="Chiudi notifica"
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-black/35 transition hover:bg-black/[0.04] hover:text-black/65"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : null}
       <div className="overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(125deg,rgba(255,255,255,.94),rgba(255,238,244,.88)_52%,rgba(238,231,248,.9))] shadow-[0_24px_70px_rgba(86,45,57,.10)]">
         <div className="grid gap-6 px-5 py-6 sm:px-7 lg:grid-cols-[1fr_auto] lg:items-end lg:px-8 lg:py-7">
           <div className="flex items-start gap-4">
