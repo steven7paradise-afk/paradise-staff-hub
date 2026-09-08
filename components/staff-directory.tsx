@@ -340,6 +340,7 @@ export function StaffDirectory({
   const [filterStatus, setFilterStatus] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterManager, setFilterManager] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [archiveMode, setArchiveMode] = useState(false);
   const [expiryMode, setExpiryMode] = useState(false);
   const [monthlyOverviewMode, setMonthlyOverviewMode] = useState<MonthlyOverviewMode | null>(null);
@@ -640,6 +641,31 @@ export function StaffDirectory({
 
     return matchesSearch && matchesLocation && matchesStatus && matchesRole && matchesManager;
   });
+  const hasActiveDirectoryFilters = Boolean(
+    searchQuery || filterLocation || filterStatus || filterRole || filterManager || expiryMode || monthlyOverviewMode
+  );
+  const clearDirectoryFilters = () => {
+    setSearchQuery("");
+    setFilterLocation("");
+    setFilterStatus("");
+    setFilterRole("");
+    setFilterManager("");
+    setExpiryMode(false);
+    setMonthlyOverviewMode(null);
+  };
+  const openEmployeeProfile = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    setIsEditing(true);
+    setEditForm({ ...employee });
+    resetRenewalForm();
+    setPinInput("");
+    setPinConfirmInput("");
+    setPasswordInput("");
+    setErrorMsg("");
+    const isCustomRole = employee.mansione
+      && !mansioniList.some((role) => role.toLowerCase() === employee.mansione.toLowerCase());
+    setCustomMansioneEdit(Boolean(isCustomRole));
+  };
   const visibleMonthlyRecords = monthlyOverviewMode
     ? monthlyOverview.records.filter((record) => record.category === monthlyOverviewMode)
     : [];
@@ -2260,12 +2286,135 @@ export function StaffDirectory({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <button type="button" onClick={() => selectMonthlyOverview("ABSENCES")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "ABSENCES" ? "border-orange-300 ring-2 ring-orange-100" : "border-orange-100")}>
+      <section className="overflow-hidden rounded-[24px] border border-[#eadde4] bg-white shadow-[0_12px_35px_rgba(104,62,79,0.06)] dark:border-white/10 dark:bg-neutral-900">
+        <div className="flex flex-col gap-4 p-4 sm:p-5 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-neutral-400" aria-hidden="true" />
+            <Field
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Cerca per nome, email o mansione"
+              aria-label="Cerca nel personale"
+              className="min-h-12 rounded-2xl border-neutral-200 bg-[#fcfafb] pl-11 pr-4 text-sm shadow-none focus:bg-white dark:border-white/10 dark:bg-neutral-950"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap xl:justify-end">
+            {isAuthorizedToEdit ? (
+              <Button
+                onClick={() => {
+                  setShowCreateModal(true);
+                  setNewEmployeeForm({
+                    name: "",
+                    email: "",
+                    role: "DIPENDENTE",
+                    sedeId: locations[0]?.id ?? "",
+                    birthDate: "",
+                    fiscalCode: "",
+                    contractStart: new Date().toISOString().slice(0, 10),
+                    contractEnd: "",
+                    photoUrl: "",
+                    whatsappPhone: "",
+                    mansione: "",
+                    employeeStatus: "Attivo",
+                    managerId: "",
+                    hrNotes: "",
+                    accessList: [],
+                    iban: "",
+                  });
+                  setCreationMessage("");
+                  setErrorMsg("");
+                  setPinInput("");
+                  setPinConfirmInput("");
+                  setPasswordInput("");
+                }}
+                className="col-span-2 min-h-11 rounded-2xl bg-[#171717] px-5 text-white shadow-sm transition hover:bg-[#343434] sm:col-span-1"
+              >
+                <Plus className="size-4" /> Nuovo dipendente
+              </Button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              aria-expanded={showFilters}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs font-bold text-neutral-700 transition hover:border-[#d96b94] hover:text-[#a73568] lg:hidden dark:border-white/10 dark:bg-neutral-900 dark:text-white"
+            >
+              <SlidersHorizontal className="size-4" /> Filtri
+            </button>
+            <Link
+              href="/recruitment"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs font-bold text-neutral-700 transition hover:border-[#d96b94] hover:text-[#a73568] dark:border-white/10 dark:bg-neutral-900 dark:text-white"
+            >
+              <UserPlus className="size-4" /> Candidati
+            </Link>
+            <Button
+              type="button"
+              variant={archiveMode ? "dark" : "soft"}
+              onClick={() => {
+                setArchiveMode((current) => !current);
+                setExpiryMode(false);
+                setMonthlyOverviewMode(null);
+                setFilterStatus("");
+              }}
+              className={cn(
+                "min-h-11 rounded-2xl px-4 text-xs",
+                archiveMode ? "bg-neutral-900 text-white hover:bg-neutral-800" : "border border-[#eadde4] bg-white text-neutral-700"
+              )}
+            >
+              <Archive className="size-4" /> Archivio {archivedCount > 0 ? `(${archivedCount})` : ""}
+            </Button>
+            <Button
+              type="button"
+              variant="soft"
+              onClick={printStaffListPdf}
+              className="min-h-11 rounded-2xl border border-[#eadde4] bg-white px-4 text-xs text-neutral-700"
+            >
+              <Printer className="size-4" /> Stampa
+            </Button>
+          </div>
+        </div>
+
+        <div className={cn(
+          "border-t border-[#f1e7ec] bg-[#fcfafb] px-4 py-4 sm:px-5",
+          showFilters ? "block" : "hidden lg:block",
+        )}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Select value={filterLocation} onChange={(event) => setFilterLocation(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti i saloni</option>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </Select>
+            <Select value={filterRole} onChange={(event) => setFilterRole(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti i ruoli</option>
+              {ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            </Select>
+            <Select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti gli stati</option>
+              {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}
+            </Select>
+            <Select value={filterManager} onChange={(event) => setFilterManager(event.target.value)} className="min-h-10 bg-white text-xs">
+              <option value="">Tutti i responsabili</option>
+              {managers.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}
+            </Select>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-neutral-500">
+              <strong className="text-neutral-900 dark:text-white">{filteredStaff.length}</strong> {filteredStaff.length === 1 ? "persona trovata" : "persone trovate"}
+            </p>
+            {hasActiveDirectoryFilters ? (
+              <button type="button" onClick={clearDirectoryFilters} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-[#a73568] transition hover:bg-[#f8e8f0]">
+                <X className="size-3.5" /> Azzera filtri
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <section aria-label={`Riepilogo presenze di ${monthlyOverview.monthLabel}`} className="grid grid-cols-2 overflow-hidden rounded-[22px] border border-[#eadde4] bg-white shadow-sm lg:grid-cols-4 dark:border-white/10 dark:bg-neutral-900">
+        <button type="button" onClick={() => selectMonthlyOverview("ABSENCES")} aria-pressed={monthlyOverviewMode === "ABSENCES"} className={cn("group flex min-h-24 items-center justify-between border-b border-r border-[#f1e7ec] p-4 text-left transition hover:bg-orange-50/50 lg:border-b-0", monthlyOverviewMode === "ABSENCES" && "bg-orange-50")}>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-500">Assenze</p>
             <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.absences.length}</p>
-            <p className="text-xs font-semibold text-neutral-500">Persone assenti · {monthlyOverview.monthLabel}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Persone assenti · {monthlyOverview.monthLabel}</p>
           </div>
           <span className="grid size-11 place-items-center rounded-2xl bg-orange-50 text-orange-700"><AlarmClock className="size-5" /></span>
         </button>
@@ -2274,37 +2423,38 @@ export function StaffDirectory({
           type="button"
           onClick={() => selectMonthlyOverview("HOLIDAYS")}
           className={cn(
-            "group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
-            monthlyOverviewMode === "HOLIDAYS" ? "border-amber-300 ring-2 ring-amber-100" : "border-amber-100",
+            "group flex min-h-24 items-center justify-between border-b border-[#f1e7ec] p-4 text-left transition hover:bg-amber-50/50 lg:border-b-0 lg:border-r",
+            monthlyOverviewMode === "HOLIDAYS" && "bg-amber-50",
           )}
+          aria-pressed={monthlyOverviewMode === "HOLIDAYS"}
         >
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-600">Ferie</p>
             <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.holidays.length}</p>
-            <p className="text-xs font-semibold text-neutral-500">Persone in ferie · {monthlyOverview.monthLabel}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Persone in ferie · {monthlyOverview.monthLabel}</p>
           </div>
           <span className="grid size-11 place-items-center rounded-2xl bg-amber-50 text-amber-700"><Umbrella className="size-5" /></span>
         </button>
 
-        <button type="button" onClick={() => selectMonthlyOverview("SICKNESS")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "SICKNESS" ? "border-violet-300 ring-2 ring-violet-100" : "border-violet-100")}>
+        <button type="button" onClick={() => selectMonthlyOverview("SICKNESS")} aria-pressed={monthlyOverviewMode === "SICKNESS"} className={cn("group flex min-h-24 items-center justify-between border-r border-[#f1e7ec] p-4 text-left transition hover:bg-violet-50/50", monthlyOverviewMode === "SICKNESS" && "bg-violet-50")}>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-500">Malattie</p>
             <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.sickness.length}</p>
-            <p className="text-xs font-semibold text-neutral-500">Persone in malattia · {monthlyOverview.monthLabel}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Persone in malattia · {monthlyOverview.monthLabel}</p>
           </div>
           <span className="grid size-11 place-items-center rounded-2xl bg-violet-50 text-violet-700"><HeartPulse className="size-5" /></span>
         </button>
 
-        <button type="button" onClick={() => selectMonthlyOverview("LATE")} className={cn("group flex min-h-24 items-center justify-between rounded-[22px] border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", monthlyOverviewMode === "LATE" ? "border-rose-300 ring-2 ring-rose-100" : "border-rose-100")}>
+        <button type="button" onClick={() => selectMonthlyOverview("LATE")} aria-pressed={monthlyOverviewMode === "LATE"} className={cn("group flex min-h-24 items-center justify-between p-4 text-left transition hover:bg-rose-50/50", monthlyOverviewMode === "LATE" && "bg-rose-50")}>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-rose-500">Ritardi</p>
             <p className="mt-1 text-2xl font-black text-neutral-900">{monthlyOverview.late.length}</p>
-            <p className="text-xs font-semibold text-neutral-500">Entrate e rientri · {monthlyOverview.monthLabel}</p>
+            <p className="mt-0.5 hidden text-[11px] font-semibold text-neutral-500 sm:block">Entrate e rientri · {monthlyOverview.monthLabel}</p>
           </div>
           <span className="grid size-11 place-items-center rounded-2xl bg-rose-50 text-rose-700"><Clock3 className="size-5" /></span>
         </button>
 
-      </div>
+      </section>
 
       {monthlyOverviewMode ? (
         <section className="overflow-hidden rounded-[24px] border border-[#F4E3EA] bg-white shadow-[0_10px_30px_rgba(104,62,79,0.05)]">
@@ -2357,140 +2507,6 @@ export function StaffDirectory({
         </section>
       ) : null}
 
-      {/* Top Filter Bar */}
-      <div className="bg-white/70 p-5 rounded-3xl border border-black/5 dark:bg-neutral-900/40 dark:border-white/10 space-y-4">
-        {monthlyOverviewMode ? (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#F3B5D4] bg-[#FFF8FC] px-4 py-3">
-            <p className="text-xs font-bold text-[#8F315E]">
-              Elenco mensile: {monthlyOverviewMode === "ABSENCES" ? "assenze" : monthlyOverviewMode === "HOLIDAYS" ? "ferie" : monthlyOverviewMode === "SICKNESS" ? "malattie" : "ritardi"} · {monthlyOverview.monthLabel}
-            </p>
-            <button type="button" onClick={() => setMonthlyOverviewMode(null)} className="inline-flex size-8 items-center justify-center rounded-full bg-white text-[#B83D7F] shadow-sm" aria-label="Rimuovi filtro mensile"><X className="size-4" /></button>
-          </div>
-        ) : null}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:min-w-[360px] lg:max-w-xl lg:flex-1">
-            <Search className="absolute left-4 top-3.5 size-4 text-black/40 dark:text-white/40" />
-            <Field 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca dipendente per nome, email, mansione..." 
-              className="pl-11 min-h-11"
-            />
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end">
-            <Link
-              href="/recruitment"
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 text-sm font-bold text-paradise-noir shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-white/10 dark:bg-neutral-900 dark:text-white"
-            >
-              <UserPlus className="size-4" /> Talent System
-            </Link>
-            <Button
-              type="button"
-              variant="soft"
-              onClick={printStaffListPdf}
-              className="min-h-11 shrink-0 rounded-2xl bg-white text-paradise-noir"
-            >
-              <Printer className="size-4" /> Stampa lista
-            </Button>
-            <Button
-              type="button"
-              variant={archiveMode ? "dark" : "soft"}
-              onClick={() => {
-                setArchiveMode((current) => !current);
-                setExpiryMode(false);
-                setMonthlyOverviewMode(null);
-                setFilterStatus("");
-              }}
-              className={cn(
-                "min-h-11 shrink-0 rounded-2xl",
-                archiveMode ? "bg-neutral-900 text-white hover:bg-neutral-800" : "bg-white text-paradise-noir"
-              )}
-            >
-              <Archive className="size-4" /> Archivio {archivedCount > 0 ? `(${archivedCount})` : ""}
-            </Button>
-            {isAuthorizedToEdit && (
-              <Button 
-                onClick={() => {
-                  setShowCreateModal(true);
-                  setNewEmployeeForm({
-                    name: "",
-                    email: "",
-                    role: "DIPENDENTE",
-                    sedeId: locations[0]?.id ?? "",
-                    birthDate: "",
-                    fiscalCode: "",
-                    contractStart: new Date().toISOString().slice(0, 10),
-                    contractEnd: "",
-                    photoUrl: "",
-                    whatsappPhone: "",
-                    mansione: "",
-                    employeeStatus: "Attivo",
-                    managerId: "",
-                    hrNotes: "",
-                    accessList: [],
-                    iban: ""
-                  });
-                  setCreationMessage("");
-                  setErrorMsg("");
-                  setPinInput("");
-                  setPinConfirmInput("");
-                  setPasswordInput("");
-                }}
-                className="bg-gradient-to-r from-paradise-pink via-paradise-softPink to-[#ffa8dd] text-paradise-noir shadow-soft hover:shadow-luxury transition-all duration-300 rounded-2xl min-h-11 shrink-0"
-              >
-                <Plus className="size-4" /> Nuovo Dipendente
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Select 
-            value={filterLocation} 
-            onChange={(e) => setFilterLocation(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti i saloni</option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </Select>
-
-          <Select 
-            value={filterRole} 
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti i livelli di ruolo</option>
-            {ROLE_OPTIONS.map((role) => (
-              <option key={role.value} value={role.value}>{role.label}</option>
-            ))}
-          </Select>
-
-          <Select 
-            value={filterStatus} 
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti gli stati</option>
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </Select>
-
-          <Select 
-            value={filterManager} 
-            onChange={(e) => setFilterManager(e.target.value)}
-            className="min-h-10 text-xs"
-          >
-            <option value="">Tutti i responsabili</option>
-            {managers.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </Select>
-        </div>
-      </div>
-
       {successMsg && (
         <div className="p-3.5 text-xs font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200 dark:border-emerald-900">
           {successMsg}
@@ -2518,35 +2534,51 @@ export function StaffDirectory({
         </div>
       ) : null}
 
-      {/* Grid of employee cards */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b54e7c]">
+            {archiveMode ? "Archivio" : "Directory"}
+          </p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-neutral-900 dark:text-white">
+            {archiveMode ? "Personale archiviato" : "Personale attivo"}
+          </h2>
+        </div>
+        <span className="rounded-full border border-[#eadde4] bg-white px-3 py-1.5 text-xs font-bold text-neutral-600 shadow-sm dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300">
+          {filteredStaff.length} {filteredStaff.length === 1 ? "profilo" : "profili"}
+        </span>
+      </div>
+
       {filteredStaff.length === 0 ? (
-        <div className="text-center py-16 bg-white/40 border border-black/5 dark:bg-neutral-900/10 dark:border-white/5 rounded-3xl">
-          <p className="text-neutral-500 font-medium">Nessun dipendente trovato con i filtri selezionati.</p>
+        <div className="rounded-[24px] border border-dashed border-[#ddcbd4] bg-white px-5 py-14 text-center dark:border-white/10 dark:bg-neutral-900">
+          <div className="mx-auto grid size-11 place-items-center rounded-2xl bg-[#f8e8f0] text-[#a73568]"><Search className="size-5" /></div>
+          <p className="mt-4 font-bold text-neutral-800 dark:text-white">Nessun dipendente trovato</p>
+          <p className="mt-1 text-sm text-neutral-500">Modifica la ricerca oppure rimuovi i filtri applicati.</p>
+          {hasActiveDirectoryFilters ? (
+            <button type="button" onClick={clearDirectoryFilters} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-xl bg-neutral-900 px-4 text-xs font-bold text-white transition hover:bg-neutral-700">
+              <X className="size-4" /> Azzera filtri
+            </button>
+          ) : null}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {filteredStaff.map((emp) => (
-            <Card 
+            <Card
               key={emp.id}
-              onClick={() => {
-                setSelectedEmployee(emp);
-                setIsEditing(true);
-                setEditForm({ ...emp });
-                resetRenewalForm();
-                setPinInput("");
-                setPinConfirmInput("");
-                setPasswordInput("");
-                setErrorMsg("");
-                const isCustom = emp.mansione && 
-                  !mansioniList.map(m => m.toLowerCase()).includes(emp.mansione.toLowerCase());
-                setCustomMansioneEdit(Boolean(isCustom));
+              role="button"
+              tabIndex={0}
+              aria-label={`Apri la scheda di ${emp.name}`}
+              onClick={() => openEmployeeProfile(emp)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openEmployeeProfile(emp);
+                }
               }}
-              className="group p-5 cursor-pointer flex flex-col justify-between border-black/5 bg-white dark:bg-neutral-900 shadow-sm hover:shadow-luxury hover:-translate-y-1 transition-all duration-300"
+              className="group flex min-h-[280px] cursor-pointer flex-col justify-between overflow-hidden rounded-[22px] border-[#eadde4] bg-white p-0 shadow-[0_8px_24px_rgba(104,62,79,0.05)] transition duration-200 hover:border-[#dca8bf] hover:shadow-[0_14px_32px_rgba(104,62,79,0.11)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d96b94] focus-visible:ring-offset-2 dark:border-white/10 dark:bg-neutral-900"
             >
-              <div className="space-y-4">
-                {/* Photo & Basic header */}
-                <div className="flex items-center gap-4">
-                  <div className="relative size-14 rounded-2xl overflow-hidden border border-black/5 bg-paradise-softPink/20 shrink-0 shadow-sm flex items-center justify-center font-bold text-lg text-paradise-noir">
+              <div className="p-5">
+                <div className="flex items-start gap-3.5">
+                  <div className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[#eadde4] bg-[#f8e8f0] text-lg font-bold text-paradise-noir shadow-sm">
                     {emp.photoUrl ? (
                       <img src={resolveDrivePhotoUrl(emp.photoUrl)} alt={emp.name} className="size-full object-cover" />
                     ) : (
@@ -2572,26 +2604,26 @@ export function StaffDirectory({
                       </label>
                     )}
                   </div>
-                  <div className="space-y-0.5">
-                    <h3 className="font-bold text-sm text-paradise-noir dark:text-white group-hover:text-paradise-pink transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="min-w-0 text-[15px] font-extrabold leading-5 text-paradise-noir transition-colors group-hover:text-[#a73568] dark:text-white">
                       {emp.name}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-semibold text-neutral-500">{emp.mansione || "Collaboratore"}</span>
-                      <span className="text-[10px] text-neutral-300">•</span>
+                      </h3>
                       <Badge tone={getStatusTone(emp.employeeStatus)}>{emp.employeeStatus}</Badge>
+                    </div>
+                    <p className="mt-1 truncate text-xs font-semibold text-neutral-500">{emp.mansione || "Collaboratore"}</p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {emp.attendanceToday?.absent ? <Badge tone="pink">Assente oggi</Badge> : null}
                       {emp.attendanceToday?.lateApprovalStatus === "PENDING" ? <Badge tone="gold">Ritardo da confermare</Badge> : null}
                     </div>
                   </div>
                 </div>
 
-                {/* Info List */}
-                <div className="space-y-2 pt-2 border-t border-black/5 dark:border-white/5 text-xs text-neutral-500 dark:text-neutral-400">
+                <div className="mt-4 space-y-2.5 border-t border-[#f1e7ec] pt-4 text-xs text-neutral-500 dark:border-white/10 dark:text-neutral-400">
                   {emp.attendanceToday?.plannedStart ? (
-                    <div className={cn("flex items-start gap-2 rounded-xl px-2.5 py-2", emp.attendanceToday.absent ? "bg-rose-50 text-rose-700" : "bg-emerald-50/70 text-emerald-700")}>
+                    <div className={cn("flex items-start gap-2 rounded-xl border px-3 py-2.5 font-semibold", emp.attendanceToday.absent ? "border-rose-100 bg-rose-50 text-rose-700" : "border-emerald-100 bg-emerald-50 text-emerald-700")}>
                       <AlarmClock className="mt-0.5 size-3.5 shrink-0" />
-                      <span>
+                      <span className="leading-4">
                         Turno {emp.attendanceToday.plannedStart}{emp.attendanceToday.plannedEnd ? `–${emp.attendanceToday.plannedEnd}` : ""} · {emp.attendanceToday.lateApprovalStatus
                           ? `entrata ${emp.attendanceToday.firstEntry ?? "registrata"} · ritardo da confermare`
                           : emp.attendanceToday.absent
@@ -2606,57 +2638,32 @@ export function StaffDirectory({
                       </span>
                     </div>
                   ) : null}
-                  <div className="flex items-center gap-2">
-                    <MapPin className="size-3.5 text-neutral-400" />
-                    <span>Salone: <strong className="text-neutral-700 dark:text-neutral-200">{emp.location}</strong></span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <MapPin className="size-3.5 shrink-0 text-neutral-400" />
+                    <span className="truncate font-semibold text-neutral-700 dark:text-neutral-200">{emp.location}</span>
                   </div>
                   {emp.whatsappPhone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="size-3.5 text-neutral-400" />
-                      <span>{emp.whatsappPhone}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Phone className="size-3.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">{emp.whatsappPhone}</span>
                     </div>
                   )}
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="size-3.5 text-neutral-400" />
-                    <span>CF: <strong className="text-neutral-700 dark:text-neutral-200">{emp.fiscalCode || "Non inserito"}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="size-3.5 text-neutral-400" />
-                    <span>Nascita: <strong className="text-neutral-700 dark:text-neutral-200">{emp.birthDate ? formatContractDate(emp.birthDate) : "Non inserita"}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="size-3.5 text-neutral-400" />
-                    <span>IBAN: <strong className="text-neutral-700 dark:text-neutral-200">{emp.iban || "Non inserito"}</strong></span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mail className="size-3.5 shrink-0 text-neutral-400" />
+                    <span className="truncate">{emp.email}</span>
                   </div>
                   {emp.managerName && (
-                    <div className="flex items-center gap-2">
-                      <User className="size-3.5 text-neutral-400" />
-                      <span>Responsabile: <strong className="text-neutral-700 dark:text-neutral-200">{emp.managerName}</strong></span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <User className="size-3.5 shrink-0 text-neutral-400" />
+                      <span className="truncate">Resp. <strong className="text-neutral-700 dark:text-neutral-200">{emp.managerName}</strong></span>
                     </div>
                   )}
                 </div>
-
-                {/* Access list badges */}
-                {emp.accessList.length > 0 && (
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider block">Accessi attivi</span>
-                    <div className="flex flex-wrap gap-1">
-                      {emp.accessList.map((access) => (
-                        <span 
-                          key={access} 
-                          className="text-[9px] font-bold bg-[#F7E9EF] text-[#B85B68] dark:bg-neutral-800 dark:text-[#FFA8DD] px-1.5 py-0.5 rounded"
-                        >
-                          {ACCESS_LABELS[access] || access}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="pt-4 mt-auto flex items-center justify-between text-xs font-bold text-paradise-pink group-hover:text-[#E96BA8] transition-colors">
-                <span>Vedi scheda completa</span>
-                <span className="size-6 rounded-full bg-paradise-softPink/20 flex items-center justify-center font-bold text-sm group-hover:translate-x-1 transition-transform">&rarr;</span>
+              <div className="mt-auto flex items-center justify-between border-t border-[#f1e7ec] bg-[#fcfafb] px-5 py-3.5 text-xs font-bold text-[#a73568] transition-colors group-hover:bg-[#fff7fb] dark:border-white/10 dark:bg-neutral-950/40">
+                <span>Apri scheda</span>
+                <ExternalLink className="size-3.5 transition-transform group-hover:translate-x-0.5" />
               </div>
             </Card>
           ))}
