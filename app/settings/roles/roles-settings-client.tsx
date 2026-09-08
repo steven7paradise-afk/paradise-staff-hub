@@ -66,6 +66,7 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/malattie": { name: "Malattie", description: "Malattie, giustificativi e certificati.", group: "Gestione Staff" },
   "/team": { name: "Team", description: "Elenco membri del team.", group: "Gestione Staff" },
   "/client-control": { name: "Controllo Cliente", description: "Schede cliente, note servizio, foto e trattamenti.", group: "Amministrazione" },
+  "/fine-giornata": { name: "Fine giornata", description: "Checklist Assistenza Clienti e commenti amministrativi.", group: "Amministrazione" },
   "/cash": { name: "Cassa & Transazioni", description: "Cassa, chiusure, prelievi, cassaforte e movimenti.", group: "Amministrazione" },
   "/cassa-live": { name: "Terminale POS", description: "Accesso al terminale Cashmatic in tempo reale.", group: "Amministrazione" },
   "/invoices": { name: "Fatture", description: "Richieste fattura e dati commercialista.", group: "Amministrazione" },

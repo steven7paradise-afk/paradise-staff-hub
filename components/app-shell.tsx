@@ -60,6 +60,7 @@ const nav = [
   { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/fine-giornata", label: "Fine giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/points", label: "Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/tablet-clock", label: "Tablet Clock", iconName: "Smartphone", roles: routePermissions["/tablet-clock"], section: "Planning & Saloni" },
@@ -313,7 +314,22 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     .filter((item) => item.href !== "/tables" || userHasTablesAccess)
     .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
 
-  const sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
+  let sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
+  if (
+    (currentRole === "ZERO" || currentRole === "SUPER_ADMIN" || currentRole === "ADMIN")
+    && sidebarConfig
+    && !sidebarConfig.some((section) => section.routes.includes("/fine-giornata"))
+  ) {
+    const preferredSection = sidebarConfig.findIndex((section) =>
+      section.id === "planning"
+      || section.title.toLowerCase().includes("planning")
+      || section.routes.includes("/client-control")
+    );
+    const sectionIndex = preferredSection >= 0 ? preferredSection : 0;
+    sidebarConfig = sidebarConfig.map((section, index) => index === sectionIndex
+      ? { ...section, routes: [...section.routes, "/fine-giornata"] }
+      : section);
+  }
   const getSidebarLabel = (href: string, fallback: string) => {
     const folder = sidebarConfig?.find((sec) => sec.routes.includes(href));
     return folder?.labels?.[href] || fallback;

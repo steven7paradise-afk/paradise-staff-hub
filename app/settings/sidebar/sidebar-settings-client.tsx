@@ -68,6 +68,7 @@ const PAGE_LABELS: Record<string, string> = {
   "/refunds": "Rimborsi",
   "/rimborsi": "Rimborsi vecchio link",
   "/client-control": "Controllo Cliente",
+  "/fine-giornata": "Fine giornata",
   "/recruitment": "Talent System",
   "/staff": "Staff Paradise",
   "/team": "Team",

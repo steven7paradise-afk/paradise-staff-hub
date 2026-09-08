@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Building2,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   FileCheck2,
   FileText,
@@ -187,7 +188,17 @@ export function parseNotificationMetadata(
 
   let category: CategoryStyle;
 
-  if (notification.type === "COMUNICAZIONE") {
+  if (notification.type === "FINE_GIORNATA") {
+    category = {
+      label: "Fine giornata",
+      isOrder: false,
+      badge: "bg-pink-100 text-[#B84F66] border border-pink-300 font-extrabold dark:bg-pink-950 dark:text-pink-200 dark:border-pink-800",
+      borderLeft: "border-l-4 border-l-[#D36B82]",
+      iconBg: "bg-pink-100 text-[#B84F66] dark:bg-pink-950 dark:text-pink-200",
+      iconText: "text-[#B84F66]",
+      Icon: ClipboardCheck,
+    };
+  } else if (notification.type === "COMUNICAZIONE") {
     category = {
       label: "Comunicazione",
       isOrder: false,

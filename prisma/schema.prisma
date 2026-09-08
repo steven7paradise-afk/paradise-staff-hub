@@ -112,6 +112,8 @@ model User {
   shift_reports_responsible ShiftReport[]            @relation("ShiftReportResponsible")
   shift_reports_approved    ShiftReport[]            @relation("ShiftReportApprover")
   shift_report_revisions    ShiftReportRevision[]
+  end_of_day_checklists     EndOfDayChecklist[]        @relation("EndOfDayChecklistSubmitter")
+  end_of_day_comments       EndOfDayChecklistComment[]
 
   @@map("users")
 }
@@ -526,6 +528,41 @@ model ShiftReportProduct {
 
   @@index([active, name])
   @@map("shift_report_products")
+}
+
+model EndOfDayChecklist {
+  id                 String                     @id @default(cuid())
+  operational_date   DateTime                   @unique
+  submitted_by_id    String
+  counts             Json
+  channels           Json
+  confirmations      Json
+  confirmation_notes Json
+  notes              String?
+  operator_one_name  String
+  operator_two_name  String
+  manager_name       String
+  submitted_at       DateTime                   @default(now())
+  updated_at         DateTime                   @updatedAt
+  submitted_by       User                       @relation("EndOfDayChecklistSubmitter", fields: [submitted_by_id], references: [id])
+  comments           EndOfDayChecklistComment[]
+
+  @@index([submitted_at])
+  @@map("end_of_day_checklists")
+}
+
+model EndOfDayChecklistComment {
+  id           String            @id @default(cuid())
+  checklist_id String
+  author_id    String
+  body         String
+  created_at   DateTime          @default(now())
+  checklist    EndOfDayChecklist @relation(fields: [checklist_id], references: [id], onDelete: Cascade)
+  author       User              @relation(fields: [author_id], references: [id])
+
+  @@index([checklist_id, created_at])
+  @@index([author_id])
+  @@map("end_of_day_checklist_comments")
 }
 
 model CashClosing {
