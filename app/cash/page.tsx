@@ -810,18 +810,26 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
 
           <div className="grid border-t border-black/10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <div className="grid grid-cols-2 divide-x divide-black/10 lg:flex lg:divide-x-0">
-              <a href="#chiusure-sedi" className="flex min-h-16 items-center gap-3 px-5 py-3 hover:bg-[#FAF7F9]">
+            <div className="grid grid-cols-1 divide-y divide-black/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:flex lg:divide-x-0">
+              <a href="#chiusure-sedi" className="flex min-h-[72px] items-center gap-3 px-5 py-3 transition hover:bg-[#FAF7F9]">
                 <span className={`grid size-9 place-items-center rounded-md ${missingTodayCount ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
                   {missingTodayCount ? <AlertTriangle className="size-4" /> : <CheckCircle2 className="size-4" />}
                 </span>
-                <span><strong className="block text-lg leading-none">{missingTodayCount}</strong><small className="text-[11px] font-bold text-black/45">sedi mancanti oggi</small></span>
+                <span>
+                  <strong className="block text-sm leading-tight">{missingTodayCount ? `${missingTodayCount} sedi senza chiusura` : "Tutte le sedi hanno chiuso"}</strong>
+                  <small className="mt-1 block text-[11px] font-bold text-black/45">{missingTodayCount ? "Apri e completa il controllo di oggi" : "Situazione giornaliera regolare"}</small>
+                </span>
+                <ArrowRight className="ml-auto size-4 text-black/25" />
               </a>
-              <a href="#movimenti-cassa" className="flex min-h-16 items-center gap-3 px-5 py-3 hover:bg-[#FAF7F9]">
+              <a href={discrepancyHref} className="flex min-h-[72px] items-center gap-3 px-5 py-3 transition hover:bg-[#FAF7F9]">
                 <span className={`grid size-9 place-items-center rounded-md ${pendingReviewCount ? "bg-pink-50 text-[#A74758]" : "bg-emerald-50 text-emerald-700"}`}>
                   <ShieldCheck className="size-4" />
                 </span>
-                <span><strong className="block text-lg leading-none">{pendingReviewCount}</strong><small className="text-[11px] font-bold text-black/45">controlli aperti</small></span>
+                <span>
+                  <strong className="block text-sm leading-tight">{pendingReviewCount ? `${pendingReviewCount} controlli da verificare` : "Nessun controllo in sospeso"}</strong>
+                  <small className="mt-1 block text-[11px] font-bold text-black/45">{pendingReviewCount ? "Rivedi differenze e chiusure" : "Movimenti già controllati"}</small>
+                </span>
+                <ArrowRight className="ml-auto size-4 text-black/25" />
               </a>
             </div>
             <div className="border-t border-black/10 p-4 lg:border-l lg:border-t-0">
@@ -842,7 +850,23 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
           </div>
         </section>
 
-        <Card className="-mx-4 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
+        <nav aria-label="Sezioni della cassa" className="-mx-4 overflow-x-auto border-y border-black/10 bg-white px-4 py-2 sm:mx-0 sm:rounded-lg sm:border">
+          <div className="flex min-w-max items-center gap-1">
+            {[
+              ["Giornata", "#dettaglio-giorno"],
+              ["Chiusure sedi", "#chiusure-sedi"],
+              ["Prelievi", "#prelievi-autorizzati"],
+              ["Movimenti", "#movimenti-cassa"],
+              ["Pagamenti Shopify", "#pagamenti-shopify"],
+            ].map(([label, href]) => (
+              <a key={href} href={href} className="inline-flex min-h-10 items-center rounded-md px-3 text-xs font-black text-black/55 transition hover:bg-[#FAF0F4] hover:text-[#A74758]">
+                {label}
+              </a>
+            ))}
+          </div>
+        </nav>
+
+        <Card id="pagamenti-shopify" className="-mx-4 scroll-mt-6 overflow-hidden rounded-none border-y border-black/10 bg-white p-0 shadow-none sm:mx-0 sm:rounded-lg sm:border">
           <div className="flex flex-col gap-3 border-b border-black/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#A74758]">Registro separato Shopify</p>
@@ -863,9 +887,14 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
               </Link>
             </div>
           </div>
-          <div className="p-5">
-            {paymentRows.length ? (
-              <div className="divide-y divide-black/5 overflow-hidden rounded-md border border-black/10">
+          <details className="group">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 border-t border-black/5 px-5 py-3 text-xs font-black text-[#A74758] marker:hidden hover:bg-[#FAF7F9]">
+              <span>{paymentRows.length ? `Mostra gli ultimi ${Math.min(4, paymentRows.length)} pagamenti` : "Nessun pagamento nel periodo"}</span>
+              <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="border-t border-black/5 p-5">
+              {paymentRows.length ? (
+                <div className="divide-y divide-black/5 overflow-hidden rounded-md border border-black/10">
                 {paymentRows.slice(0, 4).map((payment) => {
                   const isCashmatic = payment.method === "CASHMATIC";
                   const isCash = payment.method === "CONTANTI";
@@ -902,14 +931,15 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
                     </div>
                   );
                 })}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAF7F9] px-5 py-8 text-center">
-                <ReceiptText className="mx-auto size-5 text-black/25" />
-                <p className="mt-2 text-sm font-bold text-black/45">Nessun pagamento Shopify registrato nel periodo.</p>
-              </div>
-            )}
-          </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-black/10 bg-[#FAF7F9] px-5 py-8 text-center">
+                  <ReceiptText className="mx-auto size-5 text-black/25" />
+                  <p className="mt-2 text-sm font-bold text-black/45">Nessun pagamento Shopify registrato nel periodo.</p>
+                </div>
+              )}
+            </div>
+          </details>
         </Card>
 
         <Card className="-mx-4 rounded-none border-y border-black/10 bg-white p-5 shadow-none sm:mx-0 sm:rounded-lg sm:border">
