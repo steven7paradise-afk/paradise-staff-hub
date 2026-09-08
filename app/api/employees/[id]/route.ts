@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, UserRole } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
 import { addCalendarMonths, asRecord, FORMER_EMPLOYEE_STATUS, resolveEmployeeActive } from "@/lib/former-employee";
 
@@ -98,7 +99,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const nextSedeId = data.sedeId !== undefined ? (data.sedeId ? String(data.sedeId) : null) : undefined;
     const baseUpdate = {
-      name: String(data.name ?? current.name).trim(),
+      name: formatPersonName(String(data.name ?? current.name)),
       email: String(data.email ?? current.email).trim().toLowerCase(),
       role,
       sede_id: nextSedeId,

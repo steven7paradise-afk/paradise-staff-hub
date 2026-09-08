@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { createNotifications } from "@/lib/notifications";
 import { isPinAlreadyAssigned, pinLookup } from "@/lib/pin";
+import { formatPersonName } from "@/lib/person-name";
 import { prisma } from "@/lib/prisma";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     const email = String(data.email ?? "").trim().toLowerCase();
-    const name = String(data.name ?? "").trim();
+    const name = formatPersonName(String(data.name ?? ""));
     const providedPassword = String(data.password ?? "");
     const providedPin = String(data.pin ?? "");
     const password = providedPassword || temporaryPassword();
