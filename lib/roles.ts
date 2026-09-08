@@ -215,6 +215,12 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
     if (role === "ZERO") return;
     if (rawMap[role] !== undefined) next[role] = normalizePermissionSet(rawMap[role]);
   });
+  (["SUPER_ADMIN", "ADMIN"] as Role[]).forEach((role) => {
+    next[role] = {
+      view: Array.from(new Set([...next[role].view, "/fine-giornata"])),
+      edit: Array.from(new Set([...next[role].edit, "/fine-giornata"])),
+    };
+  });
   next.ZERO = defaults.ZERO;
   return next;
 }

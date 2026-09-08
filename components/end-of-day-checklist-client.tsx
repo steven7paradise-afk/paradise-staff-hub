@@ -60,7 +60,7 @@ function emptyDraft(viewerName: string) {
   };
 }
 
-export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer }: { initialEntries: ChecklistEntry[]; initialEntryId: string | null; viewer: Person }) {
+export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer, canWrite }: { initialEntries: ChecklistEntry[]; initialEntryId: string | null; viewer: Person; canWrite: boolean }) {
   const [entries, setEntries] = useState(initialEntries);
   const [draft, setDraft] = useState(() => emptyDraft(viewer.name));
   const [formOpen, setFormOpen] = useState(false);
@@ -94,6 +94,7 @@ export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer
   }, [formOpen, selected]);
 
   function openForm(entry?: ChecklistEntry) {
+    if (!canWrite) return;
     setStatus("");
     setDraft(entry ? {
       date: entry.operationalDate,
@@ -111,6 +112,7 @@ export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer
 
   async function submitChecklist(event: FormEvent) {
     event.preventDefault();
+    if (!canWrite) return;
     setSaving(true);
     setStatus("");
     try {
@@ -134,7 +136,7 @@ export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer
 
   async function submitComment(event: FormEvent) {
     event.preventDefault();
-    if (!selected || !comment.trim()) return;
+    if (!canWrite || !selected || !comment.trim()) return;
     setCommenting(true);
     setStatus("");
     try {
@@ -163,11 +165,17 @@ export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/75 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#A93C73] shadow-sm"><Sparkles className="size-3.5" />Assistenza Clienti</div>
             <h1 className="mt-4 text-3xl font-black tracking-tight text-[#281B22] sm:text-4xl">Checklist di fine giornata</h1>
-            <p className="mt-3 max-w-xl text-sm font-medium leading-6 text-[#6E5361]">Registra i dati rilevati dai sistemi, conferma i controlli e lascia un passaggio di consegne chiaro agli altri amministratori.</p>
+            <p className="mt-3 max-w-xl text-sm font-medium leading-6 text-[#6E5361]">Registra i dati rilevati dai sistemi, conferma i controlli e lascia un passaggio di consegne chiaro alle persone autorizzate.</p>
           </div>
-          <button type="button" onClick={() => openForm(todayEntry)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#C84F89] px-6 text-sm font-black text-white shadow-[0_12px_30px_rgba(184,61,127,0.28)] transition hover:-translate-y-0.5 hover:bg-[#B83D7F] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#D96B94]/30">
-            <ClipboardCheck className="size-5" />{todayEntry ? "Aggiorna la giornata" : "Compila fine giornata"}
-          </button>
+          {canWrite ? (
+            <button type="button" onClick={() => openForm(todayEntry)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#C84F89] px-6 text-sm font-black text-white shadow-[0_12px_30px_rgba(184,61,127,0.28)] transition hover:-translate-y-0.5 hover:bg-[#B83D7F] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#D96B94]/30">
+              <ClipboardCheck className="size-5" />{todayEntry ? "Aggiorna la giornata" : "Compila fine giornata"}
+            </button>
+          ) : (
+            <div className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/80 bg-white/75 px-5 text-sm font-black text-[#8B5971] shadow-sm">
+              <ShieldCheck className="size-5" />Accesso in sola lettura
+            </div>
+          )}
         </div>
       </section>
 
@@ -176,12 +184,12 @@ export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer
       <section className="grid gap-4 sm:grid-cols-3">
         <SummaryCard icon={<CheckCircle2 className="size-5" />} label="Oggi" value={todayEntry ? "Completata" : "Da compilare"} detail={todayEntry ? `Aggiornata alle ${new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(new Date(todayEntry.updatedAt))}` : "Nessuna checklist salvata"} tone={todayEntry ? "green" : "pink"} />
         <SummaryCard icon={<AlertTriangle className="size-5" />} label="Con anomalie" value={String(entriesWithAnomalies)} detail="nelle ultime 90 giornate" tone="amber" />
-        <SummaryCard icon={<MessageCircle className="size-5" />} label="Commenti" value={String(totalComments)} detail="condivisi tra amministratori" tone="pink" />
+        <SummaryCard icon={<MessageCircle className="size-5" />} label="Commenti" value={String(totalComments)} detail="condivisi con chi ha accesso" tone="pink" />
       </section>
 
       <section className="rounded-[26px] border border-[#F1E1E8] bg-white p-4 shadow-[0_14px_45px_rgba(87,51,68,0.06)] sm:p-6">
         <div className="flex items-center justify-between gap-4 border-b border-black/[0.06] pb-4">
-          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#B83D7F]">Archivio amministrativo</p><h2 className="mt-1 text-xl font-black text-[#281B22]">Giornate registrate</h2></div>
+          <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#B83D7F]">Archivio giornaliero</p><h2 className="mt-1 text-xl font-black text-[#281B22]">Giornate registrate</h2></div>
           <span className="rounded-full bg-[#FFF0F7] px-3 py-1.5 text-xs font-black text-[#B83D7F]">{entries.length}</span>
         </div>
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -191,12 +199,12 @@ export function EndOfDayChecklistClient({ initialEntries, initialEntryId, viewer
               <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><Avatar person={entry.submittedBy} /><div><p className="text-sm font-black capitalize text-[#281B22]">{formatDay(entry.operationalDate, true)}</p><p className="mt-0.5 text-[10px] font-semibold text-neutral-400">Compilata da {entry.submittedBy.name}</p></div></div><span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase ${anomalies ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700"}`}>{anomalies ? `${anomalies} anomalie` : "Completa"}</span></div>
               <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-black/[0.05] pt-3 text-[10px] font-bold text-neutral-500"><span className="inline-flex items-center gap-1"><Clock3 className="size-3.5" />{formatDateTime(entry.updatedAt)}</span><span className="inline-flex items-center gap-1"><MessageCircle className="size-3.5" />{entry.comments.length} commenti</span><span className="ml-auto text-[#B83D7F] transition group-hover:translate-x-0.5">Apri dettaglio →</span></div>
             </button>;
-          }) : <div className="rounded-[22px] border border-dashed border-black/10 p-10 text-center lg:col-span-2"><ClipboardCheck className="mx-auto size-8 text-[#D96B94]" /><p className="mt-3 text-sm font-bold text-neutral-600">Nessuna giornata registrata</p><p className="mt-1 text-xs text-neutral-400">La prima checklist comparirà qui dopo il salvataggio.</p></div>}
+          }) : <div className="rounded-[22px] border border-dashed border-black/10 p-10 text-center lg:col-span-2"><ClipboardCheck className="mx-auto size-8 text-[#D96B94]" /><p className="mt-3 text-sm font-bold text-neutral-600">Nessuna giornata registrata</p><p className="mt-1 text-xs text-neutral-400">{canWrite ? "La prima checklist comparirà qui dopo il salvataggio." : "Non è stata ancora compilata alcuna checklist."}</p></div>}
         </div>
       </section>
 
-      {formOpen ? createPortal(<ChecklistFormModal draft={draft} setDraft={setDraft} progress={progress} saving={saving} status={status} onClose={() => setFormOpen(false)} onSubmit={submitChecklist} />, document.body) : null}
-      {selected ? createPortal(<ChecklistDetailModal entry={selected} status={status} comment={comment} commenting={commenting} onCommentChange={setComment} onComment={submitComment} onEdit={() => { setSelectedId(null); openForm(selected); }} onClose={() => { setSelectedId(null); setStatus(""); }} />, document.body) : null}
+      {formOpen && canWrite ? createPortal(<ChecklistFormModal draft={draft} setDraft={setDraft} progress={progress} saving={saving} status={status} onClose={() => setFormOpen(false)} onSubmit={submitChecklist} />, document.body) : null}
+      {selected ? createPortal(<ChecklistDetailModal entry={selected} canWrite={canWrite} status={status} comment={comment} commenting={commenting} onCommentChange={setComment} onComment={submitComment} onEdit={() => { setSelectedId(null); openForm(selected); }} onClose={() => { setSelectedId(null); setStatus(""); }} />, document.body) : null}
     </div>
   );
 }
@@ -221,7 +229,7 @@ function ChecklistFormModal({ draft, setDraft, progress, saving, status, onClose
         <FormSection number="05" title="Presa visione e accettazione" subtitle="La checklist è unica: inserisci i nomi delle due addette e del responsabile che la verifica."><div className="grid gap-3 md:grid-cols-3"><NameField label="Prima addetta" value={draft.operatorOneName} onChange={(value) => setDraft((current) => ({ ...current, operatorOneName: value }))} /><NameField label="Seconda addetta" value={draft.operatorTwoName} onChange={(value) => setDraft((current) => ({ ...current, operatorTwoName: value }))} /><NameField label="Vista responsabile" value={draft.managerName} onChange={(value) => setDraft((current) => ({ ...current, managerName: value }))} /></div></FormSection>
         {status ? <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{status}</p> : null}
       </div></main>
-      <footer className="shrink-0 border-t border-black/[0.08] bg-white px-4 py-3 sm:px-7"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3"><p className="hidden text-xs font-semibold text-neutral-400 sm:block">Gli altri amministratori riceveranno una notifica.</p><div className="ml-auto flex gap-2"><button type="button" onClick={onClose} className="min-h-11 rounded-2xl border border-black/10 bg-white px-5 text-sm font-bold text-neutral-600">Annulla</button><button disabled={saving} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-[#C84F89] px-5 text-sm font-black text-white disabled:opacity-50"><ShieldCheck className="size-4" />{saving ? "Salvataggio…" : "Salva e notifica"}</button></div></div></footer>
+      <footer className="shrink-0 border-t border-black/[0.08] bg-white px-4 py-3 sm:px-7"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3"><p className="hidden text-xs font-semibold text-neutral-400 sm:block">Le altre persone autorizzate riceveranno una notifica.</p><div className="ml-auto flex gap-2"><button type="button" onClick={onClose} className="min-h-11 rounded-2xl border border-black/10 bg-white px-5 text-sm font-bold text-neutral-600">Annulla</button><button disabled={saving} className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-[#C84F89] px-5 text-sm font-black text-white disabled:opacity-50"><ShieldCheck className="size-4" />{saving ? "Salvataggio…" : "Salva e notifica"}</button></div></div></footer>
     </form>
   </div>;
 }
@@ -234,10 +242,10 @@ function NameField({ label, value, onChange }: { label: string; value: string; o
   return <label className="space-y-1.5"><span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{label}</span><input required maxLength={120} value={value} onChange={(event) => onChange(event.target.value)} placeholder="Nome e cognome" className="min-h-11 w-full rounded-2xl border border-black/10 bg-[#FCFAFB] px-4 text-sm font-bold outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20" /></label>;
 }
 
-function ChecklistDetailModal({ entry, status, comment, commenting, onCommentChange, onComment, onEdit, onClose }: { entry: ChecklistEntry; status: string; comment: string; commenting: boolean; onCommentChange: (value: string) => void; onComment: (event: FormEvent) => void; onEdit: () => void; onClose: () => void }) {
+function ChecklistDetailModal({ entry, canWrite, status, comment, commenting, onCommentChange, onComment, onEdit, onClose }: { entry: ChecklistEntry; canWrite: boolean; status: string; comment: string; commenting: boolean; onCommentChange: (value: string) => void; onComment: (event: FormEvent) => void; onEdit: () => void; onClose: () => void }) {
   const anomalies = endOfDayAnomalyCount(entry);
   return <div className="fixed inset-0 z-[9999] flex flex-col bg-[#FDF9FB]" role="dialog" aria-modal="true" aria-label={`Dettaglio fine giornata ${formatDay(entry.operationalDate)}`}>
-    <header className="shrink-0 border-b border-black/[0.08] bg-white/95 px-4 py-3 backdrop-blur-xl sm:px-7"><div className="mx-auto flex max-w-6xl items-center gap-4"><button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full bg-black/[0.05]" aria-label="Chiudi"><X className="size-5" /></button><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#B83D7F]">Fine giornata</p><h2 className="truncate text-lg font-black capitalize text-[#281B22]">{formatDay(entry.operationalDate, true)}</h2></div><button type="button" onClick={onEdit} className="min-h-10 rounded-2xl border border-[#F3B5D4] bg-[#FFF5FA] px-4 text-xs font-black text-[#B83D7F]">Modifica</button></div></header>
+    <header className="shrink-0 border-b border-black/[0.08] bg-white/95 px-4 py-3 backdrop-blur-xl sm:px-7"><div className="mx-auto flex max-w-6xl items-center gap-4"><button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full bg-black/[0.05]" aria-label="Chiudi"><X className="size-5" /></button><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[0.16em] text-[#B83D7F]">Fine giornata</p><h2 className="truncate text-lg font-black capitalize text-[#281B22]">{formatDay(entry.operationalDate, true)}</h2></div>{canWrite ? <button type="button" onClick={onEdit} className="min-h-10 rounded-2xl border border-[#F3B5D4] bg-[#FFF5FA] px-4 text-xs font-black text-[#B83D7F]">Modifica</button> : <span className="rounded-full bg-neutral-100 px-3 py-1.5 text-[9px] font-black uppercase text-neutral-500">Sola lettura</span>}</div></header>
     <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-7"><div className="mx-auto grid max-w-6xl gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-5">
         <section className="rounded-[24px] border border-black/[0.07] bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Avatar person={entry.submittedBy} size="size-11" /><div><p className="text-sm font-black text-[#281B22]">{entry.submittedBy.name}</p><p className="text-[10px] text-neutral-400">Ultimo salvataggio {formatDateTime(entry.updatedAt)}</p></div></div><span className={`rounded-full px-3 py-1.5 text-[10px] font-black uppercase ${anomalies ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700"}`}>{anomalies ? `${anomalies} anomalie` : "Tutto completato"}</span></div></section>
@@ -247,7 +255,7 @@ function ChecklistDetailModal({ entry, status, comment, commenting, onCommentCha
         <DetailSection title="Note sulla giornata"><p className="whitespace-pre-wrap text-sm leading-6 text-neutral-600">{entry.notes || "Nessuna nota aggiunta."}</p></DetailSection>
         <DetailSection title="Presa visione"><div className="grid gap-3 sm:grid-cols-3"><Signature label="Prima addetta" name={entry.operatorOneName} /><Signature label="Seconda addetta" name={entry.operatorTwoName} /><Signature label="Responsabile" name={entry.managerName} /></div></DetailSection>
       </div>
-      <aside className="xl:sticky xl:top-4 xl:self-start"><section className="rounded-[24px] border border-[#F1E1E8] bg-white p-4 shadow-sm sm:p-5"><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#B83D7F]">Confronto amministrativo</p><h3 className="mt-1 text-lg font-black text-[#281B22]">Commenti</h3></div><span className="rounded-full bg-[#FFF0F7] px-2.5 py-1 text-[10px] font-black text-[#B83D7F]">{entry.comments.length}</span></div><div className="mt-4 max-h-[42vh] space-y-3 overflow-y-auto pr-1">{entry.comments.length ? entry.comments.map((item) => <article key={item.id} className="rounded-2xl bg-[#FCFAFB] p-3"><div className="flex items-center gap-2"><Avatar person={item.author} /><div><p className="text-xs font-black text-[#382B32]">{item.author.name}</p><p className="text-[9px] text-neutral-400">{formatDateTime(item.createdAt)}</p></div></div><p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-neutral-600">{item.body}</p></article>) : <p className="rounded-2xl border border-dashed border-black/10 p-5 text-center text-xs text-neutral-400">Nessun commento. Puoi lasciare il primo aggiornamento.</p>}</div><form onSubmit={onComment} className="mt-4 border-t border-black/[0.06] pt-4"><textarea required maxLength={3000} rows={4} value={comment} onChange={(event) => onCommentChange(event.target.value)} placeholder="Lascia un commento sulla giornata…" className="w-full resize-y rounded-2xl border border-black/10 bg-[#FCFAFB] px-3 py-3 text-sm outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20" />{status ? <p className="mt-2 text-xs font-bold text-rose-700">{status}</p> : null}<button disabled={commenting || !comment.trim()} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#C84F89] px-4 text-sm font-black text-white disabled:opacity-40"><Send className="size-4" />{commenting ? "Invio…" : "Commenta e notifica"}</button></form></section></aside>
+      <aside className="xl:sticky xl:top-4 xl:self-start"><section className="rounded-[24px] border border-[#F1E1E8] bg-white p-4 shadow-sm sm:p-5"><div className="flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-[0.14em] text-[#B83D7F]">Confronto autorizzato</p><h3 className="mt-1 text-lg font-black text-[#281B22]">Commenti</h3></div><span className="rounded-full bg-[#FFF0F7] px-2.5 py-1 text-[10px] font-black text-[#B83D7F]">{entry.comments.length}</span></div><div className="mt-4 max-h-[42vh] space-y-3 overflow-y-auto pr-1">{entry.comments.length ? entry.comments.map((item) => <article key={item.id} className="rounded-2xl bg-[#FCFAFB] p-3"><div className="flex items-center gap-2"><Avatar person={item.author} /><div><p className="text-xs font-black text-[#382B32]">{item.author.name}</p><p className="text-[9px] text-neutral-400">{formatDateTime(item.createdAt)}</p></div></div><p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-neutral-600">{item.body}</p></article>) : <p className="rounded-2xl border border-dashed border-black/10 p-5 text-center text-xs text-neutral-400">Nessun commento presente.</p>}</div>{canWrite ? <form onSubmit={onComment} className="mt-4 border-t border-black/[0.06] pt-4"><textarea required maxLength={3000} rows={4} value={comment} onChange={(event) => onCommentChange(event.target.value)} placeholder="Lascia un commento sulla giornata…" className="w-full resize-y rounded-2xl border border-black/10 bg-[#FCFAFB] px-3 py-3 text-sm outline-none focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20" />{status ? <p className="mt-2 text-xs font-bold text-rose-700">{status}</p> : null}<button disabled={commenting || !comment.trim()} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#C84F89] px-4 text-sm font-black text-white disabled:opacity-40"><Send className="size-4" />{commenting ? "Invio…" : "Commenta e notifica"}</button></form> : <p className="mt-4 rounded-2xl border border-black/[0.06] bg-[#FCFAFB] px-4 py-3 text-xs font-semibold leading-5 text-neutral-500">Hai il permesso di lettura: puoi consultare i commenti, ma non aggiungerne di nuovi.</p>}</section></aside>
     </div></main>
   </div>;
 }

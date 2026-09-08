@@ -316,7 +316,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
 
   let sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
   if (
-    (currentRole === "ZERO" || currentRole === "SUPER_ADMIN" || currentRole === "ADMIN")
+    (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) || effectivePermissionSet?.view.includes("/fine-giornata"))
     && sidebarConfig
     && !sidebarConfig.some((section) => section.routes.includes("/fine-giornata"))
   ) {

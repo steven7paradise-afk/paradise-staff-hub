@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canAccess, canEdit, defaultRolePermissions, mergePermissionSets } from "../lib/roles";
+import { canAccess, canEdit, defaultRolePermissions, mergePermissionSets, normalizeRolePermissions } from "../lib/roles";
 
 test("un dipendente non accede alle pagine amministrative", () => {
   assert.equal(canAccess("/employees", "DIPENDENTE"), false);
@@ -32,4 +32,26 @@ test("la mansione aggiunge permessi senza nascondere quelli del ruolo", () => {
   );
   assert.deepEqual(permissions.view, ["/dashboard", "/tasks", "/notifications"]);
   assert.deepEqual(permissions.edit, ["/tasks"]);
+});
+
+test("la checklist di fine giornata separa lettura e scrittura per i lavoratori", () => {
+  const readOnly = { view: ["/fine-giornata"], edit: [] };
+  const readWrite = { view: ["/fine-giornata"], edit: ["/fine-giornata"] };
+
+  assert.equal(canAccess("/fine-giornata", "DIPENDENTE"), false);
+  assert.equal(canAccess("/fine-giornata", "DIPENDENTE", undefined, readOnly), true);
+  assert.equal(canEdit("/fine-giornata", "DIPENDENTE", undefined, readOnly), false);
+  assert.equal(canEdit("/fine-giornata", "DIPENDENTE", undefined, readWrite), true);
+});
+
+test("le vecchie matrici permessi mantengono la checklist disponibile agli amministratori", () => {
+  const permissions = normalizeRolePermissions({
+    ADMIN: { view: ["/dashboard"], edit: [] },
+    SUPER_ADMIN: { view: ["/dashboard"], edit: [] },
+  });
+
+  assert.equal(permissions.ADMIN.view.includes("/fine-giornata"), true);
+  assert.equal(permissions.ADMIN.edit.includes("/fine-giornata"), true);
+  assert.equal(permissions.SUPER_ADMIN.view.includes("/fine-giornata"), true);
+  assert.equal(permissions.SUPER_ADMIN.edit.includes("/fine-giornata"), true);
 });

@@ -3,30 +3,34 @@ import { AppShell } from "@/components/app-shell";
 import { EndOfDayChecklistClient } from "@/components/end-of-day-checklist-client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccess, canEdit, getEffectivePermissionSet, type Role } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
-
-const adminRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
 
 export default async function EndOfDayPage({ searchParams }: { searchParams?: Promise<{ entry?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  if (!adminRoles.has(session.user.role)) redirect("/dashboard");
+  const viewer = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, name: true, role: true, mansione: true, active: true, photo_url: true },
+  });
+  if (!viewer?.active) redirect("/login");
+  const permissions = await getEffectivePermissionSet(prisma, viewer);
+  const role = viewer.role as Role;
+  if (!canAccess("/fine-giornata", role, viewer.mansione ?? undefined, permissions)) redirect("/dashboard");
+  const canWrite = canEdit("/fine-giornata", role, viewer.mansione ?? undefined, permissions);
   const params = searchParams ? await searchParams : {};
-  const [entries, viewer] = await Promise.all([
-    prisma.endOfDayChecklist.findMany({
-      include: {
-        submitted_by: { select: { id: true, name: true, photo_url: true } },
-        comments: {
-          include: { author: { select: { id: true, name: true, photo_url: true } } },
-          orderBy: { created_at: "asc" },
-        },
+  const entries = await prisma.endOfDayChecklist.findMany({
+    include: {
+      submitted_by: { select: { id: true, name: true, photo_url: true } },
+      comments: {
+        include: { author: { select: { id: true, name: true, photo_url: true } } },
+        orderBy: { created_at: "asc" },
       },
-      orderBy: [{ operational_date: "desc" }, { updated_at: "desc" }],
-      take: 90,
-    }),
-    prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, name: true, photo_url: true } }),
-  ]);
+    },
+    orderBy: [{ operational_date: "desc" }, { updated_at: "desc" }],
+    take: 90,
+  });
 
   const serialized = entries.map((entry) => ({
     id: entry.id,
@@ -63,7 +67,8 @@ export default async function EndOfDayPage({ searchParams }: { searchParams?: Pr
       <EndOfDayChecklistClient
         initialEntries={serialized}
         initialEntryId={params.entry ?? null}
-        viewer={{ id: viewer?.id ?? session.user.id, name: viewer?.name ?? session.user.name ?? "Admin", photoUrl: viewer?.photo_url ?? null }}
+        canWrite={canWrite}
+        viewer={{ id: viewer.id, name: viewer.name, photoUrl: viewer.photo_url }}
       />
     </AppShell>
   );
