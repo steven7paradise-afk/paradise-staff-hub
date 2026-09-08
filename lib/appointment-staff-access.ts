@@ -1,8 +1,8 @@
 const FRANCESCA_ID = "cmqf02qgq0001jx0913ddfys1";
 const STEVEN_ID = "cmpmp66np0001ie09hko78bsb";
 
-const ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAMES = new Set(["franci", "steven alvarez"]);
-const ALWAYS_ACTIVE_APPOINTMENT_STAFF_IDS = new Set([FRANCESCA_ID, STEVEN_ID]);
+const ALWAYS_ACTIVE_APPOINTMENT_STAFF_NAMES = new Set(["franci"]);
+const ALWAYS_ACTIVE_APPOINTMENT_STAFF_IDS = new Set([FRANCESCA_ID]);
 
 export function isAlwaysActiveAppointmentStaff(
   name: string | null | undefined,

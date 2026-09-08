@@ -11,9 +11,9 @@ test("Franci può usare gli appuntamenti da ogni tablet autorizzato", () => {
   assert.equal(isAlwaysActiveAppointmentStaff("Profilo rinominato", "cmqf02qgq0001jx0913ddfys1"), true);
 });
 
-test("Steven può usare gli appuntamenti da ogni tablet autorizzato", () => {
-  assert.equal(isAlwaysActiveAppointmentStaff("Steven Alvarez"), true);
-  assert.equal(isAlwaysActiveAppointmentStaff("Profilo rinominato", "cmpmp66np0001ie09hko78bsb"), true);
+test("Steven dipende dalla timbratura come gli altri profili", () => {
+  assert.equal(isAlwaysActiveAppointmentStaff("Steven Alvarez"), false);
+  assert.equal(isAlwaysActiveAppointmentStaff("Profilo rinominato", "cmpmp66np0001ie09hko78bsb"), false);
 });
 
 test("il selettore mostra i nomi brevi richiesti", () => {

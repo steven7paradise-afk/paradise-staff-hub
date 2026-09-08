@@ -3333,26 +3333,15 @@ export function AppointmentsBrowser({
   const canManageAppointmentNotes = currentUser?.role !== "DIPENDENTE";
 
   useEffect(() => {
-    if (!isPC) return;
+    if (!isPC || !pcActiveWorker) return;
 
     const lockScreen = () => {
       setPcScreenLocked(true);
       setPcActiveWorker(null);
     };
 
-    let timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
-    const resetTimer = () => {
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
-    };
-
-    const events = ["click", "keydown", "mousemove", "touchstart", "scroll"];
-    events.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
-
-    return () => {
-      window.clearTimeout(timeout);
-      events.forEach((event) => window.removeEventListener(event, resetTimer));
-    };
+    const timeout = window.setTimeout(lockScreen, pcLockTimeoutMs);
+    return () => window.clearTimeout(timeout);
   }, [isPC, pcActiveWorker?.id]);
 
   function handlePcUnlock(worker: ActivePcWorker) {
