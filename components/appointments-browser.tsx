@@ -141,6 +141,7 @@ function detectServiceDetails(serviceTitle?: string | null): string[] {
   if (/micro\s?cheratina/.test(title)) add("Microcheratina");
   if (/nanoplastia|nano\s?plastia/.test(title)) add("Nanoplastia");
   if (/colore|colorazione|tinta/.test(title)) add("Colore");
+  if (/consulenz(?:a|e)/.test(title)) add("Consulenza");
 
   return detected;
 }
@@ -1874,7 +1875,6 @@ export function AppointmentsBrowser({
   const [selectedAtteggiamento, setSelectedAtteggiamento] = useState("");
   const [extraNoteText, setExtraNoteText] = useState("");
   const [selectedServiceDetails, setSelectedServiceDetails] = useState<string[]>([]);
-  const finalPaymentOptional = allowsMissingFinalPaymentOrder(selectedServiceDetails);
   const [isDepositUnlockedManually, setIsDepositUnlockedManually] = useState(false);
   const [isSecondUnlockedManually, setIsSecondUnlockedManually] = useState(false);
 
@@ -1937,6 +1937,10 @@ export function AppointmentsBrowser({
       review: false,
       bookingId: null,
     });
+  const finalPaymentOptional = allowsMissingFinalPaymentOrder([
+    ...selectedServiceDetails,
+    clientControlForm.serviceTitle,
+  ]);
   const clientControlFormRef = useRef(clientControlForm);
   const clientControlAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clientControlAutoSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -5143,7 +5147,7 @@ export function AppointmentsBrowser({
                               </button>
                             ) : (
                               <span className="text-[9px] font-extrabold text-[#D96B94] uppercase">
-                                {finalPaymentOptional ? "Facoltativo per sistemazione fasce" : "Obbligatorio"}
+                                {finalPaymentOptional ? "Non richiesto per questo servizio" : "Obbligatorio"}
                               </span>
                             )}
                           </div>
@@ -5169,7 +5173,7 @@ export function AppointmentsBrowser({
                                 ? "border-[#F6C6DE] bg-[#FFF0F6] text-black/70 cursor-not-allowed"
                                 : "border-[#D96B94]/50 bg-white text-[#1F1F1F] focus:border-[#B83D7F] focus:ring-2 focus:ring-[#D96B94]/30"
                             }`}
-                            placeholder={finalPaymentOptional ? "Facoltativo per sistemazione fasce" : "N° Ordine Finale Salone (es. 25344)"}
+                            placeholder={finalPaymentOptional ? "Non richiesto per questo servizio" : "N° Ordine Finale Salone (es. 25344)"}
                           />
                           {secondShopifyLookupLoading ? (
                             <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-[#B83D7F]">Verifica pagamento Shopify in corso...</p>

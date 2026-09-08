@@ -109,7 +109,7 @@ function clientControlChangeSummary(
 
 export async function POST(request: NextRequest) {
   const session = await auth();
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, { preferAuthenticatedAdmin: true });
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const requestedDevice = cookieStore.get(tabletDeviceCookieName)?.value ?? "";
   const tabletDevice = requestedDevice
@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
     clientName?: string;
     email?: string;
     phone?: string;
+    serviceTitle?: string;
     depositPaid?: string | number;
     paid?: string | number;
     staffIds?: string[];
@@ -267,7 +268,10 @@ export async function POST(request: NextRequest) {
   const shopifyOrder = textValue(body?.shopifyOrder);
   const secondShopifyOrder = textValue(body?.secondShopifyOrder);
   const shopifyNoteOrder = textValue(body?.shopifyNoteOrder);
-  const finalPaymentOptional = allowsMissingFinalPaymentOrder(body?.customServices);
+  const finalPaymentOptional = allowsMissingFinalPaymentOrder([
+    ...(body?.customServices ?? []),
+    body?.serviceTitle,
+  ]);
   const isNoShow = !!body?.isNoShow;
   let productsListStr = "";
   let shopifyClientName: string | null = null;
