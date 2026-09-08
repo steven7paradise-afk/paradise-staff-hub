@@ -2017,3 +2017,22 @@ textarea {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+
+/* Tablet Clock lavora come una timbratrice: evita selezioni e menu contestuali
+   accidentali durante tocchi ripetuti, preservando i campi compilabili. */
+.tablet-kiosk-root,
+.tablet-kiosk-root :where(button, a, img, svg, p, span, h1, h2, h3, div) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.tablet-kiosk-root :where(button, a, [role="button"]) {
+  touch-action: manipulation;
+}
+
+.tablet-kiosk-root :where(input, textarea, select, [contenteditable="true"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}

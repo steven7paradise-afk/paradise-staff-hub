@@ -1667,7 +1667,7 @@ export function TabletClock({
   if (!device) {
     return (
       <main
-        className="grid min-h-screen place-items-center bg-[color:var(--tablet-bg)] p-5 text-[color:var(--tablet-text)]"
+        className="tablet-kiosk-root grid min-h-screen place-items-center bg-[color:var(--tablet-bg)] p-5 text-[color:var(--tablet-text)]"
         style={tabletStyle}
       >
         <div className="rounded-[28px] border border-[#eadfd6] bg-white/80 px-10 py-12 text-center shadow-lg">
@@ -1846,7 +1846,7 @@ export function TabletClock({
   // Render private dashboard view
   if (showDashboard) {
     return (
-      <main className="h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
+      <main className="tablet-kiosk-root h-[100svh] overflow-hidden bg-[color:var(--tablet-bg)] p-2 text-[color:var(--tablet-text)] sm:p-4" style={tabletStyle}>
         <div className="relative flex h-[calc(100svh-1rem)] sm:h-[calc(100svh-2rem)] flex-col overflow-hidden rounded-[26px] border-[10px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 xl:border-[16px]">
           {/* Dashboard Private Area Header */}
           <div className="flex items-center justify-between border-b border-black/10 px-6 py-4 bg-[color:var(--tablet-card)] shadow-sm">
@@ -1913,7 +1913,7 @@ export function TabletClock({
 
   // Render Kiosk clock/app screen
   return (
-    <main className="min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] min-[600px]:h-[100svh] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:p-4" style={tabletStyle}>
+    <main className="tablet-kiosk-root min-h-[100svh] overflow-x-hidden overflow-y-auto bg-[color:var(--tablet-bg)] p-1.5 text-[color:var(--tablet-text)] min-[600px]:h-[100svh] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:p-4" style={tabletStyle}>
       <div className="relative flex min-h-[calc(100svh-0.75rem)] flex-col overflow-visible rounded-2xl border-[6px] border-[color:var(--tablet-frame)] bg-[color:var(--tablet-card)] px-3 py-3 shadow-[0_20px_70px_rgba(0,0,0,0.2)] transition-colors duration-300 min-[600px]:h-[calc(100svh-2rem)] min-[600px]:min-h-0 min-[600px]:overflow-hidden sm:rounded-[26px] sm:border-[10px] sm:px-7 sm:py-6 xl:border-[16px]">
         
         {/* header info bar */}
