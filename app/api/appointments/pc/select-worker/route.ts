@@ -10,7 +10,10 @@ import {
 } from "@/lib/appointments-pc-auth";
 import { prisma } from "@/lib/prisma";
 import { isPinPrefixValidForUser } from "@/lib/pin";
-import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
+import {
+  appointmentStaffDisplayName,
+  isAlwaysActiveAppointmentStaff,
+} from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -78,10 +81,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Questo profilo non risulta timbrato adesso." }, { status: 403 });
   }
 
+  const workerName = appointmentStaffDisplayName(worker.name, worker.id);
   const response = NextResponse.json({
     success: true,
-    appointmentUrl: `${appointmentSalonUrl(salone)}?worker=${encodeURIComponent(worker.name)}`,
-    workerName: worker.name,
+    appointmentUrl: `${appointmentSalonUrl(salone)}?worker=${encodeURIComponent(workerName)}`,
+    workerName,
   });
 
   response.cookies.set({

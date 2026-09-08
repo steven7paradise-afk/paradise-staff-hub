@@ -6,7 +6,10 @@ import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthor
 import { AppointmentsKioskEntry } from "@/components/appointments-kiosk-entry";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
+import {
+  appointmentStaffDisplayName,
+  isAlwaysActiveAppointmentStaff,
+} from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +88,7 @@ export default async function SalonAppointmentsPage({
       ...resolvedSearchParams,
       salone,
       unlocked: "1",
-      worker: selectedWorkerRecord.name,
+      worker: appointmentStaffDisplayName(selectedWorkerRecord.name, selectedWorkerRecord.id),
     }),
     forcePcSalon: salone,
   });

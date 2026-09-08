@@ -5,7 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { deriveAttendanceState } from "@/lib/attendance-state";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
-import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
+import {
+  appointmentStaffDisplayName,
+  isAlwaysActiveAppointmentStaff,
+} from "@/lib/appointment-staff-access";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
         const alwaysActive = isAlwaysActiveAppointmentStaff(worker.name, worker.id);
         return {
           id: worker.id,
-          name: worker.name,
+          name: appointmentStaffDisplayName(worker.name, worker.id),
           photo_url: worker.photo_url,
           sede_id: worker.sede_id,
           locationName: worker.location?.name ?? "",

@@ -56,7 +56,7 @@ function isGenericStaffPlaceholder(value?: string | null) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
           })
           .filter((value: StoredTeammate | null): value is StoredTeammate => Boolean(value))
       : [];
-    const signedBy = String(body?.signedBy || "").trim();
+    const signedBy = operationalUser?.isPC ? "" : String(body?.signedBy || "").trim();
 
     if (!bookingId || !requestedTeammates.length) {
       return NextResponse.json({ error: "Appuntamento o collaboratrice mancante." }, { status: 400 });

@@ -10,7 +10,10 @@ import {
 } from "@/lib/appointments-pc-auth";
 import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-shift-access";
 import { resolveRemoteControllerWorker } from "@/lib/remote-controller-user";
-import { isAlwaysActiveAppointmentStaff } from "@/lib/appointment-staff-access";
+import {
+  appointmentStaffDisplayName,
+  isAlwaysActiveAppointmentStaff,
+} from "@/lib/appointment-staff-access";
 
 export type OperationalUser = {
   id: string;
@@ -31,7 +34,10 @@ function selectedWorkerIdentity(request: NextRequest) {
   }
 }
 
-export async function getOperationalUser(request: NextRequest): Promise<OperationalUser | null> {
+export async function getOperationalUser(
+  request: NextRequest,
+  options?: { requirePcWorker?: boolean },
+): Promise<OperationalUser | null> {
   const session = await auth();
   const pcAuth = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value).catch(() => null);
   if (pcAuth) {
@@ -53,13 +59,15 @@ export async function getOperationalUser(request: NextRequest): Promise<Operatio
     if (worker) {
       return {
         id: worker.id,
-        name: worker.name,
+        name: appointmentStaffDisplayName(worker.name, worker.id),
         email: worker.email,
         role: worker.role,
         sedeId: worker.sede_id,
         isPC: true,
       };
     }
+
+    if (options?.requirePcWorker) return null;
 
     return {
       id: "PC_CASSA",

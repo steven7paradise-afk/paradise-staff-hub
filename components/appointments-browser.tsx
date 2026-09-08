@@ -3360,6 +3360,18 @@ export function AppointmentsBrowser({
     setPcScreenLocked(false);
   }
 
+  function handleExpiredPcWorker(response: Response) {
+    if (!isPC || response.status !== 401) return false;
+    setPcActiveWorker(null);
+    setPcScreenLocked(true);
+    showPushToast(
+      "Scegli chi sta usando il PC",
+      "La sessione personale è scaduta. Seleziona Steven o Francesca per continuare.",
+      "error",
+    );
+    return true;
+  }
+
   useEffect(() => {
     fetch("/api/auth/session")
       .then((res) => res.json())
@@ -3500,6 +3512,8 @@ export function AppointmentsBrowser({
         }),
       });
 
+      if (handleExpiredPcWorker(res)) return;
+
       if (res.ok) {
         const comment = await res.json();
         setDbComments((current) => [...current, comment]);
@@ -3547,6 +3561,7 @@ export function AppointmentsBrowser({
           text: savedText,
         }),
       });
+      if (handleExpiredPcWorker(response)) return;
       if (!response.ok) throw new Error("Nota non salvata");
       const note = await response.json();
       setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: note.text || savedText }));
@@ -3587,6 +3602,7 @@ export function AppointmentsBrowser({
       const res = await fetch(`/api/appointments/comments?id=${commentId}`, {
         method: "DELETE",
       });
+      if (handleExpiredPcWorker(res)) return;
       if (res.ok) {
         setDbComments((current) => current.filter((c) => c.id !== commentId));
         showPushToast("Modifica salvata", "La nota è stata eliminata.");
@@ -3694,6 +3710,10 @@ export function AppointmentsBrowser({
         body: JSON.stringify({ bookingId, status: nextStatus, signedBy }),
       });
 
+      if (handleExpiredPcWorker(response)) {
+        throw new Error("PC_WORKER_EXPIRED");
+      }
+
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare lo stato.");
@@ -3733,13 +3753,15 @@ export function AppointmentsBrowser({
         ...current,
         [bookingId]: previousTiming,
       }));
-      showPushToast(
-        "Modifica non salvata",
-        error instanceof Error
-          ? error.message
-          : "Non sono riuscito a salvare lo stato. Riprova.",
-        "error",
-      );
+      if (!(error instanceof Error && error.message === "PC_WORKER_EXPIRED")) {
+        showPushToast(
+          "Modifica non salvata",
+          error instanceof Error
+            ? error.message
+            : "Non sono riuscito a salvare lo stato. Riprova.",
+          "error",
+        );
+      }
     } finally {
       setSavingStatusId(null);
     }
@@ -3814,6 +3836,10 @@ export function AppointmentsBrowser({
         }),
       });
 
+      if (handleExpiredPcWorker(response)) {
+        throw new Error("PC_WORKER_EXPIRED");
+      }
+
       if (!response.ok) {
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "Non sono riuscito a salvare il team.");
@@ -3849,13 +3875,15 @@ export function AppointmentsBrowser({
         clientControlFormRef.current = restoredClientControlForm;
         setClientControlForm(restoredClientControlForm);
       }
-      showPushToast(
-        "Modifica non salvata",
-        error instanceof Error
-          ? error.message
-          : "Non sono riuscito a salvare il team. Riprova.",
-        "error",
-      );
+      if (!(error instanceof Error && error.message === "PC_WORKER_EXPIRED")) {
+        showPushToast(
+          "Modifica non salvata",
+          error instanceof Error
+            ? error.message
+            : "Non sono riuscito a salvare il team. Riprova.",
+          "error",
+        );
+      }
       return false;
     } finally {
       setSavingTeamId(null);

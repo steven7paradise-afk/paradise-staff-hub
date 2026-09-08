@@ -6,7 +6,7 @@ import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-a
 const NOTE_KEY_PREFIX = "appointment_office_note:";
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
   if (!operationalUser?.id) {
     return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
   }

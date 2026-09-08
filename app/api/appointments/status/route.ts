@@ -77,7 +77,7 @@ async function hasConfirmedClientControl(bookingId: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
@@ -110,8 +110,8 @@ export async function POST(request: NextRequest) {
     const currentMap = normalizeStatusMap(currentSetting?.value);
     const previousEntry = currentMap[bookingId] || {};
     const previousStatus = previousEntry.status;
-    const signedBy = String(body?.signedBy || "").trim();
-    const updatedBy = signedBy ? signedBy : sessionUserName;
+    const signedBy = operationalUser?.isPC ? "" : String(body?.signedBy || "").trim();
+    const updatedBy = signedBy || sessionUserName;
 
     let startedAt = previousEntry.startedAt ?? null;
     let stoppedAt = previousEntry.stoppedAt ?? null;

@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
@@ -109,20 +109,21 @@ export async function POST(request: NextRequest) {
     }
 
     const key = orderName || bookingId;
-    const authorName = signedBy ? signedBy : sessionUserName;
+    const effectiveSignedBy = operationalUser?.isPC ? "" : String(signedBy || "").trim();
+    const authorName = effectiveSignedBy || sessionUserName;
     
     const comment = await prisma.shopifyOrderComment.create({
       data: {
         order_name: key,
         user_name: authorName,
         user_role: sessionUserRole,
-        message: message.trim() + (signedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""),
+        message: message.trim() + (effectiveSignedBy ? ` [Tramite cassa: ${sessionUserName}]` : ""),
       },
     });
 
     const targetOrderCodes = extractShopifyOrderCodes(orderName);
     for (const code of targetOrderCodes) {
-      appendShopifyOrderNote(code, authorName, message.trim() + (signedBy ? ` [Cassa: ${sessionUserName}]` : ""))
+      appendShopifyOrderNote(code, authorName, message.trim() + (effectiveSignedBy ? ` [Cassa: ${sessionUserName}]` : ""))
         .catch((err) => console.error(`Failed to sync comment to Shopify order ${code}:`, err));
     }
 
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request);
+  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
