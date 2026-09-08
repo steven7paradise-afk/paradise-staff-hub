@@ -56,7 +56,10 @@ function isGenericStaffPlaceholder(value?: string | null) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
+  const operationalUser = await getOperationalUser(request, {
+    requirePcWorker: true,
+    preferAuthenticatedAdmin: true,
+  });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";

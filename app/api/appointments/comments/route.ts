@@ -91,7 +91,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
+  const operationalUser = await getOperationalUser(request, {
+    requirePcWorker: true,
+    preferAuthenticatedAdmin: true,
+  });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";
@@ -135,7 +138,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const operationalUser = await getOperationalUser(request, { requirePcWorker: true });
+  const operationalUser = await getOperationalUser(request, {
+    requirePcWorker: true,
+    preferAuthenticatedAdmin: true,
+  });
   const isAuthorized = Boolean(operationalUser?.id);
   const sessionUserName = operationalUser?.name || operationalUser?.email || operationalUser?.id || "Staff";
   const sessionUserRole = operationalUser?.role || "DIPENDENTE";

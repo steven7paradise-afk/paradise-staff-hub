@@ -36,11 +36,14 @@ function selectedWorkerIdentity(request: NextRequest) {
 
 export async function getOperationalUser(
   request: NextRequest,
-  options?: { requirePcWorker?: boolean },
+  options?: { requirePcWorker?: boolean; preferAuthenticatedAdmin?: boolean },
 ): Promise<OperationalUser | null> {
   const session = await auth();
   const pcAuth = await checkPCAuthorization(request.cookies.get(appointmentsPcCookieName)?.value).catch(() => null);
-  if (pcAuth) {
+  const hasAuthenticatedAdmin = Boolean(
+    session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role),
+  );
+  if (pcAuth && !(options?.preferAuthenticatedAdmin && hasAuthenticatedAdmin)) {
     const workerIdentity = selectedWorkerIdentity(request);
     const workerCandidate = workerIdentity
       ? await prisma.user.findFirst({
