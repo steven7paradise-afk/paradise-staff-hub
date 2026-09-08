@@ -68,6 +68,7 @@ const typeLabels: Record<string, string> = {
   RINNOVO: "Rinnovo / proroga",
   PROROGA: "Proroga / rinnovo",
   CUD: "CUD / Certificazione Unica",
+  LETTERA_CONTESTAZIONE: "Lettera di contestazione",
   DOCUMENTO: "Documento HR",
 };
 
@@ -754,6 +755,7 @@ export function DocumentsViewer({
                   <option value="CONTRATTO">Contratto</option>
                   <option value="PROROGA">Proroga / rinnovo</option>
                   <option value="CUD">CUD / Certificazione Unica</option>
+                  <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
                   <option value="DOCUMENTO">Documento HR</option>
                 </select>
 
@@ -1065,6 +1067,7 @@ export function DocumentsViewer({
                     <option value="CONTRATTO">Contratto</option>
                     <option value="PROROGA">Proroga / rinnovo</option>
                     <option value="CUD">CUD / Certificazione Unica</option>
+                    <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
                     <option value="DOCUMENTO">Documento HR</option>
                   </select>
 
@@ -1261,7 +1264,7 @@ export function DocumentsViewer({
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 sm:col-span-2"><span className="text-xs font-bold text-black/55">Titolo</span><input name="title" defaultValue={editingDocument.title} required className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
-              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Tipologia</span><select name="type" defaultValue={editingDocument.type} required className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="CONTRATTO">Contratto</option><option value="PROROGA">Proroga / rinnovo</option><option value="BUSTA_PAGA">Cedolino / busta paga</option><option value="CUD">CUD / Certificazione Unica</option><option value="DOCUMENTO">Altro documento HR</option></select></label>
+              <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Tipologia</span><select name="type" defaultValue={editingDocument.type} required className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="CONTRATTO">Contratto</option><option value="PROROGA">Proroga / rinnovo</option><option value="BUSTA_PAGA">Cedolino / busta paga</option><option value="CUD">CUD / Certificazione Unica</option><option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option><option value="DOCUMENTO">Altro documento HR</option></select></label>
               <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Data documento</span><input name="documentDate" type="date" defaultValue={editingDocument.document_date?.slice(0, 10) ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>
               <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Mese cedolino</span><select name="month" defaultValue={editingDocument.month ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 bg-white px-4 text-sm font-semibold"><option value="">Non indicato</option>{monthNames.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}</select></label>
               <label className="space-y-1.5"><span className="text-xs font-bold text-black/55">Anno</span><input name="year" type="number" min="2000" max="2100" defaultValue={editingDocument.year ?? ""} className="min-h-11 w-full rounded-2xl border border-black/10 px-4 text-sm font-semibold" /></label>

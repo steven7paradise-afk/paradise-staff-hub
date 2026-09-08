@@ -343,6 +343,7 @@ model Document {
   month         Int?
   year          Int?
   document_date DateTime?
+  notes         String?
   uploaded_by   String
   created_at    DateTime  @default(now())
   user          User      @relation("UserDocuments", fields: [user_id], references: [id])

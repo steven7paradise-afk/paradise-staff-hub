@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { Download, ExternalLink, Eye, FileCheck2, FileText, Pencil, Upload, X } from "lucide-react";
 import { Field, Select } from "@/components/ui";
+import { employeeDocumentGroup } from "@/lib/document-types";
 
 export type EmployeeContractDocument = {
   id: string;
@@ -13,6 +14,7 @@ export type EmployeeContractDocument = {
   fileUrl: string;
   storagePath: string | null;
   documentDate: string;
+  notes: string;
   createdAt: string;
 };
 
@@ -20,15 +22,8 @@ const GROUPS = [
   { key: "CONTRATTI_RINNOVI", label: "Contratti e rinnovi" },
   { key: "BUSTA_PAGA", label: "Cedolini / buste paga" },
   { key: "CUD", label: "CUD / CU" },
+  { key: "LETTERE_CONTESTAZIONE", label: "Lettere di contestazione" },
 ] as const;
-
-function documentGroup(document: EmployeeContractDocument) {
-  const text = `${document.type} ${document.title}`.toLowerCase();
-  if (/contratto|rinnovo|proroga/.test(text)) return "CONTRATTI_RINNOVI";
-  if (/busta.?paga|cedolino/.test(text)) return "BUSTA_PAGA";
-  if (/\bcud\b|certificazione unica|\bcu\b/.test(text)) return "CUD";
-  return "ALTRO";
-}
 
 function formatDate(value: string) {
   if (!value) return "Data non indicata";
@@ -61,7 +56,7 @@ export function EmployeeContractDocuments({
   const grouped = useMemo(() => {
     const map = new Map<string, EmployeeContractDocument[]>();
     documents.forEach((document) => {
-      const key = documentGroup(document);
+      const key = employeeDocumentGroup(document.type, document.title);
       map.set(key, [...(map.get(key) ?? []), document]);
     });
     return map;
@@ -86,6 +81,7 @@ export function EmployeeContractDocuments({
         fileUrl: data.file_url,
         storagePath: data.storage_path ?? null,
         documentDate: data.document_date ? String(data.document_date).slice(0, 10) : "",
+        notes: data.notes ?? "",
         createdAt: data.created_at,
       });
       form.reset();
@@ -112,6 +108,7 @@ export function EmployeeContractDocuments({
           title: values.get("title"),
           type: values.get("type"),
           documentDate: values.get("documentDate"),
+          notes: values.get("notes"),
         }),
       });
       const data = await response.json();
@@ -121,6 +118,7 @@ export function EmployeeContractDocuments({
         title: data.title,
         type: data.type,
         documentDate: data.document_date ? String(data.document_date).slice(0, 10) : "",
+        notes: data.notes ?? "",
       });
       setEditing(null);
       setStatus("Documento aggiornato.");
@@ -149,7 +147,7 @@ export function EmployeeContractDocuments({
             ) : (
               <h2 className="text-sm font-extrabold uppercase tracking-wider text-[#1F1F1F]">Contratti e documenti fiscali</h2>
             )}
-            <p className="text-[10px] font-semibold text-neutral-400">Contratti, rinnovi, cedolini e CUD recuperati dall'archivio Cedolini di {employeeName}</p>
+            <p className="text-[10px] font-semibold text-neutral-400">Contratti, rinnovi, cedolini, CUD e lettere di contestazione di {employeeName}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -182,20 +180,25 @@ export function EmployeeContractDocuments({
               <option value="PROROGA">Proroga / rinnovo</option>
               <option value="BUSTA_PAGA">Cedolino / busta paga</option>
               <option value="CUD">CUD / Certificazione Unica</option>
+              <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
               <option value="DOCUMENTO">Altro documento HR</option>
             </Select>
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Titolo</span>
-            <Field name="title" placeholder="Contratto, rinnovo, CUD..." required />
+            <Field name="title" placeholder="Scrivi il titolo del documento" required />
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data documento</span>
-            <Field name="documentDate" type="date" required />
+            <Field name="documentDate" type="date" />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">File PDF</span>
-            <input name="file" type="file" accept="application/pdf,.pdf" required className="block min-h-11 w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-xs file:mr-2 file:rounded-full file:border-0 file:bg-[#FCE5F3] file:px-3 file:py-1 file:font-bold file:text-[#B83D7F]" />
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">File PDF o immagine</span>
+            <input name="file" type="file" accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg" required className="block min-h-11 w-full rounded-2xl border border-black/10 bg-white px-3 py-2 text-xs file:mr-2 file:rounded-full file:border-0 file:bg-[#FCE5F3] file:px-3 file:py-1 file:font-bold file:text-[#B83D7F]" />
+          </label>
+          <label className="space-y-1 md:col-span-4">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Note (facoltative)</span>
+            <textarea name="notes" maxLength={2000} rows={3} placeholder="Aggiungi eventuali note sul documento" className="w-full resize-y rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20" />
           </label>
           <div className="flex justify-end gap-2 md:col-span-4">
             <button type="button" onClick={() => setShowUpload(false)} className="rounded-2xl border border-black/10 bg-white px-4 py-2 text-xs font-bold text-neutral-600">Annulla</button>
@@ -213,12 +216,17 @@ export function EmployeeContractDocuments({
               <option value="PROROGA">Proroga / rinnovo</option>
               <option value="BUSTA_PAGA">Cedolino / busta paga</option>
               <option value="CUD">CUD / Certificazione Unica</option>
+              <option value="LETTERA_CONTESTAZIONE">Lettera di contestazione</option>
               <option value="DOCUMENTO">Altro documento HR</option>
             </Select>
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Titolo</span>
             <Field name="title" defaultValue={editing.title} required />
+          </label>
+          <label className="space-y-1 md:col-span-3">
+            <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Note (facoltative)</span>
+            <textarea name="notes" maxLength={2000} rows={3} defaultValue={editing.notes} className="w-full resize-y rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-[#D96B94] focus:ring-2 focus:ring-[#D96B94]/20" />
           </label>
           <label className="space-y-1">
             <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Data documento</span>
@@ -231,7 +239,7 @@ export function EmployeeContractDocuments({
         </form>
       ) : null}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {GROUPS.map((group) => {
           const items = grouped.get(group.key) ?? [];
           const expanded = expandedGroups.has(group.key);
@@ -252,6 +260,7 @@ export function EmployeeContractDocuments({
                         <div className="min-w-0">
                           <p className="truncate text-xs font-extrabold text-neutral-900">{document.title}</p>
                           <p className="mt-1 text-[10px] font-semibold text-neutral-400">{formatDate(document.documentDate)}</p>
+                          {document.notes ? <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-[11px] font-medium leading-relaxed text-neutral-500">{document.notes}</p> : null}
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -298,6 +307,7 @@ export function EmployeeContractDocuments({
               <div className="min-w-0">
                 <p className="truncate text-sm font-black text-neutral-900">{preview.title}</p>
                 <p className="mt-0.5 text-[11px] font-semibold text-neutral-400">{formatDate(preview.documentDate)}</p>
+                {preview.notes ? <p className="mt-1 line-clamp-2 text-[11px] font-medium text-neutral-500">{preview.notes}</p> : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <a
