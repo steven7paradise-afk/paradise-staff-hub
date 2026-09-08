@@ -260,9 +260,16 @@ function statusClasses(status: string) {
 
 function calendarClasses(task: Task) {
   if (isCompletedTask(task)) return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (isActiveTask(task)) return "border-yellow-200 bg-yellow-50 text-yellow-800";
+  if (isActiveTask(task)) return "border-amber-400 bg-amber-100 text-amber-950 shadow-sm ring-1 ring-amber-300/60";
   if (isWaitingTask(task)) return "border-violet-200 bg-violet-50 text-violet-800";
   return "border-red-200 bg-red-50 text-red-700";
+}
+
+function calendarTaskOrder(task: Task) {
+  if (isActiveTask(task)) return 0;
+  if (isWaitingTask(task)) return 1;
+  if (isCompletedTask(task)) return 3;
+  return 2;
 }
 
 function fileToDataUrl(file: File) {
@@ -1776,9 +1783,15 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
       {view === "CALENDAR" ? (
         <Card className="bg-white p-0">
           <div className="flex flex-col gap-3 border-b border-black/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="soft">Oggi</Button>
               <h2 className="px-3 text-xl font-semibold">{calendarTitle}</h2>
+              {filteredTasks.some(isActiveTask) ? (
+                <span className="inline-flex min-h-8 items-center gap-2 rounded-full border border-amber-300 bg-amber-100 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-amber-900">
+                  <span className="size-2 rounded-full bg-amber-500 motion-safe:animate-pulse" />
+                  {filteredTasks.filter(isActiveTask).length} in corso
+                </span>
+              ) : null}
             </div>
             <div className="rounded-2xl bg-[#FAF7F9] p-1">
               <button onClick={() => setCalendarMode("MONTH")} className={`rounded-xl px-4 py-2 text-sm font-bold ${calendarMode === "MONTH" ? "bg-white shadow-sm" : "text-black/45"}`}>Mese</button>
@@ -1792,7 +1805,9 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               </div>
               <div className="grid grid-cols-7">
                 {calendarCells.map((date) => {
-                  const dayTasks = filteredTasks.filter((task) => localDateKey(taskCalendarDate(task)) === localDateKey(date));
+                  const dayTasks = filteredTasks
+                    .filter((task) => localDateKey(taskCalendarDate(task)) === localDateKey(date))
+                    .sort((left, right) => calendarTaskOrder(left) - calendarTaskOrder(right));
                   const visibleDayTasks = dayTasks.slice(0, calendarMode === "WEEK" ? 8 : 3);
                   const hiddenCount = dayTasks.length - visibleDayTasks.length;
                   const muted = date.getMonth() !== monthStart.getMonth();
@@ -1817,6 +1832,12 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                               calendarClasses(task),
                             )}
                           >
+                            {isActiveTask(task) ? (
+                              <span className="mb-1 inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.1em] text-amber-900">
+                                <span className="size-1.5 rounded-full bg-amber-500 motion-safe:animate-pulse" />
+                                In corso
+                              </span>
+                            ) : null}
                             <span className="block whitespace-normal break-words">{task.title}</span>
                             <span className="mt-0.5 block text-[10px] font-medium opacity-70">{task.dueDate ? formatShortDateTime(task.dueDate) : `Creata ${formatTaskDate(task.createdAt)}`}</span>
                           </button>
