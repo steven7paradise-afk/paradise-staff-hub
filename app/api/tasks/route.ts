@@ -4,6 +4,7 @@ import { uploadTaskImageToGoogleDrive } from "@/lib/google-drive";
 import { createNotification } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { hasTaskAccess, isTaskOfficeUser, taskEscalationRecipientWhere, taskWorkerWhere } from "@/lib/task-access";
+import { canDecideTaskCompletion, canRequestTaskCompletion } from "@/lib/task-completion-workflow";
 
 const managerRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
 
@@ -268,7 +269,14 @@ export async function PATCH(request: NextRequest) {
 
   const payload = await request.json();
   const id = String(payload.id ?? "");
-  const status = String(payload.status ?? "").toUpperCase();
+  const completionAction = String(payload.completionAction ?? "").toUpperCase();
+  const status = completionAction === "REQUEST"
+    ? "COMPLETION_REQUESTED"
+    : completionAction === "APPROVE"
+      ? "COMPLETED"
+      : completionAction === "REJECT"
+        ? "ACTIVE"
+        : String(payload.status ?? "").toUpperCase();
   const evaluation = String(payload.evaluation ?? "").toUpperCase();
   const notes = typeof payload.notes === "string" ? payload.notes : null;
   const attachmentName = typeof payload.attachmentName === "string" ? payload.attachmentName.trim() : null;
@@ -309,7 +317,7 @@ export async function PATCH(request: NextRequest) {
   const isDescriptionImageUpdate = photoUrl !== null && attachmentName !== null && !status && !evaluation && notes === null;
   const isChecklistUpdate = requestedChecklist !== null && !status && !evaluation && notes === null && photoUrl === null;
   
-  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "WAITING", "COMPLETED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
+  if (!id || (!isNotesUpdate && !isDescriptionImageUpdate && !isChecklistUpdate && !["ACTIVE", "WAITING", "COMPLETED", "COMPLETION_REQUESTED"].includes(status) && !["LIKE", "OK", "DISLIKE"].includes(evaluation))) {
     return NextResponse.json({ error: "Stato task non valido." }, { status: 400 });
   }
 
@@ -334,11 +342,21 @@ export async function PATCH(request: NextRequest) {
     return { text: item.text, done: true, completedBy: session.user.name ?? "Collaboratore", completedAt: new Date().toISOString() };
   }) ?? null;
   const isEvaluation = ["LIKE", "OK", "DISLIKE"].includes(evaluation) && !status;
-  
+
   const isAssignee = task.assignees.some(u => u.id === session.user.id);
-  const canEdit = isEvaluation
-    ? managerRoles.has(session.user.role)
-    : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
+  const isCompletionRequest = completionAction === "REQUEST";
+  const isCompletionApproval = completionAction === "APPROVE";
+  const isCompletionRejection = completionAction === "REJECT";
+  const canConfirmCompletion = task.created_by_id === session.user.id || session.user.role === "ZERO";
+  const canEdit = isCompletionRequest
+    ? canRequestTaskCompletion({ isAssignee, currentStatus: task.status })
+    : isCompletionApproval || isCompletionRejection
+      ? canDecideTaskCompletion({ userId: session.user.id, role: session.user.role, createdById: task.created_by_id, currentStatus: task.status })
+      : status === "COMPLETED"
+        ? canConfirmCompletion
+        : isEvaluation
+          ? managerRoles.has(session.user.role)
+          : managerRoles.has(session.user.role) || isAssignee || task.created_by_id === session.user.id;
   if (!canEdit || (!isTaskOfficeUser(session.user.role, currentUser.mansione, currentUser.location?.name) && currentUser.sede_id !== task.location_id)) {
     return NextResponse.json({ error: "Non autorizzato." }, { status: 403 });
   }
@@ -348,7 +366,8 @@ export async function PATCH(request: NextRequest) {
     const normalizedImage = isDescriptionImageUpdate
       ? await normalizeTaskAttachment(attachmentName, photoUrl, id)
       : null;
-    const normalizedCompletionFiles = status === "COMPLETED"
+    const storesCompletionProof = isCompletionRequest || (status === "COMPLETED" && !isCompletionApproval);
+    const normalizedCompletionFiles = storesCompletionProof
       ? await normalizeCompletionFilesForDb(completionFiles, id)
       : null;
 
@@ -367,9 +386,9 @@ export async function PATCH(request: NextRequest) {
             timer_seconds: Number.isFinite(timerSeconds) ? Math.max(0, Math.round(timerSeconds)) : task.timer_seconds,
             started_at: status === "ACTIVE" && !task.started_at ? new Date() : task.started_at,
             completed_at: status === "COMPLETED" ? new Date() : null,
-            completion_note: status === "COMPLETED" ? completionNote || task.completion_note : task.completion_note,
-            completion_links: status === "COMPLETED" ? completionLinks : task.completion_links,
-            completion_files: status === "COMPLETED" ? (normalizedCompletionFiles ?? completionFiles) : task.completion_files,
+            completion_note: storesCompletionProof ? completionNote || task.completion_note : task.completion_note,
+            completion_links: storesCompletionProof ? completionLinks : task.completion_links,
+            completion_files: storesCompletionProof ? (normalizedCompletionFiles ?? completionFiles) : task.completion_files,
           },
       include: { assignees: true, created_by: true, location: true, comments: { include: { user: true }, orderBy: { created_at: "asc" } } },
     });
@@ -378,14 +397,28 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Errore durante il salvataggio della Task. Riprova." }, { status: 500 });
   }
 
-  if (status === "COMPLETED" && task.created_by_id !== session.user.id) {
+  if (isCompletionRequest && task.created_by_id !== session.user.id) {
     await createNotification({
-        user_id: task.created_by_id,
-        title: `Task completata: ${task.title}`,
-        message: `${session.user.name} ha completato la task in ${Math.floor((updated.timer_seconds ?? 0) / 60)} min.`,
+      user_id: task.created_by_id,
+      title: `Completamento da confermare: ${task.title}`,
+      message: `${session.user.name} ha inviato la richiesta di completamento. Controlla la prova e conferma oppure rifiuta.`,
+      type: "TASK",
+      action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
+    }).catch((error) => console.error("Task completion notification failed:", error));
+  } else if (isCompletionApproval || isCompletionRejection) {
+    const title = isCompletionApproval ? `Task confermata: ${task.title}` : `Completamento da rivedere: ${task.title}`;
+    const message = isCompletionApproval
+      ? `${session.user.name} ha confermato che la task è stata completata.`
+      : `${session.user.name} ha rifiutato la richiesta di completamento. La task è di nuovo in corso.`;
+    await Promise.all(task.assignees
+      .filter((assignee) => assignee.id !== session.user.id)
+      .map((assignee) => createNotification({
+        user_id: assignee.id,
+        title,
+        message,
         type: "TASK",
         action_url: `/tasks?task=${encodeURIComponent(task.id)}`,
-    }).catch((error) => console.error("Task completion notification failed:", error));
+      }).catch((error) => console.error("Task completion decision notification failed:", error))));
   }
   return NextResponse.json(updated);
 }

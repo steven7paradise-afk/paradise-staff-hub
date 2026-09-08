@@ -109,8 +109,12 @@ function isCompletedTask(task: Task) {
   return ["COMPLETED", "DONE"].includes(normalizedStatus(task.status));
 }
 
+function isCompletionRequestedTask(task: Task) {
+  return normalizedStatus(task.status) === "COMPLETION_REQUESTED";
+}
+
 function isActiveTask(task: Task) {
-  return normalizedStatus(task.status) === "ACTIVE";
+  return normalizedStatus(task.status) === "ACTIVE" || isCompletionRequestedTask(task);
 }
 
 function isWaitingTask(task: Task) {
@@ -165,6 +169,7 @@ function startOfWeek(date: Date) {
 
 function statusLabel(status: string) {
   if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "Completato";
+  if (normalizedStatus(status) === "COMPLETION_REQUESTED") return "Da confermare";
   if (normalizedStatus(status) === "ACTIVE") return "In corso";
   if (isWaitingTask({ status } as Task)) return "Fermo";
   return "Da fare";
@@ -253,6 +258,7 @@ function priorityTone(priority: string): "pink" | "gold" | "green" {
 
 function statusClasses(status: string) {
   if (["COMPLETED", "DONE"].includes(normalizedStatus(status))) return "bg-emerald-100 text-emerald-800";
+  if (normalizedStatus(status) === "COMPLETION_REQUESTED") return "bg-sky-100 text-sky-800";
   if (normalizedStatus(status) === "ACTIVE") return "bg-yellow-100 text-yellow-800";
   if (isWaitingTask({ status } as Task)) return "bg-violet-100 text-violet-800";
   return "bg-red-100 text-red-800";
@@ -260,6 +266,7 @@ function statusClasses(status: string) {
 
 function calendarClasses(task: Task) {
   if (isCompletedTask(task)) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (isCompletionRequestedTask(task)) return "border-sky-300 bg-sky-50 text-sky-900 shadow-sm ring-1 ring-sky-200/70";
   if (isActiveTask(task)) return "border-amber-400 bg-amber-100 text-amber-950 shadow-sm ring-1 ring-amber-300/60";
   if (isWaitingTask(task)) return "border-violet-200 bg-violet-50 text-violet-800";
   return "border-red-200 bg-red-50 text-red-700";
@@ -580,6 +587,8 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const [completionTarget, setCompletionTarget] = useState<Task | null>(null);
   const [completionSaving, setCompletionSaving] = useState(false);
   const [completionError, setCompletionError] = useState("");
+  const [completionDecisionSaving, setCompletionDecisionSaving] = useState<"APPROVE" | "REJECT" | "">("");
+  const [completionDecisionError, setCompletionDecisionError] = useState("");
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerPaused, setTimerPaused] = useState(false);
   const [commentText, setCommentText] = useState("");
@@ -607,6 +616,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   useEffect(() => {
     if (!selected?.id) return;
     taskDetailPageRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    setCompletionDecisionError("");
   }, [selected?.id]);
 
   useEffect(() => {
@@ -1023,8 +1033,9 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     return () => window.clearInterval(interval);
   }, [tasks, timerAttendance.isWorking]);
 
-  async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[] }) {
-    const currentSeconds = getTaskCurrentSeconds(task, todayAttendanceLogs);
+  async function updateStatus(task: Task, status: "ACTIVE" | "COMPLETED" | "WAITING" | "COMPLETION_REQUESTED", extra?: { completionNote?: string; completionLinks?: string[]; completionFiles?: CompletionFile[]; completionAction?: "REQUEST" | "APPROVE" | "REJECT" }) {
+    const isCompletionDecision = extra?.completionAction === "APPROVE" || extra?.completionAction === "REJECT";
+    const currentSeconds = isCompletionDecision ? task.timerSeconds : getTaskCurrentSeconds(task, todayAttendanceLogs);
     const nextTask = { 
       ...task, 
       status, 
@@ -1063,13 +1074,22 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   }
 
   function requestTaskCompletion(task: Task) {
-    if (isCompletedTask(task)) {
+    if (isCompletedTask(task) || isCompletionRequestedTask(task)) {
       void openTask(task);
       return;
     }
     setCompletion({ note: "", link: "", files: [] });
     setCompletionError("");
     setCompletionTarget(task);
+  }
+
+  async function decideTaskCompletion(task: Task, action: "APPROVE" | "REJECT") {
+    if (completionDecisionSaving) return;
+    setCompletionDecisionSaving(action);
+    setCompletionDecisionError("");
+    const result = await updateStatus(task, action === "APPROVE" ? "COMPLETED" : "ACTIVE", { completionAction: action });
+    setCompletionDecisionSaving("");
+    if (!result.ok) setCompletionDecisionError(result.error);
   }
 
   function mapApiTask(data: any): Task {
@@ -1382,11 +1402,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
             event.stopPropagation();
             requestTaskCompletion(task);
           }}
-          className={cn("grid size-11 place-items-center rounded-xl transition", isCompletedTask(task) ? "text-emerald-700" : "hover:bg-[#FBE5EE]")}
-          aria-label={isCompletedTask(task) ? `Apri task completata: ${task.title}` : `Completa task: ${task.title}`}
+          className={cn("grid size-11 place-items-center rounded-xl transition", isCompletedTask(task) ? "text-emerald-700" : isCompletionRequestedTask(task) ? "text-sky-700" : "hover:bg-[#FBE5EE]")}
+          aria-label={isCompletedTask(task) ? `Apri task completata: ${task.title}` : isCompletionRequestedTask(task) ? `Apri richiesta di completamento: ${task.title}` : `Richiedi completamento: ${task.title}`}
         >
-          <span className={cn("grid size-5 place-items-center rounded-md border", isCompletedTask(task) ? "border-emerald-600 bg-emerald-600 text-white" : "border-black/20 bg-white")}>
-          {task.status === "COMPLETED" ? <Check className="size-3" /> : null}
+          <span className={cn("grid size-5 place-items-center rounded-md border", isCompletedTask(task) ? "border-emerald-600 bg-emerald-600 text-white" : isCompletionRequestedTask(task) ? "border-sky-500 bg-sky-100 text-sky-700" : "border-black/20 bg-white")}>
+          {task.status === "COMPLETED" ? <Check className="size-3" /> : isCompletionRequestedTask(task) ? <Clock3 className="size-3" /> : null}
           </span>
         </button>
         <div className="min-w-0">
@@ -1665,7 +1685,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Cerca task..." className="w-full bg-transparent text-sm outline-none" />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-auto min-w-36"><option value="ALL">Tutti stati</option><option value="DA FARE">Da fare</option><option value="IN CORSO">In corso</option><option value="COMPLETATO">Completato</option><option value="FERMO">Fermo</option></Select>
+              <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="w-auto min-w-36"><option value="ALL">Tutti stati</option><option value="DA FARE">Da fare</option><option value="IN CORSO">In corso</option><option value="DA CONFERMARE">Da confermare</option><option value="COMPLETATO">Completato</option><option value="FERMO">Fermo</option></Select>
               <Select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="w-auto min-w-32"><option value="ALL">Priorita</option><option value="ALTA">Alta</option><option value="MEDIA">Media</option><option value="BASSA">Bassa</option></Select>
               <Select value={sortKey} onChange={(event) => setSortKey(event.target.value as typeof sortKey)} className="w-auto min-w-32"><option value="updated">Aggiornate</option><option value="due">Scadenza</option><option value="priority">Priorita</option><option value="title">Titolo</option></Select>
               <Button variant="soft"><SlidersHorizontal className="size-4" /> Filtra</Button>
@@ -1835,7 +1855,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                             {isActiveTask(task) ? (
                               <span className="mb-1 inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.1em] text-amber-900">
                                 <span className="size-1.5 rounded-full bg-amber-500 motion-safe:animate-pulse" />
-                                In corso
+                                {statusLabel(task.status)}
                               </span>
                             ) : null}
                             <span className="block whitespace-normal break-words">{task.title}</span>
@@ -2009,8 +2029,11 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
 
             {/* Prova completamento (se presente) */}
             {(selected.completionNote || selected.completionLinks.length > 0 || selected.completionFiles.length > 0) ? (
-              <Card className="bg-white p-4 md:p-5">
-                <h2 className="font-semibold">Prova completamento</h2>
+              <Card className={cn("bg-white p-4 md:p-5", isCompletionRequestedTask(selected) && "border-sky-200 bg-sky-50/45")}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="font-semibold">{isCompletionRequestedTask(selected) ? "Prova inviata per conferma" : "Prova completamento"}</h2>
+                  {isCompletionRequestedTask(selected) ? <span className="rounded-full bg-sky-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-sky-800">Da confermare</span> : null}
+                </div>
                 {selected.completionNote ? <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-black/55">{selected.completionNote}</p> : null}
                 <div className="mt-4 grid gap-3">
                   {selected.completionFiles.map((file, index) => (
@@ -2247,7 +2270,32 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                 </p>
               </Card>
             ) : null}
-            {isCompletedTask(selected) ? null : (
+            {isCompletedTask(selected) ? null : isCompletionRequestedTask(selected) ? (
+            <div className="sticky bottom-2 z-10 rounded-[20px] border border-sky-200 bg-white/95 p-3 shadow-xl backdrop-blur md:bottom-4 md:rounded-[24px]">
+              {selected.createdById === userId || role === "ZERO" ? (
+                <>
+                  <div className="mb-3 rounded-2xl bg-sky-50 px-4 py-3">
+                    <p className="text-sm font-black text-sky-950">Richiesta di completamento ricevuta</p>
+                    <p className="mt-1 text-xs leading-5 text-sky-800">Controlla la prova inviata, poi conferma oppure rimanda la task al personale.</p>
+                  </div>
+                  {completionDecisionError ? <p role="alert" className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{completionDecisionError}</p> : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="soft" disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "REJECT")}>
+                      <X className="size-4" /> {completionDecisionSaving === "REJECT" ? "Invio..." : "Rifiuta"}
+                    </Button>
+                    <Button disabled={Boolean(completionDecisionSaving)} onClick={() => void decideTaskCompletion(selected, "APPROVE")}>
+                      <CheckCircle2 className="size-4" /> {completionDecisionSaving === "APPROVE" ? "Confermo..." : "Conferma completamento"}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl bg-sky-50 px-4 py-3 text-center">
+                  <p className="text-sm font-black text-sky-950">Richiesta inviata</p>
+                  <p className="mt-1 text-xs leading-5 text-sky-800">In attesa della conferma di {selected.createdByName}.</p>
+                </div>
+              )}
+            </div>
+            ) : (
             <div className="sticky bottom-2 z-10 grid grid-cols-1 gap-2 rounded-[20px] border border-black/5 bg-white/95 p-2 shadow-xl backdrop-blur sm:grid-cols-2 md:bottom-4 md:gap-3 md:rounded-[24px] md:p-3">
               {isNewTask(selected) ? (
                 <Button className="sm:col-span-2" onClick={() => { void updateStatus(selected, "ACTIVE"); }}>
@@ -2267,7 +2315,7 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
                   >
                     {selected.status === "ACTIVE" ? "Metti fermo" : selected.timerSeconds > 0 ? "Riprendi in corso" : "Metti in corso"}
                   </Button>
-                  <Button onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> Completa task</Button>
+                  <Button onClick={() => requestTaskCompletion(selected)}><CheckCircle2 className="size-4" /> {selected.createdById === userId ? "Completa task" : "Richiedi completamento"}</Button>
                 </>
               )}
             </div>
@@ -2321,8 +2369,8 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
           <div className="my-auto w-full max-w-xl rounded-[28px] border border-white/70 bg-white p-6 shadow-2xl sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">Completamento</p>
-                <h2 className="mt-2 text-2xl font-semibold">Invia prova task</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-black/35">{completionTarget.createdById === userId ? "Completamento" : "Richiesta di completamento"}</p>
+                <h2 className="mt-2 text-2xl font-semibold">{completionTarget.createdById === userId ? "Completa la task" : "Invia la prova"}</h2>
                 <p className="mt-1 font-semibold text-black/70">{completionTarget.title}</p>
                 <p className="mt-1 text-sm text-black/50">Tempo registrato: {formatTimerWithDays(getTaskCurrentSeconds(completionTarget, todayAttendanceLogs))}</p>
               </div>
@@ -2354,20 +2402,26 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
               {completionError ? <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{completionError}</p> : null}
               <Button disabled={completionSaving} onClick={async () => {
                 if (!completion.note.trim()) {
-                  setCompletionError("Scrivi l’azione svolta prima di completare la Task.");
+                  setCompletionError("Scrivi l’azione svolta prima di inviare.");
                   return;
                 }
                 const links = completion.link.trim() ? [completion.link.trim()] : [];
                 setCompletionSaving(true);
                 setCompletionError("");
-                const result = await updateStatus(completionTarget, "COMPLETED", { completionNote: completion.note.trim(), completionLinks: links, completionFiles: completion.files });
+                const requiresConfirmation = completionTarget.createdById !== userId;
+                const result = await updateStatus(completionTarget, requiresConfirmation ? "COMPLETION_REQUESTED" : "COMPLETED", {
+                  completionNote: completion.note.trim(),
+                  completionLinks: links,
+                  completionFiles: completion.files,
+                  completionAction: requiresConfirmation ? "REQUEST" : undefined,
+                });
                 setCompletionSaving(false);
                 if (!result.ok) {
                   setCompletionError(result.error);
                   return;
                 }
                 setCompletionTarget(null);
-              }}><Send className="size-4" /> {completionSaving ? "Salvataggio..." : "Invia e completa"}</Button>
+              }}><Send className="size-4" /> {completionSaving ? "Salvataggio..." : completionTarget.createdById === userId ? "Completa task" : "Invia richiesta"}</Button>
             </div>
           </div>
         </GlobalFullscreenLayer>
