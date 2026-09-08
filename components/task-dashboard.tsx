@@ -602,8 +602,8 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
   const [form, setForm] = useState({
     title: "",
     description: "",
-    assignedToId: initialAllowedWorkers[0]?.id ?? "",
-    assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[],
+    assignedToId: "",
+    assignedToIds: [] as string[],
     priority: "MEDIA",
     category: "Operativa",
     dueDate: "",
@@ -909,14 +909,14 @@ export function TaskDashboard({ role, userId, userName, currentUserLocationId, w
     ]);
     setFormStatus(`Task inviata a ${data.assignees?.map((a: any) => a.name).join(", ") || data.assigned_to?.name || "Nessuno"}. Notifica creata.`);
     setTimeout(() => {
-      setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
+      setForm({ title: "", description: "", assignedToId: "", assignedToIds: [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
       setFormStatus("");
       setOpen(false);
     }, 900);
   }
 
   function resetTaskForm() {
-    setForm({ title: "", description: "", assignedToId: initialAllowedWorkers[0]?.id ?? "", assignedToIds: initialAllowedWorkers[0]?.id ? [initialAllowedWorkers[0].id] : [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
+    setForm({ title: "", description: "", assignedToId: "", assignedToIds: [] as string[], priority: "MEDIA", category: "Operativa", dueDate: "", linkUrl: "", attachmentName: "", photoUrl: "", checklistItems: [""] });
     setEditingTaskId(null);
     setFormStatus("");
     setOpen(false);

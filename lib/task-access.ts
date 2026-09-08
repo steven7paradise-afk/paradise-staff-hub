@@ -31,8 +31,9 @@ export function taskWorkerWhere(): Prisma.UserWhereInput {
   return {
     active: true,
     employee_status: { not: "Ex dipendente" },
-    role: { notIn: ["ZERO", "SUPER_ADMIN"] },
+    role: { not: "ZERO" },
     OR: [
+      { role: "SUPER_ADMIN" as const },
       { role: "ADMIN" as const },
       { role: "RESPONSABILE" as const },
       { mansione: { contains: "ufficio", mode: "insensitive" as const } },
