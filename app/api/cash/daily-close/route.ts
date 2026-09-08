@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { automaticDailyCashSummary, isBeforeDailyClosingTime, romeDateKey } from "@/lib/daily-cash-closing";
 import { auth } from "@/lib/auth";
 import { cashClosingLocationOverride } from "@/lib/cash-records";
+import { reconcileDailyClientControls } from "@/lib/client-control-daily-closing";
 import { getOperationalUser } from "@/lib/operational-session";
 import { prisma } from "@/lib/prisma";
 
@@ -85,10 +86,19 @@ export async function POST(request: NextRequest) {
     }, { status: 409 });
   }
 
-  const summary = await automaticDailyCashSummary(context.date, context.location.id);
+  let summary = await automaticDailyCashSummary(context.date, context.location.id);
   if (!summary.available) {
     return NextResponse.json({ error: "Shopify non è disponibile: la chiusura non è stata registrata." }, { status: 503 });
   }
+
+  const controlClosing = await reconcileDailyClientControls({
+    dateKey: context.date,
+    locationId: context.location.id,
+    actorName: context.operationalUser.name || "Chiusura giornaliera",
+  });
+  // Rileggi il riepilogo dopo l'allineamento: la chiusura deve conservare
+  // esattamente i valori Shopify e lo stato aggiornato dei Controlli Cliente.
+  summary = await automaticDailyCashSummary(context.date, context.location.id);
 
   let signer = context.operationalUser.id === "PC_CASSA"
     ? null
@@ -119,6 +129,7 @@ export async function POST(request: NextRequest) {
     `Contanti Shopify: ${formatEuro(summary.shopifyCash)}.`,
     `Ordini senza Controllo Cliente: ${summary.missingControlCount}, per ${formatEuro(summary.missingControlCash)}.`,
     `Differenza sui controlli lavoratore presenti: ${formatEuro(summary.difference)}.`,
+    `Controlli Cliente allineati a Shopify: ${controlClosing.synchronized}; bozze chiuse automaticamente: ${controlClosing.autoClosed}; bozze da verificare: ${controlClosing.unresolved}.`,
     closingTime,
   ].join(" ");
   const signatureName = context.operationalUser.name || signer.name;
@@ -160,6 +171,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     closing: result.closing,
     summary,
-    message: "Chiusura giornaliera registrata senza PIN.",
+    controlClosing,
+    message: controlClosing.unresolved > 0
+      ? `Chiusura registrata. ${controlClosing.autoClosed} Controlli Cliente chiusi automaticamente; ${controlClosing.unresolved} restano da verificare.`
+      : `Chiusura registrata. ${controlClosing.autoClosed} Controlli Cliente chiusi automaticamente e dati allineati a Shopify.`,
   });
 }

@@ -1074,7 +1074,10 @@ export function StaffFormsViewer({
         alreadyClosed: true,
         existing: { id: data.closing.id, signedAt: data.closing.signed_at, signedBy: data.closing.signature_name },
       } : current);
-      setDailyCloseMessage({ type: "success", text: "Chiusura giornaliera Contanti registrata correttamente, senza PIN." });
+      setDailyCloseMessage({
+        type: "success",
+        text: data?.message || "Chiusura giornaliera registrata. I Controlli Cliente sono stati salvati e allineati a Shopify.",
+      });
     } catch (error) {
       setDailyCloseMessage({ type: "error", text: error instanceof Error ? error.message : "Impossibile registrare la chiusura giornaliera." });
     } finally {
@@ -1643,7 +1646,7 @@ export function StaffFormsViewer({
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#BCC9FF]">Contanti</p>
                   <h2 className="mt-1 text-2xl font-black">Chiusura giornaliera</h2>
-                  <p className="mt-1 text-sm font-semibold text-white/45">Importi automatici del giorno selezionato, senza conteggio manuale e senza PIN.</p>
+                  <p className="mt-1 text-sm font-semibold text-white/45">Salva i Controlli Cliente aperti, li confronta con Shopify e registra i contanti del giorno.</p>
                 </div>
               </div>
               <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="grid size-10 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/55 transition hover:bg-white/10 hover:text-white" aria-label="Chiudi"><X className="size-5" /></button>
@@ -1759,7 +1762,7 @@ export function StaffFormsViewer({
 
             <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-white/[0.025] px-5 py-4 sm:px-7">
               <button type="button" onClick={() => !dailyCloseSubmitting && setDailyCloseOpen(false)} className="min-h-12 rounded-2xl border border-white/10 px-5 text-sm font-black text-white/65 transition hover:bg-white/5">Chiudi</button>
-              <button type="button" onClick={() => void completeDailyClosing()} disabled={dailyCloseLoading || dailyCloseSubmitting || !dailyCloseSummary?.available || dailyCloseSummary?.alreadyClosed} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#A1B5FD] px-6 text-sm font-black text-[#172554] transition hover:bg-[#BCC9FF] disabled:cursor-not-allowed disabled:opacity-40">{dailyCloseSubmitting ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}{dailyCloseSubmitting ? "Registrazione…" : "Conferma chiusura"}</button>
+              <button type="button" onClick={() => void completeDailyClosing()} disabled={dailyCloseLoading || dailyCloseSubmitting || !dailyCloseSummary?.available || dailyCloseSummary?.alreadyClosed} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[#A1B5FD] px-6 text-sm font-black text-[#172554] transition hover:bg-[#BCC9FF] disabled:cursor-not-allowed disabled:opacity-40">{dailyCloseSubmitting ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />}{dailyCloseSubmitting ? "Salvo e allineo…" : "Salva controlli e chiudi"}</button>
             </footer>
           </section>
         </div>

@@ -2931,6 +2931,10 @@ export function AppointmentsBrowser({
     keepOpen = false,
   ) {
     const formToSubmit = formOverride ?? clientControlForm;
+    if (!saveAsDraft && clientControlAutoSaveTimerRef.current) {
+      clearTimeout(clientControlAutoSaveTimerRef.current);
+      clientControlAutoSaveTimerRef.current = null;
+    }
     setClientControlMessage(null);
     if (
       !saveAsDraft &&
@@ -3106,6 +3110,18 @@ export function AppointmentsBrowser({
     }
   }
 
+  function scheduleClientControlDraft(nextForm = clientControlFormRef.current) {
+    if (!nextForm.bookingId || clientControlLoading || clientControlSubmitting) return;
+    if (clientControlAutoSaveTimerRef.current) {
+      clearTimeout(clientControlAutoSaveTimerRef.current);
+    }
+    clientControlAutoSaveTimerRef.current = setTimeout(() => {
+      clientControlAutoSaveQueueRef.current = clientControlAutoSaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => submitClientControlForm(undefined, true, nextForm, true));
+    }, 700);
+  }
+
   function updateClientControlCheck(
     fieldKey: "notes" | "beforeMedia" | "afterMedia" | "products" | "review",
     checked: boolean,
@@ -3117,14 +3133,7 @@ export function AppointmentsBrowser({
     clientControlFormRef.current = nextForm;
     setClientControlForm(nextForm);
 
-    if (clientControlAutoSaveTimerRef.current) {
-      clearTimeout(clientControlAutoSaveTimerRef.current);
-    }
-    clientControlAutoSaveTimerRef.current = setTimeout(() => {
-      clientControlAutoSaveQueueRef.current = clientControlAutoSaveQueueRef.current
-        .catch(() => undefined)
-        .then(() => submitClientControlForm(undefined, true, nextForm, true));
-    }, 500);
+    scheduleClientControlDraft(nextForm);
   }
 
   const activeBookingsCount = initialBookings.filter(
@@ -4704,7 +4713,10 @@ export function AppointmentsBrowser({
 
       {clientControlOpen ? (
         <div className="fixed inset-0 z-[120] isolate bg-white text-[#171717]">
-          <div className="relative z-10 flex h-dvh w-full flex-col overflow-hidden bg-white">
+          <div
+            className="relative z-10 flex h-dvh w-full flex-col overflow-hidden bg-white"
+            onBlurCapture={() => scheduleClientControlDraft(clientControlFormRef.current)}
+          >
             {/* Scrollable Content */}
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
               <div className="mx-auto w-full max-w-[1480px] space-y-6 px-5 py-5 sm:px-8 lg:px-12">
