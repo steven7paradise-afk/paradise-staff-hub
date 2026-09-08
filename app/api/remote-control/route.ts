@@ -336,6 +336,28 @@ export async function POST(request: NextRequest) {
   const pc = pcsFrom(pcsSetting?.value).find((item) => item.code === targetCode && item.activatedAt && !item.archivedAt);
   if (!pc) return NextResponse.json({ error: "PC non disponibile o non autorizzato." }, { status: 404 });
 
+  if (action === "rename") {
+    const name = typeof body?.name === "string" ? body.name.replace(/\s+/g, " ").trim() : "";
+    if (!name) return NextResponse.json({ error: "Inserisci un nome per il dispositivo." }, { status: 400 });
+    if (name.length > 80) return NextResponse.json({ error: "Il nome può contenere al massimo 80 caratteri." }, { status: 400 });
+
+    const pcs = pcsFrom(pcsSetting?.value);
+    const duplicate = pcs.some((item) =>
+      item.code !== targetCode
+      && item.locationId === pc.locationId
+      && !item.archivedAt
+      && item.name.trim().toLocaleLowerCase("it") === name.toLocaleLowerCase("it")
+    );
+    if (duplicate) return NextResponse.json({ error: "Esiste già un dispositivo con questo nome nella stessa sede." }, { status: 409 });
+
+    const renamedPcs = pcs.map((item) => item.code === targetCode ? { ...item, name } : item);
+    await prisma.setting.update({
+      where: { key: PCS_KEY },
+      data: { value: renamedPcs as any },
+    });
+    return NextResponse.json({ success: true, name });
+  }
+
   if (action === "request_reconnect") {
     const reconnectSetting = await prisma.setting.findUnique({ where: { key: RECONNECT_REQUESTS_KEY } });
     const reconnectRequests = reconnectRequestsFrom(reconnectSetting?.value);

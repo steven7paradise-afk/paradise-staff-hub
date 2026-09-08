@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, Eye, Loader2, Monitor, Radio, X } from "lucide-react";
+import { Check, CheckCircle2, Eye, Loader2, Monitor, Pencil, Radio, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 
 type Target = { id: string; name: string; locationName: string; salone: string; active: boolean; mode?: "control" | "observe" | null; online: boolean; controllerName: string | null; current?: boolean };
@@ -47,6 +47,9 @@ export function RemoteControlSetup() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState("");
   const [requested, setRequested] = useState("");
+  const [renamingId, setRenamingId] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [savingName, setSavingName] = useState("");
   const [error, setError] = useState("");
   const [activeView, setActiveView] = useState<ActiveView | null>(null);
   const [observation, setObservation] = useState<Observation | null>(null);
@@ -331,6 +334,39 @@ export function RemoteControlSetup() {
     }
   }
 
+  function startRenaming(target: Target) {
+    setRenamingId(target.id);
+    setRenameValue(target.name);
+    setError("");
+  }
+
+  function cancelRenaming() {
+    setRenamingId("");
+    setRenameValue("");
+  }
+
+  async function saveDeviceName(target: Target) {
+    const name = renameValue.replace(/\s+/g, " ").trim();
+    if (!name || savingName) return;
+    setSavingName(target.id);
+    setError("");
+    try {
+      const response = await fetch("/api/remote-control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rename", targetCode: target.id, name }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Impossibile rinominare il dispositivo.");
+      setTargets((current) => current.map((item) => item.id === target.id ? { ...item, name: data.name || name } : item));
+      cancelRenaming();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Impossibile rinominare il dispositivo.");
+    } finally {
+      setSavingName("");
+    }
+  }
+
   return (
     <section className="mx-auto max-w-6xl space-y-6">
       {activeView ? (
@@ -405,7 +441,57 @@ export function RemoteControlSetup() {
               <article key={item.id} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3 transition hover:border-[#C23976] hover:bg-[#FFF2F7]">
                 <div className="w-full p-2 text-left">
                   <div className="flex items-start justify-between gap-3"><Monitor className="size-6 text-neutral-900" />{starting === item.id ? <Loader2 className="size-5 animate-spin text-[#C23976]" /> : item.active ? <CheckCircle2 className="size-5 text-amber-500" /> : <span className={`size-2.5 rounded-full ${item.online ? "bg-emerald-400" : "bg-neutral-300"}`} />}</div>
-                  <p className="mt-4 text-base font-black text-neutral-950">{item.name}</p>
+                  {renamingId === item.id ? (
+                    <form
+                      className="mt-4 flex items-center gap-2"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void saveDeviceName(item);
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        maxLength={80}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") cancelRenaming();
+                        }}
+                        className="min-h-10 min-w-0 flex-1 rounded-xl border border-[#C23976] bg-white px-3 text-sm font-black text-neutral-950 outline-none ring-2 ring-[#F6C9DC]/60"
+                        aria-label={`Nuovo nome per ${item.name}`}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!renameValue.trim() || savingName === item.id}
+                        className="grid size-10 shrink-0 place-items-center rounded-xl bg-neutral-950 text-white transition hover:bg-neutral-800 disabled:opacity-40"
+                        aria-label="Salva nome"
+                      >
+                        {savingName === item.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingName === item.id}
+                        onClick={cancelRenaming}
+                        className="grid size-10 shrink-0 place-items-center rounded-xl border border-neutral-300 bg-white text-neutral-700 transition hover:border-[#C23976] disabled:opacity-40"
+                        aria-label="Annulla modifica nome"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="mt-4 flex items-start gap-2">
+                      <p className="min-w-0 flex-1 text-base font-black text-neutral-950">{item.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => startRenaming(item)}
+                        className="grid size-9 shrink-0 place-items-center rounded-xl border border-neutral-200 bg-white text-neutral-500 transition hover:border-[#C23976] hover:text-[#A93469]"
+                        aria-label={`Rinomina ${item.name}`}
+                        title="Rinomina dispositivo"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    </div>
+                  )}
                   <p className="mt-1 text-xs font-bold text-neutral-500">{item.locationName}</p>
                   {item.current ? <p className="mt-2 inline-flex rounded-full bg-[#FCE6EF] px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-[#A93469]">Questo dispositivo</p> : null}
                   <p className={`mt-3 text-[10px] font-black uppercase tracking-wider ${item.online ? "text-emerald-600" : "text-red-500"}`}>{item.online ? "Online" : "Non collegato"}</p>
