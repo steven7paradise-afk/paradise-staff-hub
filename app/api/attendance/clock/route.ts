@@ -9,6 +9,7 @@ import { isPinValidForUser } from "@/lib/pin";
 import { createNotifications } from "@/lib/notifications";
 import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
+import { nfcBadgeHash } from "@/lib/nfc-badge";
 
 const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
@@ -18,11 +19,12 @@ export async function POST(request: NextRequest) {
   const deviceId = String(payload.deviceId ?? deviceHeader ?? "");
   const employeeId = String(payload.employeeId ?? "");
   const pin = String(payload.pin ?? "");
+  const nfcSerial = String(payload.nfcSerial ?? "");
   const type = String(payload.type ?? "") as AttendanceType;
   const note = payload.note ? String(payload.note) : null;
   const ip = requestIp(request.headers);
 
-  if (!deviceId || !employeeId || !/^\d{4,6}$/.test(pin) || !Object.values(AttendanceType).includes(type)) {
+  if (!deviceId || !employeeId || (!/^\d{4,6}$/.test(pin) && !nfcSerial) || !Object.values(AttendanceType).includes(type)) {
     return NextResponse.json({ error: "Dati timbratura incompleti" }, { status: 400 });
   }
 
@@ -32,13 +34,19 @@ export async function POST(request: NextRequest) {
   }
 
   const user = await prisma.user.findUnique({ where: { id: employeeId }, include: { location: true } });
-  if (!user?.active || user.employee_status === FORMER_EMPLOYEE_STATUS || !user.pin_hash) {
+  if (!user?.active || user.employee_status === FORMER_EMPLOYEE_STATUS) {
     return NextResponse.json({ error: "Dipendente non abilitato alla timbratura" }, { status: 403 });
   }
 
-  const pinValid = await isPinValidForUser(user.id, pin, user.pin_hash, user.pin_lookup);
-  if (!pinValid) {
-    return NextResponse.json({ error: "PIN non valido" }, { status: 401 });
+  let credentialValid = false;
+  if (nfcSerial) {
+    try { credentialValid = user.nfc_badge_enabled && user.nfc_badge_hash === nfcBadgeHash(nfcSerial); }
+    catch { credentialValid = false; }
+  } else {
+    credentialValid = await isPinValidForUser(user.id, pin, user.pin_hash, user.pin_lookup);
+  }
+  if (!credentialValid) {
+    return NextResponse.json({ error: nfcSerial ? "Tessera NFC non valida o sospesa" : "PIN non valido" }, { status: 401 });
   }
 
   const isOffice = device.location.name.toLowerCase().includes("ufficio");

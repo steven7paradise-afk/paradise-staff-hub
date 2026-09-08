@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { 
   CalendarDays, CheckSquare, Download, Mail, Palette, PanelsTopLeft, 
-  ShieldCheck, Smartphone, Table2, ClipboardList, Sparkles 
+  ShieldCheck, Smartphone, Table2, ClipboardList, Sparkles, Nfc
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui";
@@ -15,6 +15,7 @@ const allSettings = [
   { href: "/settings/sidebar", title: "Personalizza Sidebar", text: "Modifica il colore di sfondo della barra laterale e l'ordine dei pulsanti di navigazione.", icon: Palette, superAdminOnly: true },
   { href: "/settings/branding", title: "Branding", text: "Colori, logo, dark mode e look premium.", icon: Palette, superAdminOnly: true },
   { href: "/settings/devices", title: "Dispositivi", text: "Tablet autorizzati e blocco timbrature.", icon: Smartphone, superAdminOnly: true },
+  { href: "/settings/nfc", title: "Badge NFC", text: "Associa, sospendi o sostituisci le tessere NFC del personale.", icon: Nfc, superAdminOnly: false },
   { href: "/settings/google-sheet", title: "Google Sheet", text: "Export e sync delle timbrature.", icon: Table2, superAdminOnly: true },
   { href: "/settings/email", title: "Email", text: "Provider e template notifiche.", icon: Mail, superAdminOnly: true },
   { href: "/settings/roles", title: "Ruoli", text: "Permessi per Super Admin, Admin, Responsabili e Dipendenti.", icon: ShieldCheck, superAdminOnly: true },

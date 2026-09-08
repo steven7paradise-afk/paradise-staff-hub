@@ -4,6 +4,7 @@ import { identifyWorkerByPin } from "@/lib/pin";
 import { prisma } from "@/lib/prisma";
 import { authorizedTablet, requestIp, tabletCookieName } from "@/lib/tablet-auth";
 import { expectedShiftEndTime, romeMinutesForInstant } from "@/lib/scheduled-attendance";
+import { identifyWorkerByNfc } from "@/lib/nfc-badge";
 
 const statusByLastClock: Record<AttendanceType, "OUT" | "IN" | "BREAK"> = {
   ENTRATA: "IN",
@@ -30,17 +31,23 @@ export async function POST(request: NextRequest) {
   const payload = await request.json();
   const deviceId = String(payload.deviceId ?? request.headers.get("x-device-id") ?? "");
   const pin = String(payload.pin ?? "");
-  if (!deviceId || !/^\d{4,6}$/.test(pin)) {
-    return NextResponse.json({ error: "Inserisci il codice personale." }, { status: 400 });
+  const nfcSerial = String(payload.nfcSerial ?? "");
+  if (!deviceId || (!/^\d{4,6}$/.test(pin) && !nfcSerial)) {
+    return NextResponse.json({ error: "Inserisci il PIN o avvicina la tessera NFC." }, { status: 400 });
   }
   const device = await authorizedTablet(deviceId, request.cookies.get(tabletCookieName)?.value, requestIp(request.headers));
   if (!device) {
     return NextResponse.json({ error: "Dispositivo non autorizzato alla timbratura" }, { status: 403 });
   }
   const isOffice = device.location.name.toLowerCase().includes("ufficio");
-  const worker = await identifyWorkerByPin(pin, device.location_id, isOffice);
+  let worker = null;
+  try {
+    worker = nfcSerial ? await identifyWorkerByNfc(nfcSerial) : await identifyWorkerByPin(pin, device.location_id, isOffice);
+  } catch {
+    return NextResponse.json({ error: "Tessera NFC non leggibile." }, { status: 400 });
+  }
   if (!worker) {
-    return NextResponse.json({ error: "Codice personale non riconosciuto. Controlla PIN e account attivo." }, { status: 401 });
+    return NextResponse.json({ error: nfcSerial ? "Tessera non associata o sospesa." : "Codice personale non riconosciuto. Controlla PIN e account attivo." }, { status: 401 });
   }
   const latestLog = await prisma.attendanceLog.findFirst({
     where: { user_id: worker.id },

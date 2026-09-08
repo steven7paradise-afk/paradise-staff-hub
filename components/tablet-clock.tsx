@@ -34,7 +34,8 @@ import {
   Mic,
   Sparkles,
   Camera,
-  Trash2
+  Trash2,
+  Nfc
 } from "lucide-react";
 import type { BrandingTheme } from "@/lib/branding";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
@@ -189,6 +190,8 @@ type IdentifiedWorker = {
   mansione: string | null;
   todayShift: any;
 };
+type NfcReader = EventTarget & { scan(options?: { signal?: AbortSignal }): Promise<void> };
+type NfcReaderConstructor = new () => NfcReader;
 
 const statusLabels: Record<ClockStatus, string> = {
   OUT: "Non entrato",
@@ -414,6 +417,10 @@ export function TabletClock({
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(new Date());
   const [pin, setPin] = useState("");
+  const [nfcSerial, setNfcSerial] = useState("");
+  const [nfcSupported, setNfcSupported] = useState(false);
+  const [showPinFallback, setShowPinFallback] = useState(false);
+  const [nfcListening, setNfcListening] = useState(false);
   const [worker, setWorker] = useState<IdentifiedWorker | null>(null);
   const [imageError, setImageError] = useState(false);
   const [teammateErrors, setTeammateErrors] = useState<Set<string>>(new Set());
@@ -515,6 +522,9 @@ export function TabletClock({
     setSoundEnabled(window.localStorage.getItem("paradise-tablet-sound") !== "off");
     const savedPack = window.localStorage.getItem("paradise-tablet-sound-pack") as SoundPackId | null;
     if (savedPack && soundPacks.some((pack) => pack.id === savedPack)) setSoundPack(savedPack);
+    const canReadNfc = "NDEFReader" in window;
+    setNfcSupported(canReadNfc);
+    setShowPinFallback(!canReadNfc);
   }, []);
 
   const visibleActions = worker ? clockActions.filter((action) => allowedActionsByStatus[worker.status].includes(action.type)) : [];
@@ -1225,6 +1235,7 @@ export function TabletClock({
         mansione: data.employeeMansione || null,
         todayShift: data.todayShift ?? null,
       });
+      setNfcSerial("");
       setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
       setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
       showFeedback("success", `${data.employeeName} riconosciuta. Scegli l'azione.`);
@@ -1241,10 +1252,71 @@ export function TabletClock({
     }
   }
 
+  async function identifyNfc(serialNumber: string) {
+    if (!serialNumber || !device || identifying) return;
+    setIdentifying(true);
+    try {
+      const response = await fetch("/api/attendance/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-device-id": device.id },
+        body: JSON.stringify({ nfcSerial: serialNumber }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Tessera non riconosciuta");
+      setNfcSerial(serialNumber);
+      setPin("");
+      setWorker({
+        id: data.employeeId, name: data.employeeName, status: data.status as ClockStatus,
+        photoUrl: data.employeePhotoUrl, role: data.employeeRole,
+        mansione: data.employeeMansione || null, todayShift: data.todayShift ?? null,
+      });
+      setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
+      setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
+      showFeedback("success", `${data.employeeName} riconosciuta. Scegli l'azione.`);
+      sound("success");
+    } catch (error) {
+      setNfcSerial("");
+      showFeedback("error", error instanceof Error ? error.message : "Tessera non riconosciuta");
+      sound("error");
+    } finally {
+      setIdentifying(false);
+      setNfcListening(false);
+    }
+  }
+
+  async function startNfcReader() {
+    const NDEFReader = (window as typeof window & { NDEFReader?: NfcReaderConstructor }).NDEFReader;
+    if (!NDEFReader || nfcListening) return;
+    setFeedback(null);
+    setNfcListening(true);
+    try {
+      const controller = new AbortController();
+      const reader = new NDEFReader();
+      await reader.scan({ signal: controller.signal });
+      setMessage("Avvicina la tessera al retro del tablet");
+      reader.addEventListener("reading", (event) => {
+        controller.abort();
+        const serialNumber = (event as Event & { serialNumber?: string }).serialNumber;
+        if (!serialNumber) {
+          setNfcListening(false);
+          showFeedback("error", "Tessera non leggibile. Prova una tessera NFC NDEF.");
+          sound("error");
+          return;
+        }
+        void identifyNfc(serialNumber);
+      }, { once: true });
+    } catch {
+      setNfcListening(false);
+      showFeedback("error", "Attiva NFC e consenti l'accesso al lettore.");
+      sound("error");
+    }
+  }
+
   function updatePin(next: string) {
     const cleaned = next.replace(/\D/g, "").slice(0, 6);
     if (cleaned !== pin) sound("tap");
     setPin(cleaned);
+    setNfcSerial("");
     setWorker(null);
     setFeedback(null);
     setMessage(
@@ -1257,7 +1329,7 @@ export function TabletClock({
   }
 
   async function clock(type: string, bypassEarlyExitCheck = false, bypassNightClockCheck = false) {
-    if (!worker || !/^\d{4,6}$/.test(pin) || !device) return;
+    if (!worker || (!/^\d{4,6}$/.test(pin) && !nfcSerial) || !device) return;
 
     if (!bypassNightClockCheck && isNightClockAction(type)) {
       setPendingNightClockType(type);
@@ -1277,7 +1349,7 @@ export function TabletClock({
       const response = await fetch("/api/attendance/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-device-id": device.id },
-        body: JSON.stringify({ employeeId: worker.id, pin, type, note: "Timbratura tablet" }),
+        body: JSON.stringify({ employeeId: worker.id, pin: pin || undefined, nfcSerial: nfcSerial || undefined, type, note: nfcSerial ? "Timbratura NFC" : "Timbratura tablet" }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -1304,6 +1376,7 @@ export function TabletClock({
       setMessage(feedbackText);
       setWorker(null);
       setPin("");
+      setNfcSerial("");
     } catch {
       setMessage("Connessione non disponibile. Timbratura non registrata.");
       showFeedback("error", "Connessione non disponibile. Timbratura non registrata.");
@@ -1460,6 +1533,7 @@ export function TabletClock({
       setWorker(null);
       setTodayLogs([]);
       setPin("");
+      setNfcSerial("");
       setFeedback(null);
       setMessage("Inserisci il tuo codice personale");
       setShowDashboard(false);
@@ -1530,6 +1604,7 @@ export function TabletClock({
     const privacyTimer = window.setTimeout(() => {
       setWorker(null);
       setPin("");
+      setNfcSerial("");
       setMessage("Inserisci il tuo codice personale");
       setFeedback(null);
     }, 30000);
@@ -1607,6 +1682,7 @@ export function TabletClock({
       setMessage("Richiesta inviata e firmata con codice personale.");
       setWorker(null);
       setPin("");
+      setNfcSerial("");
     } catch {
       setRequestMessage("Connessione non disponibile. Richiesta non inviata.");
       showFeedback("error", "Connessione non disponibile. Richiesta non inviata.");
@@ -2059,7 +2135,7 @@ export function TabletClock({
               
               <p className="mt-2 truncate text-center text-base font-semibold">{worker.name}</p>
 
-              <button
+              {!nfcSerial ? <button
                 className="mt-2 flex h-12 w-full items-center justify-between rounded-2xl bg-[color:var(--tablet-soft)] px-4 text-left shadow-sm transition-transform duration-200 active:scale-[0.98] border border-black/5"
                 onClick={goToDashboard}
                 disabled={loading !== null}
@@ -2072,13 +2148,14 @@ export function TabletClock({
                   </div>
                 </div>
                 <ChevronRight className="size-5 text-[color:var(--tablet-accent)]" />
-              </button>
+              </button> : <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-xs font-semibold text-emerald-800">Identificazione NFC · per aprire il profilo usa il PIN</div>}
 
               <button
                 className="mt-2 h-9 w-full rounded-xl border border-black/10 bg-white/60 text-sm font-semibold hover:bg-white active:scale-95 transition"
                 onClick={() => {
                   setWorker(null);
                   setPin("");
+                  setNfcSerial("");
                   setFeedback(null);
                   setMessage("Inserisci il tuo codice personale");
                 }}
@@ -2094,8 +2171,17 @@ export function TabletClock({
               <div className="kiosk-panel-enter kiosk-entry-panel mx-auto flex w-full max-w-[470px] flex-col py-2">
                 <div className="kiosk-pin-heading mb-4 text-center sm:mb-5">
                   <h1 className="text-2xl font-black tracking-normal text-[#171717] sm:text-3xl lg:text-4xl">Chi sta timbrando?</h1>
-                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">Inserisci il tuo PIN personale</p>
+                  <p className="mt-2 text-sm font-medium text-black/55 lg:text-base">{nfcSupported && !showPinFallback ? "Avvicina la tessera NFC" : "Inserisci il tuo PIN personale"}</p>
                 </div>
+                {nfcSupported && !showPinFallback ? <>
+                  <div className={cn("flex min-h-[250px] flex-col items-center justify-center rounded-[28px] border-2 p-6 text-center transition", nfcListening ? "border-emerald-300 bg-emerald-50" : "border-[color:var(--tablet-accent)]/30 bg-[color:var(--tablet-soft)]/25")}>
+                    <div className={cn("grid size-24 place-items-center rounded-full shadow-lg", nfcListening ? "animate-pulse bg-emerald-600 text-white" : "bg-[color:var(--tablet-dark)] text-white")}><Nfc className="size-12" /></div>
+                    <p className="mt-6 text-xl font-black">{nfcListening ? "Avvicina la tessera" : "Timbra con NFC"}</p>
+                    <p className="mt-2 max-w-xs text-sm text-black/55">{nfcListening ? "Appoggiala al retro del tablet e attendi la conferma." : "Premi il pulsante e avvicina la tessera personale."}</p>
+                  </div>
+                  <button type="button" onClick={() => void startNfcReader()} disabled={nfcListening || identifying} className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-[color:var(--tablet-dark)] text-sm font-bold uppercase tracking-[0.14em] text-white disabled:opacity-50"><Nfc className="size-5 text-[color:var(--tablet-accent)]" />{nfcListening ? "Lettore attivo…" : "Attiva lettore NFC"}</button>
+                  <button type="button" onClick={() => { setShowPinFallback(true); setFeedback(null); }} className="mt-2 h-11 text-sm font-semibold text-black/55 underline underline-offset-4">Usa il PIN invece</button>
+                </> : <>
                 <p className="kiosk-pin-label mb-3 text-center text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--tablet-accent)]">Codice personale</p>
                 <PinDots pin={pin} />
                 <div className="h-3" />
@@ -2124,6 +2210,8 @@ export function TabletClock({
                   <LogIn className="size-4 text-[color:var(--tablet-accent)]" />
                   <span>{identifying ? "Lettura..." : "Invia PIN"}</span>
                 </button>
+                {nfcSupported && <button type="button" onClick={() => { setShowPinFallback(false); setPin(""); setFeedback(null); }} className="mt-2 h-9 text-sm font-semibold text-black/55 underline underline-offset-4">Torna alla tessera NFC</button>}
+                </>}
                 <div className="kiosk-pin-status mt-3 flex h-8 items-center justify-center" aria-live="polite">
                   {feedback ? (
                     <div

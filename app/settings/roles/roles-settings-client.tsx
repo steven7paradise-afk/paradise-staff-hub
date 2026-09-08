@@ -86,6 +86,7 @@ const ROUTE_META: Record<string, RouteMeta> = {
   "/settings/services": { name: "Servizi", description: "Trattamenti, durate e servizi.", group: "Impostazioni" },
   "/settings/forms": { name: "Moduli", description: "Creazione e modifica moduli operativi.", group: "Impostazioni" },
   "/settings/sidebar": { name: "Sidebar", description: "Organizzazione menu laterale.", group: "Impostazioni" },
+  "/settings/nfc": { name: "Badge NFC", description: "Associazione delle tessere NFC al personale.", group: "Impostazioni" },
 };
 
 function routeTitle(path: string) {

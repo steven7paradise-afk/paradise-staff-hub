@@ -71,13 +71,14 @@ export const routePermissions: Record<string, Role[]> = {
   "/settings/services": ["ZERO"],
   "/settings/forms": ["ZERO", "SUPER_ADMIN", "ADMIN"],
   "/settings/sidebar": ["ZERO", "SUPER_ADMIN", "ADMIN"],
+  "/settings/nfc": ["ZERO", "SUPER_ADMIN", "ADMIN"],
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/orders" || pathname === "/shopify-orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
-  if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
+  if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms" || pathname === "/settings/nfc") return ["ZERO", "SUPER_ADMIN", "ADMIN"];
   if (pathname.startsWith("/settings")) return ["ZERO"];
   return ["ZERO", "SUPER_ADMIN", "ADMIN"];
 }
@@ -305,7 +306,7 @@ export function canEdit(pathname: string, role?: Role, mansione?: string, access
   // Fallback to default edit rules defined in the matrix
   const isSettings = pathname.startsWith("/settings");
   if (isSettings) {
-    if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms") {
+    if (pathname === "/settings/tables" || pathname === "/settings/planning" || pathname === "/settings/forms" || pathname === "/settings/nfc") {
       return role === "ADMIN";
     }
     return false;
