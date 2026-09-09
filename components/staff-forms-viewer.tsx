@@ -106,6 +106,17 @@ type CashDailySummary = {
   total: number;
   card: number;
   cash: number;
+  grossCash: number;
+  refunds: number;
+  netCash: number;
+  refundCount: number;
+  refundRows: Array<{
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    processedAt: string;
+  }>;
   other: number;
   orders: number;
   transactions?: number;
@@ -142,6 +153,16 @@ type AutomaticDailyCloseSummary = {
   controlDeclaredCash: number;
   controlShopifyCash: number;
   shopifyCash: number;
+  shopifyGrossCash: number;
+  shopifyCashRefunds: number;
+  cashRefundCount: number;
+  cashRefundRows: Array<{
+    orderId: string;
+    orderName: string;
+    clientName: string;
+    amount: number;
+    processedAt: string;
+  }>;
   difference: number;
   controlCount: number;
   completedControlCount: number;
@@ -1056,6 +1077,10 @@ export function StaffFormsViewer({
 
   const completeDailyClosing = async () => {
     if (!dailyCloseSummary || dailyCloseSubmitting || dailyCloseSummary.alreadyClosed) return;
+    const confirmRefunds = dailyCloseSummary.shopifyCashRefunds > 0;
+    if (confirmRefunds && !window.confirm(
+      `ATTENZIONE: sono presenti ${dailyCloseSummary.cashRefundCount} rimborsi cash.\n\nIncassi lordi: ${formatEuro(dailyCloseSummary.shopifyGrossCash)}\nRimborsi: -${formatEuro(dailyCloseSummary.shopifyCashRefunds)}\nCash netto da chiudere: ${formatEuro(dailyCloseSummary.shopifyCash)}\n\nHai controllato gli ordini indicati nel riepilogo?`,
+    )) return;
     const confirmEarly = dailyCloseSummary.before19;
     if (confirmEarly && !window.confirm("Sono meno delle 19:00. Sei sicuro di voler effettuare adesso la chiusura giornaliera?")) return;
 
@@ -1065,7 +1090,7 @@ export function StaffFormsViewer({
       const response = await fetch("/api/cash/daily-close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmEarly, date: dailyCloseDate }),
+        body: JSON.stringify({ confirmEarly, confirmRefunds, date: dailyCloseDate }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "Impossibile registrare la chiusura giornaliera.");
@@ -1683,23 +1708,53 @@ export function StaffFormsViewer({
                     <div className="text-right"><p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/35">{canClosePastDays ? "Giorno selezionato" : "Giorno corrente"}</p><p className="mt-1 text-sm font-black">{new Intl.DateTimeFormat("it-IT", { dateStyle: "full", timeZone: "Europe/Rome" }).format(new Date(`${dailyCloseSummary.date}T12:00:00Z`))}</p></div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-[24px] border border-emerald-300/20 bg-emerald-300/10 p-5">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-200">Controlli Cliente collegati</p>
                       <p className="mt-3 text-3xl font-black">{dailyCloseSummary.completedControlCount}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">Abbinati a Shopify tramite il codice ordine</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{formatEuro(dailyCloseSummary.controlShopifyCash)} con scheda trovata</p>
                     </div>
                     <div className="rounded-[24px] border border-[#E9D5FF]/20 bg-[#E9D5FF]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Contanti del giorno</p>
-                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">Rilevati automaticamente da Shopify</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#E9D5FF]/70">Incassi cash lordi</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyGrossCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">Prima di sottrarre eventuali rimborsi</p>
                     </div>
-                    <div className="rounded-[24px] border border-[#A1B5FD]/25 bg-[#A1B5FD]/10 p-5">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#BCC9FF]">Contanti con scheda trovata</p>
-                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.controlShopifyCash)}</p>
-                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.controlCount} {dailyCloseSummary.controlCount === 1 ? "ordine collegato" : "ordini collegati"}; le note non cambiano l’abbinamento</p>
+                    <div className={cn("rounded-[24px] border p-5", dailyCloseSummary.shopifyCashRefunds > 0 ? "border-red-300/30 bg-red-300/10" : "border-white/10 bg-white/[0.04]")}>
+                      <p className={cn("text-[10px] font-black uppercase tracking-[0.16em]", dailyCloseSummary.shopifyCashRefunds > 0 ? "text-red-200" : "text-white/45")}>Rimborsi cash</p>
+                      <p className="mt-3 text-3xl font-black">-{formatEuro(dailyCloseSummary.shopifyCashRefunds)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/40">{dailyCloseSummary.cashRefundCount} {dailyCloseSummary.cashRefundCount === 1 ? "rimborso rilevato" : "rimborsi rilevati"}</p>
+                    </div>
+                    <div className="rounded-[24px] border border-[#A1B5FD]/35 bg-[#A1B5FD]/15 p-5 ring-1 ring-[#A1B5FD]/10">
+                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#DCE4FF]">Cash netto da chiudere</p>
+                      <p className="mt-3 text-3xl font-black">{formatEuro(dailyCloseSummary.shopifyCash)}</p>
+                      <p className="mt-2 text-xs font-bold text-white/55">Incassi lordi meno rimborsi cash</p>
                     </div>
                   </div>
+
+                  {dailyCloseSummary.cashRefundRows?.length ? (
+                    <div className="rounded-2xl border border-red-300/35 bg-red-300/10 p-4" role="alert">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-200">Attenzione · rimborsi cash rilevati</p>
+                          <p className="mt-1 text-xs font-semibold leading-5 text-red-100/70">Il netto da chiudere è già stato ridotto. Controlla questi ordini prima di confermare.</p>
+                        </div>
+                        <span className="rounded-full bg-red-200 px-3 py-1.5 text-[10px] font-black uppercase text-red-950">-{formatEuro(dailyCloseSummary.shopifyCashRefunds)}</span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {dailyCloseSummary.cashRefundRows.map((refund) => (
+                          <div key={refund.orderId + refund.processedAt} className="rounded-xl border border-red-200/20 bg-black/15 px-3 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-black text-white">{refund.clientName}</p>
+                                <p className="mt-1 text-[10px] font-semibold text-white/50">Ordine {refund.orderName.startsWith("#") ? refund.orderName : `#${refund.orderName}`} · {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(refund.processedAt))}</p>
+                              </div>
+                              <span className="shrink-0 text-sm font-black text-red-200">-{formatEuro(refund.amount)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {dailyCloseSummary.completedControlRows?.length ? (
                     <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
@@ -3071,7 +3126,7 @@ export function StaffFormsViewer({
                             <>
                               <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
                                 <div className="rounded-[24px] border border-white/10 bg-white/[0.065] p-5">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Atteso da Shopify</p>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/45">Netto atteso da Shopify</p>
                                   <p className="mt-2 text-3xl font-black tracking-tight text-white">{formatEuro(cashSummary.cash)}</p>
                                   <p className="mt-2 text-xs font-bold text-white/40">{cashSummary.orders} {cashSummary.orders === 1 ? "ordine cash" : "ordini cash"}</p>
                                 </div>
@@ -3081,6 +3136,26 @@ export function StaffFormsViewer({
                                   <p className="mt-2 text-xs font-bold text-white/40">Aggiornato mentre compili</p>
                                 </div>
                               </div>
+
+                              {cashSummary.refundRows?.length ? (
+                                <div className="mt-3 rounded-2xl border border-red-300/30 bg-red-300/10 p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-200">Rimborsi cash rilevati</p>
+                                      <p className="mt-1 text-xs font-semibold text-white/55">Lordo {formatEuro(cashSummary.grossCash)} · rimborsi -{formatEuro(cashSummary.refunds)}</p>
+                                    </div>
+                                    <span className="rounded-full bg-red-200 px-3 py-1.5 text-[10px] font-black text-red-950">{cashSummary.refundCount}</span>
+                                  </div>
+                                  <div className="mt-3 space-y-2">
+                                    {cashSummary.refundRows.map((refund) => (
+                                      <div key={refund.orderId + refund.processedAt} className="flex items-center justify-between gap-3 rounded-xl bg-black/15 px-3 py-2 text-xs">
+                                        <span className="min-w-0 truncate font-bold">{refund.orderName} · {refund.clientName}</span>
+                                        <span className="shrink-0 font-black text-red-200">-{formatEuro(refund.amount)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
 
                               {(() => {
                                 const declared = Number(answers.cash_withdrawn) || 0;

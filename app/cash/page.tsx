@@ -386,19 +386,18 @@ export default async function CashDashboardPage(props: { searchParams: Promise<{
   const totalVaultOut = vaultWithdrawals.reduce((sum, response) => sum + moneyValue(answer(response, VAULT_WITHDRAWAL_FIELD_IDS.amount)), 0);
   // Derive the accounting total only from the Shopify transaction rows.
   // Vault movements, cash funds and manual cash records never enter here.
-  const shopifyCashExpected = shopifyRevenue.payments.reduce(
-    (sum, payment) =>
-      payment.method === "CONTANTI" || payment.method === "CASHMATIC"
-        ? sum + payment.amount
-        : sum,
-    0,
-  );
+  const shopifyCashExpected = shopifyRevenue.cash;
   const shopifyCashDifference = totalWithdrawn - shopifyCashExpected;
   const shopifyCashByDay = new Map<string, number>();
   for (const payment of shopifyRevenue.payments) {
     if (payment.method !== "CONTANTI" && payment.method !== "CASHMATIC") continue;
     const key = romeDayKey(new Date(payment.processedAt));
     shopifyCashByDay.set(key, (shopifyCashByDay.get(key) ?? 0) + payment.amount);
+  }
+  for (const refund of shopifyRevenue.refunds) {
+    if (refund.method !== "CONTANTI" && refund.method !== "CASHMATIC") continue;
+    const key = romeDayKey(new Date(refund.processedAt));
+    shopifyCashByDay.set(key, (shopifyCashByDay.get(key) ?? 0) - refund.amount);
   }
   const declaredCashByDay = new Map<string, number>();
   for (const response of responses) {

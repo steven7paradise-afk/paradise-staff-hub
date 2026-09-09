@@ -13,6 +13,7 @@ import { getShopifyOrderNamesBulk } from "@/lib/shopify";
 import { getAppointmentStatusesFromGoogleSheet } from "@/lib/google-sheet";
 import { checkPCAuthorization, appointmentsPcCookieName } from "@/lib/appointments-pc-auth";
 import { appointmentSalonSlugFromName, normalizeAppointmentSalonSlug, type AppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { appointmentDateKey, appointmentDayBoundaryIso, isAppointmentDateKey } from "@/lib/appointment-date";
 
 export const dynamic = "force-dynamic";
 
@@ -69,17 +70,6 @@ function matchUserByTeamName<T extends { name: string }>(users: T[], teamName: s
   return containsMatches.length === 1 ? containsMatches[0] : null;
 }
 
-function localDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function toIsoBoundary(date: Date, endOfDay = false) {
-  const copy = new Date(date);
-  if (endOfDay) copy.setHours(23, 59, 59, 999);
-  else copy.setHours(0, 0, 0, 0);
-  return copy.toISOString();
-}
-
 async function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
@@ -94,34 +84,24 @@ async function resolveWithin<T>(promise: Promise<T>, fallback: T, timeoutMs: num
 
 function parseLocalDateParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
-  const [year, month, day] = raw.split("-").map(Number);
-  const parsed = new Date(year, month - 1, day);
-  if (
-    parsed.getFullYear() !== year ||
-    parsed.getMonth() !== month - 1 ||
-    parsed.getDate() !== day
-  ) return null;
-  return parsed;
+  return isAppointmentDateKey(raw) ? raw : null;
 }
 
 function resolveAppointmentsRange(params: { [key: string]: string | string[] | undefined }) {
-  const today = new Date();
+  const today = appointmentDateKey();
   if (params.scope === "all") {
+    const [year, month] = today.split("-").map(Number);
     return {
-      start: new Date(today.getFullYear(), today.getMonth() - 1, 1),
-      end: new Date(today.getFullYear(), today.getMonth() + 4, 0),
+      start: new Date(Date.UTC(year, month - 2, 1, 12)).toISOString().slice(0, 10),
+      end: new Date(Date.UTC(year, month + 3, 0, 12)).toISOString().slice(0, 10),
     };
   }
-  const defaultStart = new Date(today);
-  const defaultEnd = new Date(today);
-
   const requestedStart = parseLocalDateParam(params.from);
   const requestedEnd = parseLocalDateParam(params.to);
-  const start = requestedStart || defaultStart;
-  const end = requestedEnd || requestedStart || defaultEnd;
+  const start = requestedStart || today;
+  const end = requestedEnd || requestedStart || today;
 
-  return start.getTime() <= end.getTime()
+  return start <= end
     ? { start, end }
     : { start: end, end: start };
 }
@@ -395,8 +375,8 @@ export default async function AppointmentsPage({
       [bookings, services] = await Promise.all([
         resolveWithin(
           getCowlendarBookingsForRange({
-            startDate: toIsoBoundary(appointmentRange.start),
-            endDate: toIsoBoundary(appointmentRange.end, true),
+            startDate: appointmentDayBoundaryIso(appointmentRange.start),
+            endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
             limit: 5000,
             forceRefresh,
           }),
@@ -649,7 +629,7 @@ export default async function AppointmentsPage({
           : null,
         startDate: booking.start_date,
         endDate: booking.end_date || null,
-        dateKey: localDateKey(bookingDate),
+        dateKey: appointmentDateKey(bookingDate),
         inferredSalon,
         teammates,
         priceAmount: booking.price?.amount ?? null,
@@ -703,9 +683,9 @@ export default async function AppointmentsPage({
         initialSalon={initialSalon}
         initialPcWorkerName={kioskWorkerName}
         initialView={initialView}
-        initialAnchorDate={localDateKey(requestedFocus || new Date())}
-        initialRangeFrom={localDateKey(appointmentRange.start)}
-        initialRangeTo={localDateKey(appointmentRange.end)}
+        initialAnchorDate={requestedFocus || appointmentDateKey()}
+        initialRangeFrom={appointmentRange.start}
+        initialRangeTo={appointmentRange.end}
         initialScopeAll={resolvedSearchParams?.scope === "all"}
         locations={locations}
         navigationBasePath={navigationBasePath}

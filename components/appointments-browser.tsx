@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { appointmentSalonUrl, normalizeAppointmentSalonSlug } from "@/lib/appointment-salon-url";
+import { initialAppointmentDateFilter } from "@/lib/appointment-date";
 import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
@@ -1518,28 +1519,22 @@ export function AppointmentsBrowser({
   const [filterStaff, setFilterStaff] = useState<string>("all");
   const [filterPayment, setFilterPayment] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState(() => {
-    const today = localDateKey(new Date());
-    if (initialScopeAll) {
-      return {
-        mode: "all" as AppointmentDateFilterMode,
-        from: initialRangeFrom || today,
-        to: initialRangeTo || today,
-      };
-    }
-    if (initialView !== "day" && initialRangeFrom && initialRangeTo) {
-      return {
-        mode: "custom" as AppointmentDateFilterMode,
-        from: initialRangeFrom,
-        to: initialRangeTo,
-      };
-    }
-    return {
-      mode: "today" as AppointmentDateFilterMode,
-      from: today,
-      to: today,
-    };
-  });
+  const [dateFilter, setDateFilter] = useState(() => initialAppointmentDateFilter({
+    initialRangeFrom,
+    initialRangeTo,
+    initialScopeAll,
+  }));
+
+  useEffect(() => {
+    setView(initialView);
+    setAnchorDate(dateFromLocalKey(initialAnchorDate) || new Date());
+    setDateFilter(initialAppointmentDateFilter({
+      initialRangeFrom,
+      initialRangeTo,
+      initialScopeAll,
+    }));
+    setVisibleCount(appointmentsPageSize);
+  }, [initialAnchorDate, initialRangeFrom, initialRangeTo, initialScopeAll, initialView]);
 
   useEffect(() => {
     if (layoutMode !== "board") return;
@@ -1628,9 +1623,14 @@ export function AppointmentsBrowser({
     const range = options?.from && options?.to
       ? { from: options.from, to: options.to }
       : rangeForView(nextView, nextAnchor);
+    const selectedDay = nextView === "day" && !options?.scopeAll && range.from === range.to
+      ? dateFromLocalKey(range.from)
+      : null;
+    const effectiveAnchor = selectedDay || nextAnchor;
+    setAnchorDate(effectiveAnchor);
     const params = new URLSearchParams();
     params.set("view", nextView);
-    params.set("focus", localDateKey(nextAnchor));
+    params.set("focus", localDateKey(effectiveAnchor));
     if (options?.scopeAll) {
       params.set("scope", "all");
     } else {

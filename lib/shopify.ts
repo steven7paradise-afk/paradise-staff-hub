@@ -1,5 +1,26 @@
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Normalizza i riferimenti che vengono normalmente incollati da Shopify:
+ * #27159, 27159, "ordine #27159" oppure l'URL dell'ordine nell'Admin.
+ */
+export function normalizeShopifyOrderReference(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const adminUrlId = raw.match(/\/orders\/(\d{10,})(?:[/?#]|$)/i)?.[1];
+  if (adminUrlId) return adminUrlId;
+
+  const hashNumber = raw.match(/#\s*(\d{3,})\b/);
+  if (hashNumber) return `#${hashNumber[1]}`;
+
+  const compact = raw.replace(/[\s\u00a0]+/g, "");
+  if (/^\d{3,}$/.test(compact)) return compact;
+
+  const labelledNumber = raw.match(/(?:ordine|order|shopify)\D{0,20}(\d{3,})\b/i)?.[1];
+  return labelledNumber ? `#${labelledNumber}` : null;
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 800): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -277,7 +298,7 @@ export async function appendShopifyOrderNote(orderName: string, userName: string
     const cleanMessage = message.trim();
     if (!cleanMessage) return true;
 
-    const cleanName = orderName.trim();
+    const cleanName = normalizeShopifyOrderReference(orderName) || orderName.trim();
     if (!cleanName) return false;
 
     let orderId: string | number | null = null;
@@ -774,7 +795,7 @@ export async function getShopifyOrderDetails(orderName: string): Promise<{
       return null;
     }
 
-    const cleanName = orderName.trim();
+    const cleanName = normalizeShopifyOrderReference(orderName) || orderName.trim();
     if (!cleanName) return null;
 
     let orderData: any = null;

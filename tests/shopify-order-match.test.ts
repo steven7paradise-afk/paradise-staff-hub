@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shopifyOrderMatchKeys } from "../lib/shopify-payment-register";
+import { netShopifyCash, shopifyOrderMatchKeys } from "../lib/shopify-payment-register";
 
 test("abbina lo stesso ordine con o senza cancelletto", () => {
   assert.deepEqual(shopifyOrderMatchKeys("#26678"), ["26678"]);
@@ -16,4 +16,9 @@ test("supporta più codici salvati nello stesso campo", () => {
   const keys = shopifyOrderMatchKeys("Acconto #26670 · saldo #26678");
   assert.ok(keys.includes("26670"));
   assert.ok(keys.includes("26678"));
+});
+
+test("sottrae i rimborsi cash dall'incasso lordo giornaliero", () => {
+  assert.equal(netShopifyCash(2223, 100), 2123);
+  assert.equal(netShopifyCash(35.1, 0.1), 35);
 });

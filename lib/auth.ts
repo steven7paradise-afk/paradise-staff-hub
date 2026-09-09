@@ -8,6 +8,7 @@ import { canAccessSalonShiftModules, isShiftProtectedPath } from "@/lib/salon-sh
 import { appointmentsPcCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 import { FORMER_EMPLOYEE_STATUS, hasFormerEmployeeDocumentAccess, isFormerEmployeeAllowedPath } from "@/lib/former-employee";
 import { isPcCassaAllowedPath } from "@/lib/pc-cassa-access";
+import { consumePasskeyGrant } from "@/lib/passkey";
 
 function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/login" || pathname === "/login/") return true;
@@ -17,6 +18,7 @@ function isPublicOperationalRequest(pathname: string, method: string) {
   if (pathname === "/tablet-clock" || pathname.startsWith("/tablet-clock/")) return true;
   if (pathname === "/api/devices/activate") return true;
   if (["/api/attendance/clock", "/api/attendance/identify", "/api/attendance/status", "/api/tablet-requests"].includes(pathname)) return true;
+  if (pathname.startsWith("/api/passkeys/auth/")) return true;
   if (pathname === "/api/settings/tablet" && method === "GET") return true;
   if ([
     "/api/client-control/analytics",
@@ -60,8 +62,23 @@ export const authConfig = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
         pin: { label: "PIN", type: "password" },
+        passkeyToken: { label: "Passkey token", type: "password" },
       },
       async authorize(credentials) {
+        const passkeyToken = String(credentials?.passkeyToken ?? "");
+        if (passkeyToken) {
+          const user = await consumePasskeyGrant(passkeyToken, "LOGIN");
+          if (!user) return null;
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            sedeId: user.sede_id,
+            mansione: user.mansione,
+          };
+        }
+
         const pin = String(credentials?.pin ?? "").trim();
         if (pin) {
           if (!/^\d{4,6}$/.test(pin)) return null;

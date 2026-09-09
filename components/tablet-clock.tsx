@@ -41,6 +41,7 @@ import type { BrandingTheme } from "@/lib/branding";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { signIn, signOut } from "next-auth/react";
+import { browserSupportsWebAuthn, startAuthentication } from "@simplewebauthn/browser";
 import { useRouter } from "next/navigation";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 
@@ -500,6 +501,10 @@ export function TabletClock({
   const [feedback, setFeedback] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [identifying, setIdentifying] = useState(false);
+  const [faceIdentifying, setFaceIdentifying] = useState(false);
+  const [passkeyAttendanceToken, setPasskeyAttendanceToken] = useState("");
+  const [passkeyLoginToken, setPasskeyLoginToken] = useState("");
+  const logoTapRef = useRef({ count: 0, lastTap: 0 });
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundPack, setSoundPack] = useState<SoundPackId>("paradise");
   const [soundMenuOpen, setSoundMenuOpen] = useState(false);
@@ -1238,6 +1243,8 @@ export function TabletClock({
         mansione: data.employeeMansione || null,
         todayShift: data.todayShift ?? null,
       });
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
       setNfcSerial("");
       setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
       setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
@@ -1273,6 +1280,8 @@ export function TabletClock({
         photoUrl: data.employeePhotoUrl, role: data.employeeRole,
         mansione: data.employeeMansione || null, todayShift: data.todayShift ?? null,
       });
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
       setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
       setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
       showFeedback("success", `${data.employeeName} riconosciuta. Scegli l'azione.`);
@@ -1286,12 +1295,83 @@ export function TabletClock({
     }
   }
 
+  async function identifyFaceId() {
+    if (!device || worker || identifying || faceIdentifying) return;
+    if (!browserSupportsWebAuthn()) {
+      showFeedback("error", "Face ID non è supportato su questo browser.");
+      return;
+    }
+
+    setFaceIdentifying(true);
+    setMessage("Verifica Face ID in corso...");
+    try {
+      const optionsResponse = await fetch("/api/passkeys/auth/options", {
+        method: "POST",
+        headers: { "x-device-id": device.id },
+      });
+      const options = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(options.error || "Face ID non disponibile.");
+
+      const authentication = await startAuthentication(options);
+      const verifyResponse = await fetch("/api/passkeys/auth/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-device-id": device.id },
+        body: JSON.stringify({ response: authentication }),
+      });
+      const data = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(data.error || "Face ID non riconosciuto.");
+
+      setWorker({
+        id: data.employeeId,
+        name: data.employeeName,
+        status: data.status as ClockStatus,
+        photoUrl: data.employeePhotoUrl,
+        role: data.employeeRole,
+        mansione: data.employeeMansione || null,
+        todayShift: data.todayShift ?? null,
+      });
+      setTodayLogs(Array.isArray(data.todayLogs) ? data.todayLogs : []);
+      setPasskeyAttendanceToken(data.attendanceToken || "");
+      setPasskeyLoginToken(data.loginToken || "");
+      setPin("");
+      setNfcSerial("");
+      setMessage(`${data.employeeName}: ${statusLabels[data.status as ClockStatus]}`);
+      showFeedback("success", `${data.employeeName} riconosciuta con Face ID. Scegli l’azione.`);
+      sound("success");
+    } catch (error) {
+      const message = error instanceof Error && error.name !== "NotAllowedError"
+        ? error.message
+        : "Verifica Face ID annullata.";
+      setWorker(null);
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
+      setMessage("Inserisci il tuo codice personale");
+      showFeedback("error", message);
+      sound("error");
+    } finally {
+      setFaceIdentifying(false);
+    }
+  }
+
+  function handleHiddenLogoTap() {
+    if (worker || faceIdentifying) return;
+    const nowMs = Date.now();
+    const nextCount = nowMs - logoTapRef.current.lastTap <= 1200 ? logoTapRef.current.count + 1 : 1;
+    logoTapRef.current = { count: nextCount, lastTap: nowMs };
+    if (nextCount >= 3) {
+      logoTapRef.current = { count: 0, lastTap: 0 };
+      void identifyFaceId();
+    }
+  }
+
   function updatePin(next: string) {
     const cleaned = next.replace(/\D/g, "").slice(0, 6);
     if (cleaned !== pin) sound("tap");
     setPin(cleaned);
     setNfcSerial("");
     setWorker(null);
+    setPasskeyAttendanceToken("");
+    setPasskeyLoginToken("");
     setFeedback(null);
     setMessage(
       cleaned.length < 4
@@ -1303,7 +1383,7 @@ export function TabletClock({
   }
 
   async function clock(type: string, bypassEarlyExitCheck = false, bypassNightClockCheck = false) {
-    if (!worker || (!/^\d{4,6}$/.test(pin) && !nfcSerial) || !device) return;
+    if (!worker || (!/^\d{4,6}$/.test(pin) && !nfcSerial && !passkeyAttendanceToken) || !device) return;
 
     if (!bypassNightClockCheck && isNightClockAction(type)) {
       setPendingNightClockType(type);
@@ -1323,7 +1403,14 @@ export function TabletClock({
       const response = await fetch("/api/attendance/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-device-id": device.id },
-        body: JSON.stringify({ employeeId: worker.id, pin: pin || undefined, nfcSerial: nfcSerial || undefined, type, note: nfcSerial ? "Timbratura NFC" : "Timbratura tablet" }),
+        body: JSON.stringify({
+          employeeId: worker.id,
+          pin: pin || undefined,
+          nfcSerial: nfcSerial || undefined,
+          passkeyToken: passkeyAttendanceToken || undefined,
+          type,
+          note: passkeyAttendanceToken ? "Timbratura Face ID" : nfcSerial ? "Timbratura NFC" : "Timbratura tablet",
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -1351,6 +1438,8 @@ export function TabletClock({
       setWorker(null);
       setPin("");
       setNfcSerial("");
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
     } catch {
       setMessage("Connessione non disponibile. Timbratura non registrata.");
       showFeedback("error", "Connessione non disponibile. Timbratura non registrata.");
@@ -1361,11 +1450,12 @@ export function TabletClock({
   }
 
   async function goToDashboard() {
-    if (!worker || !/^\d{4,6}$/.test(pin) || !device) return;
+    if (!worker || (!/^\d{4,6}$/.test(pin) && !passkeyLoginToken) || !device) return;
     setLoading("DASHBOARD");
     try {
       const response = await signIn("credentials", {
-        pin,
+        pin: pin || undefined,
+        passkeyToken: passkeyLoginToken || undefined,
         redirect: false,
       });
       if (response?.error) {
@@ -1376,6 +1466,8 @@ export function TabletClock({
       sound("success");
       setDashboardFrameLoading(true);
       setShowDashboard(true);
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
     } catch {
       showFeedback("error", "Errore durante l'accesso.");
       sound("error");
@@ -1508,6 +1600,8 @@ export function TabletClock({
       setTodayLogs([]);
       setPin("");
       setNfcSerial("");
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
       setFeedback(null);
       setMessage("Inserisci il tuo codice personale");
       setShowDashboard(false);
@@ -1579,6 +1673,8 @@ export function TabletClock({
       setWorker(null);
       setPin("");
       setNfcSerial("");
+      setPasskeyAttendanceToken("");
+      setPasskeyLoginToken("");
       setMessage("Inserisci il tuo codice personale");
       setFeedback(null);
     }, 30000);
@@ -1703,7 +1799,16 @@ export function TabletClock({
     const logoUrl = tabletBranding?.logo_url || branding?.logo_url || null;
     return (
       <div className="text-center">
-        <div className={cn("mx-auto grid place-items-center overflow-hidden", compact ? "size-16 lg:size-20" : "size-28 lg:size-36")}>
+        <button
+          type="button"
+          aria-label="Paradise Beauty"
+          onClick={handleHiddenLogoTap}
+          disabled={faceIdentifying || Boolean(worker)}
+          className={cn(
+            "mx-auto grid place-items-center overflow-hidden rounded-2xl bg-transparent p-0 outline-none touch-manipulation disabled:cursor-default",
+            compact ? "size-16 lg:size-20" : "size-28 lg:size-36",
+          )}
+        >
           {logoUrl ? (
             <img src={logoUrl} alt="Paradise Beauty" className="size-full object-contain" />
           ) : (
@@ -1711,7 +1816,7 @@ export function TabletClock({
               P
             </p>
           )}
-        </div>
+        </button>
         <p className={cn("font-serif leading-none tracking-tight", compact ? "mt-1 text-5xl lg:text-6xl" : "mt-3 text-7xl lg:text-[104px]")}>
           {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(now)}
         </p>
@@ -2130,6 +2235,8 @@ export function TabletClock({
                   setWorker(null);
                   setPin("");
                   setNfcSerial("");
+                  setPasskeyAttendanceToken("");
+                  setPasskeyLoginToken("");
                   setFeedback(null);
                   setMessage("Inserisci il tuo codice personale");
                 }}

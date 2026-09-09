@@ -10,6 +10,7 @@ import { createNotifications } from "@/lib/notifications";
 import { ensureAutomaticLateRequests } from "@/lib/automatic-late-requests";
 import { FORMER_EMPLOYEE_STATUS } from "@/lib/former-employee";
 import { nfcBadgeHash } from "@/lib/nfc-badge";
+import { consumePasskeyGrant } from "@/lib/passkey";
 
 const PAUSE_LATENESS_START_KEY = "2026-08-26";
 
@@ -20,11 +21,12 @@ export async function POST(request: NextRequest) {
   const employeeId = String(payload.employeeId ?? "");
   const pin = String(payload.pin ?? "");
   const nfcSerial = String(payload.nfcSerial ?? "");
+  const passkeyToken = String(payload.passkeyToken ?? "");
   const type = String(payload.type ?? "") as AttendanceType;
   const note = payload.note ? String(payload.note) : null;
   const ip = requestIp(request.headers);
 
-  if (!deviceId || !employeeId || (!/^\d{4,6}$/.test(pin) && !nfcSerial) || !Object.values(AttendanceType).includes(type)) {
+  if (!deviceId || !employeeId || (!/^\d{4,6}$/.test(pin) && !nfcSerial && !passkeyToken) || !Object.values(AttendanceType).includes(type)) {
     return NextResponse.json({ error: "Dati timbratura incompleti" }, { status: 400 });
   }
 
@@ -39,14 +41,16 @@ export async function POST(request: NextRequest) {
   }
 
   let credentialValid = false;
-  if (nfcSerial) {
+  if (passkeyToken) {
+    credentialValid = Boolean(await consumePasskeyGrant(passkeyToken, "ATTENDANCE", user.id));
+  } else if (nfcSerial) {
     try { credentialValid = user.nfc_badge_enabled && user.nfc_badge_hash === nfcBadgeHash(nfcSerial); }
     catch { credentialValid = false; }
   } else {
     credentialValid = await isPinValidForUser(user.id, pin, user.pin_hash, user.pin_lookup);
   }
   if (!credentialValid) {
-    return NextResponse.json({ error: nfcSerial ? "Tessera NFC non valida o sospesa" : "PIN non valido" }, { status: 401 });
+    return NextResponse.json({ error: passkeyToken ? "Face ID scaduto o non valido" : nfcSerial ? "Tessera NFC non valida o sospesa" : "PIN non valido" }, { status: 401 });
   }
 
   const isOffice = device.location.name.toLowerCase().includes("ufficio");

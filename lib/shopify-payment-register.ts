@@ -24,9 +24,12 @@ export type ShopifyDailyRevenue = {
   total: number;
   card: number;
   cash: number;
+  cashGross: number;
+  cashRefunds: number;
   cashmatic: number;
   unclassified: number;
   transactions: number;
+  refundTransactions: number;
   available: boolean;
   payments: Array<{
     id: string;
@@ -39,9 +42,23 @@ export type ShopifyDailyRevenue = {
     gateway: string;
     processedAt: string;
   }>;
+  refunds: Array<{
+    id: string;
+    orderId: string;
+    orderName: string;
+    amount: number;
+    method: "CARTA" | "CASHMATIC" | "CONTANTI" | "DA_VERIFICARE";
+    provider: string;
+    gateway: string;
+    processedAt: string;
+  }>;
 };
 
 export type ShopifyRevenuePayment = ShopifyDailyRevenue["payments"][number];
+
+export function netShopifyCash(gross: number, refunds: number) {
+  return Math.round((gross - refunds + Number.EPSILON) * 100) / 100;
+}
 
 /**
  * Returns stable lookup keys for an order reference. Staff forms sometimes
@@ -141,7 +158,20 @@ function paymentProvider(gateway: unknown, method: string) {
  * is counted even before staff complete the operational control.
  */
 export async function getShopifyRevenueRange(startDateKey: string, endDateKey: string): Promise<ShopifyDailyRevenue> {
-  const empty: ShopifyDailyRevenue = { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false, payments: [] };
+  const empty: ShopifyDailyRevenue = {
+    total: 0,
+    card: 0,
+    cash: 0,
+    cashGross: 0,
+    cashRefunds: 0,
+    cashmatic: 0,
+    unclassified: 0,
+    transactions: 0,
+    refundTransactions: 0,
+    available: false,
+    payments: [],
+    refunds: [],
+  };
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
   if (!shop || !token || !/^\d{4}-\d{2}-\d{2}$/.test(startDateKey) || !/^\d{4}-\d{2}-\d{2}$/.test(endDateKey)) return empty;
@@ -168,53 +198,78 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
   }`;
 
   try {
-    const transactionGroups: Array<{ order: { id: string; name: string }; transactions: any[] }> = [];
-    let cursor: string | null = null;
-    for (let page = 0; page < 20; page += 1) {
-      const response: Response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          query,
-          variables: {
-            cursor,
-            search: `processed_at:>=${start.toISOString()} processed_at:<${end.toISOString()}`,
-          },
-        }),
-        signal: AbortSignal.timeout(15000),
-        next: { revalidate: 300 },
-      });
-      if (!response.ok) throw new Error(`Shopify GraphQL ${response.status}`);
-      const data = await response.json();
-      if (data?.errors?.some((error: { path?: string[] }) => error.path?.[0] === "orders")) {
-        throw new Error(`Shopify GraphQL orders: ${data.errors[0]?.message || "unknown error"}`);
+    const transactionGroups = new Map<string, { order: { id: string; name: string }; transactions: any[] }>();
+    // processed_at finds sales made during the day; updated_at also finds
+    // refunds made today for an order originally created on an earlier day.
+    for (const searchField of ["processed_at", "updated_at"]) {
+      let cursor: string | null = null;
+      for (let page = 0; page < 20; page += 1) {
+        const response: Response = await fetch(`https://${shop}/admin/api/2024-04/graphql.json`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            query,
+            variables: {
+              cursor,
+              search: `${searchField}:>=${start.toISOString()} ${searchField}:<${end.toISOString()}`,
+            },
+          }),
+          signal: AbortSignal.timeout(15000),
+          next: { revalidate: 300 },
+        });
+        if (!response.ok) throw new Error(`Shopify GraphQL ${response.status}`);
+        const data = await response.json();
+        if (data?.errors?.some((error: { path?: string[] }) => error.path?.[0] === "orders")) {
+          throw new Error(`Shopify GraphQL orders: ${data.errors[0]?.message || "unknown error"}`);
+        }
+        const connection = data?.data?.orders;
+        for (const order of Array.isArray(connection?.nodes) ? connection.nodes : []) {
+          transactionGroups.set(String(order.id), {
+            order,
+            transactions: Array.isArray(order?.transactions) ? order.transactions : [],
+          });
+        }
+        if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
+        cursor = connection.pageInfo.endCursor;
       }
-      const connection = data?.data?.orders;
-      for (const order of Array.isArray(connection?.nodes) ? connection.nodes : []) {
-        transactionGroups.push({ order, transactions: Array.isArray(order?.transactions) ? order.transactions : [] });
-      }
-      if (!connection?.pageInfo?.hasNextPage || !connection.pageInfo.endCursor) break;
-      cursor = connection.pageInfo.endCursor;
     }
 
     const seen = new Set<string>();
     const totals = { ...empty, available: true };
-    for (const group of transactionGroups) {
+    for (const group of transactionGroups.values()) {
       for (const transaction of group.transactions) {
       const id = String(transaction?.id || "");
       const processedAt = paymentDate(transaction?.processedAt, new Date(0));
       if (!id || seen.has(id) || processedAt < start || processedAt >= end) continue;
       if (String(transaction?.status).toLowerCase() !== "success") continue;
-      if (!["sale", "capture"].includes(String(transaction?.kind).toLowerCase())) continue;
       const amount = moneyValue(transaction?.amountSet?.shopMoney?.amount);
       if (amount <= 0) continue;
+      const kind = String(transaction?.kind).toLowerCase();
+      if (!["sale", "capture", "refund"].includes(kind)) continue;
       seen.add(id);
       const method = classifyShopifyPaymentMethod([String(transaction?.gateway || "")]);
+      if (kind === "refund") {
+        totals.refundTransactions += 1;
+        if (method === "CONTANTI" || method === "CASHMATIC") {
+          totals.cashRefunds += amount;
+          totals.refunds.push({
+            id,
+            orderId: String(group.order.id),
+            orderName: String(group.order.name || group.order.id),
+            amount,
+            method,
+            provider: paymentProvider(transaction?.gateway, method),
+            gateway: String(transaction?.gateway || ""),
+            processedAt: processedAt.toISOString(),
+          });
+        }
+        continue;
+      }
       totals.total += amount;
       totals.transactions += 1;
       if (method === "CARTA") totals.card += amount;
-      else if (method === "CONTANTI") totals.cash += amount;
-      else if (method === "CASHMATIC") totals.cash += amount;
+      else if (method === "CONTANTI") totals.cashGross += amount;
+      else if (method === "CASHMATIC") totals.cashGross += amount;
       else totals.unclassified += amount;
       totals.payments.push({
         id,
@@ -231,6 +286,7 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
       });
       }
     }
+    totals.cash = netShopifyCash(totals.cashGross, totals.cashRefunds);
     totals.payments.sort((a, b) => new Date(b.processedAt).getTime() - new Date(a.processedAt).getTime());
     return totals;
   } catch (error) {
@@ -241,7 +297,10 @@ export async function getShopifyRevenueRange(startDateKey: string, endDateKey: s
 
 export async function getShopifyDailyRevenue(dateKey: string): Promise<ShopifyDailyRevenue> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-    return { total: 0, card: 0, cash: 0, cashmatic: 0, unclassified: 0, transactions: 0, available: false, payments: [] };
+    return {
+      total: 0, card: 0, cash: 0, cashGross: 0, cashRefunds: 0, cashmatic: 0,
+      unclassified: 0, transactions: 0, refundTransactions: 0, available: false, payments: [], refunds: [],
+    };
   }
   const end = new Date(`${dateKey}T12:00:00Z`);
   end.setUTCDate(end.getUTCDate() + 1);

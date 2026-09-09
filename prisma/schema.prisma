@@ -45,43 +45,43 @@ enum RequestStatus {
 }
 
 model User {
-  id                   String    @id @default(cuid())
-  name                 String
-  email                String    @unique
-  password_hash        String
-  role                 UserRole  @default(DIPENDENTE)
-  sede_id              String?
-  pin_hash             String?
-  pin_lookup           String?   @unique
-  nfc_badge_hash       String?   @unique
-  nfc_badge_enabled    Boolean   @default(false)
+  id                    String    @id @default(cuid())
+  name                  String
+  email                 String    @unique
+  password_hash         String
+  role                  UserRole  @default(DIPENDENTE)
+  sede_id               String?
+  pin_hash              String?
+  pin_lookup            String?   @unique
+  nfc_badge_hash        String?   @unique
+  nfc_badge_enabled     Boolean   @default(false)
   nfc_badge_enrolled_at DateTime?
-  birth_date           DateTime?
-  fiscal_code          String?
-  contract_start       DateTime?
-  contract_end         DateTime?
-  photo_url            String?
-  cover_url            String?
-  whatsapp_phone       String?
-  mansione             String?
-  google_calendar_sync Boolean   @default(false)
-  google_calendar_id   String?
-  active               Boolean   @default(true)
-  created_at           DateTime  @default(now())
-  employee_status      String    @default("Attivo")
-  manager_id           String?
-  access_list          Json?
-  hr_notes             String?
-  workforce_data       Json?
-  candidate_id         String?
-  header_color         String?
-  sidebar_color        String?
-  default_page         String?
-  default_task_view    String?
-  iban                 String?
-  contract_history     Json?
-  last_edited_by_id    String?
-  last_edited_at       DateTime?
+  birth_date            DateTime?
+  fiscal_code           String?
+  contract_start        DateTime?
+  contract_end          DateTime?
+  photo_url             String?
+  cover_url             String?
+  whatsapp_phone        String?
+  mansione              String?
+  google_calendar_sync  Boolean   @default(false)
+  google_calendar_id    String?
+  active                Boolean   @default(true)
+  created_at            DateTime  @default(now())
+  employee_status       String    @default("Attivo")
+  manager_id            String?
+  access_list           Json?
+  hr_notes              String?
+  workforce_data        Json?
+  candidate_id          String?
+  header_color          String?
+  sidebar_color         String?
+  default_page          String?
+  default_task_view     String?
+  iban                  String?
+  contract_history      Json?
+  last_edited_by_id     String?
+  last_edited_at        DateTime?
 
   manager      User?  @relation("UserManager", fields: [manager_id], references: [id])
   subordinates User[] @relation("UserManager")
@@ -89,38 +89,90 @@ model User {
   last_edited_by User?  @relation("UserLastEditedBy", fields: [last_edited_by_id], references: [id])
   edited_users   User[] @relation("UserLastEditedBy")
 
-  location                  Location?                @relation(fields: [sede_id], references: [id])
+  location                  Location?                  @relation(fields: [sede_id], references: [id])
   attendance_logs           AttendanceLog[]
-  leave_requests            LeaveRequest[]           @relation("UserLeaveRequests")
-  approvals                 LeaveRequest[]           @relation("LeaveApprover")
-  shipments_packed          ShopifyShipment[]        @relation("ShipmentPacker")
-  documents                 Document[]               @relation("UserDocuments")
-  uploadedDocuments         Document[]               @relation("DocumentUploader")
+  leave_requests            LeaveRequest[]             @relation("UserLeaveRequests")
+  approvals                 LeaveRequest[]             @relation("LeaveApprover")
+  shipments_packed          ShopifyShipment[]          @relation("ShipmentPacker")
+  documents                 Document[]                 @relation("UserDocuments")
+  uploadedDocuments         Document[]                 @relation("DocumentUploader")
   notifications             Notification[]
-  sent_internal_emails      InternalEmail[]          @relation("InternalEmailSender")
-  received_internal_emails  InternalEmailRecipient[] @relation("InternalEmailRecipientUser")
+  sent_internal_emails      InternalEmail[]            @relation("InternalEmailSender")
+  received_internal_emails  InternalEmailRecipient[]   @relation("InternalEmailRecipientUser")
   schedule_entries          ScheduleEntry[]
   schedule_overrides        ScheduleWorkerOverride[]
-  assigned_tasks            StaffTask[]              @relation("AssignedTasks")
-  created_tasks             StaffTask[]              @relation("CreatedTasks")
+  assigned_tasks            StaffTask[]                @relation("AssignedTasks")
+  created_tasks             StaffTask[]                @relation("CreatedTasks")
   task_comments             StaffTaskComment[]
   work_hour_records         WorkHourRecord[]
-  created_service_forms     ServiceForm[]            @relation("CreatedServiceForms")
+  created_service_forms     ServiceForm[]              @relation("CreatedServiceForms")
   service_form_responses    ServiceFormResponse[]
   cash_closings             CashClosing[]
   cash_vault_withdrawals    CashVaultWithdrawal[]
   cash_month_closings       CashMonthClose[]
-  social_posts              SocialPost[]             @relation("CreatedSocialPosts")
+  social_posts              SocialPost[]               @relation("CreatedSocialPosts")
   social_post_comments      SocialPostComment[]
   assistant_action_logs     AssistantActionLog[]
   assistant_memories        AssistantMemory[]
-  shift_reports_responsible ShiftReport[]            @relation("ShiftReportResponsible")
-  shift_reports_approved    ShiftReport[]            @relation("ShiftReportApprover")
+  shift_reports_responsible ShiftReport[]              @relation("ShiftReportResponsible")
+  shift_reports_approved    ShiftReport[]              @relation("ShiftReportApprover")
   shift_report_revisions    ShiftReportRevision[]
   end_of_day_checklists     EndOfDayChecklist[]        @relation("EndOfDayChecklistSubmitter")
+  webauthn_credentials      WebAuthnCredential[]
+  webauthn_challenges       WebAuthnChallenge[]
+  passkey_grants            PasskeyGrant[]
   end_of_day_comments       EndOfDayChecklistComment[]
 
   @@map("users")
+}
+
+model WebAuthnCredential {
+  id            String    @id @default(cuid())
+  user_id       String
+  credential_id String    @unique
+  public_key    Bytes
+  counter       BigInt    @default(0)
+  transports    String[]
+  device_type   String?
+  backed_up     Boolean   @default(false)
+  label         String?
+  created_at    DateTime  @default(now())
+  last_used_at  DateTime?
+  user          User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("webauthn_credentials")
+}
+
+model WebAuthnChallenge {
+  id         String   @id @default(cuid())
+  challenge  String   @unique
+  purpose    String
+  user_id    String?
+  device_id  String?
+  rp_id      String
+  origin     String
+  expires_at DateTime
+  created_at DateTime @default(now())
+  user       User?    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, purpose, expires_at])
+  @@index([device_id, purpose, expires_at])
+  @@map("webauthn_challenges")
+}
+
+model PasskeyGrant {
+  id         String    @id @default(cuid())
+  token_hash String    @unique
+  user_id    String
+  purpose    String
+  expires_at DateTime
+  used_at    DateTime?
+  created_at DateTime  @default(now())
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, purpose, expires_at])
+  @@map("passkey_grants")
 }
 
 model Location {

@@ -90,6 +90,12 @@ export async function POST(request: NextRequest) {
   if (!summary.available) {
     return NextResponse.json({ error: "Shopify non è disponibile: la chiusura non è stata registrata." }, { status: 503 });
   }
+  if (summary.shopifyCashRefunds > 0 && body?.confirmRefunds !== true) {
+    return NextResponse.json({
+      error: "Sono presenti rimborsi Contanti Shopify. Controlla il riepilogo e conferma prima di chiudere.",
+      requiresRefundConfirmation: true,
+    }, { status: 409 });
+  }
 
   const controlClosing = await reconcileDailyClientControls({
     dateKey: context.date,
@@ -126,7 +132,12 @@ export async function POST(request: NextRequest) {
     `Controlli Cliente collegati: ${summary.completedControlCount}.`,
     `Contanti associati ai Controlli Cliente, rilevati da Shopify: ${formatEuro(summary.controlShopifyCash)}.`,
     `Importo dichiarato negli stessi Controlli Cliente: ${formatEuro(summary.controlDeclaredCash)}.`,
-    `Contanti Shopify: ${formatEuro(summary.shopifyCash)}.`,
+    `Incassi Contanti Shopify lordi: ${formatEuro(summary.shopifyGrossCash)}.`,
+    `Rimborsi Contanti Shopify: ${formatEuro(summary.shopifyCashRefunds)}.`,
+    `Contanti Shopify netti: ${formatEuro(summary.shopifyCash)}.`,
+    ...(summary.cashRefundRows.length ? [
+      `Dettaglio rimborsi: ${summary.cashRefundRows.map((refund) => `${refund.orderName} ${formatEuro(refund.amount)}`).join(", ")}.`,
+    ] : []),
     `Ordini senza Controllo Cliente: ${summary.missingControlCount}, per ${formatEuro(summary.missingControlCash)}.`,
     `Differenza sui controlli lavoratore presenti: ${formatEuro(summary.difference)}.`,
     `Controlli Cliente allineati a Shopify: ${controlClosing.synchronized}; bozze chiuse automaticamente: ${controlClosing.autoClosed}; bozze da verificare: ${controlClosing.unresolved}.`,

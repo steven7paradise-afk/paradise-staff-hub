@@ -119,7 +119,10 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     });
   }
 
-  const shopifyClientNames = await getShopifyOrderClientNames(shopify.payments.map((payment) => payment.orderId));
+  const shopifyClientNames = await getShopifyOrderClientNames([
+    ...shopify.payments.map((payment) => payment.orderId),
+    ...shopify.refunds.map((refund) => refund.orderId),
+  ]);
   const shopifyOrderTotals = new Map<string, number>();
   for (const payment of shopify.payments) {
     const key = cleanOrder(payment.orderName) || payment.orderId;
@@ -152,6 +155,32 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
       processedAt: payment.processedAt,
     });
   }
+  const cashRefundRows = shopify.refunds
+    .filter((refund) => refund.method === "CONTANTI" || refund.method === "CASHMATIC")
+    .map((refund) => ({
+      orderId: refund.orderId,
+      orderName: refund.orderName,
+      clientName: shopifyClientNames.get(cleanOrder(refund.orderName))
+        || shopifyClientNames.get(refund.orderId.match(/(\d+)$/)?.[1] || "")
+        || "Cliente Shopify",
+      amount: roundMoney(refund.amount),
+      processedAt: refund.processedAt,
+    }));
+  for (const refund of cashRefundRows) {
+    const key = cleanOrder(refund.orderName) || refund.orderId;
+    const current = shopifyRowsByOrder.get(key);
+    if (current) {
+      current.amount = roundMoney(current.amount - refund.amount);
+    } else {
+      shopifyRowsByOrder.set(key, {
+        orderId: refund.orderId,
+        orderName: refund.orderName,
+        clientName: refund.clientName,
+        amount: -refund.amount,
+        processedAt: refund.processedAt,
+      });
+    }
+  }
 
   const controlRows = Array.from(declarations.values()).map((declaration) => {
     const shopifyRow = shopifyOrderMatchKeys(declaration.order)
@@ -178,6 +207,7 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     ))?.declaredAmount ?? null,
   }));
   const missingControlRows = shopifyRows
+    .filter((row) => row.amount > 0)
     .filter((row) => !shopifyOrderMatchKeys(row.orderName).some((key) => linkedControlOrderKeys.has(key)))
     .map((row) => {
       return {
@@ -194,6 +224,8 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
   const controlShopifyCash = roundMoney(shopifyRows
     .filter((row) => shopifyOrderMatchKeys(row.orderName).some((key) => linkedControlOrderKeys.has(key)))
     .reduce((sum, row) => sum + row.amount, 0));
+  const shopifyGrossCash = roundMoney(shopify.cashGross);
+  const shopifyCashRefunds = roundMoney(shopify.cashRefunds);
   const shopifyCash = roundMoney(shopify.cash);
   const matchedControlDifference = roundMoney(controlRows.reduce((sum, row) => (
     row.shopifyOrderTotal == null ? sum : sum + row.declaredAmount - row.shopifyOrderTotal
@@ -206,6 +238,10 @@ export async function automaticDailyCashSummary(dateKey: string, locationId: str
     controlDeclaredCash,
     controlShopifyCash,
     shopifyCash,
+    shopifyGrossCash,
+    shopifyCashRefunds,
+    cashRefundCount: cashRefundRows.length,
+    cashRefundRows,
     difference: matchedControlDifference,
     controlCount: controlRows.length,
     completedControlCount: linkedControlRows.length,

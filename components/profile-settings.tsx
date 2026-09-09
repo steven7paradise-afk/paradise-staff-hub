@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
-import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle, Palette, RotateCcw } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { CalendarDays, Camera, KeyRound, Upload, CheckCircle2, AlertCircle, Palette, RotateCcw, ScanFace } from "lucide-react";
+import { browserSupportsWebAuthn, platformAuthenticatorIsAvailable, startRegistration } from "@simplewebauthn/browser";
 import { Button, Card, Field } from "@/components/ui";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
@@ -44,8 +45,44 @@ export function ProfileSettings({
   const [sidebarColorVal, setSidebarColorVal] = useState(sidebarColor ?? "");
   const [themeStatus, setThemeStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeyAvailable, setPasskeyAvailable] = useState<boolean | null>(null);
+  const [passkeyStatus, setPasskeyStatus] = useState("");
   const canUseCalendar = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canManagePhoto = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
+
+  useEffect(() => {
+    if (!canUseCalendar || !browserSupportsWebAuthn()) {
+      setPasskeyAvailable(false);
+      return;
+    }
+    void platformAuthenticatorIsAvailable().then(setPasskeyAvailable).catch(() => setPasskeyAvailable(false));
+  }, [canUseCalendar]);
+
+  async function registerFaceId() {
+    if (!canUseCalendar || passkeyLoading) return;
+    setPasskeyLoading(true);
+    setPasskeyStatus("");
+    try {
+      const optionsResponse = await fetch("/api/passkeys/register/options", { cache: "no-store" });
+      const optionsData = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(optionsData.error || "Registrazione non disponibile.");
+
+      const registration = await startRegistration(optionsData.options);
+      const verifyResponse = await fetch("/api/passkeys/register/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: registration, label: "Face ID dispositivo personale" }),
+      });
+      const result = await verifyResponse.json();
+      if (!verifyResponse.ok) throw new Error(result.error || "Face ID non verificato.");
+      setPasskeyStatus("Face ID registrato. Sul Tablet Clock tocca rapidamente tre volte il logo.");
+    } catch (error) {
+      setPasskeyStatus(error instanceof Error ? error.message : "Registrazione Face ID annullata.");
+    } finally {
+      setPasskeyLoading(false);
+    }
+  }
 
   async function uploadPhoto(file?: File) {
     if (!file || !canManagePhoto) return;
@@ -284,6 +321,37 @@ export function ProfileSettings({
       </Card>
 
 
+
+
+      {/* Face ID / passkey card (Admins only) */}
+      {canUseCalendar ? (
+        <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6">
+          <div className="flex items-center gap-2 border-b border-black/5 pb-3 dark:border-white/5">
+            <ScanFace className="size-5 text-[#B85B68] dark:text-paradise-pink" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Face ID Tablet Clock</h2>
+          </div>
+          <p className="mt-4 text-xs leading-5 text-black/50 dark:text-white/45">
+            Registra Face ID o Touch ID di questo dispositivo. Paradise salva solo la passkey protetta dal dispositivo, non la foto del volto.
+          </p>
+          <button
+            type="button"
+            onClick={registerFaceId}
+            disabled={passkeyLoading || passkeyAvailable === false}
+            className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#171717] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none sm:w-auto"
+          >
+            <ScanFace className="size-5" />
+            {passkeyLoading ? "Verifica in corso..." : "Registra Face ID"}
+          </button>
+          {passkeyAvailable === false ? (
+            <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-400">Questo browser o dispositivo non supporta Face ID/passkey.</p>
+          ) : null}
+          {passkeyStatus ? (
+            <p className={cn("mt-3 text-xs font-bold", passkeyStatus.startsWith("Face ID registrato") ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
+              {passkeyStatus}
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
 
       {/* Google Calendar card (Admins/Super Admins only) */}
       {canUseCalendar ? (

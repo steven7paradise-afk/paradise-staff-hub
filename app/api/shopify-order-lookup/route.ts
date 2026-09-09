@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getShopifyOrderDetails, isFuzzyNameMatch } from "@/lib/shopify";
+import { getShopifyOrderDetails, isFuzzyNameMatch, normalizeShopifyOrderReference } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
 
 export async function GET(request: NextRequest) {
@@ -198,7 +198,8 @@ export async function GET(request: NextRequest) {
     }
 
     // B. If query is a specific order number (e.g. starts with # or is just numeric)
-    const isOrderNumber = query.startsWith("#") || /^\d+$/.test(query);
+    const normalizedOrderReference = normalizeShopifyOrderReference(query);
+    const isOrderNumber = Boolean(normalizedOrderReference);
 
     if (strictOrderNumber && !isOrderNumber) {
       return NextResponse.json({
@@ -207,7 +208,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (isOrderNumber) {
-      const details = await getShopifyOrderDetails(query);
+      const details = await getShopifyOrderDetails(normalizedOrderReference!);
       if (!details) {
         return NextResponse.json({ error: `Ordine ${query} non trovato su Shopify.` }, { status: 404 });
       }
