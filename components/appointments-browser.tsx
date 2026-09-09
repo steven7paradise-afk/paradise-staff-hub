@@ -3564,15 +3564,19 @@ export function AppointmentsBrowser({
         }),
       });
       if (handleExpiredPcWorker(response)) return;
-      if (!response.ok) throw new Error("Nota non salvata");
-      const note = await response.json();
+      const note = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(note?.error || "Nota non salvata");
       setParadiseNotes((current) => ({ ...current, [quickNoteBooking.id]: note.text || savedText }));
       setQuickNoteBookingId(null);
       setQuickNoteText("");
       showPushToast("Nota salvata", "La nota dell’ufficio è visibile sulla scheda.");
     } catch (error) {
       console.error("Failed to save quick appointment note", error);
-      showPushToast("Nota non salvata", "Impossibile salvare la nota dell’ufficio.", "error");
+      showPushToast(
+        "Nota non salvata",
+        error instanceof Error ? error.message : "Impossibile salvare la nota dell’ufficio.",
+        "error",
+      );
     } finally {
       setSubmittingComment(false);
     }
@@ -7006,7 +7010,7 @@ export function AppointmentsBrowser({
                                       onClick={(event) => {
                                         event.preventDefault();
                                         event.stopPropagation();
-                                        void openClientControlForBooking(booking, undefined, true);
+                                        openQuickNote(booking);
                                       }}
                                       className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#C7CCD4] bg-[#FAFBFC] px-2 text-[8px] font-black uppercase tracking-wider text-[#5E6C84] transition hover:border-[#D6A535] hover:bg-[#FFF9E9] hover:text-[#8A5A00]"
                                     >
