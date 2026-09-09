@@ -1,0 +1,4 @@
+- generic [active] [ref=e1]:
+  - status "Caricamento della pagina":
+    - paragraph: Aggiornamento...
+  - alert [ref=e2]
