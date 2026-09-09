@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canUsePasskeyGrant, isAdminRole, passkeyLoginChallengeDeviceId } from "../lib/passkey";
+import {
+  canUsePasskeyGrant,
+  isAdminRole,
+  passkeyLoginChallengeDeviceId,
+  passkeyRegistrationChallengeDeviceId,
+} from "../lib/passkey";
 
 test("Face ID Tablet Clock accepts only administrative roles", () => {
   assert.equal(isAdminRole("ZERO"), true);
@@ -30,4 +35,12 @@ test("personal login challenge is isolated behind a one-way flow identifier", ()
   assert.match(first, /^app-login:[a-f0-9]{64}$/);
   assert.notEqual(first, second);
   assert.equal(first.includes("flow-one"), false);
+});
+
+test("PIN registration challenge is separate from login and does not expose its flow", () => {
+  const login = passkeyLoginChallengeDeviceId("same-flow");
+  const registration = passkeyRegistrationChallengeDeviceId("same-flow");
+  assert.match(registration, /^registration:[a-f0-9]{64}$/);
+  assert.notEqual(login, registration);
+  assert.equal(registration.includes("same-flow"), false);
 });

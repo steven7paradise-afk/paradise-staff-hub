@@ -48,6 +48,8 @@ export function ProfileSettings({
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyAvailable, setPasskeyAvailable] = useState<boolean | null>(null);
   const [passkeyStatus, setPasskeyStatus] = useState("");
+  const [passkeyPin, setPasskeyPin] = useState("");
+  const [passkeyOwnerName, setPasskeyOwnerName] = useState("");
   const canUseCalendar = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
   const canManagePhoto = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
 
@@ -61,12 +63,23 @@ export function ProfileSettings({
 
   async function registerFaceId() {
     if (passkeyLoading) return;
+    if (!/^\d{4,6}$/.test(passkeyPin)) {
+      setPasskeyStatus("Inserisci il tuo PIN personale di 4-6 cifre.");
+      return;
+    }
     setPasskeyLoading(true);
     setPasskeyStatus("");
+    setPasskeyOwnerName("");
     try {
-      const optionsResponse = await fetch("/api/passkeys/register/options", { cache: "no-store" });
+      const optionsResponse = await fetch("/api/passkeys/register/options", {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: passkeyPin }),
+      });
       const optionsData = await optionsResponse.json();
       if (!optionsResponse.ok) throw new Error(optionsData.error || "Registrazione non disponibile.");
+      setPasskeyOwnerName(optionsData.employeeName || "");
 
       const registration = await startRegistration(optionsData.options);
       const verifyResponse = await fetch("/api/passkeys/register/verify", {
@@ -76,7 +89,9 @@ export function ProfileSettings({
       });
       const result = await verifyResponse.json();
       if (!verifyResponse.ok) throw new Error(result.error || "Face ID non verificato.");
-      setPasskeyStatus("Accesso biometrico registrato. Ora puoi usarlo dalla pagina Login su questo dispositivo.");
+      setPasskeyPin("");
+      setPasskeyOwnerName(result.employeeName || optionsData.employeeName || "");
+      setPasskeyStatus(`${result.message || "Accesso biometrico registrato."} Ora puoi usarlo dalla pagina Login su questo dispositivo.`);
     } catch (error) {
       setPasskeyStatus(error instanceof Error ? error.message : "Registrazione Face ID annullata.");
     } finally {
@@ -329,17 +344,42 @@ export function ProfileSettings({
             <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Accesso dal telefono</h2>
           </div>
           <p className="mt-4 text-xs leading-5 text-black/50 dark:text-white/45">
-            Registra Face ID, impronta o codice del tuo telefono. Paradise salva solo la passkey protetta dal dispositivo, non il volto o l’impronta.
+            Inserisci il tuo PIN personale e poi conferma con Face ID, impronta o codice del telefono. L’accesso verrà collegato al proprietario del PIN, non all’email aperta in questo momento.
           </p>
+          <label className="mt-5 block max-w-sm">
+            <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-black/50 dark:text-white/40">
+              PIN personale del lavoratore
+            </span>
+            <Field
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={passkeyPin}
+              onChange={(event) => {
+                setPasskeyPin(event.target.value.replace(/\D/g, "").slice(0, 6));
+                setPasskeyOwnerName("");
+                setPasskeyStatus("");
+              }}
+              placeholder="Inserisci il tuo PIN"
+              disabled={passkeyLoading}
+            />
+          </label>
           <button
             type="button"
             onClick={registerFaceId}
-            disabled={passkeyLoading || passkeyAvailable === false}
-            className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#171717] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none sm:w-auto"
+            disabled={passkeyLoading || passkeyAvailable === false || !/^\d{4,6}$/.test(passkeyPin)}
+            className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#171717] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none sm:w-auto"
           >
             <ScanFace className="size-5" />
             {passkeyLoading ? "Verifica in corso..." : "Attiva Face ID / impronta"}
           </button>
+          {passkeyOwnerName ? (
+            <p className="mt-3 text-xs font-black text-emerald-700 dark:text-emerald-400">
+              Profilo riconosciuto: {passkeyOwnerName}
+            </p>
+          ) : null}
           {passkeyAvailable === false ? (
             <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-400">Questo browser o telefono non supporta l’accesso biometrico.</p>
           ) : null}

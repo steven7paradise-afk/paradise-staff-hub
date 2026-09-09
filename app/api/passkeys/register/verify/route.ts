@@ -2,7 +2,12 @@ import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import type { RegistrationResponseJSON } from "@simplewebauthn/types";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { credentialIdToString, takeChallenge } from "@/lib/passkey";
+import {
+  credentialIdToString,
+  passkeyRegistrationChallengeDeviceId,
+  passkeyRegistrationCookieName,
+  takeChallengeForDevice,
+} from "@/lib/passkey";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -11,14 +16,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Accedi prima di registrare questo telefono." }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-  if (!user?.active) {
-    return NextResponse.json({ error: "Profilo non disponibile." }, { status: 403 });
+  const registrationFlowId = request.cookies.get(passkeyRegistrationCookieName)?.value || "";
+  if (!registrationFlowId) {
+    return NextResponse.json({ error: "Richiesta scaduta. Inserisci nuovamente il PIN." }, { status: 400 });
   }
 
-  const challenge = await takeChallenge({ purpose: "REGISTER", userId: user.id });
-  if (!challenge) {
+  const challenge = await takeChallengeForDevice({
+    purpose: "REGISTER",
+    deviceId: passkeyRegistrationChallengeDeviceId(registrationFlowId),
+  });
+  if (!challenge?.user_id) {
     return NextResponse.json({ error: "Richiesta scaduta. Avvia nuovamente la registrazione." }, { status: 400 });
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: challenge.user_id } });
+  if (!user?.active) {
+    return NextResponse.json({ error: "Profilo non disponibile." }, { status: 403 });
   }
 
   const payload = (await request.json()) as { response?: RegistrationResponseJSON; label?: string };
@@ -62,7 +75,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ok: true, message: "Accesso biometrico registrato su questo dispositivo." });
+    const response = NextResponse.json({
+      ok: true,
+      employeeName: user.name,
+      message: `Accesso biometrico registrato per ${user.name}.`,
+    });
+    response.cookies.delete(passkeyRegistrationCookieName);
+    return response;
   } catch {
     return NextResponse.json({ error: "Non è stato possibile verificare Face ID." }, { status: 400 });
   }
