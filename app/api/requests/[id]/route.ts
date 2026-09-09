@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
 import { createNotification, createNotifications } from "@/lib/notifications";
+import { ensureLeaveAssistanceWorkflow, shouldCreateLeaveAssistanceWorkflow } from "@/lib/leave-assistance-workflow";
 import { prisma } from "@/lib/prisma";
 import { syncApprovedLeaveToSchedule, revertApprovedLeaveFromSchedule, UNJUSTIFIED_ABSENCE_MARKER } from "@/lib/schedule-sync";
 import { isAutomaticLateReason } from "@/lib/automatic-late-requests";
@@ -301,7 +302,17 @@ export async function PATCH(
     }
   }
 
-  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync, lateAccountingLabel });
+  let assistanceWorkflow = null;
+  if (status && shouldCreateLeaveAssistanceWorkflow(existing.status, status, leaveRequest.type)) {
+    try {
+      assistanceWorkflow = await ensureLeaveAssistanceWorkflow(leaveRequest, session.user.id);
+    } catch (error) {
+      console.error("Errore durante la comunicazione e la creazione della task per Assistenza:", error);
+      assistanceWorkflow = { skipped: true, reason: "Comunicazione ad Assistenza non completata." };
+    }
+  }
+
+  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync, lateAccountingLabel, assistanceWorkflow });
 }
 
 export async function DELETE(

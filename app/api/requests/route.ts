@@ -3,6 +3,7 @@ import { LeaveType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { syncLeaveRequestToGoogleCalendar } from "@/lib/google-calendar";
+import { ensureLeaveAssistanceWorkflow, shouldCreateLeaveAssistanceWorkflow } from "@/lib/leave-assistance-workflow";
 import { prisma } from "@/lib/prisma";
 
 const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN"]);
@@ -147,5 +148,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync });
+  let assistanceWorkflow = null;
+  if (shouldCreateLeaveAssistanceWorkflow(null, leaveRequest.status, leaveRequest.type)) {
+    try {
+      assistanceWorkflow = await ensureLeaveAssistanceWorkflow(leaveRequest, session.user.id);
+    } catch (error) {
+      console.error("Errore durante la comunicazione e la creazione della task per Assistenza:", error);
+      assistanceWorkflow = { skipped: true, reason: "Comunicazione ad Assistenza non completata." };
+    }
+  }
+
+  return NextResponse.json({ leaveRequest, scheduleSync, calendarSync, assistanceWorkflow });
 }
