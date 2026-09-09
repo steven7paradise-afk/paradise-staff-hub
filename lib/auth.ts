@@ -69,6 +69,7 @@ export const authConfig = {
         if (passkeyToken) {
           const user = await consumePasskeyGrant(passkeyToken, "LOGIN");
           if (!user) return null;
+          if (user.employee_status === FORMER_EMPLOYEE_STATUS && !hasFormerEmployeeDocumentAccess(user.workforce_data, user.last_edited_at)) return null;
           return {
             id: user.id,
             name: user.name,

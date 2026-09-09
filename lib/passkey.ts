@@ -5,9 +5,22 @@ import { prisma } from "@/lib/prisma";
 export const ADMIN_ROLES = ["ZERO", "SUPER_ADMIN", "ADMIN"] as const;
 export const PASSKEY_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const PASSKEY_GRANT_TTL_MS = 60 * 1000;
+export const passkeyLoginCookieName = `${process.env.NODE_ENV === "production" ? "__Secure-" : ""}paradise-passkey-login`;
 
 export function isAdminRole(role?: string | null) {
   return ADMIN_ROLES.includes((role ?? "") as (typeof ADMIN_ROLES)[number]);
+}
+
+export function canUsePasskeyGrant(role: string | null | undefined, purpose: "ATTENDANCE" | "LOGIN") {
+  return purpose === "LOGIN" || isAdminRole(role);
+}
+
+export function createPasskeyLoginFlowId() {
+  return randomBytes(24).toString("base64url");
+}
+
+export function passkeyLoginChallengeDeviceId(flowId: string) {
+  return `app-login:${createHash("sha256").update(flowId).digest("hex")}`;
 }
 
 export function webAuthnRequestConfig(request: NextRequest) {
@@ -122,7 +135,7 @@ export async function consumePasskeyGrant(token: string, purpose: "ATTENDANCE" |
     grant.expires_at <= now ||
     (expectedUserId && grant.user_id !== expectedUserId) ||
     !grant.user.active ||
-    !isAdminRole(grant.user.role)
+    !canUsePasskeyGrant(grant.user.role, purpose)
   ) {
     return null;
   }

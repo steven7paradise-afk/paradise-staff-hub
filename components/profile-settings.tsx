@@ -52,15 +52,15 @@ export function ProfileSettings({
   const canManagePhoto = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
 
   useEffect(() => {
-    if (!canUseCalendar || !browserSupportsWebAuthn()) {
+    if (!browserSupportsWebAuthn()) {
       setPasskeyAvailable(false);
       return;
     }
     void platformAuthenticatorIsAvailable().then(setPasskeyAvailable).catch(() => setPasskeyAvailable(false));
-  }, [canUseCalendar]);
+  }, []);
 
   async function registerFaceId() {
-    if (!canUseCalendar || passkeyLoading) return;
+    if (passkeyLoading) return;
     setPasskeyLoading(true);
     setPasskeyStatus("");
     try {
@@ -76,7 +76,7 @@ export function ProfileSettings({
       });
       const result = await verifyResponse.json();
       if (!verifyResponse.ok) throw new Error(result.error || "Face ID non verificato.");
-      setPasskeyStatus("Face ID registrato. Sul Tablet Clock tocca rapidamente tre volte il logo.");
+      setPasskeyStatus("Accesso biometrico registrato. Ora puoi usarlo dalla pagina Login su questo dispositivo.");
     } catch (error) {
       setPasskeyStatus(error instanceof Error ? error.message : "Registrazione Face ID annullata.");
     } finally {
@@ -323,15 +323,13 @@ export function ProfileSettings({
 
 
 
-      {/* Face ID / passkey card (Admins only) */}
-      {canUseCalendar ? (
-        <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6">
+      <Card className="border border-black/5 dark:border-white/10 bg-white/95 dark:bg-neutral-900 shadow-soft p-5 sm:p-6">
           <div className="flex items-center gap-2 border-b border-black/5 pb-3 dark:border-white/5">
             <ScanFace className="size-5 text-[#B85B68] dark:text-paradise-pink" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Face ID Tablet Clock</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-black/75 dark:text-white/80">Accesso dal telefono</h2>
           </div>
           <p className="mt-4 text-xs leading-5 text-black/50 dark:text-white/45">
-            Registra Face ID o Touch ID di questo dispositivo. Paradise salva solo la passkey protetta dal dispositivo, non la foto del volto.
+            Registra Face ID, impronta o codice del tuo telefono. Paradise salva solo la passkey protetta dal dispositivo, non il volto o l’impronta.
           </p>
           <button
             type="button"
@@ -340,18 +338,17 @@ export function ProfileSettings({
             className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#171717] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none sm:w-auto"
           >
             <ScanFace className="size-5" />
-            {passkeyLoading ? "Verifica in corso..." : "Registra Face ID"}
+            {passkeyLoading ? "Verifica in corso..." : "Attiva Face ID / impronta"}
           </button>
           {passkeyAvailable === false ? (
-            <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-400">Questo browser o dispositivo non supporta Face ID/passkey.</p>
+            <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-400">Questo browser o telefono non supporta l’accesso biometrico.</p>
           ) : null}
           {passkeyStatus ? (
-            <p className={cn("mt-3 text-xs font-bold", passkeyStatus.startsWith("Face ID registrato") ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
+            <p className={cn("mt-3 text-xs font-bold", passkeyStatus.startsWith("Accesso biometrico registrato") ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
               {passkeyStatus}
             </p>
           ) : null}
-        </Card>
-      ) : null}
+      </Card>
 
       {/* Google Calendar card (Admins/Super Admins only) */}
       {canUseCalendar ? (

@@ -5,6 +5,8 @@ import {
   createPasskeyGrant,
   credentialIdFromString,
   isAdminRole,
+  passkeyLoginChallengeDeviceId,
+  passkeyLoginCookieName,
   takeChallenge,
 } from "@/lib/passkey";
 import { prisma } from "@/lib/prisma";
@@ -19,19 +21,31 @@ const statusByLastClock = {
 } as const;
 
 export async function POST(request: NextRequest) {
+  const isAppLogin = request.headers.get("x-passkey-context") === "app-login";
   const deviceId = request.headers.get("x-device-id") ?? "";
-  const device = await authorizedTablet(
-    deviceId,
-    request.cookies.get(tabletCookieName)?.value,
-    requestIp(request.headers),
-  );
-  if (!device) {
+  const device = isAppLogin ? null : await authorizedTablet(
+      deviceId,
+      request.cookies.get(tabletCookieName)?.value,
+      requestIp(request.headers),
+    );
+  if (!isAppLogin && !device) {
     return NextResponse.json({ error: "Tablet non autorizzato." }, { status: 403 });
   }
 
-  const challenge = await takeChallenge({ purpose: "AUTHENTICATE", deviceId: device.id });
+  const loginFlowId = isAppLogin ? request.cookies.get(passkeyLoginCookieName)?.value || "" : "";
+  if (isAppLogin && !loginFlowId) {
+    return NextResponse.json({ error: "Richiesta di accesso scaduta. Riprova." }, { status: 400 });
+  }
+  const challenge = await takeChallenge({
+    purpose: "AUTHENTICATE",
+    deviceId: isAppLogin ? passkeyLoginChallengeDeviceId(loginFlowId) : device!.id,
+  });
   if (!challenge) {
-    return NextResponse.json({ error: "Scansione scaduta. Tocca nuovamente il logo." }, { status: 400 });
+    return NextResponse.json({
+      error: isAppLogin
+        ? "Richiesta di accesso scaduta. Riprova."
+        : "Scansione scaduta. Tocca nuovamente il logo.",
+    }, { status: 400 });
   }
 
   const payload = (await request.json()) as { response?: AuthenticationResponseJSON };
@@ -43,8 +57,8 @@ export async function POST(request: NextRequest) {
     where: { credential_id: payload.response.id },
     include: { user: true },
   });
-  if (!credential || !credential.user.active || !isAdminRole(credential.user.role)) {
-    return NextResponse.json({ error: "Volto non abilitato per l’accesso Admin." }, { status: 401 });
+  if (!credential || !credential.user.active || (!isAppLogin && !isAdminRole(credential.user.role))) {
+    return NextResponse.json({ error: "Credenziale non abilitata per questo accesso." }, { status: 401 });
   }
 
   try {
@@ -72,6 +86,16 @@ export async function POST(request: NextRequest) {
         last_used_at: new Date(),
       },
     });
+
+    if (isAppLogin) {
+      const loginToken = await createPasskeyGrant(credential.user.id, "LOGIN");
+      const response = NextResponse.json({
+        loginToken,
+        employeeName: credential.user.name,
+      });
+      response.cookies.delete(passkeyLoginCookieName);
+      return response;
+    }
 
     const [attendanceToken, loginToken, latestLog] = await Promise.all([
       createPasskeyGrant(credential.user.id, "ATTENDANCE"),
@@ -110,7 +134,7 @@ export async function POST(request: NextRequest) {
     const effectiveEndTime = expectedShiftEndTime({
       plannedStart: startTime,
       plannedEnd: endTime,
-      locationName: todayShift?.location?.name ?? device.location.name,
+      locationName: todayShift?.location?.name ?? device!.location.name,
       actualEntryMinutes: firstEntry ? romeMinutesForInstant(firstEntry.timestamp) : null,
     });
 

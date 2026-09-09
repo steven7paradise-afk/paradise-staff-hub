@@ -1799,13 +1799,10 @@ export function TabletClock({
     const logoUrl = tabletBranding?.logo_url || branding?.logo_url || null;
     return (
       <div className="text-center">
-        <button
-          type="button"
+        <div
           aria-label="Paradise Beauty"
-          onClick={handleHiddenLogoTap}
-          disabled={faceIdentifying || Boolean(worker)}
           className={cn(
-            "mx-auto grid place-items-center overflow-hidden rounded-2xl bg-transparent p-0 outline-none touch-manipulation disabled:cursor-default",
+            "mx-auto grid place-items-center overflow-hidden rounded-2xl bg-transparent p-0",
             compact ? "size-16 lg:size-20" : "size-28 lg:size-36",
           )}
         >
@@ -1816,7 +1813,7 @@ export function TabletClock({
               P
             </p>
           )}
-        </button>
+        </div>
         <p className={cn("font-serif leading-none tracking-tight", compact ? "mt-1 text-5xl lg:text-6xl" : "mt-3 text-7xl lg:text-[104px]")}>
           {new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" }).format(now)}
         </p>
