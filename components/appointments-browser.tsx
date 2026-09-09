@@ -639,16 +639,60 @@ function getCustomerContactLines(booking: AppointmentRecord) {
   };
 }
 
-function getBookingNotePreview(booking: AppointmentRecord) {
-  const cowlendarNote = compactValue(booking.notesText, 130);
-  if (cowlendarNote) return cowlendarNote;
+type AppointmentNotePreview = {
+  key: "office" | "booking" | "form";
+  label: string;
+  text: string;
+};
+
+function getBookingNotePreviews(booking: AppointmentRecord, officeNote?: string | null) {
+  const previews: AppointmentNotePreview[] = [];
+  const seen = new Set<string>();
+  const add = (key: AppointmentNotePreview["key"], label: string, value?: string | null) => {
+    const text = compactValue(value, 260);
+    const normalized = normalizeSearchValue(text);
+    if (!text || !normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    previews.push({ key, label, text });
+  };
+
+  add("office", "Nota ufficio", officeNote || booking.paradiseNote);
+  add("booking", "Nota prenotazione", booking.notesText);
   const formNote = getDetailValue(booking.extraDetails, [
     "note",
     "nota",
     "comment",
     "memo",
   ]);
-  return compactValue(formNote, 130);
+  add("form", "Nota modulo", formNote);
+  return previews;
+}
+
+function AppointmentNotePreviews({
+  notes,
+  compact = false,
+}: {
+  notes: AppointmentNotePreview[];
+  compact?: boolean;
+}) {
+  if (!notes.length) return null;
+  return (
+    <div className={compact ? "mt-2 space-y-1" : "mt-2 space-y-1.5"}>
+      {notes.map((note) => (
+        <div
+          key={note.key}
+          className={compact
+            ? "rounded-lg bg-[#FFF7FA] px-2 py-1.5 text-[9px] font-semibold leading-snug text-[#7E4353]"
+            : "rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
+        >
+          <span className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-[#B9476D]">
+            <MessageSquare className="size-3" /> {note.label}
+          </span>
+          <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function getOrderSearchVariants(value?: string | null) {
@@ -1845,6 +1889,7 @@ export function AppointmentsBrowser({
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
     setSelectedShopifyNoteOrder("");
+    setShopifyNoteFallbackToDeposit(false);
     setIsStaffDropdownOpen(false);
     setServiceDetailsModalOpen(false);
     // Refresh the appointment list only after the editor has been closed.
@@ -2161,9 +2206,10 @@ export function AppointmentsBrowser({
   const [todayOrdersList, setTodayOrdersList] = useState<ShopifyClientOrder[]>([]);
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
   const [selectedShopifyNoteOrder, setSelectedShopifyNoteOrder] = useState("");
+  const [shopifyNoteFallbackToDeposit, setShopifyNoteFallbackToDeposit] = useState(false);
   const [showManualShopifyCorrection] = useState(false);
 
-  async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string }) {
+  async function fetchTodayShopifyOrders(identity?: { clientName?: string; email?: string; phone?: string; shopifyOrder?: string }) {
     setLoadingTodayOrders(true);
     try {
       const params = new URLSearchParams({
@@ -2172,13 +2218,39 @@ export function AppointmentsBrowser({
         email: identity?.email ?? clientControlForm.email ?? "",
         phone: identity?.phone ?? clientControlForm.phone ?? "",
       });
-      const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`);
-      const data = await res.json().catch(() => null);
-      if (res.ok && Array.isArray(data?.orders)) {
-        setTodayOrdersList(data.orders);
+      let lastLookupError: unknown = null;
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const res = await fetch(`/api/shopify-order-lookup?${params.toString()}`, { cache: "no-store" });
+          const data = await res.json().catch(() => null);
+          if (res.ok && Array.isArray(data?.orders) && data.orders.length > 0) {
+            setTodayOrdersList(data.orders);
+            setShopifyNoteFallbackToDeposit(false);
+            return;
+          }
+        } catch (error) {
+          lastLookupError = error;
+        }
+      }
+
+      if (lastLookupError) console.error("Failed to fetch client's Shopify orders:", lastLookupError);
+      setTodayOrdersList([]);
+      const depositOrder = String(
+        identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
+      ).trim().replace(/^#/, "");
+      if (depositOrder) {
+        setSelectedShopifyNoteOrder(depositOrder);
+        setShopifyNoteFallbackToDeposit(true);
       }
     } catch (err) {
-      console.error("Failed to fetch client's Shopify orders:", err);
+      console.error("Failed to prepare client's Shopify order search:", err);
+      const depositOrder = String(
+        identity?.shopifyOrder || clientControlFormRef.current.shopifyOrder || "",
+      ).trim().replace(/^#/, "");
+      if (depositOrder) {
+        setSelectedShopifyNoteOrder(depositOrder);
+        setShopifyNoteFallbackToDeposit(true);
+      }
     } finally {
       setLoadingTodayOrders(false);
     }
@@ -2190,6 +2262,7 @@ export function AppointmentsBrowser({
   ) {
     const cleanName = order.orderName ? order.orderName.replace(/^#/, "") : "";
     setSelectedShopifyNoteOrder(cleanName);
+    setShopifyNoteFallbackToDeposit(false);
     const isSecond = forceTarget
       ? forceTarget === "second"
       : Boolean(clientControlForm.shopifyOrder && clientControlForm.shopifyOrder.trim() !== "");
@@ -2738,6 +2811,7 @@ export function AppointmentsBrowser({
         clientName: baseForm.clientName,
         email: baseForm.email,
         phone: baseForm.phone,
+        shopifyOrder: baseForm.shopifyOrder,
       });
       if (booking.bookingStr || booking.customerName) {
         void handleShopifyOrderLookup(booking.bookingStr || booking.customerName);
@@ -4673,9 +4747,6 @@ export function AppointmentsBrowser({
   const selectedContacts = selectedBooking
     ? getCustomerContactLines(selectedBooking)
     : null;
-  const selectedNotePreview = selectedBooking
-    ? getBookingNotePreview(selectedBooking)
-    : "";
   const clientControlBooking = clientControlForm.bookingId
     ? initialBookings.find(
         (booking) => booking.id === clientControlForm.bookingId,
@@ -4957,7 +5028,9 @@ export function AppointmentsBrowser({
                   {selectedShopifyNoteOrder ? (
                     <div className="mt-4 flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-xs font-black text-emerald-800">
                       <span className="grid size-5 shrink-0 place-items-center rounded-full bg-emerald-600 text-[11px] text-white">✓</span>
-                      La nota Shopify verrà salvata solo nell’ordine #{selectedShopifyNoteOrder.replace(/^#/, "")}.
+                      {shopifyNoteFallbackToDeposit
+                        ? `Dopo 2 tentativi senza risultato, la nota verrà salvata automaticamente nell’acconto #${selectedShopifyNoteOrder.replace(/^#/, "")}.`
+                        : `La nota Shopify verrà salvata solo nell’ordine #${selectedShopifyNoteOrder.replace(/^#/, "")}.`}
                     </div>
                   ) : null}
                 </div>
@@ -6837,6 +6910,8 @@ export function AppointmentsBrowser({
                           {column.bookings.length ? column.bookings.map((booking) => {
                             const status = getBookingStatus(booking);
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
+                            const otherNotePreviews = getBookingNotePreviews(booking, paradiseNote)
+                              .filter((note) => note.key !== "office");
                             return (
                               <div
                                 key={booking.id}
@@ -7019,6 +7094,7 @@ export function AppointmentsBrowser({
                                     )}
                                   </div>
                                 ) : null}
+                                <AppointmentNotePreviews notes={otherNotePreviews} compact />
                               </div>
                             );
                           }) : (
@@ -7855,6 +7931,13 @@ export function AppointmentsBrowser({
                                 Ordine {formatOrderCode(booking.bookingStr)}
                               </p>
                             ) : null}
+                            <AppointmentNotePreviews
+                              notes={getBookingNotePreviews(
+                                booking,
+                                paradiseNotes[booking.id] || booking.paradiseNote,
+                              )}
+                              compact
+                            />
                           </button>
                         ))}
                         {items.length > 4 ? (
@@ -7909,6 +7992,13 @@ export function AppointmentsBrowser({
                             {formatTime(booking.startDate)} ·{" "}
                             {booking.customerName}
                           </p>
+                          <AppointmentNotePreviews
+                            notes={getBookingNotePreviews(
+                              booking,
+                              paradiseNotes[booking.id] || booking.paradiseNote,
+                            )}
+                            compact
+                          />
                         </button>
                       ))
                     ) : (
@@ -7940,7 +8030,10 @@ export function AppointmentsBrowser({
                 : recentBookings.slice(0, appointmentsPageSize)
               ).map((booking) => {
                 const customerLines = getCustomerContactLines(booking);
-                const notePreview = getBookingNotePreview(booking);
+                const notePreviews = getBookingNotePreviews(
+                  booking,
+                  paradiseNotes[booking.id] || booking.paradiseNote,
+                );
                 const status = getBookingStatus(booking);
 
                 return (
@@ -7985,12 +8078,7 @@ export function AppointmentsBrowser({
                             {booking.bookingType || "Regular booking"}
                           </span>
                         </div>
-                        {notePreview ? (
-                          <p className="mt-2 line-clamp-2 rounded-xl bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#9C4F62]">
-                            <MessageSquare className="mr-1 inline size-3.5 align-[-2px]" />
-                            {notePreview}
-                          </p>
-                        ) : null}
+                        <AppointmentNotePreviews notes={notePreviews} />
                       </div>
                     </div>
 
@@ -8105,7 +8193,10 @@ export function AppointmentsBrowser({
               {visibleRecentBookings.map((booking) => {
                 const status = getBookingStatus(booking);
                 const customerLines = getCustomerContactLines(booking);
-                const notePreview = getBookingNotePreview(booking);
+                const notePreviews = getBookingNotePreviews(
+                  booking,
+                  paradiseNotes[booking.id] || booking.paradiseNote,
+                );
                 return (
                   <div
                     key={booking.id}
@@ -8144,12 +8235,7 @@ export function AppointmentsBrowser({
                             </span>
                           ) : null}
                         </div>
-                        {notePreview ? (
-                          <p className="mt-2 line-clamp-2 rounded-xl bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#9C4F62]">
-                            <MessageSquare className="mr-1 inline size-3.5 align-[-2px]" />
-                            {notePreview}
-                          </p>
-                        ) : null}
+                        <AppointmentNotePreviews notes={notePreviews} />
                       </div>
                     </div>
 

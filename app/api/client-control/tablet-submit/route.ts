@@ -645,7 +645,7 @@ export async function POST(request: NextRequest) {
   const customNote = isNoShow ? "Cliente non si è presentata (No Show)" : textValue(body?.customNoteText);
   const targetOrders = shopifyNoteOrder
     ? extractShopifyOrderCodes(shopifyNoteOrder)
-    : extractShopifyOrderCodes(body?.shopifyOrder, body?.secondShopifyOrder);
+    : extractShopifyOrderCodes(body?.shopifyOrder);
 
   if (!isDraft && targetOrders.length > 0) {
     const writerName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(" e ") || "Staff");
