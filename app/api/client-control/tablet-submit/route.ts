@@ -651,16 +651,19 @@ export async function POST(request: NextRequest) {
     const writerName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(" e ") || "Staff");
     const collaboratorName = isNoShow ? "NO SHOW" : (shopifyStaffNames.join(", ") || "");
 
-    for (const singleOrder of targetOrders) {
-      appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato")
-        .catch((err) => console.error(`Failed to append note to Shopify order ${singleOrder}:`, err));
+    await Promise.all(targetOrders.map(async (singleOrder) => {
+      await appendShopifyOrderNote(singleOrder, writerName, customNote || "Stato cambiato")
+        .catch((err) => {
+          console.error(`Failed to append note to Shopify order ${singleOrder}:`, err);
+          return false;
+        });
       updateShopifyOrderMetafields(
         singleOrder,
         isNoShow ? "No Show" : "Controllato",
         customNote || "",
         collaboratorName
       ).catch((err) => console.error(`Failed to update Shopify metafields for order ${singleOrder}:`, err));
-    }
+    }));
   }
 
   // AUTO-UPDATE APPOINTMENT STATUS TO COMPLETATO

@@ -195,21 +195,40 @@ export async function getShopifyOrderNamesBulk(orderIds: (string | number | null
  * the operational board.
  */
 export async function getShopifyOrderNotesBulk(
-  orderIds: (string | number | null | undefined)[],
+  orderReferences: (string | number | null | undefined)[],
 ): Promise<Map<string, string>> {
   const notes = new Map<string, string>();
-  const cleanIds = Array.from(
+  const cleanReferences = Array.from(
     new Set(
-      orderIds
-        .map((id) => String(id || "").trim())
-        .filter((id) => /^\d{10,}$/.test(id)),
+      orderReferences
+        .map((reference) => String(reference || "").trim())
+        .filter(Boolean),
     ),
   ).slice(0, 200);
-  if (!cleanIds.length) return notes;
+  if (!cleanReferences.length) return notes;
+
+  const directIds = cleanReferences.filter((reference) => /^\d{10,}$/.test(reference));
+  const requestedNames = Array.from(new Set(
+    cleanReferences
+      .filter((reference) => !/^\d{10,}$/.test(reference))
+      .map((reference) => reference.replace(/^#?/, "#"))
+      .filter((reference) => /^#\d{3,}$/.test(reference)),
+  ));
 
   const shop = process.env.SHOPIFY_SHOP_DOMAIN;
   const token = process.env.SHOPIFY_ACCESS_TOKEN;
   if (!shop || !token) return notes;
+
+  const cachedByName = requestedNames.length
+    ? await prisma.shopifyOrderCache.findMany({
+        where: { order_name: { in: requestedNames } },
+      }).catch(() => [])
+    : [];
+  const cachedNameById = new Map(cachedByName.map((record) => [record.order_id, record.order_name]));
+  const cleanIds = Array.from(new Set([
+    ...directIds,
+    ...cachedByName.map((record) => record.order_id),
+  ]));
 
   const chunks: string[][] = [];
   for (let index = 0; index < cleanIds.length; index += 50) {
@@ -218,7 +237,7 @@ export async function getShopifyOrderNotesBulk(
 
   await Promise.all(chunks.map(async (chunk) => {
     try {
-      const url = `https://${shop}/admin/api/2024-04/orders.json?ids=${chunk.join(",")}&status=any&fields=id,note`;
+      const url = `https://${shop}/admin/api/2024-04/orders.json?ids=${chunk.join(",")}&status=any&fields=id,name,note`;
       const response = await fetchWithTimeout(url, {
         headers: {
           "X-Shopify-Access-Token": token,
@@ -229,12 +248,48 @@ export async function getShopifyOrderNotesBulk(
       const payload = await response.json();
       for (const order of Array.isArray(payload?.orders) ? payload.orders : []) {
         const note = String(order?.note || "").trim();
-        if (order?.id && note) notes.set(String(order.id), note);
+        if (!order?.id || !note) continue;
+        const orderId = String(order.id);
+        const orderName = String(order.name || cachedNameById.get(orderId) || "").trim();
+        notes.set(orderId, note);
+        if (orderName) notes.set(orderName.replace(/^#?/, "#"), note);
       }
     } catch (error) {
       console.error("Error loading Shopify appointment notes:", error);
     }
   }));
+
+  const unresolvedNames = requestedNames.filter((orderName) => !notes.has(orderName));
+  if (unresolvedNames.length) {
+    try {
+      const url = `https://${shop}/admin/api/2024-04/orders.json?status=any&limit=250&fields=id,name,note`;
+      const response = await fetchWithTimeout(url, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      }, 3000);
+      if (response.ok) {
+        const payload = await response.json();
+        const unresolved = new Set(unresolvedNames);
+        for (const order of Array.isArray(payload?.orders) ? payload.orders : []) {
+          const orderName = String(order?.name || "").trim().replace(/^#?/, "#");
+          if (!unresolved.has(orderName)) continue;
+          const note = String(order?.note || "").trim();
+          if (note) notes.set(orderName, note);
+          if (order?.id) {
+            await prisma.shopifyOrderCache.upsert({
+              where: { order_id: String(order.id) },
+              update: { order_name: orderName },
+              create: { order_id: String(order.id), order_name: orderName },
+            }).catch(() => null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error loading recent Shopify appointment notes:", error);
+    }
+  }
 
   return notes;
 }

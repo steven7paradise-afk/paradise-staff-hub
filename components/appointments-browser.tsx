@@ -1677,23 +1677,33 @@ export function AppointmentsBrowser({
   }));
 
   useEffect(() => {
+    if (!initialBookings.length) return;
     const bookingsWithShopifyOrder = initialBookings.filter((booking) => booking.shopifyOrderId);
-    if (!bookingsWithShopifyOrder.length) return;
     const controller = new AbortController();
 
     fetch("/api/appointments/shopify-notes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderIds: bookingsWithShopifyOrder.map((booking) => booking.shopifyOrderId) }),
+      body: JSON.stringify({
+        orderIds: bookingsWithShopifyOrder.map((booking) => booking.shopifyOrderId),
+        appointments: initialBookings.map((booking) => ({
+          bookingId: booking.id,
+          orderId: booking.shopifyOrderId,
+        })),
+      }),
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         if (!payload?.notes || controller.signal.aborted) return;
         const notesByOrderId = payload.notes as Record<string, string>;
+        const notesByBooking = (payload.notesByBooking || {}) as Record<string, string>;
         setShopifyNotesByBooking(Object.fromEntries(
-          bookingsWithShopifyOrder
-            .map((booking) => [booking.id, notesByOrderId[String(booking.shopifyOrderId)] || ""] as const)
+          initialBookings
+            .map((booking) => [
+              booking.id,
+              notesByBooking[booking.id] || notesByOrderId[String(booking.shopifyOrderId)] || "",
+            ] as const)
             .filter((entry) => Boolean(entry[1])),
         ));
       })
