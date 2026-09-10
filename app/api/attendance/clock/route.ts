@@ -86,8 +86,9 @@ export async function POST(request: NextRequest) {
     select: { type: true, timestamp: true },
   });
 
-  // Early morning (00:00 - 06:00): exits/breaks belong to yesterday if that shift is still open.
-  if (currentRomeHour < 6 && (type === "USCITA" || type === "PAUSA")) {
+  // Early morning (00:00 - 06:00): every continuation belongs to yesterday
+  // when that shift is still open, including a return from a break.
+  if (currentRomeHour < 6 && type !== "ENTRATA") {
     const yesterdayLogs = await prisma.attendanceLog.findMany({
       where: { user_id: user.id, date: { gte: yesterdayDateOnly, lt: actualDateOnly } },
       orderBy: { timestamp: "asc" },

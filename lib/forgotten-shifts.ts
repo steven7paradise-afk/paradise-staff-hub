@@ -1,6 +1,7 @@
 import { emailTemplates, sendEmail } from "@/lib/email";
 import { createNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
+import { forgottenShiftExitTime } from "@/lib/forgotten-shift-policy";
 
 function localDay(date: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(date);
@@ -32,15 +33,20 @@ export async function closeForgottenShifts(now = new Date()) {
     include: { user: true, location: true, device: true },
     orderBy: { timestamp: "desc" },
   });
-  const latestByUser = new Map<string, (typeof logs)[number]>();
+  const logsByUser = new Map<string, typeof logs>();
   logs.forEach((log) => {
-    if (!latestByUser.has(log.user_id)) latestByUser.set(log.user_id, log);
+    logsByUser.set(log.user_id, [...(logsByUser.get(log.user_id) ?? []), log]);
   });
-  const openLogs = Array.from(latestByUser.values()).filter((log) => log.type !== "USCITA");
+  const openShifts = Array.from(logsByUser.values()).flatMap((userLogs) => {
+    const exitTime = forgottenShiftExitTime(userLogs);
+    if (!exitTime) return [];
+    const referenceLog = [...userLogs].sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+    )[0];
+    return referenceLog ? [{ log: referenceLog, exitTime }] : [];
+  });
 
-  for (const log of openLogs) {
-    const entryTime = new Date(log.timestamp);
-    const exitTime = new Date(entryTime.getTime() + 8 * 60 * 60 * 1000);
+  for (const { log, exitTime } of openShifts) {
     const timeString = new Intl.DateTimeFormat("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
@@ -75,5 +81,5 @@ export async function closeForgottenShifts(now = new Date()) {
     await Promise.allSettled([sendEmail({ to: log.user.email, ...template }), ...admins.map((admin) => sendEmail({ to: admin.email, ...template }))]);
   }
 
-  return { closed: openLogs.length };
+  return { closed: openShifts.length };
 }

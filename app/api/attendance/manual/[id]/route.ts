@@ -38,7 +38,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     create: { device_id: `ADMIN-MANUAL-${user.sede_id}`, device_name: "Correzione manuale Admin", location_id: user.sede_id, status: "BLOCKED" },
   });
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(timestamp);
-  const date = new Date(`${day}T00:00:00.000Z`);
+  const previousTimestampDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(existing.timestamp);
+  const previousShiftDay = existing.date.toISOString().slice(0, 10);
+  const wasAssignedToPreviousShift = previousShiftDay !== previousTimestampDay && existing.type !== "ENTRATA";
+  const date = wasAssignedToPreviousShift && type !== "ENTRATA"
+    ? existing.date
+    : new Date(`${day}T00:00:00.000Z`);
   const time = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Europe/Rome" }).format(timestamp);
   const storedNote = `Modificata manualmente da Admin${note ? ` - ${note}` : ""}`;
   const log = await prisma.attendanceLog.update({
