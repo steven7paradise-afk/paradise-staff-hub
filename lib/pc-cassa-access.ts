@@ -34,6 +34,7 @@ export function isPcCassaAllowedPath(pathname: string) {
 export function isPcCassaProxyAllowedPath(pathname: string) {
   const isAllowedPage =
     pathname === "/appointments/buenos-aires" ||
+    pathname === "/client-control/giornata" ||
     pathname === "/orders" ||
     pathname === "/shopify-orders" ||
     pathname.startsWith("/shopify-orders/") ||

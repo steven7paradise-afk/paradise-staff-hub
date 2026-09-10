@@ -52,6 +52,7 @@ import { AppointmentSignModal } from "./appointment-sign-modal";
 import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
+import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 import {
   allowsMissingFinalPaymentOrder,
   CLIENT_CONTROL_SERVICE_OPTIONS,
@@ -2007,6 +2008,7 @@ export function AppointmentsBrowser({
   >([]);
   const [clientControlLoading, setClientControlLoading] = useState(false);
   const [clientControlSubmitting, setClientControlSubmitting] = useState(false);
+  const [clientControlLastSave, setClientControlLastSave] = useState<"draft" | "confirmed" | null>(null);
   const [clientControlLastVisitAt, setClientControlLastVisitAt] = useState<string | null>(null);
   const [clientControlHistoryLoaded, setClientControlHistoryLoaded] = useState(false);
   const [serviceDetailsModalOpen, setServiceDetailsModalOpen] = useState(false);
@@ -2460,8 +2462,8 @@ export function AppointmentsBrowser({
       const phoneMatchB = phoneDigits && bPhone && (phoneDigits === bPhone || phoneDigits.endsWith(bPhone) || bPhone.endsWith(phoneDigits));
 
       // Email match
-      const emailMatchA = emailClean && aEmail && emailClean === aEmail;
-      const emailMatchB = emailClean && bEmail && emailClean === bEmail;
+      const emailMatchA = isLikelySameCustomerEmail(emailClean, aEmail);
+      const emailMatchB = isLikelySameCustomerEmail(emailClean, bEmail);
 
       // Full Name match (both first and last)
       const nameMatchA = nameNorm && aName && (nameNorm === aName || (nameParts.length >= 2 && aName.includes(nameParts[0]) && aName.includes(nameParts[nameParts.length - 1])));
@@ -2502,7 +2504,7 @@ export function AppointmentsBrowser({
         return true;
       }
       // 2. Match Email
-      if (emailClean && oEmail && emailClean === oEmail) {
+      if (isLikelySameCustomerEmail(emailClean, oEmail)) {
         return true;
       }
       // 3. Match Full Name
@@ -2620,19 +2622,28 @@ export function AppointmentsBrowser({
   }, [clientShopifyNoteHistory]);
 
   useEffect(() => {
+    const currentSecondOrder = String(clientControlForm.secondShopifyOrder || "").trim().replace(/^#/, "");
+    const currentDepositOrder = String(clientControlForm.shopifyOrder || "").trim().replace(/^#/, "");
+    const hasDistinctFinalOrder = Boolean(
+      currentSecondOrder && currentSecondOrder !== currentDepositOrder,
+    );
     if (
       !clientControlOpen ||
       !clientControlHistoryLoaded ||
       !suggestedSaldoOrder ||
-      String(clientControlForm.secondShopifyOrder || "").trim()
+      hasDistinctFinalOrder
     ) {
       return;
     }
 
     const cleanOrderName = suggestedSaldoOrder.orderName.replace(/^#/, "");
     setSecondOrderDetails(suggestedSaldoOrder);
+    setSelectedShopifyNoteOrder(cleanOrderName);
+    setShopifyNoteFallbackToDeposit(false);
     setClientControlForm((current) => {
-      if (String(current.secondShopifyOrder || "").trim()) return current;
+      const currentSecond = String(current.secondShopifyOrder || "").trim().replace(/^#/, "");
+      const currentDeposit = String(current.shopifyOrder || "").trim().replace(/^#/, "");
+      if (currentSecond && currentSecond !== currentDeposit) return current;
       return {
         ...current,
         secondShopifyOrder: cleanOrderName,
@@ -2647,6 +2658,7 @@ export function AppointmentsBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     clientControlForm.secondShopifyOrder,
+    clientControlForm.shopifyOrder,
     clientControlHistoryLoaded,
     clientControlOpen,
     suggestedSaldoOrder,
@@ -2830,6 +2842,7 @@ export function AppointmentsBrowser({
     const requestController = new AbortController();
     clientControlRequestRef.current = requestController;
     setClientControlMessage(null);
+    setClientControlLastSave(null);
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
     setSelectedShopifyNoteOrder("");
@@ -3137,6 +3150,7 @@ export function AppointmentsBrowser({
     keepOpen = false,
   ) {
     const formToSubmit = formOverride ?? clientControlForm;
+    if (!keepOpen) setClientControlLastSave(null);
     if (!saveAsDraft && clientControlAutoSaveTimerRef.current) {
       clearTimeout(clientControlAutoSaveTimerRef.current);
       clientControlAutoSaveTimerRef.current = null;
@@ -3282,12 +3296,13 @@ export function AppointmentsBrowser({
             ? "✓ Appuntamento modificato e salvato. Puoi continuare a fare altre modifiche."
             : "✓ Appuntamento salvato. Puoi continuare a modificarlo."),
       });
+      if (!keepOpen) setClientControlLastSave(saveAsDraft ? "draft" : "confirmed");
       setPaymentMethodPrompt({ open: false, gateways: [], resumeSubmit: false });
 
       // Flusso cassa: dopo un salvataggio riuscito si torna subito alla lista.
       // La schermata resta aperta soltanto quando c'e un avviso da leggere.
       if (!teamSyncWarning && !keepOpen) {
-        closeClientControl();
+        window.setTimeout(closeClientControl, 900);
         return;
       }
 
@@ -6440,19 +6455,19 @@ export function AppointmentsBrowser({
                   type="button"
                   onClick={() => void submitClientControlForm(undefined, true)}
                   disabled={clientControlSubmitting || clientControlLoading}
-                  className="inline-flex items-center gap-2 rounded-2xl border-2 border-[#D96B94] bg-white px-5 py-3 text-xs font-black text-[#B83D7F] transition hover:bg-[#FFF0F6] active:scale-95 disabled:opacity-60"
+                  className={`inline-flex items-center gap-2 rounded-2xl border-2 px-5 py-3 text-xs font-black transition active:scale-95 disabled:opacity-60 ${clientControlLastSave === "draft" ? "border-emerald-600 bg-emerald-600 text-white" : "border-[#D96B94] bg-white text-[#B83D7F] hover:bg-[#FFF0F6]"}`}
                 >
                   <Save className="size-4" />
-                  <span>{clientControlSubmitting ? "Salvataggio..." : "Salva bozza"}</span>
+                  <span>{clientControlSubmitting ? "Salvataggio..." : clientControlLastSave === "draft" ? "Bozza salvata ✓" : "Salva bozza"}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => void submitClientControlForm()}
                   disabled={clientControlSubmitting || clientControlLoading}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[#D96B94] to-[#B83D7F] px-6 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60"
+                  className={`inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-xs font-black text-white shadow-md transition hover:opacity-95 active:scale-95 disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "bg-emerald-600 shadow-emerald-200" : "bg-gradient-to-r from-[#D96B94] to-[#B83D7F]"}`}
                 >
                   <Check className="size-4" />
-                  <span>{clientControlSubmitting ? "Conferma..." : "Conferma controllo"}</span>
+                  <span>{clientControlSubmitting ? "Conferma..." : clientControlLastSave === "confirmed" ? "Salvato ✓" : "Conferma controllo"}</span>
                 </button>
               </div>
               </div>
@@ -8872,11 +8887,13 @@ export function AppointmentsBrowser({
                   type="button"
                   onClick={() => void submitClientControlForm()}
                   disabled={clientControlSubmitting || clientControlLoading}
-                  className="mt-5 h-13 w-full rounded-2xl bg-[#E88AC5] px-5 py-4 text-sm font-black text-white shadow-lg shadow-pink-200 transition active:scale-[0.99] disabled:opacity-60"
+                  className={`mt-5 h-13 w-full rounded-2xl px-5 py-4 text-sm font-black text-white shadow-lg transition active:scale-[0.99] disabled:opacity-60 ${clientControlLastSave === "confirmed" ? "bg-emerald-600 shadow-emerald-200" : "bg-[#E88AC5] shadow-pink-200"}`}
                 >
                   {clientControlSubmitting
                     ? "Salvataggio..."
-                    : "Salva appuntamento"}
+                    : clientControlLastSave === "confirmed"
+                      ? "Salvato ✓"
+                      : "Salva appuntamento"}
                 </button>
               </div>
             </div>

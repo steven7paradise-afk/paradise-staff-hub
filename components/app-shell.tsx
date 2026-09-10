@@ -378,10 +378,11 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     // pagine e lasciare quindi visibile una sidebar completamente vuota.
     sidebarItems = [
       { href: "/appointments/buenos-aires", label: "Appuntamenti", iconName: "CalendarDays", section: "", badge: undefined },
+      { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", section: "", badge: undefined },
       { href: "/service-forms", label: "Cassa", iconName: "ReceiptText", section: "", badge: undefined },
       { href: "/shopify-orders", label: "Ordini Shopify", iconName: "ShoppingCart", section: "", badge: undefined },
     ];
-    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/service-forms", "/shopify-orders"] }];
+    effectiveSidebarConfig = [{ id: "pc-cassa", title: "", routes: ["/appointments/buenos-aires", "/client-control/giornata", "/service-forms", "/shopify-orders"] }];
   }
   const aside = (
       <aside className={cn(

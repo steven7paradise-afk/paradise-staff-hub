@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { AppShell } from "@/components/app-shell";
 import { DailyClientControl, type DailyClientControlItem } from "@/components/daily-client-control";
 import { auth } from "@/lib/auth";
@@ -7,6 +8,7 @@ import { CLIENT_CONTROL_FIELD_IDS, isClientControlFormName } from "@/lib/client-
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
+import { appointmentsPcCookieName, appointmentsPcWorkerCookieName, checkPCAuthorization } from "@/lib/appointments-pc-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +41,25 @@ function bookingSalon(booking: any): DailyClientControlItem["salon"] {
 
 export default async function DailyClientControlPage({ searchParams }: { searchParams: Promise<{ day?: string; salone?: string }> }) {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  const accessUser = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, role: true, mansione: true, access_list: true } });
-  const role = session.user.role as Role;
-  const canAccess = accessUser ? await canAccessForUser(prisma, "/client-control", accessUser) : ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
-  if (!canAccess) redirect("/dashboard");
+  const cookieStore = await cookies();
+  const hasAdministratorSession = Boolean(session?.user?.id && ["ZERO", "SUPER_ADMIN", "ADMIN"].includes(session.user.role));
+  const pcAuth = hasAdministratorSession ? null : await checkPCAuthorization(cookieStore.get(appointmentsPcCookieName)?.value).catch(() => null);
+  const isPC = Boolean(pcAuth);
+  if (!session?.user?.id && !isPC) redirect("/login");
+
+  const accessUser = session?.user?.id
+    ? await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, role: true, mansione: true, access_list: true } })
+    : null;
+  const role = isPC ? "RESPONSABILE" : session!.user.role as Role;
+  if (!isPC) {
+    const canAccess = accessUser ? await canAccessForUser(prisma, "/client-control/giornata", accessUser) : ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"].includes(role);
+    if (!canAccess) redirect("/dashboard");
+  }
+
+  const selectedWorkerId = cookieStore.get(appointmentsPcWorkerCookieName)?.value || "";
+  const selectedPcWorker = isPC && selectedWorkerId
+    ? await prisma.user.findFirst({ where: { id: selectedWorkerId, active: true }, select: { name: true, photo_url: true } }).catch(() => null)
+    : null;
 
   const params = await searchParams;
   const day = isAppointmentDateKey(params.day) ? params.day : appointmentDateKey();
@@ -92,5 +108,5 @@ export default async function DailyClientControlPage({ searchParams }: { searchP
     };
   }).filter((item) => salon === "tutti" || item.salon === salon).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
-  return <AppShell title="Controllo giornata" subtitle="Foto, note e responsabili delle clienti di oggi." role={role} hideHeader><DailyClientControl day={day} salon={salon} items={items} /></AppShell>;
+  return <AppShell title="Controllo giornata" subtitle="Foto, note e responsabili delle clienti di oggi." role={role} hideHeader pcMode={isPC} pcDisplayUser={selectedPcWorker} hideDesktopControls={isPC} hideAdminAssistant={isPC}><DailyClientControl day={day} salon={salon} items={items} /></AppShell>;
 }

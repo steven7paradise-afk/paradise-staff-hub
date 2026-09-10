@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getShopifyOrderDetails, isFuzzyNameMatch, normalizeShopifyOrderReference } from "@/lib/shopify";
 import { getOperationalUser } from "@/lib/operational-session";
+import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
 
 export async function GET(request: NextRequest) {
   const user = await getOperationalUser(request);
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
 
       // Filter ONLY for this client's orders across all dates
       let filteredOrders = allFetchedOrders.filter((order: any) => {
-        const oEmail = (order.customer?.email || "").trim().toLowerCase();
+        const oEmail = (order.customer?.email || order.email || "").trim().toLowerCase();
         const oPhone = cleanPhone(order.customer?.phone || order.phone);
         const firstName = (order.customer?.first_name || "").trim().toLowerCase();
         const lastName = (order.customer?.last_name || "").trim().toLowerCase();
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
           return true;
         }
         // 2. Match Email
-        if (targetEmail && oEmail && targetEmail === oEmail) {
+        if (isLikelySameCustomerEmail(targetEmail, oEmail)) {
           return true;
         }
         // 3. Match Full Name (exact match or first + last name match)
