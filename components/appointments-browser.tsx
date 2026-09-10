@@ -424,13 +424,14 @@ const appointmentStatusOptions: Array<{
   { value: "PRENOTATO", label: "Confermato" },
   { value: "NON_PRESENTATO", label: "Non presentato" },
   { value: "IN_ATTESA", label: "Arrivata" },
+  { value: "INIZIATO", label: "In lavorazione" },
   { value: "COMPLETATO", label: "Completato" },
 ];
 
 const appointmentStatusLabels: Record<AppointmentStatusValue, string> = {
   PRENOTATO: "Confermato",
   NON_PRESENTATO: "Non presentato",
-  INIZIATO: "Arrivata",
+  INIZIATO: "In lavorazione",
   IN_ATTESA: "Arrivata",
   COMPLETATO: "Completato",
   ARRIVATO_IN_RITARDO: "Arrivata",
@@ -703,6 +704,77 @@ function AppointmentNotePreviews({
   );
 }
 
+function AppointmentInstantSearch({
+  value,
+  onSearchChange,
+}: {
+  value: string;
+  onSearchChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  function updateSearch(nextValue: string) {
+    setDraft(nextValue);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      onSearchChange(nextValue);
+      timerRef.current = null;
+    }, 60);
+  }
+
+  function clearSearch() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    setDraft("");
+    onSearchChange("");
+  }
+
+  return (
+    <div className="relative min-h-14 rounded-[18px] border border-white bg-white/95 shadow-[0_8px_24px_rgba(81,43,60,0.08)] transition focus-within:border-[#D86B9B] focus-within:ring-4 focus-within:ring-[#F7D9E7]">
+      <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-14 place-items-center">
+        <span className="grid size-9 place-items-center rounded-xl bg-[#FFF0F7] text-[#B44D79]">
+          <Search className="size-5" strokeWidth={2.4} />
+        </span>
+      </span>
+      <label htmlFor="appointments-client-search" className="pointer-events-none absolute left-14 top-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#A93469]">
+        Cerca cliente
+      </label>
+      <input
+        id="appointments-client-search"
+        type="search"
+        value={draft}
+        onChange={(event) => updateSearch(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") clearSearch();
+        }}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="Nome, telefono, email o numero ordine…"
+        className="h-14 w-full appearance-none rounded-[18px] bg-transparent pb-1 pl-14 pr-12 pt-4 text-sm font-bold text-[#24171D] outline-none placeholder:text-black/35 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {draft ? (
+        <button
+          type="button"
+          onClick={clearSearch}
+          className="absolute right-2 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-xl bg-[#F5EAF0] text-[#8E536F] transition hover:bg-[#F0D7E3] active:scale-95"
+          aria-label="Cancella ricerca"
+        >
+          <X className="size-4" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function getOrderSearchVariants(value?: string | null) {
   const raw = String(value || "").trim();
   if (!raw) return [];
@@ -729,13 +801,14 @@ function normalizeAppointmentStatus(
 
   if (normalized === "NON_PRESENTATO" || normalized === "NO_SHOW")
     return "NON_PRESENTATO";
-  // I vecchi stati di ingresso confluiscono nell'unico stato operativo "Arrivata".
+  // I vecchi stati di ingresso confluiscono nello stato operativo "Arrivata".
   if (
     normalized === "ARRIVATO_IN_RITARDO" ||
-    normalized === "IN_RITARDO" ||
-    normalized === "INIZIATO"
+    normalized === "IN_RITARDO"
   )
     return "IN_ATTESA";
+  if (normalized === "INIZIATO" || normalized === "IN_LAVORAZIONE")
+    return "INIZIATO";
   if (normalized === "IN_ATTESA" || normalized === "ATTESA") return "IN_ATTESA";
   if (normalized === "COMPLETATO" || normalized === "COMPLETA")
     return "COMPLETATO";
@@ -954,6 +1027,18 @@ function formatPcBreakTimer(startedAt: string, now: number) {
   const seconds = elapsedSeconds % 60;
   const parts = hours > 0 ? [hours, minutes, seconds] : [minutes, seconds];
   return parts.map((part) => String(part).padStart(2, "0")).join(":");
+}
+
+function LivePcWorkerTimer({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [startedAt]);
+
+  return <>{formatPcBreakTimer(startedAt, now)}</>;
 }
 
 function formatAppointmentTimer(totalSeconds: number) {
@@ -1444,7 +1529,7 @@ export function AppointmentsBrowser({
         // A temporary network error must not interrupt appointment management.
       } finally {
         requestInProgress = false;
-        if (!stopped) timer = setTimeout(synchronizeCustomerUpdates, 1000);
+        if (!stopped) timer = setTimeout(synchronizeCustomerUpdates, 5000);
       }
     };
 
@@ -1511,7 +1596,6 @@ export function AppointmentsBrowser({
   const [boardActiveStaff, setBoardActiveStaff] = useState<ActivePcWorker[]>([]);
   const [boardStaffLoading, setBoardStaffLoading] = useState(false);
   const [boardStaffError, setBoardStaffError] = useState("");
-  const [boardNow, setBoardNow] = useState(Date.now());
   const [draggedBoardBookingId, setDraggedBoardBookingId] = useState<string | null>(null);
   const [boardDropTargetId, setBoardDropTargetId] = useState<string | null>(null);
   const [boardWorkerOrder, setBoardWorkerOrder] = useState<string[]>([]);
@@ -1636,13 +1720,6 @@ export function AppointmentsBrowser({
       // The board remains usable when local storage is unavailable.
     }
   }, [boardWorkerOrder]);
-
-  useEffect(() => {
-    if (layoutMode !== "board") return;
-    setBoardNow(Date.now());
-    const interval = window.setInterval(() => setBoardNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [layoutMode]);
 
   function rangeForView(nextView: ViewMode, date: Date) {
     const start = new Date(date);
@@ -4309,6 +4386,9 @@ export function AppointmentsBrowser({
   const visibleRecentBookings = recentBookings.slice(0, visibleCount);
 
   const appointmentBoardColumns = useMemo(() => {
+    // While searching, the board is hidden. Avoid rebuilding all worker columns
+    // so the compact results can appear without the cost of the full board.
+    if (normalizedSearch) return [];
     const orderIndex = new Map(boardWorkerOrder.map((id, index) => [id, index]));
     const workers = boardActiveStaff
       .map((worker) => ({
@@ -4422,7 +4502,7 @@ export function AppointmentsBrowser({
         ];
 
     return columns;
-  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, initialPcWorkerName, teamByBooking]);
+  }, [boardActiveStaff, boardWorkerOrder, filteredBookings, initialPcWorkerName, normalizedSearch, teamByBooking]);
   const hiddenEmptyBoardWorkerCount = appointmentBoardColumns.filter(
     (column) =>
       column.id !== "unassigned" &&
@@ -6483,37 +6563,7 @@ export function AppointmentsBrowser({
             </div>
 
             <div className="mt-3 grid items-stretch gap-2 sm:mt-5 sm:gap-3 md:grid-cols-2 xl:grid-cols-[minmax(430px,1.5fr)_210px_190px_120px_150px]">
-              <div className="relative min-h-14 rounded-[18px] border border-white bg-white/95 shadow-[0_8px_24px_rgba(81,43,60,0.08)] transition focus-within:border-[#D86B9B] focus-within:ring-4 focus-within:ring-[#F7D9E7]">
-                <span className="pointer-events-none absolute inset-y-0 left-0 z-10 grid w-14 place-items-center">
-                  <span className="grid size-9 place-items-center rounded-xl bg-[#FFF0F7] text-[#B44D79]">
-                    <Search className="size-5" strokeWidth={2.4} />
-                  </span>
-                </span>
-                <label htmlFor="appointments-client-search" className="pointer-events-none absolute left-14 top-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-[#A93469]">
-                  Cerca cliente
-                </label>
-                <input
-                  id="appointments-client-search"
-                  type="search"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setSearchTerm("");
-                  }}
-                  placeholder="Nome, telefono, email o numero ordine…"
-                  className="h-14 w-full appearance-none rounded-[18px] bg-transparent pb-1 pl-14 pr-12 pt-4 text-sm font-bold text-[#24171D] outline-none placeholder:text-black/35 [&::-webkit-search-cancel-button]:hidden"
-                />
-                {searchTerm ? (
-                  <button
-                    type="button"
-                    onClick={() => setSearchTerm("")}
-                    className="absolute right-2 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-xl bg-[#F5EAF0] text-[#8E536F] transition hover:bg-[#F0D7E3] active:scale-95"
-                    aria-label="Cancella ricerca"
-                  >
-                    <X className="size-4" />
-                  </button>
-                ) : null}
-              </div>
+              <AppointmentInstantSearch value={searchTerm} onSearchChange={setSearchTerm} />
               <div className="relative h-11 sm:h-[52px]">
                 <button
                   type="button"
@@ -6989,7 +7039,7 @@ export function AppointmentsBrowser({
                               </p>
                               {column.id !== "unassigned" && (column.status === "BREAK" || column.status === "IN") && (column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) ? (
                                 <p className="mt-0.5 text-[9px] font-bold tabular-nums text-[#6B778C]">
-                                  Tempo trascorso {formatPcBreakTimer((column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) as string, boardNow)}
+                                  Tempo trascorso <LivePcWorkerTimer startedAt={(column.status === "BREAK" ? column.breakStartedAt : column.clockedInAt) as string} />
                                 </p>
                               ) : null}
                             </div>

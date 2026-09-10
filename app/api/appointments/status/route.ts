@@ -19,7 +19,7 @@ const allowedStatuses = new Set([
 const statusLabels: Record<CowlendarAppointmentStatus, string> = {
   PRENOTATO: "Confermato",
   NON_PRESENTATO: "Non presentato",
-  INIZIATO: "Iniziato",
+  INIZIATO: "In lavorazione",
   IN_ATTESA: "In attesa",
   COMPLETATO: "Completato",
   ARRIVATO_IN_RITARDO: "Arrivato in ritardo",
