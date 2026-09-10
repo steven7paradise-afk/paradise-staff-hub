@@ -61,6 +61,7 @@ const nav = [
   { href: "/invoices", label: "Fatture", iconName: "ReceiptText", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/refunds", label: "Rimborsi", iconName: "RotateCcw", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/client-control", label: "Controllo Cliente", iconName: "BarChart3", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
+  { href: "/client-control/giornata", label: "Controllo giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"], section: "Planning & Saloni" },
   { href: "/fine-giornata", label: "Fine giornata", iconName: "ClipboardCheck", roles: ["ZERO", "SUPER_ADMIN", "ADMIN"], section: "Planning & Saloni" },
   { href: "/tables", label: "Tabelle", iconName: "Table2", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "DIPENDENTE"], section: "Planning & Saloni" },
   { href: "/points", label: "Punti", iconName: "Award", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Planning & Saloni" },
