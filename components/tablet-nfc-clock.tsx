@@ -51,14 +51,14 @@ export function TabletNfcClock({
 
     if (badgeToken) window.history.replaceState({}, "", "/tablet-clock/nfc");
 
-    if (!device) {
-      setState("error");
-      setMessage("Questo tablet non è autorizzato. Apri prima il link di attivazione sul tablet.");
-      return;
-    }
     if (!badgeToken) {
       setState("error");
-      setMessage("Badge non rilevato. Avvicinalo nuovamente al tablet.");
+      setMessage("Questo collegamento non contiene un badge personale. Avvicina al tablet una tessera associata dall’area Badge NFC.");
+      return;
+    }
+    if (!device) {
+      setState("error");
+      setMessage("Il badge è stato letto, ma questo tablet non è autorizzato. Attiva prima il tablet nello stesso browser e sulla stessa rete.");
       return;
     }
     const authorizedDevice = device;

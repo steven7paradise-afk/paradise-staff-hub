@@ -645,7 +645,11 @@ type AppointmentNotePreview = {
   text: string;
 };
 
-function getBookingNotePreviews(booking: AppointmentRecord, officeNote?: string | null) {
+function getBookingNotePreviews(
+  booking: AppointmentRecord,
+  officeNote?: string | null,
+  completed = false,
+) {
   const previews: AppointmentNotePreview[] = [];
   const seen = new Set<string>();
   const add = (key: AppointmentNotePreview["key"], label: string, value?: string | null) => {
@@ -656,7 +660,7 @@ function getBookingNotePreviews(booking: AppointmentRecord, officeNote?: string 
     previews.push({ key, label, text });
   };
 
-  add("office", "Nota ufficio", officeNote || booking.paradiseNote);
+  add("office", completed ? "Nota completata" : "Nota ufficio", officeNote || booking.paradiseNote);
   add("booking", "Nota prenotazione", booking.notesText);
   const formNote = getDetailValue(booking.extraDetails, [
     "note",
@@ -681,12 +685,16 @@ function AppointmentNotePreviews({
       {notes.map((note) => (
         <div
           key={note.key}
-          className={compact
-            ? "rounded-lg bg-[#FFF7FA] px-2 py-1.5 text-[9px] font-semibold leading-snug text-[#7E4353]"
-            : "rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
+          className={note.label === "Nota completata"
+            ? compact
+              ? "rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[9px] font-semibold leading-snug text-emerald-900"
+              : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-900"
+            : compact
+              ? "rounded-lg bg-[#FFF7FA] px-2 py-1.5 text-[9px] font-semibold leading-snug text-[#7E4353]"
+              : "rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
         >
-          <span className="mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider text-[#B9476D]">
-            <MessageSquare className="size-3" /> {note.label}
+          <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${note.label === "Nota completata" ? "text-emerald-700" : "text-[#B9476D]"}`}>
+            {note.label === "Nota completata" ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
           </span>
           <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
         </div>
@@ -3240,6 +3248,40 @@ export function AppointmentsBrowser({
     (filterPayment !== "all" ? 1 : 0) +
     (filterStatus !== "all" ? 1 : 0);
 
+  const bookingSearchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    for (const booking of initialBookings || []) {
+      const orderVariants = getOrderSearchVariants(booking.bookingStr);
+      const liveOfficeNote = paradiseNotes[booking.id] || booking.paradiseNote;
+      const bookingTeam = teamByBooking[booking.id] || booking.teammates || [];
+      const searchableValues = [
+        booking.customerName,
+        booking.customerEmail,
+        booking.customerPhone,
+        booking.serviceTitle,
+        booking.bookingStr,
+        ...orderVariants,
+        booking.bookingType,
+        booking.dateKey,
+        ...getDateSearchValues(booking.startDate),
+        ...getDateSearchValues(booking.endDate),
+        booking.notesText,
+        liveOfficeNote,
+        booking.sheetNote,
+        ...bookingTeam.map((mate) => mate.name),
+        ...(booking.extraDetails ?? []).flatMap((item) => [item.label, item.value]),
+      ];
+      index.set(
+        booking.id,
+        searchableValues
+          .filter(Boolean)
+          .map((entry) => normalizeSearchValue(entry))
+          .join(" "),
+      );
+    }
+    return index;
+  }, [initialBookings, paradiseNotes, teamByBooking]);
+
   const filteredBookings = useMemo(() => {
     const statusScoped = showCanceled
       ? (initialBookings || []).filter((booking) => booking.isCanceled)
@@ -3314,32 +3356,9 @@ export function AppointmentsBrowser({
           });
 
     const searched = normalizedSearch
-      ? appointmentStatusScoped.filter((booking) => {
-          const orderVariants = getOrderSearchVariants(booking.bookingStr);
-          const haystack = [
-            booking.customerName,
-            booking.customerEmail,
-            booking.customerPhone,
-            booking.serviceTitle,
-            booking.bookingStr,
-            ...orderVariants,
-            booking.bookingType,
-            booking.dateKey,
-            ...getDateSearchValues(booking.startDate),
-            ...getDateSearchValues(booking.endDate),
-            booking.notesText,
-            ...getBookingTeam(booking).map((mate) => mate.name),
-            ...(booking.extraDetails ?? []).flatMap((item) => [
-              item.label,
-              item.value,
-            ]),
-          ]
-            .filter(Boolean)
-            .map((entry) => normalizeSearchValue(entry))
-            .join(" ");
-
-          return haystack.includes(normalizedSearch);
-        })
+      ? appointmentStatusScoped.filter((booking) =>
+          (bookingSearchIndex.get(booking.id) || "").includes(normalizedSearch),
+        )
       : appointmentStatusScoped;
 
     return [...searched].sort((a, b) => {
@@ -3354,6 +3373,7 @@ export function AppointmentsBrowser({
     filterPayment,
     filterStatus,
     initialBookings,
+    bookingSearchIndex,
     normalizedSearch,
     salon,
     showCanceled,
@@ -6743,7 +6763,81 @@ export function AppointmentsBrowser({
             </div>
           </section>
 
-          {layoutMode === "board" ? (
+          {normalizedSearch ? (
+            <section
+              className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]"
+              aria-live="polite"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E9DCE2] bg-[#FFF8FB] px-4 py-4 sm:px-6">
+                <div>
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#A93469]">Risultato immediato</p>
+                  <h2 className="mt-1 text-lg font-black text-[#211A1E]">
+                    {filteredBookings.length === 1
+                      ? "1 appuntamento trovato"
+                      : `${filteredBookings.length} appuntamenti trovati`}
+                  </h2>
+                </div>
+                <span className="rounded-full border border-[#F0C4D7] bg-white px-3 py-1.5 text-[10px] font-black text-[#9E3262]">
+                  Ricerca: {searchTerm.trim()}
+                </span>
+              </div>
+
+              {filteredBookings.length ? (
+                <div className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
+                  {filteredBookings.slice(0, 30).map((booking) => {
+                    const status = getBookingStatus(booking);
+                    const officeNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
+                    const notePreviews = getBookingNotePreviews(
+                      booking,
+                      officeNote,
+                      status === "COMPLETATO",
+                    );
+                    return (
+                      <button
+                        key={`instant-${booking.id}`}
+                        type="button"
+                        onClick={() => void openClientControlForBooking(booking)}
+                        className="rounded-2xl border border-[#E8DCE2] bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#D86B9B] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#F7D9E7]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-base font-black text-[#211A1E]">{booking.customerName}</p>
+                            <p className="mt-1 text-xs font-bold tabular-nums text-[#6F5662]">
+                              {formatDate(booking.startDate)} · {formatTime(booking.startDate)}–{formatTime(booking.endDate)}
+                            </p>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                            {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
+                          </span>
+                        </div>
+                        <p className="mt-3 line-clamp-2 text-xs font-bold uppercase leading-relaxed text-[#493C43]">{booking.serviceTitle}</p>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold text-[#806774]">
+                          <span>{getSalonLabel(booking.inferredSalon)}</span>
+                          {booking.bookingStr ? <span>Ordine {formatOrderCode(booking.bookingStr)}</span> : null}
+                          {booking.customerPhone ? <span>{booking.customerPhone}</span> : null}
+                        </div>
+                        <AppointmentNotePreviews notes={notePreviews} />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-8 text-center">
+                  <Search className="mx-auto size-7 text-[#CFA8BA]" />
+                  <p className="mt-3 text-sm font-black text-[#33252C]">Nessun appuntamento trovato</p>
+                  <p className="mt-1 text-xs font-semibold text-black/45">Prova con nome, telefono, email o numero ordine.</p>
+                </div>
+              )}
+
+              {filteredBookings.length > 30 ? (
+                <p className="border-t border-[#EEE2E8] px-5 py-3 text-center text-[10px] font-bold text-black/45">
+                  Mostro i primi 30 risultati. Aggiungi qualche lettera per restringere la ricerca.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          {!normalizedSearch && layoutMode === "board" ? (
             <section className="overflow-hidden rounded-xl border border-[#DFE2E7] bg-white shadow-[0_2px_8px_rgba(33,43,54,0.10)]">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EBEDF0] bg-white px-4 py-4 sm:px-5">
                 <div>
@@ -6910,7 +7004,11 @@ export function AppointmentsBrowser({
                           {column.bookings.length ? column.bookings.map((booking) => {
                             const status = getBookingStatus(booking);
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
-                            const otherNotePreviews = getBookingNotePreviews(booking, paradiseNote)
+                            const otherNotePreviews = getBookingNotePreviews(
+                              booking,
+                              paradiseNote,
+                              status === "COMPLETATO",
+                            )
                               .filter((note) => note.key !== "office");
                             return (
                               <div
@@ -7050,7 +7148,10 @@ export function AppointmentsBrowser({
                                           aria-label={`Apri i dettagli del servizio di ${booking.customerName}`}
                                         >
                                           <span className="flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-wider text-[#8A5A00]">
-                                            <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" /> Nota ufficio</span>
+                                          <span className="inline-flex items-center gap-1">
+                                            {status === "COMPLETATO" ? <Check className="size-3" /> : <MessageSquare className="size-3" />}
+                                            {status === "COMPLETATO" ? "Nota completata" : "Nota ufficio"}
+                                          </span>
                                             <span>Apri</span>
                                           </span>
                                           <span
@@ -7129,7 +7230,7 @@ export function AppointmentsBrowser({
             </section>
           ) : null}
 
-          {layoutMode === "table" ? (
+          {!normalizedSearch && layoutMode === "table" ? (
           <section className="overflow-hidden rounded-[20px] border border-[#E2D5DB] bg-white shadow-[0_14px_36px_rgba(66,39,51,0.07)] sm:rounded-[28px]">
             <div className="hidden grid-cols-[1.05fr_0.92fr_1.35fr_0.86fr_0.5fr_0.9fr_48px] gap-5 border-b border-[#E6D9DF] bg-[#F8F2F5] px-6 py-4 text-[10px] font-black uppercase tracking-[0.12em] text-[#765866] xl:grid">
               <span>Appuntamento</span>
@@ -7143,7 +7244,7 @@ export function AppointmentsBrowser({
 
             <div className="divide-y divide-[#F0E4EA]">
               {tableBookings.length ? (
-                tableBookings.map((booking, index) => {
+                tableBookings.map((booking) => {
                   const status = getBookingStatus(booking);
                   const contacts = getCustomerContactLines(booking);
                   const isSelected = selectedBooking?.id === booking.id;
@@ -7232,6 +7333,14 @@ export function AppointmentsBrowser({
                             </span>
                           </div>
                         </div>
+                        <AppointmentNotePreviews
+                          notes={getBookingNotePreviews(
+                            booking,
+                            paradiseNotes[booking.id] || booking.paradiseNote,
+                            status === "COMPLETATO",
+                          )}
+                          compact
+                        />
                       </div>
 
                       <button
@@ -7935,6 +8044,7 @@ export function AppointmentsBrowser({
                               notes={getBookingNotePreviews(
                                 booking,
                                 paradiseNotes[booking.id] || booking.paradiseNote,
+                                getBookingStatus(booking) === "COMPLETATO",
                               )}
                               compact
                             />
@@ -7996,6 +8106,7 @@ export function AppointmentsBrowser({
                             notes={getBookingNotePreviews(
                               booking,
                               paradiseNotes[booking.id] || booking.paradiseNote,
+                              getBookingStatus(booking) === "COMPLETATO",
                             )}
                             compact
                           />
@@ -8030,11 +8141,12 @@ export function AppointmentsBrowser({
                 : recentBookings.slice(0, appointmentsPageSize)
               ).map((booking) => {
                 const customerLines = getCustomerContactLines(booking);
+                const status = getBookingStatus(booking);
                 const notePreviews = getBookingNotePreviews(
                   booking,
                   paradiseNotes[booking.id] || booking.paradiseNote,
+                  status === "COMPLETATO",
                 );
-                const status = getBookingStatus(booking);
 
                 return (
                   <div
@@ -8196,6 +8308,7 @@ export function AppointmentsBrowser({
                 const notePreviews = getBookingNotePreviews(
                   booking,
                   paradiseNotes[booking.id] || booking.paradiseNote,
+                  status === "COMPLETATO",
                 );
                 return (
                   <div

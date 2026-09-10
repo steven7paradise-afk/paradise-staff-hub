@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { canManageAppointmentOfficeNotes } from "@/lib/appointment-office-note-access";
 import { requiresBuenosAiresPcCassa } from "@/lib/pc-cassa-access";
 import { canAccessSalonShiftModules } from "@/lib/salon-shift-access";
-import { getCowlendarBookingsForRange, getCowlendarServices, hasCowlendarToken } from "@/lib/cowlendar";
+import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser, type Role } from "@/lib/roles";
 import { getShopifyOrderNamesBulk } from "@/lib/shopify";
@@ -366,32 +366,26 @@ export default async function AppointmentsPage({
     : null;
   const initialSalon = requestedSalon || pcSalon || "tutti";
 
-  let loadError = "";
   let bookings = [] as Awaited<ReturnType<typeof getCowlendarBookingsForRange>>;
-  let services = [] as Awaited<ReturnType<typeof getCowlendarServices>>;
 
   if (hasCowlendarToken()) {
     try {
-      [bookings, services] = await Promise.all([
-        resolveWithin(
-          getCowlendarBookingsForRange({
-            startDate: appointmentDayBoundaryIso(appointmentRange.start),
-            endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
-            limit: 5000,
-            forceRefresh,
-          }),
-          [],
-          9_000,
-        ),
-        resolveWithin(getCowlendarServices(forceRefresh), [], 9_000),
-      ]);
+      bookings = await resolveWithin(
+        getCowlendarBookingsForRange({
+          startDate: appointmentDayBoundaryIso(appointmentRange.start),
+          endDate: appointmentDayBoundaryIso(appointmentRange.end, true),
+          limit: 5000,
+          forceRefresh,
+        }),
+        [],
+        9_000,
+      );
     } catch (error) {
-      loadError = error instanceof Error ? error.message : "Errore nel caricamento appuntamenti.";
+      console.error("Errore nel caricamento appuntamenti:", error);
     }
   }
 
   const safeBookings = Array.isArray(bookings) ? bookings : [];
-  const safeServices = Array.isArray(services) ? services : [];
 
   const corsoUsers = localUsers.filter((user) =>
     isCorsoLocation(user.location?.name) || normalizeName(user.name) === "franci"
@@ -401,10 +395,7 @@ export default async function AppointmentsPage({
     : null;
 
   const cowlendarTeamOptionsByName = new Map<string, { id: string; name: string; photoUrl?: string | null }>();
-  const cowlendarTeammates = [
-    ...safeBookings.flatMap((booking) => booking.teammates ?? []),
-    ...safeServices.flatMap((service) => service.teammates ?? []),
-  ];
+  const cowlendarTeammates = safeBookings.flatMap((booking) => booking.teammates ?? []);
 
   for (const mate of cowlendarTeammates) {
     const name = cleanTeamName(`${mate.firstname ?? ""} ${mate.lastname ?? ""}`.trim());
