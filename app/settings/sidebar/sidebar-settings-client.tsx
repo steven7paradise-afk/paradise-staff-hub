@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,11 +20,12 @@ import {
   PanelLeft,
   RotateCcw,
   Layers3,
+  UsersRound,
   X,
 } from "lucide-react";
 import { Card } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { roleLabels, routePermissions, type Role } from "@/lib/roles";
+import { routePermissions } from "@/lib/roles";
 import { SIDEBAR_ICON_OPTIONS } from "@/lib/sidebar-icons";
 
 type SidebarFolder = {
@@ -33,22 +34,13 @@ type SidebarFolder = {
   routes: string[];
   labels?: Record<string, string>;
   icons?: Record<string, string>;
-  roles?: Role[];
   area?: "LAVORO" | "PERSONALE";
 };
 
-const SIDEBAR_ROLES: Role[] = [
-  "DIPENDENTE",
-  "RESPONSABILE",
-  "MAGAZZINO",
-  "ADMIN",
-  "SUPER_ADMIN",
-  "ZERO",
-];
-
-function isFolderVisibleForRole(folder: SidebarFolder, role: Role) {
-  return folder.roles === undefined || folder.roles.includes(role);
-}
+type SidebarLayoutConfig = {
+  default: SidebarFolder[];
+  targets: Record<string, SidebarFolder[]>;
+};
 
 const PAGE_ICONS: Record<string, string> = {
   "/dashboard": "LayoutDashboard",
@@ -162,45 +154,100 @@ const DEFAULT_LAYOUT: SidebarFolder[] = [
     id: "generale",
     title: "Generale",
     routes: ["/dashboard", "/my-shifts", "/tasks", "/notifications", "/email"],
+    area: "LAVORO",
   },
   {
     id: "planning",
     title: "Planning & Saloni",
     routes: ["/schedules", "/orders"],
+    area: "LAVORO",
   },
   {
     id: "staff",
     title: "Gestione Staff",
     routes: ["/requests", "/documents", "/malattie"],
+    area: "PERSONALE",
   },
-  { id: "settings", title: "Impostazioni", routes: ["/profile", "/settings"] },
+  { id: "settings", title: "Impostazioni", routes: ["/profile", "/settings"], area: "PERSONALE" },
 ];
 
-function getInitialLayout(initialLayout: SidebarFolder[] | null) {
-  return initialLayout &&
-    Array.isArray(initialLayout) &&
-    initialLayout.length > 0
-    ? initialLayout
-    : DEFAULT_LAYOUT;
+function normalizeMansioneKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function inferArea(folder: Pick<SidebarFolder, "title" | "area">) {
+  if (folder.area) return folder.area;
+  const title = folder.title.toLowerCase();
+  return title.includes("il mio lavoro") || title.includes("personale") || title.includes("profilo")
+    ? "PERSONALE" as const
+    : "LAVORO" as const;
+}
+
+function normalizeFolders(value: unknown): SidebarFolder[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item, index) => {
+      const folder: SidebarFolder = {
+        id: typeof item.id === "string" ? item.id : `folder-${index}`,
+        title: typeof item.title === "string" ? item.title : "Sezione",
+        routes: Array.isArray(item.routes) ? item.routes.filter((route): route is string => typeof route === "string") : [],
+        labels: item.labels && typeof item.labels === "object" && !Array.isArray(item.labels) ? item.labels as Record<string, string> : {},
+        icons: item.icons && typeof item.icons === "object" && !Array.isArray(item.icons) ? item.icons as Record<string, string> : {},
+        area: item.area === "PERSONALE" || item.area === "LAVORO" ? item.area : undefined,
+      };
+      return { ...folder, area: inferArea(folder) };
+    });
+}
+
+function cloneFolders(folders: SidebarFolder[]) {
+  return folders.map((folder) => ({
+    ...folder,
+    routes: [...folder.routes],
+    labels: { ...folder.labels },
+    icons: { ...folder.icons },
+  }));
+}
+
+function getInitialConfig(initialLayout: unknown): SidebarLayoutConfig {
+  if (Array.isArray(initialLayout)) {
+    const folders = normalizeFolders(initialLayout);
+    return { default: folders.length ? folders : cloneFolders(DEFAULT_LAYOUT), targets: {} };
+  }
+  if (initialLayout && typeof initialLayout === "object") {
+    const raw = initialLayout as { default?: unknown; targets?: unknown };
+    const defaultFolders = normalizeFolders(raw.default);
+    const rawTargets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
+      ? raw.targets as Record<string, unknown>
+      : {};
+    return {
+      default: defaultFolders.length ? defaultFolders : cloneFolders(DEFAULT_LAYOUT),
+      targets: Object.fromEntries(
+        Object.entries(rawTargets).map(([key, value]) => [normalizeMansioneKey(key), normalizeFolders(value)]),
+      ),
+    };
+  }
+  return { default: cloneFolders(DEFAULT_LAYOUT), targets: {} };
 }
 
 export function SidebarSettingsClient({
   initialLayout,
+  mansioni,
 }: {
-  initialLayout: SidebarFolder[] | null;
+  initialLayout: unknown;
+  mansioni: string[];
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
-  // Layout state
-  const [folders, setFolders] = useState<SidebarFolder[]>(() =>
-    getInitialLayout(initialLayout),
-  );
+  const initialConfig = useMemo(() => getInitialConfig(initialLayout), [initialLayout]);
+  const [layoutConfig, setLayoutConfig] = useState<SidebarLayoutConfig>(initialConfig);
   const [savedLayout, setSavedLayout] = useState(() =>
-    JSON.stringify(getInitialLayout(initialLayout)),
+    JSON.stringify(initialConfig),
   );
+  const [activeTarget, setActiveTarget] = useState("default");
 
   const [newFolderName, setNewFolderName] = useState("");
   const [activeFolderForAdd, setActiveFolderForAdd] = useState<string>("");
@@ -209,8 +256,36 @@ export function SidebarSettingsClient({
     () => new Set(),
   );
   const [editingRouteKey, setEditingRouteKey] = useState<string | null>(null);
-  const [previewRole, setPreviewRole] = useState<Role>("DIPENDENTE");
   const [previewArea, setPreviewArea] = useState<"LAVORO" | "PERSONALE">("LAVORO");
+
+  const mansioneOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+    mansioni.forEach((mansione) => labels.set(normalizeMansioneKey(mansione), mansione.trim()));
+    Object.keys(layoutConfig.targets).forEach((key) => {
+      if (!labels.has(key)) labels.set(key, key);
+    });
+    return Array.from(labels, ([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "it", { sensitivity: "base" }));
+  }, [layoutConfig.targets, mansioni]);
+  const isDefaultTarget = activeTarget === "default";
+  const isInheritedTarget = !isDefaultTarget && !Object.prototype.hasOwnProperty.call(layoutConfig.targets, activeTarget);
+  const folders = isDefaultTarget
+    ? layoutConfig.default
+    : layoutConfig.targets[activeTarget] ?? layoutConfig.default;
+  const activeTargetLabel = isDefaultTarget
+    ? "Menu generale"
+    : mansioneOptions.find((option) => option.key === activeTarget)?.label ?? activeTarget;
+
+  const setFolders = (value: SetStateAction<SidebarFolder[]>) => {
+    setLayoutConfig((current) => {
+      const currentFolders = activeTarget === "default"
+        ? current.default
+        : current.targets[activeTarget] ?? cloneFolders(current.default);
+      const nextFolders = typeof value === "function" ? value(currentFolders) : value;
+      if (activeTarget === "default") return { ...current, default: nextFolders };
+      return { ...current, targets: { ...current.targets, [activeTarget]: nextFolders } };
+    });
+  };
 
   const assignedRouteHrefs = new Set(folders.flatMap((f) => f.routes));
   const unassignedPages = ALL_PAGES.filter(
@@ -226,11 +301,15 @@ export function SidebarSettingsClient({
     (total, folder) => total + folder.routes.length,
     0,
   );
-  const serializedLayout = JSON.stringify(folders);
+  const serializedLayout = JSON.stringify(layoutConfig);
   const hasUnsavedChanges = savedLayout !== serializedLayout;
 
   useEffect(() => {
-    if (folders.length > 0 && !activeFolderForAdd) {
+    if (!folders.length) {
+      setActiveFolderForAdd("");
+      return;
+    }
+    if (!folders.some((folder) => folder.id === activeFolderForAdd)) {
       setActiveFolderForAdd(folders[0].id);
     }
   }, [folders, activeFolderForAdd]);
@@ -292,17 +371,6 @@ export function SidebarSettingsClient({
     });
   };
 
-  const handleToggleFolderRole = (folderId: string, role: Role) => {
-    setFolders((current) => current.map((folder) => {
-      if (folder.id !== folderId) return folder;
-      const currentRoles = folder.roles ?? SIDEBAR_ROLES;
-      const roles = currentRoles.includes(role)
-        ? currentRoles.filter((item) => item !== role)
-        : SIDEBAR_ROLES.filter((item) => currentRoles.includes(item) || item === role);
-      return { ...folder, roles };
-    }));
-  };
-
   const handleSetFolderArea = (folderId: string, area: "LAVORO" | "PERSONALE") => {
     setFolders((current) => current.map((folder) => folder.id === folderId
       ? { ...folder, area }
@@ -316,7 +384,7 @@ export function SidebarSettingsClient({
     )
       return;
     try {
-      setFolders(JSON.parse(savedLayout) as SidebarFolder[]);
+      setLayoutConfig(JSON.parse(savedLayout) as SidebarLayoutConfig);
       setSuccessMsg("");
       setErrorMsg("");
     } catch {
@@ -424,7 +492,7 @@ export function SidebarSettingsClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          layout: folders,
+          layout: layoutConfig,
         }),
       });
 
@@ -435,9 +503,9 @@ export function SidebarSettingsClient({
         );
       }
 
-      setSavedLayout(JSON.stringify(folders));
+      setSavedLayout(JSON.stringify(layoutConfig));
       setSuccessMsg(
-        "Ordine della barra laterale salvato. Ricarica la pagina per vedere il nuovo ordinamento.",
+        "Menu salvato. Ogni lavoratore vedrà le pagine della propria mansione.",
       );
       router.refresh();
     } catch (err: any) {
@@ -445,6 +513,16 @@ export function SidebarSettingsClient({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetMansione = () => {
+    if (isDefaultTarget || isInheritedTarget) return;
+    if (!window.confirm(`Ripristinare per “${activeTargetLabel}” il menu generale?`)) return;
+    setLayoutConfig((current) => {
+      const targets = { ...current.targets };
+      delete targets[activeTarget];
+      return { ...current, targets };
+    });
   };
 
   return (
@@ -509,6 +587,57 @@ export function SidebarSettingsClient({
         </div>
       )}
 
+      <Card className="border border-zinc-200 bg-white p-4 shadow-sm hover:translate-y-0 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
+              <UsersRound size={19} />
+            </span>
+            <div>
+              <p className="text-sm font-black text-zinc-950">Menu per mansione</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                La stessa pagina può essere aggiunta a tutte le mansioni che ne hanno bisogno.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
+              Mansione da configurare
+              <select
+                value={activeTarget}
+                onChange={(event) => {
+                  setActiveTarget(event.target.value);
+                  setEditingRouteKey(null);
+                  setPageQuery("");
+                }}
+                className="mt-1 block h-11 min-w-64 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-bold normal-case tracking-normal text-zinc-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="default">Menu generale (amministratori)</option>
+                {mansioneOptions.map((option) => (
+                  <option key={option.key} value={option.key}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            {!isDefaultTarget && !isInheritedTarget ? (
+              <button
+                type="button"
+                onClick={handleResetMansione}
+                className="mt-auto h-11 rounded-xl border border-zinc-200 bg-white px-4 text-xs font-black text-zinc-600 transition hover:bg-zinc-50"
+              >
+                Usa menu generale
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {!isDefaultTarget ? (
+          <div className={`mt-4 rounded-xl px-3 py-2.5 text-xs font-bold ${isInheritedTarget ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>
+            {isInheritedTarget
+              ? `${activeTargetLabel} usa per ora il menu generale. La prima modifica creerà automaticamente il suo menu personale.`
+              : `${activeTargetLabel} ha un menu personalizzato.`}
+          </div>
+        ) : null}
+      </Card>
+
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="space-y-5 border border-zinc-200 bg-white p-4 shadow-sm hover:translate-y-0 sm:p-6">
           <div className="flex flex-col gap-4 border-b border-zinc-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
@@ -520,7 +649,7 @@ export function SidebarSettingsClient({
                 </h2>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                Per ogni sezione scegli Personale o Lavoro e i ruoli che possono vederla.
+                Stai configurando <strong>{activeTargetLabel}</strong>. Per ogni sezione scegli Personale o Lavoro.
               </p>
             </div>
             <div className="flex w-full gap-2 lg:max-w-md">
@@ -606,7 +735,7 @@ export function SidebarSettingsClient({
                   </div>
                   {!isCollapsed && (
                     <div className="space-y-2 p-3">
-                      <div className="mb-3 grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3 lg:grid-cols-[auto_1fr]">
+                      <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3">
                         <fieldset>
                           <legend className="px-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
                             Tipo di sezione
@@ -629,32 +758,6 @@ export function SidebarSettingsClient({
                           </div>
                         </fieldset>
 
-                        <fieldset>
-                          <legend className="px-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
-                            Visibile per questi ruoli
-                          </legend>
-                          <div className="mt-1 flex flex-wrap gap-2">
-                            {SIDEBAR_ROLES.map((role) => {
-                              const selected = isFolderVisibleForRole(folder, role);
-                              return (
-                                <button
-                                  key={role}
-                                  type="button"
-                                  aria-pressed={selected}
-                                  onClick={() => handleToggleFolderRole(folder.id, role)}
-                                  className={`min-h-9 rounded-full border px-3 text-[10px] font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-zinc-200 bg-white text-zinc-500 hover:border-blue-300 hover:text-blue-700"}`}
-                                >
-                                  {role === "DIPENDENTE" ? "Lavoratore" : roleLabels[role]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {folder.roles?.length === 0 ? (
-                            <p className="mt-2 text-[11px] font-bold text-amber-700">
-                              Seleziona almeno un ruolo oppure questa sezione resterà nascosta a tutti.
-                            </p>
-                          ) : null}
-                        </fieldset>
                       </div>
                       {folder.routes.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-5 text-center text-xs font-semibold text-zinc-400">
@@ -844,21 +947,9 @@ export function SidebarSettingsClient({
                   Anteprima menu
                 </p>
                 <p className="mt-0.5 text-[11px] text-zinc-500">
-                  Come apparirà al personale
+                  {activeTargetLabel}
                 </p>
               </div>
-              <select
-                value={previewRole}
-                onChange={(event) => setPreviewRole(event.target.value as Role)}
-                className="h-9 rounded-xl border border-zinc-200 bg-white px-2 text-[10px] font-black text-zinc-700 outline-none focus:border-blue-500"
-                aria-label="Ruolo mostrato nell'anteprima"
-              >
-                {SIDEBAR_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {role === "DIPENDENTE" ? "Lavoratore" : roleLabels[role]}
-                  </option>
-                ))}
-              </select>
             </div>
             <div
               className="m-3 min-h-[440px] overflow-hidden rounded-2xl border border-black/5 p-3"
@@ -892,7 +983,6 @@ export function SidebarSettingsClient({
               </div>
               <div className="space-y-4">
                 {folders
-                  .filter((folder) => isFolderVisibleForRole(folder, previewRole))
                   .filter((folder) => (folder.area ?? "LAVORO") === previewArea)
                   .map((folder) => (
                   <div key={folder.id}>
@@ -934,11 +1024,23 @@ export function SidebarSettingsClient({
                   </div>
                 ))}
               </div>
+              <div className="mt-6 border-t border-current/10 pt-3">
+                <p className="px-2 text-[8px] font-black uppercase tracking-[0.18em] opacity-45">Account</p>
+                <div className="mt-2 flex items-center gap-2 rounded-xl bg-white/10 px-2.5 py-2">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/25">
+                    <UsersRound className="size-3.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[10px] font-black">Nome lavoratore</p>
+                    <p className="truncate text-[8px] font-bold opacity-55">{activeTargetLabel}</p>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="space-y-2 px-4 pb-4">
               <p className="text-xs leading-relaxed text-zinc-500">
-                L’anteprima mostra soltanto le sezioni della categoria e del
-                ruolo selezionati. Qui modifichi ordine, visibilità, nomi e icone.
+                L’anteprima mostra le sezioni della mansione e della categoria
+                selezionata. L’account resta sempre disponibile in basso.
               </p>
               <Link
                 href="/settings/branding"

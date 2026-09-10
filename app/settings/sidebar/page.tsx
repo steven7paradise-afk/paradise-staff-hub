@@ -25,19 +25,35 @@ export default async function SidebarSettingsPage() {
     redirect("/dashboard");
   }
 
-  // Fetch current layout settings from DB
-  const layoutSetting = await prisma.setting.findUnique({
-    where: { key: "sidebar_configuration" }
-  });
+  const [layoutSetting, usersWithMansione, mansioniSetting] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: "sidebar_configuration" } }),
+    prisma.user.findMany({
+      where: { active: true, NOT: { mansione: null } },
+      select: { mansione: true },
+      orderBy: { mansione: "asc" },
+    }),
+    prisma.setting.findUnique({ where: { key: "mansioni_permissions" } }),
+  ]);
+
+  const configuredMansioni = mansioniSetting?.value
+    && typeof mansioniSetting.value === "object"
+    && !Array.isArray(mansioniSetting.value)
+      ? Object.keys(mansioniSetting.value as Record<string, unknown>)
+      : [];
+  const mansioni = Array.from(new Set([
+    ...usersWithMansione.map((user) => String(user.mansione || "").trim()),
+    ...configuredMansioni,
+  ].filter(Boolean))).sort((a, b) => a.localeCompare(b, "it", { sensitivity: "base" }));
 
   return (
     <AppShell
       title="Organizza Barra Laterale"
-      subtitle="Organizza le sezioni, scegli per quali ruoli sono visibili e personalizza ordine, nome e icona dei tasti."
+      subtitle="Scegli una mansione e organizza le sue pagine nelle aree Lavoro e Personale."
       role={role}
     >
       <SidebarSettingsClient
         initialLayout={layoutSetting ? (layoutSetting.value as any) : null}
+        mansioni={mansioni}
       />
     </AppShell>
   );

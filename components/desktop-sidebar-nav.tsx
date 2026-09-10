@@ -47,7 +47,7 @@ export function DesktopSidebarNav({
 }: DesktopSidebarNavProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
-  const [activeArea, setActiveArea] = useState<"LAVORO" | "PERSONALE">("PERSONALE");
+  const [activeArea, setActiveArea] = useState<"LAVORO" | "PERSONALE">("LAVORO");
   const pathname = usePathname();
 
   const getSidebarLabel = (href: string, fallback: string) => {
@@ -59,8 +59,8 @@ export function DesktopSidebarNav({
   const filteredItems = items.filter((item) =>
     getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
   );
-  const configuredAreas = new Set(sidebarConfig?.map((folder) => folder.area ?? "LAVORO") ?? []);
-  const hasAreaSwitch = configuredAreas.has("LAVORO") && configuredAreas.has("PERSONALE");
+  const hasAreaSwitch = sidebarConfig !== null
+    && !sidebarConfig.some((folder) => folder.id === "pc-cassa" || folder.id === "ex-dipendente");
   const activePageArea = sidebarConfig?.find((folder) =>
     folder.routes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
   )?.area ?? "LAVORO";

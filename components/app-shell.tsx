@@ -25,7 +25,7 @@ import { RemoteControlBridge } from "@/components/remote-control-bridge";
 import pkg from "@/package.json";
 import { redirect } from "next/navigation";
 import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
-import { isSidebarIconName } from "@/lib/sidebar-icons";
+import { resolveSidebarLayout, type SidebarFolder } from "@/lib/sidebar-layout";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -88,64 +88,6 @@ const permissionMenuOverrides = [
   { href: "/service-notes", label: "NOTE", iconName: "FilePenLine", section: "Generale" },
   { href: "/service-forms", label: "Moduli operativi", iconName: "ReceiptText", section: "Planning & Saloni" },
 ] satisfies { href: string; label: string; iconName: string; section?: string }[];
-
-type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string>; icons?: Record<string, string>; roles?: Role[]; area?: "LAVORO" | "PERSONALE" };
-
-function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
-  const allowedRoles: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"];
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown; icons?: unknown; roles?: unknown; area?: unknown } => Boolean(folder) && typeof folder === "object")
-    .map((folder) => ({
-      id: typeof folder.id === "string" ? folder.id : "folder",
-      title: typeof folder.title === "string" ? folder.title : "Menu",
-      routes: Array.isArray(folder.routes) ? folder.routes.filter((route): route is string => typeof route === "string") : [],
-      labels: folder.labels && typeof folder.labels === "object" && !Array.isArray(folder.labels)
-        ? Object.fromEntries(
-            Object.entries(folder.labels as Record<string, unknown>)
-              .filter(([route, label]) => typeof route === "string" && typeof label === "string")
-          ) as Record<string, string>
-        : {},
-      icons: folder.icons && typeof folder.icons === "object" && !Array.isArray(folder.icons)
-        ? Object.fromEntries(
-            Object.entries(folder.icons as Record<string, unknown>)
-              .filter(([route, icon]) => typeof route === "string" && isSidebarIconName(icon))
-          ) as Record<string, string>
-        : {},
-      roles: Array.isArray(folder.roles)
-        ? folder.roles.filter((role): role is Role => allowedRoles.includes(role as Role))
-        : undefined,
-      area: folder.area === "PERSONALE" ? "PERSONALE" : "LAVORO",
-    }));
-}
-
-function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | null): SidebarFolder[] | null {
-  if (Array.isArray(value)) {
-    const folders = normalizeSidebarFolders(value)
-      .filter((folder) => folder.roles === undefined || folder.roles.includes(role));
-    return folders;
-  }
-
-  if (value && typeof value === "object") {
-    const raw = value as { default?: unknown; targets?: unknown };
-    const targets = raw.targets && typeof raw.targets === "object" && !Array.isArray(raw.targets)
-      ? raw.targets as Record<string, unknown>
-      : {};
-    
-    // Ignore mansione layouts for system roles so they always get the full admin layout.
-    const isSystemAdmin = role === "ZERO" || role === "SUPER_ADMIN" || role === "ADMIN";
-    const cleanMansione = !isSystemAdmin && mansione?.trim().toLowerCase();
-    
-    const targetLayout = cleanMansione && targets[cleanMansione]
-      ? targets[cleanMansione]
-      : targets[role];
-    const folders = normalizeSidebarFolders(targetLayout || raw.default)
-      .filter((folder) => folder.roles === undefined || folder.roles.includes(role));
-    return folders;
-  }
-
-  return null;
-}
 
 function uniqueMenuItemsForAccess(role: Role) {
   const items = [
@@ -331,7 +273,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
     .filter((item) => item.href !== "/tables" || userHasTablesAccess)
     .filter((item) => item.href !== "/tasks" || userHasTaskAccess);
 
-  let sidebarConfig = resolveSidebarConfig(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
+  let sidebarConfig = resolveSidebarLayout(sidebarConfigSetting?.value, currentRole, currentUser?.mansione);
   if (
     (["ZERO", "SUPER_ADMIN", "ADMIN"].includes(currentRole) || effectivePermissionSet?.view.includes("/fine-giornata"))
     && sidebarConfig
@@ -456,7 +398,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             logoUrl={branding.logo_url}
             userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
             userPhoto={displayUser?.photo_url ? resolveDrivePhotoUrl(displayUser.photo_url) : null}
-            roleLabel={isPcCassa ? "PC Cassa" : currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            roleLabel={isPcCassa ? "PC Cassa" : currentUser?.mansione?.trim() || (currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole])}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
             sidebarConfig={effectiveSidebarConfig}
@@ -502,7 +444,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
             logoUrl={branding.logo_url}
             userName={displayUser?.name ?? session?.user?.name ?? "PC Cassa"}
             userPhoto={displayUser?.photo_url ?? null}
-            roleLabel={isPcCassa ? "PC Cassa" : currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole]}
+            roleLabel={isPcCassa ? "PC Cassa" : currentUser?.mansione?.trim() || (currentRole === "DIPENDENTE" ? "Collaboratore" : roleLabels[currentRole])}
             currentRole={currentRole}
             unreadNotifications={unreadNotifications}
             items={sidebarItems}
