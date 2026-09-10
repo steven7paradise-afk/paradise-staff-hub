@@ -155,6 +155,7 @@ model User {
   inventory_labels_created  InventoryLabel[]           @relation("InventoryLabelCreator")
   inventory_movements       InventoryMovement[]
   inventory_print_jobs      InventoryPrintJob[]
+  inventory_count_sessions  InventoryCountSession[]
 
   @@map("users")
 }
@@ -250,10 +251,24 @@ model InventoryProduct {
   labels                    InventoryLabel[]
   movements                 InventoryMovement[]
   sync_jobs                 InventoryStockSyncJob[]
+  count_scans               InventoryCountScan[]
 
   @@index([name])
   @@index([category])
   @@map("inventory_products")
+}
+
+model InventoryCatalog {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String?
+  cover_image_url String?
+  active          Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([active, name])
+  @@map("inventory_catalogs")
 }
 
 model InventoryLocation {
@@ -272,6 +287,7 @@ model InventoryLocation {
   movements_from      InventoryMovement[]     @relation("InventoryMovementFrom")
   movements_to        InventoryMovement[]     @relation("InventoryMovementTo")
   sync_jobs           InventoryStockSyncJob[]
+  count_sessions      InventoryCountSession[]
 
   @@index([kind, active])
   @@map("inventory_locations")
@@ -297,6 +313,7 @@ model InventoryLabel {
   created_by       User                     @relation("InventoryLabelCreator", fields: [created_by_id], references: [id])
   movements        InventoryMovement[]
   print_job_labels InventoryPrintJobLabel[]
+  count_scans      InventoryCountScan[]
 
   @@index([product_id, status])
   @@index([location_id, status])
@@ -370,6 +387,44 @@ model InventoryStockSyncJob {
   @@index([status, created_at])
   @@index([product_id, location_id, created_at])
   @@map("inventory_stock_sync_jobs")
+}
+
+model InventoryCountSession {
+  id              String               @id @default(cuid())
+  location_id     String
+  created_by_id   String
+  inventory_date  DateTime             @db.Date
+  status          String               @default("COMPLETED")
+  scans_count     Int
+  products_count  Int
+  summary         Json
+  created_at      DateTime             @default(now())
+  completed_at    DateTime             @default(now())
+  location        InventoryLocation    @relation(fields: [location_id], references: [id])
+  created_by      User                 @relation(fields: [created_by_id], references: [id])
+  scans           InventoryCountScan[]
+
+  @@index([location_id, inventory_date])
+  @@index([inventory_date, created_at])
+  @@index([created_by_id, created_at])
+  @@map("inventory_count_sessions")
+}
+
+model InventoryCountScan {
+  id                 String                @id @default(cuid())
+  session_id         String
+  product_id         String
+  inventory_label_id String?
+  raw_code           String
+  scanned_at         DateTime              @default(now())
+  session            InventoryCountSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  product            InventoryProduct      @relation(fields: [product_id], references: [id])
+  inventory_label    InventoryLabel?        @relation(fields: [inventory_label_id], references: [id])
+
+  @@index([session_id, scanned_at])
+  @@index([product_id, scanned_at])
+  @@index([inventory_label_id])
+  @@map("inventory_count_scans")
 }
 
 model ScheduleCategory {

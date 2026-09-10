@@ -5,9 +5,12 @@ import {
   applyInventoryOperation,
   createInventoryPrintJob,
   createInventoryProduct,
+  ensureInventoryLocations,
   findInventoryScan,
   generateInventoryLabels,
   getInventoryOverview,
+  resolveInventoryCountCode,
+  saveInventoryCount,
 } from "@/lib/inventory";
 import { inventoryManagementRoles, inventoryOperationRoles, normalizeInventoryCode } from "@/lib/inventory-rules";
 import { prisma } from "@/lib/prisma";
@@ -41,6 +44,15 @@ export async function GET(request: NextRequest) {
       const result = await findInventoryScan(scan);
       return NextResponse.json({ result, scannedCode: normalizeInventoryCode(scan) });
     }
+    const countCode = request.nextUrl.searchParams.get("countCode");
+    if (countCode !== null) {
+      return NextResponse.json({ result: await resolveInventoryCountCode(countCode), scannedCode: normalizeInventoryCode(countCode) });
+    }
+    if (request.nextUrl.searchParams.get("countSetup") === "1") {
+      await ensureInventoryLocations();
+      const locations = await prisma.inventoryLocation.findMany({ where: { active: true }, select: { id: true, name: true, code: true, kind: true, address: true }, orderBy: [{ kind: "asc" }, { name: "asc" }] });
+      return NextResponse.json({ locations, permissions: { operate: inventoryOperationRoles.has(user.role) } });
+    }
     const query = request.nextUrl.searchParams.get("q") ?? "";
     return NextResponse.json({ data: await getInventoryOverview(query), permissions: { manage: inventoryManagementRoles.has(user.role), operate: inventoryOperationRoles.has(user.role) } });
   } catch (error) {
@@ -57,6 +69,19 @@ export async function POST(request: NextRequest) {
     const canManage = inventoryManagementRoles.has(user.role);
     const canOperate = inventoryOperationRoles.has(user.role);
 
+    if (action === "createCatalog") {
+      if (!canManage) return NextResponse.json({ error: "Solo amministratori e responsabili possono creare cataloghi." }, { status: 403 });
+      const name = String(body.name ?? "").trim();
+      if (!name) throw new Error("Il nome del catalogo è obbligatorio.");
+      const catalog = await prisma.inventoryCatalog.create({
+        data: {
+          name,
+          description: String(body.description ?? "").trim() || null,
+          cover_image_url: String(body.coverImageUrl ?? "").trim() || null,
+        },
+      });
+      return NextResponse.json({ catalog });
+    }
     if (action === "createProduct") {
       if (!canManage) return NextResponse.json({ error: "Solo amministratori e responsabili possono creare prodotti." }, { status: 403 });
       return NextResponse.json({ product: await createInventoryProduct(body) });
@@ -93,6 +118,10 @@ export async function POST(request: NextRequest) {
     if (action === "generateLabels") {
       if (!canOperate) return NextResponse.json({ error: "Non puoi generare etichette." }, { status: 403 });
       return NextResponse.json({ labels: await generateInventoryLabels(body, user.id) });
+    }
+    if (action === "saveInventoryCount") {
+      if (!canOperate) return NextResponse.json({ error: "Non puoi registrare inventari." }, { status: 403 });
+      return NextResponse.json(await saveInventoryCount(body, user.id));
     }
     if (action === "moveLabel") {
       if (!canOperate) return NextResponse.json({ error: "Non puoi movimentare il magazzino." }, { status: 403 });

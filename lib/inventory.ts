@@ -44,18 +44,19 @@ export async function getInventoryOverview(query = "") {
     ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { sku: { contains: search, mode: "insensitive" } }, { barcode: { contains: search, mode: "insensitive" } }] }
     : {};
 
-  const [products, locations, statusCounts, locationCounts, recentLabels, movements] = await Promise.all([
-    prisma.inventoryProduct.findMany({ where: productWhere, orderBy: { name: "asc" }, take: 200 }),
+  const [products, catalogs, locations, statusCounts, locationCounts, recentLabels, movements] = await Promise.all([
+    prisma.inventoryProduct.findMany({ where: productWhere, orderBy: { name: "asc" }, take: 1000 }),
+    prisma.inventoryCatalog.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.inventoryLocation.findMany({ where: { active: true }, orderBy: [{ kind: "asc" }, { name: "asc" }] }),
     prisma.inventoryLabel.groupBy({ by: ["product_id", "status"], _count: { _all: true } }),
     prisma.inventoryLabel.groupBy({ by: ["location_id", "status"], _count: { _all: true } }),
     prisma.inventoryLabel.findMany({
       where: search ? { OR: [{ label_code: { contains: search, mode: "insensitive" } }, { barcode: { contains: search, mode: "insensitive" } }, { lot_number: { contains: search, mode: "insensitive" } }] } : {},
-      include: { product: true, location: true }, orderBy: { created_at: "desc" }, take: 120,
+      include: { product: true, location: true }, orderBy: { created_at: "desc" }, take: 500,
     }),
     prisma.inventoryMovement.findMany({
       include: { product: { select: { name: true, sku: true } }, label: { select: { label_code: true, barcode: true } }, from_location: { select: { name: true } }, to_location: { select: { name: true } }, user: { select: { name: true } } },
-      orderBy: { created_at: "desc" }, take: 100,
+      orderBy: { created_at: "desc" }, take: 500,
     }),
   ]);
 
@@ -74,6 +75,7 @@ export async function getInventoryOverview(query = "") {
 
   return {
     products: products.map((product) => ({ ...product, counts: countsByProduct.get(product.id) ?? {} })),
+    catalogs,
     locations: locations.map((location) => ({ ...location, counts: countsByLocation.get(location.id) ?? {} })),
     labels: recentLabels,
     movements,
@@ -91,11 +93,112 @@ export async function findInventoryScan(rawCode: unknown) {
   if (!code) return null;
   const label = await prisma.inventoryLabel.findFirst({
     where: { OR: [{ barcode: code }, { label_code: code }] },
-    include: { product: true, location: true, movements: { include: { user: { select: { name: true } }, from_location: { select: { name: true } }, to_location: { select: { name: true } } }, orderBy: { created_at: "desc" }, take: 20 } },
+    include: { product: true, location: true, movements: { include: { label: { select: { label_code: true, barcode: true } }, user: { select: { name: true } }, from_location: { select: { name: true } }, to_location: { select: { name: true } } }, orderBy: { created_at: "desc" } } },
   });
-  if (label) return { kind: "label" as const, label };
-  const product = await prisma.inventoryProduct.findFirst({ where: { OR: [{ sku: code }, { barcode: code }] } });
+  if (label) {
+    const [productLabels, productMovements] = await Promise.all([
+      prisma.inventoryLabel.findMany({ where: { product_id: label.product_id }, include: { location: true }, orderBy: { created_at: "desc" } }),
+      prisma.inventoryMovement.findMany({
+        where: { product_id: label.product_id },
+        include: { label: { select: { label_code: true, barcode: true } }, user: { select: { name: true } }, from_location: { select: { name: true } }, to_location: { select: { name: true } } },
+        orderBy: { created_at: "desc" },
+      }),
+    ]);
+    return { kind: "label" as const, label, productLabels, productMovements };
+  }
+  const product = await prisma.inventoryProduct.findFirst({
+    where: { OR: [{ sku: code }, { barcode: code }] },
+    include: {
+      labels: { include: { location: true }, orderBy: { created_at: "desc" } },
+      movements: { include: { label: { select: { label_code: true, barcode: true } }, user: { select: { name: true } }, from_location: { select: { name: true } }, to_location: { select: { name: true } } }, orderBy: { created_at: "desc" } },
+    },
+  });
   return product ? { kind: "product" as const, product } : null;
+}
+
+export async function resolveInventoryCountCode(rawCode: unknown) {
+  const code = normalizeInventoryCode(rawCode);
+  if (!code) return null;
+  const label = await prisma.inventoryLabel.findFirst({
+    where: { OR: [{ barcode: code }, { label_code: code }] },
+    select: { id: true, label_code: true, status: true, location: { select: { id: true, name: true } }, product: { select: { id: true, name: true, sku: true, barcode: true, image_url: true, category: true } } },
+  });
+  if (label) return { code, kind: "label" as const, label, product: label.product };
+  const product = await prisma.inventoryProduct.findFirst({
+    where: { active: true, OR: [{ sku: code }, { barcode: code }] },
+    select: { id: true, name: true, sku: true, barcode: true, image_url: true, category: true },
+  });
+  return product ? { code, kind: "product" as const, label: null, product } : null;
+}
+
+export async function saveInventoryCount(input: Record<string, unknown>, userId: string) {
+  const locationId = String(input.locationId ?? "");
+  const inventoryDateValue = String(input.inventoryDate ?? "").trim();
+  const codes = Array.isArray(input.codes) ? input.codes.map(normalizeInventoryCode).filter(Boolean) : [];
+  if (!locationId) throw new Error("Seleziona il salone o il magazzino del conteggio.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inventoryDateValue)) throw new Error("Seleziona la data dell’inventario.");
+  const [year, month, day] = inventoryDateValue.split("-").map(Number);
+  const inventoryDate = new Date(Date.UTC(year, month - 1, day, 12));
+  if (inventoryDate.toISOString().slice(0, 10) !== inventoryDateValue) throw new Error("La data dell’inventario non è valida.");
+  const todayInRome = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  if (inventoryDateValue > todayInRome) throw new Error("Non puoi registrare un inventario con una data futura.");
+  if (!codes.length) throw new Error("Scansiona almeno un prodotto prima di salvare.");
+  if (codes.length > 2000) throw new Error("Puoi salvare al massimo 2.000 scansioni per inventario.");
+
+  return prisma.$transaction(async (tx) => {
+    const location = await tx.inventoryLocation.findFirst({ where: { id: locationId, active: true }, select: { id: true, name: true, kind: true } });
+    if (!location) throw new Error("La sede selezionata non è più disponibile.");
+    const uniqueCodes = Array.from(new Set(codes));
+    const labels = await tx.inventoryLabel.findMany({
+      where: { OR: [{ barcode: { in: uniqueCodes } }, { label_code: { in: uniqueCodes } }] },
+      select: { id: true, barcode: true, label_code: true, product_id: true },
+    });
+    const labelProductIds = Array.from(new Set(labels.map((label) => label.product_id)));
+    const products = await tx.inventoryProduct.findMany({
+      where: { active: true, OR: [{ id: { in: labelProductIds } }, { barcode: { in: uniqueCodes } }, { sku: { in: uniqueCodes } }] },
+      select: { id: true, barcode: true, sku: true, name: true },
+    });
+    const labelByCode = new Map<string, (typeof labels)[number]>();
+    for (const label of labels) { labelByCode.set(label.barcode, label); labelByCode.set(label.label_code, label); }
+    const productByCode = new Map<string, (typeof products)[number]>();
+    for (const product of products) { if (product.barcode) productByCode.set(product.barcode, product); productByCode.set(product.sku, product); }
+    const duplicateUnits = codes.filter((code, index) => labelByCode.has(code) && codes.indexOf(code) !== index);
+    if (duplicateUnits.length) throw new Error(`La confezione ${duplicateUnits[0]} è stata scansionata più di una volta.`);
+
+    const resolved = codes.map((code) => {
+      const label = labelByCode.get(code);
+      const product = label ? products.find((item) => item.id === label.product_id) : productByCode.get(code);
+      if (!product) throw new Error(`Codice non riconosciuto: ${code}`);
+      return { code, product, label };
+    });
+    const grouped = new Map<string, { productId: string; name: string; counted: number }>();
+    for (const item of resolved) {
+      const current = grouped.get(item.product.id) ?? { productId: item.product.id, name: item.product.name, counted: 0 };
+      current.counted += 1;
+      grouped.set(item.product.id, current);
+    }
+    const productIds = Array.from(grouped.keys());
+    const expected = await tx.inventoryLabel.groupBy({
+      by: ["product_id"],
+      where: { product_id: { in: productIds }, location_id: locationId, status: { in: availableStatuses } },
+      _count: { _all: true },
+    });
+    const expectedByProduct = new Map(expected.map((row) => [row.product_id, row._count._all]));
+    const summary = Array.from(grouped.values()).map((item) => ({ ...item, expected: expectedByProduct.get(item.productId) ?? 0, difference: item.counted - (expectedByProduct.get(item.productId) ?? 0) }));
+    const session = await tx.inventoryCountSession.create({
+      data: {
+        location_id: locationId,
+        created_by_id: userId,
+        inventory_date: inventoryDate,
+        scans_count: resolved.length,
+        products_count: grouped.size,
+        summary,
+        scans: { create: resolved.map((item) => ({ raw_code: item.code, product_id: item.product.id, inventory_label_id: item.label?.id ?? null })) },
+      },
+      include: { location: { select: { name: true, kind: true } }, created_by: { select: { name: true } } },
+    });
+    return { session, summary };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function createInventoryProduct(input: Record<string, unknown>) {
@@ -104,19 +207,21 @@ export async function createInventoryProduct(input: Record<string, unknown>) {
   if (!name || !sku) throw new Error("Nome e SKU sono obbligatori.");
   const minimumStock = Number(input.minimumStock ?? 0);
   if (!Number.isInteger(minimumStock) || minimumStock < 0) throw new Error("La scorta minima deve essere un numero intero positivo.");
-  return prisma.inventoryProduct.create({
-    data: {
+  const category = String(input.category ?? "").trim() || null;
+  return prisma.$transaction(async (tx) => {
+    if (category) await tx.inventoryCatalog.upsert({ where: { name: category }, update: { active: true }, create: { name: category } });
+    return tx.inventoryProduct.create({ data: {
       name,
       sku,
       barcode: normalizeInventoryCode(input.barcode) || null,
       description: String(input.description ?? "").trim() || null,
-      category: String(input.category ?? "").trim() || null,
+      category,
       image_url: String(input.imageUrl ?? "").trim() || null,
       minimum_stock: minimumStock,
       shopify_product_id: String(input.shopifyProductId ?? "").trim() || null,
       shopify_variant_id: String(input.shopifyVariantId ?? "").trim() || null,
       shopify_inventory_item_id: String(input.shopifyInventoryItemId ?? "").trim() || null,
-    },
+    } });
   });
 }
 
