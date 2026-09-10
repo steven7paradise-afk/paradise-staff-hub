@@ -18,6 +18,7 @@ export const roleLabels: Record<Role, string> = {
 export const routePermissions: Record<string, Role[]> = {
   "/dashboard": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
   "/hub": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"],
+  "/magazzino": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"],
   "/my-shifts": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"],
   "/responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"],
   "/programmazione-responsabile-di-turno": ["ZERO", "SUPER_ADMIN", "ADMIN"],
@@ -75,6 +76,7 @@ export const routePermissions: Record<string, Role[]> = {
 };
 
 export function defaultEditRolesForPath(pathname: string): Role[] {
+  if (pathname === "/magazzino") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/social-calendar") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"];
   if (pathname === "/shipping") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"];
   if (pathname === "/orders" || pathname === "/shopify-orders" || pathname === "/recruitment") return ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"];
@@ -86,6 +88,8 @@ export function defaultEditRolesForPath(pathname: string): Role[] {
 const legacyAccessRouteMap: Record<string, string> = {
   dashboard: "/dashboard",
   hub: "/hub",
+  magazzino: "/magazzino",
+  inventario: "/magazzino",
   "paradise hub": "/hub",
   "i miei turni": "/my-shifts",
   turni: "/my-shifts",
@@ -220,6 +224,12 @@ export function normalizeRolePermissions(value: unknown): RolePermissionMap {
     next[role] = {
       view: Array.from(new Set([...next[role].view, "/fine-giornata"])),
       edit: Array.from(new Set([...next[role].edit, "/fine-giornata"])),
+    };
+  });
+  (["SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO"] as Role[]).forEach((role) => {
+    next[role] = {
+      view: Array.from(new Set([...next[role].view, "/magazzino"])),
+      edit: Array.from(new Set([...next[role].edit, "/magazzino"])),
     };
   });
   next.ZERO = defaults.ZERO;

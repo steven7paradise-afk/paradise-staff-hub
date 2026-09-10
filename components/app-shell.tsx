@@ -40,7 +40,7 @@ function getContrastYIQ(hexcolor: string) {
 const nav = [
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
-  { href: "/hub", label: "Magazzino Paradise", iconName: "PanelsTopLeft", roles: routePermissions["/hub"], section: "Generale" },
+  { href: "/magazzino", label: "Magazzino", iconName: "Boxes", roles: routePermissions["/magazzino"], section: "Planning & Saloni" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/responsabile-di-turno", label: "Responsabile di turno", iconName: "UserRound", roles: routePermissions["/responsabile-di-turno"], section: "Generale" },
   { href: "/programmazione-responsabile-di-turno", label: "Turni responsabili", iconName: "CalendarDays", roles: routePermissions["/programmazione-responsabile-di-turno"], section: "Generale" },

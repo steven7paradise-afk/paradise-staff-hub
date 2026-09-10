@@ -1,101 +1,110 @@
+import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getWarehouseState, saveWarehouseState, type WarehouseProduct } from "@/lib/internal-warehouse";
+import {
+  applyInventoryOperation,
+  createInventoryPrintJob,
+  createInventoryProduct,
+  findInventoryScan,
+  generateInventoryLabels,
+  getInventoryOverview,
+} from "@/lib/inventory";
+import { inventoryManagementRoles, inventoryOperationRoles, normalizeInventoryCode } from "@/lib/inventory-rules";
+import { prisma } from "@/lib/prisma";
+import { canAccessForUser } from "@/lib/roles";
 
-const managementRoles = new Set(["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE"]);
+export const dynamic = "force-dynamic";
 
-function slug(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 80);
+async function currentInventoryUser() {
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, role: true, mansione: true, access_list: true } });
+  if (!user || !(await canAccessForUser(prisma, "/magazzino", user))) return null;
+  return user;
 }
 
-export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
-  const state = await getWarehouseState();
-  return NextResponse.json({ state });
+function apiError(error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    return NextResponse.json({ error: "Questo SKU, barcode o collegamento Shopify è già registrato." }, { status: 409 });
+  }
+  const message = error instanceof Error ? error.message : "Operazione non riuscita.";
+  const conflict = /già uscita|altro operatore|già registrato/i.test(message);
+  return NextResponse.json({ error: message }, { status: conflict ? 409 : 400 });
+}
+
+export async function GET(request: NextRequest) {
+  const user = await currentInventoryUser();
+  if (!user) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  try {
+    const scan = request.nextUrl.searchParams.get("scan");
+    if (scan !== null) {
+      const result = await findInventoryScan(scan);
+      return NextResponse.json({ result, scannedCode: normalizeInventoryCode(scan) });
+    }
+    const query = request.nextUrl.searchParams.get("q") ?? "";
+    return NextResponse.json({ data: await getInventoryOverview(query), permissions: { manage: inventoryManagementRoles.has(user.role), operate: inventoryOperationRoles.has(user.role) } });
+  } catch (error) {
+    return apiError(error);
+  }
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id || !managementRoles.has(session.user.role)) {
-    return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  const user = await currentInventoryUser();
+  if (!user) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
+  try {
+    const body = await request.json() as Record<string, unknown>;
+    const action = String(body.action ?? "");
+    const canManage = inventoryManagementRoles.has(user.role);
+    const canOperate = inventoryOperationRoles.has(user.role);
+
+    if (action === "createProduct") {
+      if (!canManage) return NextResponse.json({ error: "Solo amministratori e responsabili possono creare prodotti." }, { status: 403 });
+      return NextResponse.json({ product: await createInventoryProduct(body) });
+    }
+    if (action === "updateProduct") {
+      if (!canManage) return NextResponse.json({ error: "Permesso insufficiente." }, { status: 403 });
+      const id = String(body.productId ?? "");
+      if (!id) throw new Error("Prodotto non valido.");
+      const product = await prisma.inventoryProduct.update({
+        where: { id },
+        data: {
+          name: body.name === undefined ? undefined : String(body.name).trim(),
+          minimum_stock: body.minimumStock === undefined ? undefined : Math.max(0, Number(body.minimumStock) || 0),
+          image_url: body.imageUrl === undefined ? undefined : String(body.imageUrl).trim() || null,
+          category: body.category === undefined ? undefined : String(body.category).trim() || null,
+          active: body.active === undefined ? undefined : Boolean(body.active),
+        },
+      });
+      return NextResponse.json({ product });
+    }
+    if (action === "createLocation") {
+      if (!canManage) return NextResponse.json({ error: "Permesso insufficiente." }, { status: 403 });
+      const name = String(body.name ?? "").trim();
+      const code = normalizeInventoryCode(body.code).replace(/[^A-Z0-9-]+/g, "-");
+      if (!name || !code) throw new Error("Nome e codice sede sono obbligatori.");
+      return NextResponse.json({ location: await prisma.inventoryLocation.create({ data: { name, code, kind: "WAREHOUSE", address: String(body.address ?? "").trim() || null } }) });
+    }
+    if (action === "updateLocation") {
+      if (!canManage) return NextResponse.json({ error: "Permesso insufficiente." }, { status: 403 });
+      const locationId = String(body.locationId ?? "");
+      if (!locationId) throw new Error("Sede non valida.");
+      return NextResponse.json({ location: await prisma.inventoryLocation.update({ where: { id: locationId }, data: { shopify_location_id: String(body.shopifyLocationId ?? "").trim() || null } }) });
+    }
+    if (action === "generateLabels") {
+      if (!canOperate) return NextResponse.json({ error: "Non puoi generare etichette." }, { status: 403 });
+      return NextResponse.json({ labels: await generateInventoryLabels(body, user.id) });
+    }
+    if (action === "moveLabel") {
+      if (!canOperate) return NextResponse.json({ error: "Non puoi movimentare il magazzino." }, { status: 403 });
+      return NextResponse.json({ label: await applyInventoryOperation(body, user.id) });
+    }
+    if (action === "printLabels") {
+      if (!canOperate) return NextResponse.json({ error: "Non puoi stampare etichette." }, { status: 403 });
+      const ids = Array.isArray(body.labelIds) ? body.labelIds.map(String) : [];
+      return NextResponse.json(await createInventoryPrintJob(ids, user.id, String(body.printerName ?? "")));
+    }
+    return NextResponse.json({ error: "Azione non valida." }, { status: 400 });
+  } catch (error) {
+    return apiError(error);
   }
-
-  const body = await request.json();
-  const action = String(body.action ?? "");
-  const state = await getWarehouseState();
-
-  if (action === "createCollection") {
-    const name = String(body.name ?? "").trim();
-    if (!name) return NextResponse.json({ error: "Nome collezione obbligatorio." }, { status: 400 });
-    const id = `collection-${slug(name)}-${Date.now().toString(36)}`;
-    state.collections = [...state.collections, { id, name, description: String(body.description ?? ""), productIds: [] }];
-    return NextResponse.json({ state: await saveWarehouseState(state) });
-  }
-
-  if (action === "addProductToCollection") {
-    const collectionId = String(body.collectionId ?? "");
-    const productId = String(body.productId ?? "");
-    const collection = state.collections.find((item) => item.id === collectionId);
-    if (!collection) return NextResponse.json({ error: "Collezione non trovata." }, { status: 404 });
-    const productExists = state.inventories.some((inventory) => inventory.products.some((product) => product.id === productId));
-    if (!productExists) return NextResponse.json({ error: "Prodotto non trovato." }, { status: 404 });
-    collection.productIds = Array.from(new Set([...collection.productIds, productId]));
-    state.inventories = state.inventories.map((inventory) => ({
-      ...inventory,
-      products: inventory.products.map((product) =>
-        product.id === productId ? { ...product, collectionIds: Array.from(new Set([...product.collectionIds, collectionId])) } : product,
-      ),
-    }));
-    return NextResponse.json({ state: await saveWarehouseState(state) });
-  }
-
-  if (action === "createProduct") {
-    const inventoryId = String(body.inventoryId ?? "");
-    const name = String(body.name ?? "").trim();
-    const inventory = state.inventories.find((item) => item.id === inventoryId);
-    if (!inventory) return NextResponse.json({ error: "Magazzino non trovato." }, { status: 404 });
-    if (!name) return NextResponse.json({ error: "Nome prodotto obbligatorio." }, { status: 400 });
-    const quantities = {
-      cm40: Number(body.cm40) || 0,
-      cm55: Number(body.cm55) || 0,
-      cm65: Number(body.cm65) || 0,
-      cm75: Number(body.cm75) || 0,
-    };
-    const collectionIds = Array.isArray(body.collectionIds) ? body.collectionIds.map(String) : [];
-    const product: WarehouseProduct = {
-      id: `${inventoryId}:custom-${slug(name)}-${Date.now().toString(36)}`,
-      name,
-      quantities,
-      total: quantities.cm40 + quantities.cm55 + quantities.cm65 + quantities.cm75,
-      collectionIds,
-      custom: true,
-    };
-    inventory.products = [...inventory.products, product];
-    inventory.totals = inventory.products.reduce(
-      (sum, item) => {
-        sum.cm40 += item.quantities.cm40;
-        sum.cm55 += item.quantities.cm55;
-        sum.cm65 += item.quantities.cm65;
-        sum.cm75 += item.quantities.cm75;
-        sum.total += item.total;
-        return sum;
-      },
-      { cm40: 0, cm55: 0, cm65: 0, cm75: 0, total: 0 },
-    );
-    state.collections = state.collections.map((collection) =>
-      collectionIds.includes(collection.id)
-        ? { ...collection, productIds: Array.from(new Set([...collection.productIds, product.id])) }
-        : collection,
-    );
-    return NextResponse.json({ state: await saveWarehouseState(state) });
-  }
-
-  return NextResponse.json({ error: "Azione non valida." }, { status: 400 });
 }
