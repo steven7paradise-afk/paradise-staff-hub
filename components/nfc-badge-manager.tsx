@@ -38,7 +38,7 @@ export function NfcBadgeManager({ initialWorkers }: { initialWorkers: Worker[] }
       const reader = new NDEFReader();
       const bytes = crypto.getRandomValues(new Uint8Array(32));
       const badgeToken = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-      const badgeUrl = `${window.location.origin}/tablet-clock?badge=${badgeToken}`;
+      const badgeUrl = `${window.location.origin}/tablet-clock/nfc?badge=${badgeToken}`;
       setMessage({ ok: true, text: `Avvicina ora la tessera di ${worker.name}. Il vecchio link verrà sostituito.` });
       await reader.write({ records: [{ recordType: "url", data: badgeUrl }] }, { signal: controller.signal });
       const data = await api("POST", { userId: worker.id, badgeToken });

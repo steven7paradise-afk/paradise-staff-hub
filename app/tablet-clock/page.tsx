@@ -5,6 +5,7 @@ import { getBrandingTheme } from "@/lib/branding";
 import { authorizedTablet, requestIp, tabletCookieName, tabletDeviceCookieName } from "@/lib/tablet-auth";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { ensureClientControlForm, CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { getCowlendarBookingsForRange, hasCowlendarToken } from "@/lib/cowlendar";
 import { getShopifyOrderNamesBulk, isFuzzyNameMatch } from "@/lib/shopify";
@@ -63,6 +64,11 @@ export default async function TabletClockPage({
   searchParams: Promise<{ device?: string; badge?: string }>;
 }) {
   const params = await searchParams;
+  if (params.badge) {
+    const nextParams = new URLSearchParams({ badge: params.badge });
+    if (params.device) nextParams.set("device", params.device);
+    redirect(`/tablet-clock/nfc?${nextParams.toString()}`);
+  }
   const [cookieStore, headerStore, session] = await Promise.all([
     cookies(),
     headers(),

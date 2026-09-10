@@ -122,3 +122,27 @@ export function permittedAttendanceActions(status: AttendanceStateType): Attenda
   if (status === "BREAK") return ["RIENTRO", "USCITA"];
   return ["PAUSA", "USCITA"];
 }
+
+/**
+ * Returns the next action for the one-tap NFC flow.
+ * The NFC sequence intentionally allows one pause per workday:
+ * ENTRATA -> PAUSA -> RIENTRO -> USCITA.
+ */
+export function nextSequentialAttendanceAction<TLog extends AttendanceStateLog>(
+  logs: TLog[],
+  fallbackStatus: AttendanceStateType = "OUT",
+): AttendanceActionType | null {
+  const state = deriveAttendanceState(logs);
+
+  if (state.lastExit) return null;
+  if (!state.firstEntry) {
+    // Before 06:00 the open shift may belong to the previous calendar day.
+    if (logs.length === 0 && fallbackStatus === "BREAK") return "RIENTRO";
+    if (logs.length === 0 && fallbackStatus === "IN") return "USCITA";
+    return "ENTRATA";
+  }
+  if (state.status === "BREAK") return "RIENTRO";
+  if (state.status === "IN" && state.lastReturn) return "USCITA";
+  if (state.status === "IN") return "PAUSA";
+  return null;
+}
