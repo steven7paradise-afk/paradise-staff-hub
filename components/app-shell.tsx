@@ -89,12 +89,13 @@ const permissionMenuOverrides = [
   { href: "/service-forms", label: "Moduli operativi", iconName: "ReceiptText", section: "Planning & Saloni" },
 ] satisfies { href: string; label: string; iconName: string; section?: string }[];
 
-type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string>; icons?: Record<string, string> };
+type SidebarFolder = { id: string; title: string; routes: string[]; labels?: Record<string, string>; icons?: Record<string, string>; roles?: Role[]; area?: "LAVORO" | "PERSONALE" };
 
 function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
+  const allowedRoles: Role[] = ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"];
   if (!Array.isArray(value)) return [];
   return value
-    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown; icons?: unknown } => Boolean(folder) && typeof folder === "object")
+    .filter((folder): folder is { id?: unknown; title?: unknown; routes?: unknown; labels?: unknown; icons?: unknown; roles?: unknown; area?: unknown } => Boolean(folder) && typeof folder === "object")
     .map((folder) => ({
       id: typeof folder.id === "string" ? folder.id : "folder",
       title: typeof folder.title === "string" ? folder.title : "Menu",
@@ -111,11 +112,19 @@ function normalizeSidebarFolders(value: unknown): SidebarFolder[] {
               .filter(([route, icon]) => typeof route === "string" && isSidebarIconName(icon))
           ) as Record<string, string>
         : {},
+      roles: Array.isArray(folder.roles)
+        ? folder.roles.filter((role): role is Role => allowedRoles.includes(role as Role))
+        : undefined,
+      area: folder.area === "PERSONALE" ? "PERSONALE" : "LAVORO",
     }));
 }
 
 function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | null): SidebarFolder[] | null {
-  if (Array.isArray(value)) return normalizeSidebarFolders(value);
+  if (Array.isArray(value)) {
+    const folders = normalizeSidebarFolders(value)
+      .filter((folder) => folder.roles === undefined || folder.roles.includes(role));
+    return folders;
+  }
 
   if (value && typeof value === "object") {
     const raw = value as { default?: unknown; targets?: unknown };
@@ -130,8 +139,9 @@ function resolveSidebarConfig(value: unknown, role: Role, mansione?: string | nu
     const targetLayout = cleanMansione && targets[cleanMansione]
       ? targets[cleanMansione]
       : targets[role];
-    const folders = normalizeSidebarFolders(targetLayout || raw.default);
-    return folders.length > 0 ? folders : null;
+    const folders = normalizeSidebarFolders(targetLayout || raw.default)
+      .filter((folder) => folder.roles === undefined || folder.roles.includes(role));
+    return folders;
   }
 
   return null;
@@ -347,7 +357,7 @@ export async function AppShell({ children, title, subtitle, role, hideHeader = f
   };
 
   const getStructuredMenuItems = <T extends { href: string }>(flatList: T[]): T[] => {
-    if (!sidebarConfig || !Array.isArray(sidebarConfig) || sidebarConfig.length === 0) {
+    if (sidebarConfig === null) {
       return flatList;
     }
     const ordered: T[] = [];

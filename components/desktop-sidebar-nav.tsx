@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, Search, X } from "lucide-react";
+import { BriefcaseBusiness, ChevronDown, Search, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -21,6 +21,7 @@ type SidebarFolder = {
   title: string;
   routes: string[];
   labels?: Record<string, string>;
+  area?: "LAVORO" | "PERSONALE";
 };
 
 type DesktopSidebarNavProps = {
@@ -46,6 +47,7 @@ export function DesktopSidebarNav({
 }: DesktopSidebarNavProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
+  const [activeArea, setActiveArea] = useState<"LAVORO" | "PERSONALE">("PERSONALE");
   const pathname = usePathname();
 
   const getSidebarLabel = (href: string, fallback: string) => {
@@ -57,11 +59,18 @@ export function DesktopSidebarNav({
   const filteredItems = items.filter((item) =>
     getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
   );
+  const configuredAreas = new Set(sidebarConfig?.map((folder) => folder.area ?? "LAVORO") ?? []);
+  const hasAreaSwitch = configuredAreas.has("LAVORO") && configuredAreas.has("PERSONALE");
+  const activePageArea = sidebarConfig?.find((folder) =>
+    folder.routes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
+  )?.area ?? "LAVORO";
 
   // Group items by Section or Config Folders
   const getRenderSections = () => {
-    if (sidebarConfig && Array.isArray(sidebarConfig) && sidebarConfig.length > 0) {
-      const sectionsToRender = sidebarConfig.map((sec) => {
+    if (sidebarConfig !== null) {
+      const sectionsToRender = sidebarConfig
+        .filter((sec) => !hasAreaSwitch || (sec.area ?? "LAVORO") === activeArea)
+        .map((sec) => {
         const matchedItems = filteredItems
           .filter((item) => sec.routes.includes(item.href))
           .sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
@@ -96,12 +105,16 @@ export function DesktopSidebarNav({
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
   useEffect(() => {
+    if (hasAreaSwitch) setActiveArea(activePageArea);
+  }, [activePageArea, hasAreaSwitch, pathname]);
+
+  useEffect(() => {
     if (activeSectionId) {
       setOpenSectionId(activeSectionId);
       return;
     }
-    setOpenSectionId((current) => current ?? sections[0]?.id ?? null);
-  }, [activeSectionId, pathname]);
+    setOpenSectionId((current) => sections.some((section) => section.id === current) ? current : sections[0]?.id ?? null);
+  }, [activeArea, activeSectionId, pathname]);
 
   return (
     <div className="app-liquid-sidebar-nav flex h-full flex-col font-[family-name:var(--sidebar-font)]">
@@ -137,6 +150,30 @@ export function DesktopSidebarNav({
           </button>
         ) : null}
       </div>
+
+      {hasAreaSwitch ? (
+        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-white/12 bg-white/[0.06] p-1">
+          {(["PERSONALE", "LAVORO"] as const).map((area) => {
+            const selected = activeArea === area;
+            const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
+            return (
+              <button
+                key={area}
+                type="button"
+                onClick={() => setActiveArea(area)}
+                aria-pressed={selected}
+                className={cn(
+                  "flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-[9px] font-black uppercase tracking-[0.12em] transition",
+                  selected ? "bg-white text-zinc-900 shadow-sm" : "text-white/55 hover:text-white",
+                )}
+              >
+                <Icon className="size-3.5" />
+                {area === "PERSONALE" ? "Personale" : "Lavoro"}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto" aria-label="Navigazione principale">
         <div className="space-y-4 px-1 pb-4">

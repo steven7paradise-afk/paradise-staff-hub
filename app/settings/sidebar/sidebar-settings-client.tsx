@@ -10,7 +10,6 @@ import {
   Trash2,
   Plus,
   Save,
-  Sparkles,
   AlertCircle,
   CheckCircle2,
   FolderPlus,
@@ -25,7 +24,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui";
 import { DynamicIcon } from "@/components/dynamic-icon";
-import { routePermissions } from "@/lib/roles";
+import { roleLabels, routePermissions, type Role } from "@/lib/roles";
 import { SIDEBAR_ICON_OPTIONS } from "@/lib/sidebar-icons";
 
 type SidebarFolder = {
@@ -34,7 +33,22 @@ type SidebarFolder = {
   routes: string[];
   labels?: Record<string, string>;
   icons?: Record<string, string>;
+  roles?: Role[];
+  area?: "LAVORO" | "PERSONALE";
 };
+
+const SIDEBAR_ROLES: Role[] = [
+  "DIPENDENTE",
+  "RESPONSABILE",
+  "MAGAZZINO",
+  "ADMIN",
+  "SUPER_ADMIN",
+  "ZERO",
+];
+
+function isFolderVisibleForRole(folder: SidebarFolder, role: Role) {
+  return folder.roles === undefined || folder.roles.includes(role);
+}
 
 const PAGE_ICONS: Record<string, string> = {
   "/dashboard": "LayoutDashboard",
@@ -195,6 +209,8 @@ export function SidebarSettingsClient({
     () => new Set(),
   );
   const [editingRouteKey, setEditingRouteKey] = useState<string | null>(null);
+  const [previewRole, setPreviewRole] = useState<Role>("DIPENDENTE");
+  const [previewArea, setPreviewArea] = useState<"LAVORO" | "PERSONALE">("LAVORO");
 
   const assignedRouteHrefs = new Set(folders.flatMap((f) => f.routes));
   const unassignedPages = ALL_PAGES.filter(
@@ -274,6 +290,23 @@ export function SidebarSettingsClient({
       else next.add(folderId);
       return next;
     });
+  };
+
+  const handleToggleFolderRole = (folderId: string, role: Role) => {
+    setFolders((current) => current.map((folder) => {
+      if (folder.id !== folderId) return folder;
+      const currentRoles = folder.roles ?? SIDEBAR_ROLES;
+      const roles = currentRoles.includes(role)
+        ? currentRoles.filter((item) => item !== role)
+        : SIDEBAR_ROLES.filter((item) => currentRoles.includes(item) || item === role);
+      return { ...folder, roles };
+    }));
+  };
+
+  const handleSetFolderArea = (folderId: string, area: "LAVORO" | "PERSONALE") => {
+    setFolders((current) => current.map((folder) => folder.id === folderId
+      ? { ...folder, area }
+      : folder));
   };
 
   const handleRestoreSavedLayout = () => {
@@ -487,7 +520,7 @@ export function SidebarSettingsClient({
                 </h2>
               </div>
               <p className="mt-1 text-xs text-zinc-500">
-                Ordina ciò che il personale vede nella barra laterale.
+                Per ogni sezione scegli Personale o Lavoro e i ruoli che possono vederla.
               </p>
             </div>
             <div className="flex w-full gap-2 lg:max-w-md">
@@ -573,6 +606,56 @@ export function SidebarSettingsClient({
                   </div>
                   {!isCollapsed && (
                     <div className="space-y-2 p-3">
+                      <div className="mb-3 grid gap-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3 lg:grid-cols-[auto_1fr]">
+                        <fieldset>
+                          <legend className="px-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
+                            Tipo di sezione
+                          </legend>
+                          <div className="mt-1 flex gap-2">
+                            {(["LAVORO", "PERSONALE"] as const).map((area) => {
+                              const selected = (folder.area ?? "LAVORO") === area;
+                              return (
+                                <button
+                                  key={area}
+                                  type="button"
+                                  aria-pressed={selected}
+                                  onClick={() => handleSetFolderArea(folder.id, area)}
+                                  className={`min-h-9 rounded-full border px-3 text-[10px] font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${selected ? "border-pink-600 bg-pink-600 text-white" : "border-zinc-200 bg-white text-zinc-500 hover:border-pink-300 hover:text-pink-700"}`}
+                                >
+                                  {area === "LAVORO" ? "Lavoro" : "Personale"}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+
+                        <fieldset>
+                          <legend className="px-1 text-[10px] font-black uppercase tracking-wider text-blue-700">
+                            Visibile per questi ruoli
+                          </legend>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            {SIDEBAR_ROLES.map((role) => {
+                              const selected = isFolderVisibleForRole(folder, role);
+                              return (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  aria-pressed={selected}
+                                  onClick={() => handleToggleFolderRole(folder.id, role)}
+                                  className={`min-h-9 rounded-full border px-3 text-[10px] font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-zinc-200 bg-white text-zinc-500 hover:border-blue-300 hover:text-blue-700"}`}
+                                >
+                                  {role === "DIPENDENTE" ? "Lavoratore" : roleLabels[role]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {folder.roles?.length === 0 ? (
+                            <p className="mt-2 text-[11px] font-bold text-amber-700">
+                              Seleziona almeno un ruolo oppure questa sezione resterà nascosta a tutti.
+                            </p>
+                          ) : null}
+                        </fieldset>
+                      </div>
                       {folder.routes.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-5 text-center text-xs font-semibold text-zinc-400">
                           Questa sezione è vuota. Aggiungi un tasto dalle pagine
@@ -764,7 +847,18 @@ export function SidebarSettingsClient({
                   Come apparirà al personale
                 </p>
               </div>
-              <Sparkles size={17} className="text-pink-500" />
+              <select
+                value={previewRole}
+                onChange={(event) => setPreviewRole(event.target.value as Role)}
+                className="h-9 rounded-xl border border-zinc-200 bg-white px-2 text-[10px] font-black text-zinc-700 outline-none focus:border-blue-500"
+                aria-label="Ruolo mostrato nell'anteprima"
+              >
+                {SIDEBAR_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role === "DIPENDENTE" ? "Lavoratore" : roleLabels[role]}
+                  </option>
+                ))}
+              </select>
             </div>
             <div
               className="m-3 min-h-[440px] overflow-hidden rounded-2xl border border-black/5 p-3"
@@ -784,8 +878,23 @@ export function SidebarSettingsClient({
                   <p className="text-[9px] opacity-60">Staff Hub</p>
                 </div>
               </div>
+              <div className="mb-4 grid grid-cols-2 rounded-xl border border-current/10 bg-white/5 p-1">
+                {(["PERSONALE", "LAVORO"] as const).map((area) => (
+                  <button
+                    key={area}
+                    type="button"
+                    onClick={() => setPreviewArea(area)}
+                    className={`min-h-9 rounded-lg px-2 text-[9px] font-black uppercase tracking-wider transition ${previewArea === area ? "bg-white text-zinc-900 shadow-sm" : "opacity-55"}`}
+                  >
+                    {area === "PERSONALE" ? "Personale" : "Lavoro"}
+                  </button>
+                ))}
+              </div>
               <div className="space-y-4">
-                {folders.map((folder) => (
+                {folders
+                  .filter((folder) => isFolderVisibleForRole(folder, previewRole))
+                  .filter((folder) => (folder.area ?? "LAVORO") === previewArea)
+                  .map((folder) => (
                   <div key={folder.id}>
                     <p className="mb-1.5 px-2 text-[9px] font-black uppercase tracking-[0.18em] opacity-55">
                       {folder.title}
@@ -828,8 +937,8 @@ export function SidebarSettingsClient({
             </div>
             <div className="space-y-2 px-4 pb-4">
               <p className="text-xs leading-relaxed text-zinc-500">
-                L'anteprima usa i colori già impostati. Qui modifichi ordine,
-                sezioni, nomi e icone.
+                L’anteprima mostra soltanto le sezioni della categoria e del
+                ruolo selezionati. Qui modifichi ordine, visibilità, nomi e icone.
               </p>
               <Link
                 href="/settings/branding"

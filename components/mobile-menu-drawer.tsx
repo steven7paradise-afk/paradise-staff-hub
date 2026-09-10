@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, ArrowLeft, ChevronDown, Menu, X } from "lucide-react";
+import { BriefcaseBusiness, Search, ArrowLeft, ChevronDown, Menu, UserRound, X } from "lucide-react";
 import { resolveDrivePhotoUrl } from "@/lib/photo-url";
 import { cn } from "@/lib/utils";
 import { DynamicIcon } from "./dynamic-icon";
@@ -16,7 +16,7 @@ type MobileMenuDrawerProps = {
   unreadNotifications: number;
   colleagues?: Array<{ id: string; name: string; photo_url: string | null }>;
   items: Array<{ href: string; label: string; iconName: string; section?: string; badge?: number }>;
-  sidebarConfig?: Array<{ id: string; title: string; routes: string[]; labels?: Record<string, string> }> | null;
+  sidebarConfig?: Array<{ id: string; title: string; routes: string[]; labels?: Record<string, string>; area?: "LAVORO" | "PERSONALE" }> | null;
   logoutButton: ReactNode;
 };
 
@@ -33,6 +33,7 @@ export function MobileMenuDrawer({
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
+  const [activeArea, setActiveArea] = useState<"LAVORO" | "PERSONALE">("PERSONALE");
   const pathname = usePathname();
 
   useEffect(() => {
@@ -51,10 +52,17 @@ export function MobileMenuDrawer({
   const filteredItems = items.filter((item) =>
     getSidebarLabel(item.href, item.label).toLowerCase().includes(normalizedSearch)
   );
+  const configuredAreas = new Set(sidebarConfig?.map((folder) => folder.area ?? "LAVORO") ?? []);
+  const hasAreaSwitch = configuredAreas.has("LAVORO") && configuredAreas.has("PERSONALE");
+  const activePageArea = sidebarConfig?.find((folder) =>
+    folder.routes.some((href) => pathname === href || pathname.startsWith(`${href}/`))
+  )?.area ?? "LAVORO";
 
   const getRenderSections = () => {
-    if (sidebarConfig && sidebarConfig.length > 0) {
-      const configured = sidebarConfig.map((sec) => {
+    if (sidebarConfig !== null) {
+      const configured = sidebarConfig
+        .filter((sec) => !hasAreaSwitch || (sec.area ?? "LAVORO") === activeArea)
+        .map((sec) => {
         const sectionItems = filteredItems
           .filter((item) => sec.routes.includes(item.href))
           .sort((a, b) => sec.routes.indexOf(a.href) - sec.routes.indexOf(b.href));
@@ -77,13 +85,17 @@ export function MobileMenuDrawer({
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
   useEffect(() => {
+    if (hasAreaSwitch) setActiveArea(activePageArea);
+  }, [activePageArea, hasAreaSwitch, pathname]);
+
+  useEffect(() => {
     if (!isOpen) return;
     if (activeSectionId) {
       setOpenSectionId(activeSectionId);
       return;
     }
-    setOpenSectionId((current) => current ?? sections[0]?.id ?? null);
-  }, [activeSectionId, isOpen, pathname]);
+    setOpenSectionId((current) => sections.some((section) => section.id === current) ? current : sections[0]?.id ?? null);
+  }, [activeArea, activeSectionId, isOpen, pathname]);
 
   return (
     <div className="xl:hidden">
@@ -178,6 +190,30 @@ export function MobileMenuDrawer({
               </button>
             ) : null}
           </div>
+
+          {hasAreaSwitch ? (
+            <div className="mt-4 grid grid-cols-2 rounded-xl border border-white/15 bg-white/[0.06] p-1">
+              {(["PERSONALE", "LAVORO"] as const).map((area) => {
+                const selected = activeArea === area;
+                const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
+                return (
+                  <button
+                    key={area}
+                    type="button"
+                    onClick={() => setActiveArea(area)}
+                    aria-pressed={selected}
+                    className={cn(
+                      "flex min-h-11 items-center justify-center gap-2 rounded-lg px-2 text-[10px] font-black uppercase tracking-[0.12em] transition",
+                      selected ? "bg-white text-zinc-900 shadow-sm" : "text-white/55",
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {area === "PERSONALE" ? "Personale" : "Lavoro"}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
           {/* Main Navigation links */}
           <div className="no-scrollbar mt-7 flex-1 overflow-y-auto">
