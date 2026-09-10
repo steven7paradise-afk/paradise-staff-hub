@@ -615,6 +615,7 @@ export default async function AppointmentsPage({
         serviceTitle: booking.service?.title || "Servizio",
         serviceImageUrl: findImageUrl(booking.service) || findImageUrl(booking),
         bookingType: booking.booking_type || null,
+        shopifyOrderId: booking.order_id ? String(booking.order_id) : null,
         bookingStr: booking.order_id 
           ? (shopifyOrderNames.get(String(booking.order_id)) || `#${booking.order_id}`) 
           : null,

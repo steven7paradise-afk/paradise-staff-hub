@@ -190,6 +190,56 @@ export async function getShopifyOrderNamesBulk(orderIds: (string | number | null
 }
 
 /**
+ * Loads Shopify order notes in a small number of bulk requests. This is used
+ * after the appointments page is already visible, so Shopify can never block
+ * the operational board.
+ */
+export async function getShopifyOrderNotesBulk(
+  orderIds: (string | number | null | undefined)[],
+): Promise<Map<string, string>> {
+  const notes = new Map<string, string>();
+  const cleanIds = Array.from(
+    new Set(
+      orderIds
+        .map((id) => String(id || "").trim())
+        .filter((id) => /^\d{10,}$/.test(id)),
+    ),
+  ).slice(0, 200);
+  if (!cleanIds.length) return notes;
+
+  const shop = process.env.SHOPIFY_SHOP_DOMAIN;
+  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  if (!shop || !token) return notes;
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < cleanIds.length; index += 50) {
+    chunks.push(cleanIds.slice(index, index + 50));
+  }
+
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const url = `https://${shop}/admin/api/2024-04/orders.json?ids=${chunk.join(",")}&status=any&fields=id,note`;
+      const response = await fetchWithTimeout(url, {
+        headers: {
+          "X-Shopify-Access-Token": token,
+          "Content-Type": "application/json",
+        },
+      }, 1600);
+      if (!response.ok) return;
+      const payload = await response.json();
+      for (const order of Array.isArray(payload?.orders) ? payload.orders : []) {
+        const note = String(order?.note || "").trim();
+        if (order?.id && note) notes.set(String(order.id), note);
+      }
+    } catch (error) {
+      console.error("Error loading Shopify appointment notes:", error);
+    }
+  }));
+
+  return notes;
+}
+
+/**
  * Resolves the real Shopify admin order ID from either the visible order name
  * (e.g. #24492) or a direct Shopify order ID.
  */

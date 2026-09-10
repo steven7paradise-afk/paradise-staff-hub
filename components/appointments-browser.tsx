@@ -273,6 +273,7 @@ type AppointmentRecord = {
   serviceTitle: string;
   serviceImageUrl?: string | null;
   bookingType?: string | null;
+  shopifyOrderId?: string | null;
   bookingStr?: string | null;
   startDate: string;
   endDate?: string | null;
@@ -641,7 +642,7 @@ function getCustomerContactLines(booking: AppointmentRecord) {
 }
 
 type AppointmentNotePreview = {
-  key: "office" | "booking" | "form";
+  key: "shopify" | "office" | "booking" | "form";
   label: string;
   text: string;
 };
@@ -650,6 +651,7 @@ function getBookingNotePreviews(
   booking: AppointmentRecord,
   officeNote?: string | null,
   completed = false,
+  shopifyNote?: string | null,
 ) {
   const previews: AppointmentNotePreview[] = [];
   const seen = new Set<string>();
@@ -661,6 +663,7 @@ function getBookingNotePreviews(
     previews.push({ key, label, text });
   };
 
+  add("shopify", "Nota Shopify", shopifyNote);
   add("office", completed ? "Nota completata" : "Nota ufficio", officeNote || booking.paradiseNote);
   add("booking", "Nota prenotazione", booking.notesText);
   const formNote = getDetailValue(booking.extraDetails, [
@@ -683,10 +686,17 @@ function AppointmentNotePreviews({
   if (!notes.length) return null;
   return (
     <div className={compact ? "mt-2 space-y-1" : "mt-2 space-y-1.5"}>
-      {notes.map((note) => (
+      {notes.map((note) => {
+        const isCompleted = note.label === "Nota completata";
+        const isShopify = note.key === "shopify";
+        return (
         <div
           key={note.key}
-          className={note.label === "Nota completata"
+          className={isShopify
+            ? compact
+              ? "rounded-lg border-2 border-[#E85A9B] bg-[#FFF0F7] px-2 py-2 text-[10px] font-bold leading-snug text-[#64183C] shadow-sm"
+              : "rounded-xl border-2 border-[#E85A9B] bg-[#FFF0F7] px-3 py-2.5 text-xs font-black leading-relaxed text-[#64183C] shadow-sm"
+            : isCompleted
             ? compact
               ? "rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[9px] font-semibold leading-snug text-emerald-900"
               : "rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold leading-relaxed text-emerald-900"
@@ -694,12 +704,13 @@ function AppointmentNotePreviews({
               ? "rounded-lg bg-[#FFF7FA] px-2 py-1.5 text-[9px] font-semibold leading-snug text-[#7E4353]"
               : "rounded-xl border border-[#F5DCE5] bg-[#FFF7FA] px-3 py-2 text-xs font-bold leading-relaxed text-[#7E4353]"}
         >
-          <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${note.label === "Nota completata" ? "text-emerald-700" : "text-[#B9476D]"}`}>
-            {note.label === "Nota completata" ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
+          <span className={`mb-0.5 flex items-center gap-1 text-[8px] font-black uppercase tracking-wider ${isShopify ? "text-[#C02F73]" : isCompleted ? "text-emerald-700" : "text-[#B9476D]"}`}>
+            {isCompleted ? <Check className="size-3" /> : <MessageSquare className="size-3" />} {note.label}
           </span>
           <span className={compact ? "line-clamp-2" : "line-clamp-3"}>{note.text}</span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1613,6 +1624,7 @@ export function AppointmentsBrowser({
   const [paradiseNotes, setParadiseNotes] = useState<Record<string, string>>(() =>
     Object.fromEntries(initialBookings.map((booking) => [booking.id, booking.paradiseNote || ""])),
   );
+  const [shopifyNotesByBooking, setShopifyNotesByBooking] = useState<Record<string, string>>({});
   const boardLongPressTimerRef = useRef<number | null>(null);
   const boardScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const boardLongPressStartRef = useRef<{
@@ -1660,6 +1672,34 @@ export function AppointmentsBrowser({
     initialRangeTo,
     initialScopeAll,
   }));
+
+  useEffect(() => {
+    const bookingsWithShopifyOrder = initialBookings.filter((booking) => booking.shopifyOrderId);
+    if (!bookingsWithShopifyOrder.length) return;
+    const controller = new AbortController();
+
+    fetch("/api/appointments/shopify-notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderIds: bookingsWithShopifyOrder.map((booking) => booking.shopifyOrderId) }),
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!payload?.notes || controller.signal.aborted) return;
+        const notesByOrderId = payload.notes as Record<string, string>;
+        setShopifyNotesByBooking(Object.fromEntries(
+          bookingsWithShopifyOrder
+            .map((booking) => [booking.id, notesByOrderId[String(booking.shopifyOrderId)] || ""] as const)
+            .filter((entry) => Boolean(entry[1])),
+        ));
+      })
+      .catch(() => {
+        // Shopify notes are supplementary: the appointments page remains usable.
+      });
+
+    return () => controller.abort();
+  }, [initialBookings]);
 
   useEffect(() => {
     setView(initialView);
@@ -1968,8 +2008,11 @@ export function AppointmentsBrowser({
   const [clientControlLastVisitAt, setClientControlLastVisitAt] = useState<string | null>(null);
   const [clientControlHistoryLoaded, setClientControlHistoryLoaded] = useState(false);
   const [serviceDetailsModalOpen, setServiceDetailsModalOpen] = useState(false);
+  const clientControlRequestRef = useRef<AbortController | null>(null);
 
   function closeClientControl() {
+    clientControlRequestRef.current?.abort();
+    clientControlRequestRef.current = null;
     setClientControlOpen(false);
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
@@ -1977,10 +2020,6 @@ export function AppointmentsBrowser({
     setShopifyNoteFallbackToDeposit(false);
     setIsStaffDropdownOpen(false);
     setServiceDetailsModalOpen(false);
-    // Refresh the appointment list only after the editor has been closed.
-    // Refreshing immediately after a save remounts this component and makes
-    // the full-page editor disappear a few seconds after the operation.
-    router.refresh();
   }
   const [clientControlPolishing, setClientControlPolishing] = useState(false);
   const [clientControlMessage, setClientControlMessage] = useState<{
@@ -2785,6 +2824,9 @@ export function AppointmentsBrowser({
     preferredTeammate?: Pick<BookingTeammate, "id" | "name">,
     openServiceDetails = false,
   ) {
+    clientControlRequestRef.current?.abort();
+    const requestController = new AbortController();
+    clientControlRequestRef.current = requestController;
     setClientControlMessage(null);
     setShowShopifyOrdersPanel(false);
     setShowTodayOrdersDropdown(false);
@@ -2923,10 +2965,13 @@ export function AppointmentsBrowser({
       }),
       fetch(
         `/api/appointments/comments?bookingId=${encodeURIComponent(booking.id)}${booking.bookingStr ? `&orderName=${encodeURIComponent(booking.bookingStr)}` : ""}${booking.customerName ? `&clientName=${encodeURIComponent(booking.customerName)}` : ""}&appointmentDate=${encodeURIComponent(booking.startDate)}`,
+        { signal: requestController.signal },
       )
         .then((response) => (response.ok ? response.json() : null))
         .catch(() => null),
     ]);
+
+    if (requestController.signal.aborted || clientControlRequestRef.current !== requestController) return;
 
     const existingAnswers = bookingNotes?.existingControl?.answers as Record<string, any> | undefined;
     if (existingAnswers) {
@@ -3343,6 +3388,7 @@ export function AppointmentsBrowser({
         ...getDateSearchValues(booking.startDate),
         ...getDateSearchValues(booking.endDate),
         booking.notesText,
+        shopifyNotesByBooking[booking.id],
         liveOfficeNote,
         booking.sheetNote,
         ...bookingTeam.map((mate) => mate.name),
@@ -3357,7 +3403,7 @@ export function AppointmentsBrowser({
       );
     }
     return index;
-  }, [initialBookings, paradiseNotes, teamByBooking]);
+  }, [initialBookings, paradiseNotes, shopifyNotesByBooking, teamByBooking]);
 
   const filteredBookings = useMemo(() => {
     const statusScoped = showCanceled
@@ -3698,6 +3744,16 @@ export function AppointmentsBrowser({
           return current && current.trim()
             ? `${current.trim()}\n\n${newBlock}`
             : newBlock;
+        });
+        setShopifyNotesByBooking((current) => {
+          const author = comment.user_name ?? "Staff";
+          const msg = comment.message ?? "";
+          const newBlock = `Staff: ${author}\n${msg}`;
+          const previous = current[bookingId]?.trim();
+          return {
+            ...current,
+            [bookingId]: previous ? `${previous}\n\n${newBlock}` : newBlock,
+          };
         });
         showPushToast("Nota salvata", "La nota interna è stata aggiunta all’appuntamento.");
       } else {
@@ -6841,6 +6897,7 @@ export function AppointmentsBrowser({
                       booking,
                       officeNote,
                       status === "COMPLETATO",
+                      shopifyNotesByBooking[booking.id],
                     );
                     return (
                       <button
@@ -7058,6 +7115,7 @@ export function AppointmentsBrowser({
                               booking,
                               paradiseNote,
                               status === "COMPLETATO",
+                              shopifyNotesByBooking[booking.id],
                             )
                               .filter((note) => note.key !== "office");
                             return (
@@ -7388,6 +7446,7 @@ export function AppointmentsBrowser({
                             booking,
                             paradiseNotes[booking.id] || booking.paradiseNote,
                             status === "COMPLETATO",
+                            shopifyNotesByBooking[booking.id],
                           )}
                           compact
                         />
@@ -8095,6 +8154,7 @@ export function AppointmentsBrowser({
                                 booking,
                                 paradiseNotes[booking.id] || booking.paradiseNote,
                                 getBookingStatus(booking) === "COMPLETATO",
+                                shopifyNotesByBooking[booking.id],
                               )}
                               compact
                             />
@@ -8157,6 +8217,7 @@ export function AppointmentsBrowser({
                               booking,
                               paradiseNotes[booking.id] || booking.paradiseNote,
                               getBookingStatus(booking) === "COMPLETATO",
+                              shopifyNotesByBooking[booking.id],
                             )}
                             compact
                           />
@@ -8196,6 +8257,7 @@ export function AppointmentsBrowser({
                   booking,
                   paradiseNotes[booking.id] || booking.paradiseNote,
                   status === "COMPLETATO",
+                  shopifyNotesByBooking[booking.id],
                 );
 
                 return (
@@ -8359,6 +8421,7 @@ export function AppointmentsBrowser({
                   booking,
                   paradiseNotes[booking.id] || booking.paradiseNote,
                   status === "COMPLETATO",
+                  shopifyNotesByBooking[booking.id],
                 );
                 return (
                   <div
