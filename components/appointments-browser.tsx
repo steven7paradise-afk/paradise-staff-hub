@@ -663,7 +663,9 @@ function getBookingNotePreviews(
     previews.push({ key, label, text });
   };
 
-  add("shopify", "Nota Shopify", shopifyNote);
+  // La nota Shopify contiene il riepilogo operativo finale: deve diventare
+  // visibile sulla board soltanto quando l'appuntamento è completato.
+  add("shopify", "Nota Shopify", completed ? shopifyNote : null);
   add("office", completed ? "Nota completata" : "Nota ufficio", officeNote || booking.paradiseNote);
   add("booking", "Nota prenotazione", booking.notesText);
   const formNote = getDetailValue(booking.extraDetails, [
