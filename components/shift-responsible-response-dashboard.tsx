@@ -367,23 +367,24 @@ export function ShiftResponsibleResponseDashboard({ questions, answers, assignme
           </div>
 
           {rows.length ? (
-            <><div className="grid gap-4 border-t border-black/[0.06] p-4 sm:p-5 lg:grid-cols-[minmax(0,0.92fr)_minmax(400px,1.08fr)]">
-          <section className="overflow-hidden rounded-[20px] border border-black/[0.08] bg-white" aria-label="Giornate compilate">
-            <div className="hidden grid-cols-[1fr_1.2fr_0.8fr_0.7fr] gap-3 border-b border-black/[0.06] px-4 py-3 text-[8px] font-black uppercase tracking-wide text-black/40 sm:grid">
-              <span>Data</span><span>Responsabile</span><span>Risposte</span><span>Stato</span>
-            </div>
-            <div className="divide-y divide-black/[0.06]">
-              {filteredRows.map((row) => <button key={row.day} type="button" onClick={() => setSelectedDay(row.day)} className={`grid w-full gap-3 px-4 py-4 text-left transition sm:grid-cols-[1fr_1.2fr_0.8fr_0.7fr] sm:items-center ${selected?.day === row.day ? "bg-[#fff2f7] shadow-[inset_4px_0_0_#d94c88]" : "hover:bg-[#faf8f9]"}`}>
-                <span className="flex items-center gap-2 text-[10px] font-bold text-[#3c4043]"><CalendarDays className={`size-3.5 ${selected?.day === row.day ? "text-[#c43f78]" : "text-black/35"}`} />{formatDay(row.day)}</span>
-                <span className="flex items-center gap-2"><Avatar person={row.assigned} /><span><span className="block text-[10px] font-black text-[#202124]">{row.assigned?.name || "Non assegnato"}</span><span className="block text-[8px] text-black/40">Ultima firma: {row.actorName}</span></span></span>
-                <span className="block"><span className="text-[9px] font-bold text-black/55">{row.progress.completed} di {row.progress.total}</span><span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-black/[0.06]"><span className="block h-full rounded-full bg-[#d94c88]" style={{ width: `${row.progress.percent}%` }} /></span></span>
-                <span className={`w-fit rounded-full px-2 py-1 text-[8px] font-black uppercase ${row.progress.percent === 100 ? "bg-[#e8f7e9] text-[#2f7a36]" : "bg-[#fff3dc] text-[#976100]"}`}>{row.progress.percent === 100 ? "Completo" : `${row.progress.percent}%`}</span>
-              </button>)}
-              {!filteredRows.length ? <p className="px-4 py-10 text-center text-xs font-semibold text-black/40">Nessun risultato trovato.</p> : null}
-            </div>
-          </section>
+            <><div className="border-t border-black/[0.06] p-4 sm:p-5">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div><p className="text-[9px] font-black uppercase tracking-[0.12em] text-black/35">Giornate registrate</p><p className="mt-1 text-xs font-bold text-[#302c2e]">Scegli la giornata da consultare</p></div>
+                <span className="shrink-0 rounded-full bg-[#f5f1f3] px-2.5 py-1 text-[9px] font-black text-black/45">{filteredRows.length} risultati</span>
+              </div>
+              {filteredRows.length ? <nav className="flex snap-x gap-3 overflow-x-auto pb-3" aria-label="Giornate compilate">
+                {filteredRows.map((row) => {
+                  const isSelected = selected?.day === row.day;
+                  return <button key={row.day} type="button" onClick={() => setSelectedDay(row.day)} aria-pressed={isSelected} className={`min-w-[220px] snap-start rounded-[18px] border p-4 text-left transition sm:min-w-[240px] ${isSelected ? "border-[#d94c88] bg-[#fff1f7] shadow-[0_8px_24px_rgba(190,59,112,0.12)]" : "border-black/[0.07] bg-white hover:border-[#e6a4c1] hover:bg-[#fffafb]"}`}>
+                    <span className="flex items-start justify-between gap-3"><span className="flex items-center gap-2 text-[11px] font-black capitalize text-[#282426]"><CalendarDays className={`size-4 ${isSelected ? "text-[#c43f78]" : "text-black/30"}`} />{formatDay(row.day, true)}</span><span className={`shrink-0 rounded-full px-2 py-1 text-[8px] font-black ${row.progress.percent === 100 ? "bg-[#e8f7e9] text-[#2f7a36]" : "bg-[#fff3dc] text-[#976100]"}`}>{row.progress.percent === 100 ? "Completa" : `${row.progress.percent}%`}</span></span>
+                    <span className="mt-4 flex items-center gap-2.5"><Avatar person={row.assigned} /><span className="min-w-0"><span className="block truncate text-[10px] font-black text-[#202124]">{row.assigned?.name || "Non assegnato"}</span><span className="mt-0.5 block truncate text-[8px] text-black/40">Firmata da {row.actorName}</span></span></span>
+                    <span className="mt-4 block h-1.5 overflow-hidden rounded-full bg-black/[0.06]"><span className={`block h-full rounded-full ${row.progress.percent === 100 ? "bg-[#42a957]" : "bg-[#d94c88]"}`} style={{ width: `${row.progress.percent}%` }} /></span>
+                    <span className="mt-1.5 block text-[8px] font-bold text-black/35">{row.progress.completed} risposte su {row.progress.total}</span>
+                  </button>;
+                })}
+              </nav> : <p className="rounded-2xl border border-dashed border-black/10 px-4 py-10 text-center text-xs font-semibold text-black/40">Nessun risultato trovato.</p>}
 
-          {selected ? <ResponseDetail row={selected} questions={questions} /> : null}
+              {selected ? <div className="mt-2"><ResponseDetail row={selected} questions={questions} /></div> : null}
             </div>
             {selected ? <AuditTrail entries={access[selected.day]?.audit ?? []} questions={questions} /> : null}</>
           ) : <div className="border-t border-black/[0.06] px-5 py-16 text-center text-[#303833]"><span className="mx-auto grid size-14 place-items-center rounded-full bg-[#fff1f7]"><FileText className="size-6 text-[#c43f78]" /></span><p className="mt-4 text-sm font-black">Ancora nessuna risposta</p><p className="mt-1 text-[10px] text-black/40">Le giornate compilate compariranno qui automaticamente.</p></div>}
@@ -495,24 +496,31 @@ function StructuredResponse({ value, question }: { value: string; question?: Shi
 }
 
 function ResponseTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return <div className="overflow-hidden rounded-xl border border-black/[0.07]">
-    <div className="grid bg-[#f1f5f2]" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{headers.map((header) => <span key={header} className="border-r border-black/[0.06] px-2.5 py-2 text-[7px] font-black uppercase tracking-wide text-black/40 last:border-r-0">{header}</span>)}</div>
-    <div className="divide-y divide-black/[0.06]">{rows.map((row, rowIndex) => <div key={rowIndex} className="grid" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{row.map((cell, cellIndex) => <span key={cellIndex} className="min-w-0 break-words border-r border-black/[0.06] px-2.5 py-2 text-[8px] leading-relaxed text-[#444b46] last:border-r-0">{cell}</span>)}</div>)}</div>
+  return <div className="overflow-x-auto rounded-xl border border-black/[0.07] bg-white">
+    <div className="min-w-[460px]">
+      <div className="grid bg-[#f6f3f4]" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{headers.map((header) => <span key={header} className="border-r border-black/[0.06] px-3 py-2.5 text-[8px] font-black uppercase tracking-wide text-black/40 last:border-r-0">{header}</span>)}</div>
+      <div className="divide-y divide-black/[0.06]">{rows.map((row, rowIndex) => <div key={rowIndex} className="grid" style={{ gridTemplateColumns: `repeat(${headers.length}, minmax(0, 1fr))` }}>{row.map((cell, cellIndex) => <span key={cellIndex} className="min-w-0 break-words border-r border-black/[0.06] px-3 py-3 text-[10px] leading-relaxed text-[#444b46] last:border-r-0">{cell}</span>)}</div>)}</div>
+    </div>
   </div>;
 }
 
-function ResponseDetail({ row, questions }: { row: { day: string; values: Record<string, string>; assigned?: ResponsiblePerson; actorName: string; updatedAt?: string; progress: { percent: number } }; questions: ShiftResponsibleQuestion[] }) {
-  return <aside className="overflow-hidden rounded-[20px] border border-black/[0.08] bg-white lg:sticky lg:top-4 lg:self-start" aria-label={`Risposte del ${formatDay(row.day)}`}>
-    <div className="flex items-center justify-between gap-3 border-b border-black/[0.08] bg-[#fff2f7] p-4 sm:p-5"><div className="flex min-w-0 items-center gap-3"><Avatar person={row.assigned} /><div className="min-w-0"><span className="text-[7px] font-black uppercase tracking-wider text-[#b7356d]">Giornata selezionata</span><h4 className="truncate text-sm font-black text-[#202124]">{row.assigned?.name || row.actorName}</h4><p className="mt-0.5 text-[8px] text-black/45">{formatDay(row.day, true)}{row.updatedAt ? ` · aggiornata alle ${new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.updatedAt))}` : ""}</p></div></div><span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[8px] font-black ${row.progress.percent === 100 ? "border-[#ccebd2] bg-white text-[#277b38]" : "border-[#f1d49c] bg-[#fff9ea] text-[#8b5a00]"}`}><CheckCircle2 className={`size-3.5 ${row.progress.percent === 100 ? "text-[#49a852]" : "text-[#d7a23a]"}`} />{row.progress.percent}%</span></div>
-    <div className="grid max-h-[680px] gap-2.5 overflow-y-auto bg-white p-3 sm:grid-cols-2 sm:p-4">
+function ResponseDetail({ row, questions }: { row: { day: string; values: Record<string, string>; assigned?: ResponsiblePerson; actorName: string; updatedAt?: string; progress: { percent: number; completed: number; total: number } }; questions: ShiftResponsibleQuestion[] }) {
+  return <aside className="overflow-hidden rounded-[22px] border border-black/[0.08] bg-white shadow-[0_12px_35px_rgba(47,28,38,0.05)]" aria-label={`Risposte del ${formatDay(row.day)}`}>
+    <div className="flex flex-col gap-4 border-b border-black/[0.08] bg-[#fff7fa] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="flex min-w-0 items-center gap-3.5"><span className="scale-110"><Avatar person={row.assigned} /></span><div className="min-w-0"><span className="text-[8px] font-black uppercase tracking-[0.14em] text-[#b7356d]">Verbale della giornata</span><h4 className="mt-0.5 truncate text-base font-black text-[#202124]">{row.assigned?.name || row.actorName}</h4><p className="mt-1 text-[9px] capitalize text-black/45">{formatDay(row.day, true)}{row.updatedAt ? ` · aggiornata alle ${new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" }).format(new Date(row.updatedAt))}` : ""}</p></div></div>
+      <div className="flex items-center gap-3 sm:justify-end"><div className="text-right"><p className="text-[8px] font-black uppercase tracking-wide text-black/35">Compilazione</p><p className="mt-0.5 text-[10px] font-bold text-[#343034]">{row.progress.completed} di {row.progress.total} risposte</p></div><span className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border bg-white px-3 text-[9px] font-black ${row.progress.percent === 100 ? "border-[#ccebd2] text-[#277b38]" : "border-[#f1d49c] text-[#8b5a00]"}`}><CheckCircle2 className={`size-4 ${row.progress.percent === 100 ? "text-[#49a852]" : "text-[#d7a23a]"}`} />{row.progress.percent}%</span></div>
+    </div>
+    <div className="divide-y divide-black/[0.07]">
       {questions.map((question, index) => {
         const value = row.values[question.id];
         const branches = activeShiftFollowUps(question, value).flatMap((followUp) => {
           const branchValue = row.values[`${question.id}::${followUp.key}`];
           return branchValue ? [{ ...followUp, value: branchValue }] : [];
         });
-        const structured = value?.startsWith("{") || value?.startsWith("[") || branches.length > 0;
-        return <article key={question.id} className={`rounded-xl border border-black/[0.07] bg-[#fdfcfc] p-3.5 ${structured ? "sm:col-span-2" : ""}`}><div className="flex items-start gap-2.5"><span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#ffe7f1] text-[8px] font-black text-[#b7356d]">{index + 1}</span><div className="min-w-0 flex-1"><p className="text-[10px] font-black leading-snug text-[#303833]">{question.title}</p><div className="mt-2">{value ? <StructuredResponse value={value} question={question} /> : <p className="text-[9px] italic text-black/35">Nessuna risposta</p>}</div>{branches.map((branch) => <div key={branch.key} className="mt-2 border-t border-black/[0.06] pt-2"><p className="mb-1.5 text-[7px] font-black uppercase tracking-wide text-black/40">{branch.prompt}</p><StructuredResponse value={branch.value} /></div>)}</div></div></article>;
+        return <article key={question.id} className="grid gap-4 px-4 py-5 transition hover:bg-[#fdfbfc] sm:px-6 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.35fr)] md:gap-8">
+          <div className="flex items-start gap-3"><span className="grid size-7 shrink-0 place-items-center rounded-full bg-[#ffe7f1] text-[9px] font-black text-[#b7356d]">{index + 1}</span><div><p className="text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Domanda</p><p className="mt-1 text-[11px] font-black leading-relaxed text-[#302c2e]">{question.title}</p></div></div>
+          <div className="min-w-0 rounded-xl bg-[#faf8f9] p-3.5 sm:p-4"><p className="mb-2 text-[8px] font-black uppercase tracking-[0.1em] text-black/30">Risposta</p>{value ? <StructuredResponse value={value} question={question} /> : <p className="text-[10px] italic text-black/35">Non compilata</p>}{branches.map((branch) => <div key={branch.key} className="mt-3 border-t border-black/[0.07] pt-3"><p className="mb-2 text-[8px] font-black uppercase tracking-wide text-[#9b667c]">{branch.prompt}</p><StructuredResponse value={branch.value} /></div>)}</div>
+        </article>;
       })}
     </div>
   </aside>;
