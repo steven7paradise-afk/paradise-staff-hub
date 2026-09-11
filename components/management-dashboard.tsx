@@ -452,14 +452,20 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       </aside>
       </div>
 
-      <section className="order-5 overflow-hidden rounded-[28px] border border-black/10 bg-[#0f1720] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
-        <div className="flex flex-col gap-4 border-b border-white/10 p-6 sm:flex-row sm:items-end sm:justify-between lg:p-8">
+      <section className="order-5 overflow-hidden rounded-[28px] border border-[#8d345d]/25 bg-[linear-gradient(145deg,#24151d_0%,#321824_52%,#431c30_100%)] text-white shadow-[0_18px_45px_rgba(54,18,37,0.18)]">
+        <div className="flex flex-col gap-6 border-b border-white/10 p-6 lg:flex-row lg:items-end lg:justify-between lg:p-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f080b7]">Performance Buenos Aires</p>
-            <h2 className="mt-2 text-2xl font-black">Confronto ultimi 3 mesi</h2>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.025em] sm:text-3xl">Confronto ultimi 3 mesi</h2>
             <p className="mt-1 text-sm text-white/60">Schede cliente, servizi e fatturazione attribuita · giorni 1–31</p>
           </div>
-          {analytics ? <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-3 text-right"><strong className="text-2xl tabular-nums">{analytics.totals.controls}</strong><p className="text-[10px] font-bold uppercase tracking-wider text-white/55">schede nei 3 mesi</p></div> : null}
+          {analytics ? (
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[470px]">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3"><strong className="block text-xl tabular-nums sm:text-2xl">{analytics.totals.controls}</strong><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/50">Schede</p></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3"><strong className="block truncate text-base tabular-nums text-[#f3a0c8] sm:text-xl">{money.format(analytics.totals.revenue)}</strong><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/50">Fatturato</p></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3"><strong className="block text-xl tabular-nums sm:text-2xl">{analytics.workers.filter((worker) => worker.controls > 0).length}</strong><p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/50">Staff attivo</p></div>
+            </div>
+          ) : null}
         </div>
 
         {analyticsLoading ? (
@@ -467,15 +473,21 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         ) : !analytics || !analytics.workers.length ? (
           <div className="p-8 text-sm text-white/60">Nessuna scheda valida trovata per il salone Buenos Aires.</div>
         ) : (
-          <div className="space-y-7 p-5 lg:p-8">
-            <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="grid gap-5 p-5 lg:p-8 xl:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="min-w-0 rounded-[24px] border border-white/10 bg-black/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#f080b7]">Classifica</p><h3 className="mt-1 font-black">Performance staff</h3></div>
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[9px] font-black uppercase text-white/55">3 mesi</span>
+              </div>
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-2 xl:max-h-[430px] xl:flex-col xl:overflow-x-hidden xl:overflow-y-auto xl:pr-1">
               {analytics.ranking.map((worker, index) => (
-                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId((current) => current === worker.id ? null : worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-24 min-w-52 items-center gap-3 rounded-[20px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15" : "border-white/10 bg-white/[0.05] hover:bg-white/[0.09]"}`}>
-                  <span className="text-sm font-black text-[#f3a0c8]">#{index + 1}</span>
-                  <Avatar name={worker.name} photoUrl={worker.photoUrl} size={48} />
+                <button key={worker.id} type="button" onClick={() => { setSelectedWorkerId((current) => current === worker.id ? null : worker.id); setSelectedAnalyticsDay(null); setSelectedComparisonDay(null); setDayTooltip(null); }} aria-pressed={selectedWorker?.id === worker.id} className={`flex min-h-20 min-w-52 items-center gap-3 rounded-[18px] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f080b7] xl:w-full xl:min-w-0 ${selectedWorker?.id === worker.id ? "border-[#f080b7] bg-[#f080b7]/15 shadow-[inset_3px_0_0_#f080b7]" : "border-white/10 bg-white/[0.045] hover:bg-white/[0.09]"}`}>
+                  <span className="w-5 text-center text-xs font-black text-[#f3a0c8]">{index + 1}</span>
+                  <Avatar name={worker.name} photoUrl={worker.photoUrl} size={42} />
                   <span className="min-w-0"><span className="block truncate text-sm font-black">{worker.name}</span><span className="mt-1 block text-xs text-white/55">{worker.controls} schede</span></span>
                 </button>
               ))}
+              </div>
             </div>
 
             <ThreeMonthControlsChart
@@ -486,9 +498,9 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             />
 
             {selectedWorker ? (
-              <div className="space-y-5">
+              <div className="space-y-5 xl:col-span-2">
                 <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-                <div className="rounded-[24px] border border-white/15 bg-[#172131] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
+                <div className="rounded-[24px] border border-white/15 bg-[#2c1823] p-5 text-white shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
                   <div className="flex items-center gap-3"><Avatar name={selectedWorker.name} photoUrl={selectedWorker.photoUrl} size={58} /><div><h3 className="text-lg font-black">{selectedWorker.name}</h3><p className="text-xs text-white/50">Vista personale · 3 mesi</p></div></div>
                   <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-1">
                     <div className="rounded-2xl bg-white/[0.06] p-4"><p className="text-[10px] font-bold uppercase text-white/50">Clienti svolti</p><strong className="mt-1 block text-2xl tabular-nums">{selectedWorker.controls}</strong></div>
@@ -509,7 +521,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
                       {selectedWorker.months.map((month) => {
                         const max = Math.max(1, ...month.days.map((day) => day.controls));
                         return <div key={month.key} className="grid grid-cols-[120px_repeat(31,44px)] items-center gap-1.5">
-                          <div className="sticky left-0 z-10 self-stretch bg-[#151e2c] pr-3 shadow-[12px_0_18px_-14px_rgba(0,0,0,0.95)]">
+                          <div className="sticky left-0 z-10 self-stretch bg-[#24151d] pr-3 shadow-[12px_0_18px_-14px_rgba(0,0,0,0.95)]">
                             <div className="flex h-full flex-col justify-center">
                               <p className="truncate text-xs font-black capitalize">{month.label}</p>
                               <p className="mt-1 text-[10px] text-white/45">{month.controls} schede · {money.format(month.revenue)}</p>

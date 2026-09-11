@@ -715,7 +715,7 @@ textarea {
     padding-right: 0 !important;
   }
 
-  .sidebar-collapsed aside {
+  .sidebar-collapsed .app-liquid-sidebar > aside {
     background: var(--user-sidebar-color, var(--sidebar)) !important;
     border-right: 1px solid rgba(0, 0, 0, 0.05) !important;
   }
