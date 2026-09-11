@@ -719,6 +719,36 @@ textarea {
     display: grid !important;
   }
 
+  .sidebar-collapsed .sidebar-compact-tools {
+    display: flex !important;
+  }
+
+  .sidebar-collapsed .sidebar-compact-tool {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: 0 0 2.75rem;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 0.625rem;
+    color: var(--sidebar-icon);
+    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+  }
+
+  .sidebar-collapsed .sidebar-compact-tool:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .sidebar-collapsed .sidebar-compact-tool.is-active {
+    border-color: color-mix(in srgb, var(--primary) 42%, transparent);
+    background: var(--sidebar-active-bg);
+    color: var(--sidebar-active-text);
+  }
+
+  .dark .sidebar-collapsed .sidebar-compact-tool:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .sidebar-collapsed .sidebar-profile {
     justify-content: center;
     padding-left: 0 !important;

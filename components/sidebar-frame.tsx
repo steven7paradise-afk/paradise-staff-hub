@@ -32,6 +32,18 @@ export function SidebarFrame({
     setCollapsed(window.localStorage.getItem("paradise-sidebar-collapsed") !== "0");
   }, [forceCollapsed]);
 
+  useEffect(() => {
+    if (forceCollapsed) return;
+
+    const expandSidebar = () => {
+      setCollapsed(false);
+      window.localStorage.setItem("paradise-sidebar-collapsed", "0");
+    };
+
+    window.addEventListener("paradise-sidebar-expand", expandSidebar);
+    return () => window.removeEventListener("paradise-sidebar-expand", expandSidebar);
+  }, [forceCollapsed]);
+
   const toggleCollapsed = () => {
     setCollapsed((value) => {
       const nextValue = !value;

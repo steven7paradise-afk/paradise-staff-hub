@@ -104,6 +104,11 @@ export function DesktopSidebarNav({
   const isItemActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const activeSectionId = sections.find((section) => section.items.some((item) => isItemActive(item.href)))?.id;
 
+  const openSidebarSearch = () => {
+    window.dispatchEvent(new CustomEvent("paradise-sidebar-expand"));
+    window.setTimeout(() => document.getElementById("desktop-sidebar-search")?.focus(), 320);
+  };
+
   useEffect(() => {
     if (hasAreaSwitch) setActiveArea(activePageArea);
   }, [activePageArea, hasAreaSwitch, pathname]);
@@ -136,6 +141,7 @@ export function DesktopSidebarNav({
           <Search size={13} className="opacity-75" />
         </span>
         <input
+          id="desktop-sidebar-search"
           type="text"
           placeholder="Cerca una pagina"
           value={searchQuery}
@@ -177,6 +183,42 @@ export function DesktopSidebarNav({
           })}
         </div>
       ) : null}
+
+      <div className="sidebar-compact-tools mt-3 hidden shrink-0 flex-col items-center gap-1" aria-label="Strumenti rapidi">
+        <button
+          type="button"
+          onClick={openSidebarSearch}
+          className="sidebar-compact-tool"
+          aria-label="Cerca una pagina"
+          title="Cerca una pagina"
+        >
+          <Search className="size-[18px]" />
+        </button>
+        {hasAreaSwitch ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveArea("PERSONALE")}
+              className={cn("sidebar-compact-tool", activeArea === "PERSONALE" && "is-active")}
+              aria-label="Mostra area Personale"
+              aria-pressed={activeArea === "PERSONALE"}
+              title="Personale"
+            >
+              <UserRound className="size-[18px]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveArea("LAVORO")}
+              className={cn("sidebar-compact-tool", activeArea === "LAVORO" && "is-active")}
+              aria-label="Mostra area Lavoro"
+              aria-pressed={activeArea === "LAVORO"}
+              title="Lavoro"
+            >
+              <BriefcaseBusiness className="size-[18px]" />
+            </button>
+          </>
+        ) : null}
+      </div>
 
       <nav className="no-scrollbar mt-4 flex-1 overflow-y-auto" aria-label="Navigazione principale">
         <div className="space-y-4 px-1 pb-4">
