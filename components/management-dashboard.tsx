@@ -421,8 +421,8 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <aside className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-        <section className="rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22]">
+      <aside>
+        <section className="h-full rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22]">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#b83f70]">Priorità</p>
@@ -449,17 +449,6 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           </div>
         </section>
 
-        <Link href="/cash" className="group flex min-h-56 flex-col justify-between overflow-hidden rounded-[28px] border border-[#b62f69] bg-[linear-gradient(145deg,#42162c_0%,#8f2857_52%,#d95d95_100%)] p-6 text-white shadow-[0_18px_40px_rgba(117,30,70,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3]">
-          <div className="flex items-start justify-between gap-4">
-            <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/65">Controllo economico</p><h2 className="mt-1 text-xl font-black">Cassa disponibile</h2></div>
-            <span className="grid size-11 place-items-center rounded-full bg-white text-[#a72d61]"><WalletCards className="size-5" /></span>
-          </div>
-          <div>
-            <strong className="block text-3xl font-black tabular-nums">{money.format(data.availableCash)}</strong>
-            <div className="mt-4 flex items-center justify-between border-t border-white/15 pt-4 text-xs text-white/70"><span>Ricavi del mese</span><strong className="text-white">{money.format(data.monthRevenue)}</strong></div>
-            <div className="mt-4 inline-flex items-center gap-2 text-xs font-black uppercase">Apri cassa <ChevronRight className="size-4 transition group-hover:translate-x-1" /></div>
-          </div>
-        </Link>
       </aside>
       </div>
 
