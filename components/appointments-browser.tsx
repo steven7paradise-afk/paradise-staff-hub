@@ -53,6 +53,7 @@ import { GlobalFullscreenLayer } from "@/components/global-fullscreen-layer";
 import { AppointmentsAdminUnlock } from "@/components/appointments-admin-unlock";
 import { CLIENT_CONTROL_FIELD_IDS } from "@/lib/client-control-form";
 import { isLikelySameCustomerEmail } from "@/lib/shopify-customer-match";
+import { compareCanceledAppointmentsLast } from "@/lib/appointment-order";
 import {
   allowsMissingFinalPaymentOrder,
   CLIENT_CONTROL_SERVICE_OPTIONS,
@@ -3512,6 +3513,8 @@ export function AppointmentsBrowser({
       : appointmentStatusScoped;
 
     return [...searched].sort((a, b) => {
+      const cancellationOrder = compareCanceledAppointmentsLast(a, b);
+      if (cancellationOrder !== 0) return cancellationOrder;
       const aCompleted = getBookingStatus(a) === "COMPLETATO";
       const bCompleted = getBookingStatus(b) === "COMPLETATO";
       if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
@@ -4458,6 +4461,8 @@ export function AppointmentsBrowser({
   const recentBookings = useMemo(
     () =>
       [...filteredBookings].sort((a, b) => {
+        const cancellationOrder = compareCanceledAppointmentsLast(a, b);
+        if (cancellationOrder !== 0) return cancellationOrder;
         const aCompleted = getBookingStatus(a) === "COMPLETATO";
         const bCompleted = getBookingStatus(b) === "COMPLETATO";
         if (aCompleted !== bCompleted) return aCompleted ? 1 : -1;
@@ -4530,7 +4535,10 @@ export function AppointmentsBrowser({
       return sum + Math.min(24, (end - start) / 3600000);
     }, 0);
     const sortBookings = (bookings: AppointmentRecord[]) => [...bookings].sort(
-      (left, right) => new Date(left.startDate).getTime() - new Date(right.startDate).getTime(),
+      (left, right) => (
+        compareCanceledAppointmentsLast(left, right) ||
+        new Date(left.startDate).getTime() - new Date(right.startDate).getTime()
+      ),
     );
 
     const workerColumns = workers.map((worker) => {
