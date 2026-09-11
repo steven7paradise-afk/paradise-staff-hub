@@ -1418,6 +1418,32 @@ textarea {
   color: #000000 !important;
 }
 
+.notification-primary-action,
+.dark .notification-primary-action {
+  border: 1px solid #ffffff !important;
+  background: #ffffff !important;
+  color: #17151a !important;
+  -webkit-text-fill-color: #17151a !important;
+}
+
+.notification-primary-action:hover,
+.dark .notification-primary-action:hover {
+  background: #fff0f6 !important;
+  color: #17151a !important;
+}
+
+html.dark .app-content-surface .notification-hero {
+  color: #ffffff !important;
+}
+
+html.dark .app-content-surface .notification-hero .notification-primary-action {
+  border-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #17151a !important;
+  -webkit-text-fill-color: #17151a !important;
+  opacity: 1 !important;
+}
+
 .mobile-liquid-sidebar::before {
   content: none;
 }
