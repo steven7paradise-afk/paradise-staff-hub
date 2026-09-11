@@ -137,7 +137,7 @@ export function DesktopSidebarNav({
       </div>
 
       <div className="sidebar-label relative mx-1 mt-4 shrink-0">
-        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 dark:text-zinc-500">
+        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-500 dark:text-zinc-300">
           <Search size={13} className="opacity-75" />
         </span>
         <input
@@ -146,13 +146,13 @@ export function DesktopSidebarNav({
           placeholder="Cerca una pagina"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-11 w-full rounded-xl border border-black/[0.08] bg-black/[0.025] py-2 pl-9 pr-11 text-xs font-bold outline-none transition focus:border-black/20 focus:bg-white"
+          className="h-11 w-full rounded-xl border border-black/[0.08] bg-black/[0.025] py-2 pl-9 pr-11 text-xs font-bold text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-black/20 focus:bg-white dark:border-white/10 dark:bg-white/[0.035] dark:text-white dark:placeholder:text-white/45 dark:focus:border-white/20 dark:focus:bg-white/[0.06]"
         />
         {searchQuery ? (
           <button
             type="button"
             onClick={() => setSearchQuery("")}
-            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-black/40 transition hover:text-black"
+            className="absolute inset-y-0 right-0 grid w-11 place-items-center text-black/40 transition hover:text-black dark:text-white/45 dark:hover:text-white"
             aria-label="Cancella ricerca"
           >
             <X className="size-3.5" />
@@ -161,7 +161,7 @@ export function DesktopSidebarNav({
       </div>
 
       {hasAreaSwitch ? (
-        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-black/[0.07] bg-black/[0.025] p-1">
+        <div className="sidebar-label mx-1 mt-3 grid shrink-0 grid-cols-2 rounded-xl border border-black/[0.07] bg-black/[0.025] p-1 dark:border-white/10 dark:bg-white/[0.035]">
           {(["PERSONALE", "LAVORO"] as const).map((area) => {
             const selected = activeArea === area;
             const Icon = area === "PERSONALE" ? UserRound : BriefcaseBusiness;
@@ -173,7 +173,7 @@ export function DesktopSidebarNav({
                 aria-pressed={selected}
                 className={cn(
                   "flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-[9px] font-black uppercase tracking-[0.12em] transition",
-                  selected ? "bg-white text-zinc-900 shadow-sm" : "text-black/45 hover:text-black",
+                  selected ? "bg-white text-zinc-900 shadow-sm" : "text-black/45 hover:text-black dark:text-white/50 dark:hover:text-white",
                 )}
               >
                 <Icon className="size-3.5" />

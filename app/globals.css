@@ -1431,6 +1431,16 @@ textarea {
   .app-liquid-sidebar-nav input::placeholder {
     color: color-mix(in srgb, var(--light-sidebar-text, #1f1f1f) 48%, transparent) !important;
   }
+
+  .dark .app-liquid-sidebar-nav input {
+    color: var(--sidebar-text) !important;
+    border-color: color-mix(in srgb, var(--sidebar-text) 14%, transparent) !important;
+    background-color: color-mix(in srgb, var(--sidebar-text) 5%, transparent) !important;
+  }
+
+  .dark .app-liquid-sidebar-nav input::placeholder {
+    color: color-mix(in srgb, var(--sidebar-text) 52%, transparent) !important;
+  }
 }
 
 /* Menu telefono: stessa superficie piena della sidebar desktop. */
