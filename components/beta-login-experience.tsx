@@ -30,6 +30,7 @@ export function BetaLoginExperience({
         alt="Paradise Beauty"
         fill
         priority
+        unoptimized
         sizes="100vw"
         className="absolute inset-0 size-full object-cover object-[56%_center] sm:object-center"
       />
