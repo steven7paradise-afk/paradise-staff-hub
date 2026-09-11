@@ -193,14 +193,14 @@ function Metric({ label, value, note, icon: Icon, tone = "pink", active = false,
       aria-pressed={active}
       aria-expanded={active}
       aria-controls={controls}
-      className={`group min-h-36 min-w-0 rounded-[22px] border border-black/[0.07] bg-[#edf3f5] px-5 py-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none ${active ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15" : ""}`}
+      className={`group min-h-36 min-w-0 rounded-[22px] border border-black/[0.07] bg-[#edf3f5] px-5 py-4 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-black/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d85a91] motion-reduce:transform-none motion-reduce:transition-none dark:border-white/10 dark:bg-[#292a30] dark:hover:border-white/20 ${active ? "border-[#d85a91]/40 bg-[#fff0f6] ring-2 ring-[#d85a91]/15 dark:border-[#f080b7]/55 dark:bg-[#382730]" : ""}`}
     >
-      <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-black/50">
+      <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.12em] text-black/50 dark:text-white/60">
         <span className={`flex h-8 w-8 items-center justify-center rounded-full transition duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${colors}`}><Icon size={16} aria-hidden="true" /></span>
         {label}
       </div>
-      <p className="text-3xl font-black text-[#171719]">{value}</p>
-      <p className="mt-1 flex items-center gap-1 text-xs leading-5 text-black/55">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
+      <p className="text-3xl font-black text-[#171719] dark:text-white">{value}</p>
+      <p className="mt-1 flex items-center gap-1 text-xs leading-5 text-black/55 dark:text-white/55">{note}<ChevronRight className="size-3 transition group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" aria-hidden="true" /></p>
     </button>
   );
 }
@@ -312,14 +312,14 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
 
   return (
     <div className="management-dashboard-liquid w-full max-w-none space-y-5 p-4 pb-12 font-sans antialiased sm:p-6 lg:p-8">
-      <section className="rounded-[28px] border border-black/[0.06] bg-white p-4 shadow-[0_12px_35px_rgba(20,16,18,0.055)] sm:p-5">
+      <section className="rounded-[28px] border border-black/[0.06] bg-white p-4 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-5">
         <div className="flex flex-col gap-5 px-1 pb-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#b83f70]">Direzione operativa</p>
-            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-[#171719] sm:text-4xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
-            <p className="mt-1 text-sm text-black/50">Stato in tempo reale · {data.scopeLabel}</p>
+            <h1 className="mt-1 text-3xl font-black tracking-[-0.035em] text-[#171719] dark:text-white sm:text-4xl">Buongiorno, {data.viewerName.split(" ")[0]}</h1>
+            <p className="mt-1 text-sm text-black/50 dark:text-white/55">Stato in tempo reale · {data.scopeLabel}</p>
           </div>
-          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 text-xs font-bold uppercase text-black/65 transition hover:border-black/20 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
+          <button onClick={refresh} aria-label="Aggiorna i dati della dashboard" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-5 text-xs font-bold uppercase text-black/65 transition hover:border-black/20 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none dark:border-white/15 dark:bg-white/5 dark:text-white/75 dark:hover:border-white/30 dark:hover:text-white">
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
@@ -333,12 +333,12 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
       </section>
 
       {data.missingPayslips.length > 0 && (
-        <section className="flex flex-col gap-4 rounded-[20px] border border-[#efb2ca] bg-white/75 p-4 shadow-sm backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-4 rounded-[20px] border border-[#efb2ca] bg-white/75 p-4 shadow-sm backdrop-blur-xl dark:border-[#f080b7]/30 dark:bg-[#1d1d22] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <FileWarning className="mt-0.5 shrink-0 text-[#b92f68]" size={22} />
             <div>
-              <p className="font-black text-[#341522]">Buste paga da inviare: {data.missingPayslips.length}</p>
-              <p className="mt-1 text-sm text-[#775563]">Mancano i documenti di {data.payrollMonthLabel}: {data.missingPayslips.slice(0, 4).map((item) => item.name).join(", ")}{data.missingPayslips.length > 4 ? "…" : ""}</p>
+              <p className="font-black text-[#341522] dark:text-white">Buste paga da inviare: {data.missingPayslips.length}</p>
+              <p className="mt-1 text-sm text-[#775563] dark:text-white/60">Mancano i documenti di {data.payrollMonthLabel}: {data.missingPayslips.slice(0, 4).map((item) => item.name).join(", ")}{data.missingPayslips.length > 4 ? "…" : ""}</p>
             </div>
           </div>
           <Link href="/cedolini" className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-[#17131a] px-5 text-xs font-black uppercase text-white transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none">Apri cedolini</Link>
@@ -411,18 +411,18 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] lg:p-7">
+      <section className="overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] lg:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase text-[#c4467d]">Andamento saloni</p>
-            <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg text-left text-xl font-black transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none"><TrendingUp className="size-5 text-[#eb5da3]" /> Controlli cliente completati per ora</button>
+            <button type="button" onClick={() => router.push("/client-control?date=today")} className="mt-1 inline-flex min-h-11 items-center gap-2 rounded-lg text-left text-xl font-black text-[#171719] transition hover:text-[#9d315f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:text-white dark:hover:text-[#f3a0c8]"><TrendingUp className="size-5 text-[#eb5da3]" /> Controlli cliente completati per ora</button>
           </div>
-          <button type="button" onClick={() => router.push("/client-control?date=today")} aria-label={`Apri tutte le ${data.clientsToday} schede Controllo Cliente completate oggi`} className="min-h-11 rounded-xl px-3 text-left transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#6f676b]">schede oggi · apri controlli</p></button>
+          <button type="button" onClick={() => router.push("/client-control?date=today")} aria-label={`Apri tutte le ${data.clientsToday} schede Controllo Cliente completate oggi`} className="min-h-11 rounded-xl px-3 text-left text-[#171719] transition hover:bg-[#fff0f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] motion-reduce:transition-none dark:text-white dark:hover:bg-white/5 sm:text-right"><strong className="text-3xl font-black">{data.clientsToday}</strong><p className="text-xs text-[#6f676b] dark:text-white/55">schede oggi · apri controlli</p></button>
         </div>
         <div className="mt-6 overflow-x-auto pb-2">
-          <div className="flex min-w-[720px] items-end gap-4 border-b border-[#dfd5dd] px-3 pt-8">
+          <div className="flex min-w-[720px] items-end gap-4 border-b border-[#dfd5dd] px-3 pt-8 dark:border-white/15">
             {hourlyChartItems.map((item) => (
-              <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede completate alle ${item.hour}`} className="group flex min-h-36 min-w-16 flex-1 flex-col items-center justify-end rounded-t-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f]">
+              <button key={item.hour} type="button" onClick={() => router.push(`/client-control?date=today&hour=${encodeURIComponent(item.hour.slice(0, 2))}`)} aria-label={`Apri ${item.count} schede completate alle ${item.hour}`} className="group flex min-h-36 min-w-16 flex-1 flex-col items-center justify-end rounded-t-2xl text-[#171719] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9d315f] dark:text-white">
                 <strong className="mb-2 text-sm tabular-nums">{item.count}</strong>
                 <span className="w-full max-w-16 rounded-t-xl bg-[#ee78ad] transition group-hover:bg-[#d95b93]" style={{ height: `${Math.max(28, item.count / maxHourly * 108)}px` }} />
                 <span className="py-3 text-xs font-black">{item.hour}</span>
@@ -598,7 +598,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <p className="flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b]"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
+      <p className="flex items-center justify-end gap-2 text-[11px] font-medium text-[#6f676b] dark:text-white/55"><CalendarDays size={14} aria-hidden="true" /> Aggiornato {data.updatedAt} · aggiornamento automatico ogni minuto</p>
     </div>
   );
 }

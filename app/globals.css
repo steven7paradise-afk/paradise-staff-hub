@@ -1327,6 +1327,25 @@ textarea {
     border-radius: inherit;
   }
 
+  .dark .app-liquid-sidebar {
+    --sidebar-text: #f8f3f6;
+    --sidebar-icon: #f8f3f6;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: #171719 !important;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  }
+
+  .dark .app-liquid-sidebar-nav {
+    --sidebar-text: #f8f3f6;
+    --sidebar-icon: #f8f3f6;
+    color: #f8f3f6;
+  }
+
+  .dark .app-liquid-sidebar-nav .sidebar-nav-link:not(.active):hover {
+    color: #f8f3f6 !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
   .app-liquid-sidebar .sidebar-nav-link.active {
     border-color: color-mix(in srgb, var(--primary) 22%, transparent) !important;
     box-shadow: none !important;
