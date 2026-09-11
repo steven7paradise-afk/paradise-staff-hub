@@ -4617,6 +4617,12 @@ export function AppointmentsBrowser({
   const boardBookingCount = new Set(
     visibleAppointmentBoardColumns.flatMap((column) => column.bookings.map((booking) => booking.id)),
   ).size;
+  const boardCanceledBookingCount = new Set(
+    visibleAppointmentBoardColumns.flatMap((column) =>
+      column.bookings.filter((booking) => booking.isCanceled).map((booking) => booking.id),
+    ),
+  ).size;
+  const boardActiveBookingCount = boardBookingCount - boardCanceledBookingCount;
 
   function scrollAppointmentBoard(direction: "left" | "right") {
     boardScrollContainerRef.current?.scrollBy({
@@ -6980,13 +6986,13 @@ export function AppointmentsBrowser({
           ) : null}
 
           {!normalizedSearch && layoutMode === "board" ? (
-            <section className="overflow-hidden rounded-xl border border-[#DFE2E7] bg-white shadow-[0_2px_8px_rgba(33,43,54,0.10)]">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EBEDF0] bg-white px-4 py-4 sm:px-5">
+            <section className="overflow-hidden rounded-[24px] border border-[#E7DDE2] bg-white shadow-[0_16px_45px_rgba(72,45,58,0.08)]">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#EEE4E9] bg-[linear-gradient(110deg,#FFF7FB_0%,#FFFFFF_56%,#F8F5FA_100%)] px-4 py-5 sm:px-6">
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[#7D8590]">Appuntamenti · Salone Corso</p>
                   <div>
-                    <h2 className="mt-1 text-lg font-black tracking-[-0.02em] text-[#172B4D]">Board</h2>
-                    <p className="mt-0.5 text-[11px] font-semibold text-[#6B778C]">La lavoratrice selezionata e gli appuntamenti da assegnare sono sempre all'inizio</p>
+                    <h2 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#261C22]">Agenda dello staff</h2>
+                    <p className="mt-1 text-[11px] font-semibold text-[#76656E]">Ogni colonna mostra la giornata di una lavoratrice. Gli annullati restano sempre in fondo.</p>
                     <p className="mt-1 text-[10px] font-bold text-[#9E3262] lg:hidden">Un dito premuto: cambia stato · Due dita: sposta</p>
                   </div>
                 </div>
@@ -7014,9 +7020,16 @@ export function AppointmentsBrowser({
                       </span>
                     ) : null}
                   </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold text-[#505F79]">
-                    <UsersRound className="size-3.5" /> {boardBookingCount} schede
-                  </span>
+                  <div className="hidden items-center gap-2 sm:flex" aria-label="Riepilogo appuntamenti">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#CFE8D7] bg-[#EDF8F1] px-3 py-1.5 text-[10px] font-black text-[#237A45]">
+                      <span className="size-1.5 rounded-full bg-[#36A866]" /> {boardActiveBookingCount} attivi
+                    </span>
+                    {boardCanceledBookingCount > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F2CED2] bg-[#FFF1F2] px-3 py-1.5 text-[10px] font-black text-[#B83B49]">
+                        <span className="size-1.5 rounded-full bg-[#E05A67]" /> {boardCanceledBookingCount} annullati
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="flex items-center gap-1" role="group" aria-label="Scorri la board">
                     <button
                       type="button"
@@ -7041,11 +7054,11 @@ export function AppointmentsBrowser({
               {visibleAppointmentBoardColumns.length ? (
                 <div
                   ref={boardScrollContainerRef}
-                  className="overflow-x-auto scroll-smooth bg-white p-3 sm:p-4"
+                  className="overflow-x-auto scroll-smooth bg-[#FBFAFB] p-3 sm:p-5"
                   tabIndex={0}
                   aria-label="Colonne degli appuntamenti"
                 >
-                  <div className="flex min-h-[520px] min-w-max items-stretch gap-3">
+                  <div className="flex min-h-[520px] min-w-max items-stretch gap-4">
                     {visibleAppointmentBoardColumns.map((column) => (
                       <article
                         key={column.id}
@@ -7084,14 +7097,14 @@ export function AppointmentsBrowser({
                           setDraggedBoardBookingId(null);
                           if (column.id !== "unassigned") void moveBoardBooking(bookingId, column.id);
                         }}
-                        className={`flex w-[270px] shrink-0 flex-col rounded-lg p-2 transition ${
+                        className={`flex w-[286px] shrink-0 flex-col rounded-[20px] border p-3 transition ${
                           boardDropTargetId === column.id
-                            ? "bg-[#E9F2FF] ring-2 ring-[#4C9AFF] ring-offset-2"
+                            ? "border-[#7CB5F5] bg-[#EDF6FF] ring-2 ring-[#4C9AFF] ring-offset-2"
                             : boardWorkerDropTarget?.id === column.id
                               ? boardWorkerDropTarget.position === "before"
-                                ? "bg-[#F4F5F7] shadow-[-5px_0_0_#4C9AFF]"
-                                : "bg-[#F4F5F7] shadow-[5px_0_0_#4C9AFF]"
-                              : "bg-[#F4F5F7]"
+                                ? "border-[#DDE1E7] bg-[#F5F6F8] shadow-[-5px_0_0_#4C9AFF]"
+                                : "border-[#DDE1E7] bg-[#F5F6F8] shadow-[5px_0_0_#4C9AFF]"
+                              : "border-[#E2E4E8] bg-[#F5F6F8] shadow-[0_6px_18px_rgba(35,43,54,0.05)]"
                         }`}
                       >
                         <header
@@ -7108,17 +7121,17 @@ export function AppointmentsBrowser({
                             setDraggedBoardWorkerId(null);
                             setBoardWorkerDropTarget(null);
                           }}
-                          className={`px-1 pb-3 pt-1 ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
+                          className={`mb-3 rounded-2xl border border-white bg-white px-3 py-3 shadow-sm ${column.id !== "unassigned" ? "cursor-grab active:cursor-grabbing" : ""}`}
                           title={column.id !== "unassigned" ? "Tieni premuto e trascina per riordinare" : undefined}
                         >
                           <div className="flex items-center gap-2.5">
-                            <Avatar name={column.name} photoUrl={column.photoUrl} size="size-8" />
+                            <Avatar name={column.name} photoUrl={column.photoUrl} size="size-10" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <p className="truncate text-[11px] font-black uppercase tracking-wide text-[#42526E]">{column.name}</p>
-                                <span className="text-[10px] font-bold text-[#6B778C]">{column.bookings.length}</span>
+                                <p className="truncate text-[13px] font-black text-[#25202A]">{column.name}</p>
                               </div>
-                              <p className={`mt-0.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
+                              <p className={`mt-1 inline-flex items-center gap-1.5 text-[8px] font-black uppercase tracking-wider ${column.status === "BREAK" ? "text-amber-600" : column.status === "IN" ? "text-emerald-600" : "text-slate-500"}`}>
+                                <span className={`size-1.5 rounded-full ${column.status === "BREAK" ? "bg-amber-500" : column.status === "IN" ? "bg-emerald-500" : "bg-slate-400"}`} />
                                 {column.id === "unassigned"
                                   ? "Da assegnare"
                                   : column.status === "BREAK"
@@ -7136,14 +7149,17 @@ export function AppointmentsBrowser({
                               ) : null}
                             </div>
                           </div>
-                          <div className="mt-2 flex items-center justify-between text-[8px] font-black uppercase tracking-wider text-[#7A869A]">
-                            <span>{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
-                            <span>{column.bookings.length} schede</span>
+                          <div className="mt-3 flex items-center gap-2 border-t border-[#F0EBEE] pt-2 text-[9px] font-black text-[#756A71]">
+                            <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.hours.toLocaleString("it-IT", { maximumFractionDigits: 1 })} ore</span>
+                            <span className="rounded-lg bg-[#F6F2F4] px-2 py-1">{column.bookings.filter((booking) => !booking.isCanceled).length} attivi</span>
+                            {column.bookings.some((booking) => booking.isCanceled) ? (
+                              <span className="rounded-lg bg-[#FFF0F1] px-2 py-1 text-[#B83B49]">{column.bookings.filter((booking) => booking.isCanceled).length} ann.</span>
+                            ) : null}
                           </div>
                         </header>
 
-                        <div className="flex-1 space-y-2">
-                          {column.bookings.length ? column.bookings.map((booking) => {
+                        <div className="flex-1 space-y-2.5">
+                          {column.bookings.length ? column.bookings.map((booking, bookingIndex) => {
                             const status = getBookingStatus(booking);
                             const paradiseNote = paradiseNotes[booking.id] || booking.paradiseNote || "";
                             const otherNotePreviews = getBookingNotePreviews(
@@ -7154,8 +7170,15 @@ export function AppointmentsBrowser({
                             )
                               .filter((note) => note.key !== "office");
                             return (
+                              <div key={booking.id} className="space-y-2.5">
+                              {booking.isCanceled && (bookingIndex === 0 || !column.bookings[bookingIndex - 1]?.isCanceled) ? (
+                                <div className="flex items-center gap-2 px-1 pt-2" aria-label="Appuntamenti annullati">
+                                  <span className="h-px flex-1 bg-[#E9C7CC]" />
+                                  <span className="text-[8px] font-black uppercase tracking-[0.16em] text-[#B85561]">Annullati</span>
+                                  <span className="h-px flex-1 bg-[#E9C7CC]" />
+                                </div>
+                              ) : null}
                               <div
-                                key={booking.id}
                                 role="button"
                                 tabIndex={0}
                                 onPointerDown={(event) => startBoardTouchGesture(event, booking, status)}
@@ -7204,14 +7227,14 @@ export function AppointmentsBrowser({
                                     isTouchPress,
                                   );
                                 }}
-                                className={`w-full touch-[pan-x_pan-y] select-none rounded-[5px] border p-3 text-left shadow-[0_1px_2px_rgba(9,30,66,0.12)] transition hover:border-[#4C9AFF] hover:shadow-[0_3px_8px_rgba(9,30,66,0.16)] ${
+                                className={`w-full touch-[pan-x_pan-y] select-none rounded-2xl border border-l-4 p-3.5 text-left shadow-[0_3px_10px_rgba(40,32,36,0.07)] transition hover:-translate-y-0.5 hover:border-[#B35680] hover:shadow-[0_8px_18px_rgba(40,32,36,0.11)] ${
                                   booking.isCanceled || status === "NON_PRESENTATO"
-                                    ? "border-red-200 bg-red-50"
+                                    ? "border-red-200 border-l-[#DB5968] bg-[#FFF5F5]"
                                     : status === "COMPLETATO"
-                                    ? "border-[#A9D8B8] bg-[#EAF7EE]"
+                                    ? "border-[#B9DFC5] border-l-[#45A96A] bg-[#F1FAF4]"
                                     : status === "IN_ATTESA"
-                                      ? "border-[#E8CE78] bg-[#FFF4CC]"
-                                    : "border-[#DFE1E6] bg-white"
+                                      ? "border-[#EBD58B] border-l-[#D6A52D] bg-[#FFF9E5]"
+                                    : "border-[#E1E3E7] border-l-[#D45B91] bg-white"
                                 } ${
                                   draggedBoardBookingId === booking.id || touchDraggedBoardBookingId === booking.id
                                     ? "scale-[0.98] opacity-45 ring-2 ring-[#4C9AFF]"
@@ -7220,12 +7243,12 @@ export function AppointmentsBrowser({
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
-                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#5E6C84]">{formatDate(booking.startDate)}</p>
-                                    <p className="mt-0.5 text-xs font-black tabular-nums text-[#172B4D]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
-                                    <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-[#7A869A]">{formatDuration(booking.startDate, booking.endDate)}</p>
+                                    <p className="text-[9px] font-black uppercase tracking-wider text-[#7B6872]">{formatDate(booking.startDate)}</p>
+                                    <p className="mt-1 text-sm font-black tabular-nums text-[#241D21]">{formatTime(booking.startDate)} – {formatTime(booking.endDate)}</p>
+                                    <p className="mt-1 text-[9px] font-bold uppercase tracking-wider text-[#8A7E84]">{formatDuration(booking.startDate, booking.endDate)}</p>
                                   </div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase ${booking.isCanceled ? "border-red-200 bg-red-50 text-red-700" : appointmentStatusClasses[status]}`}>
+                                    <span className={`rounded-full border px-2.5 py-1.5 text-[8px] font-black uppercase shadow-sm ${booking.isCanceled ? "border-red-200 bg-white text-red-700" : appointmentStatusClasses[status]}`}>
                                       {booking.isCanceled ? "Annullato" : appointmentStatusLabels[status]}
                                     </span>
                                     <button
@@ -7266,7 +7289,7 @@ export function AppointmentsBrowser({
                                         event.preventDefault();
                                         event.stopPropagation();
                                       }}
-                                      className="grid size-11 shrink-0 touch-none cursor-grab place-items-center rounded-xl border border-[#D8DCE3] bg-white text-[#6B778C] shadow-sm transition hover:border-[#4C9AFF] hover:text-[#172B4D] active:cursor-grabbing active:scale-95"
+                                      className="grid size-10 shrink-0 touch-none cursor-grab place-items-center rounded-xl border border-[#DDD6DA] bg-white text-[#71666D] shadow-sm transition hover:border-[#B35680] hover:text-[#9E3262] active:cursor-grabbing active:scale-95"
                                       aria-label={`Sposta appuntamento di ${booking.customerName}`}
                                       title="Trascina per spostare"
                                     >
@@ -7274,8 +7297,8 @@ export function AppointmentsBrowser({
                                     </button>
                                   </div>
                                 </div>
-                                <p className="mt-2.5 truncate text-xs font-black text-[#172B4D]">{booking.customerName}</p>
-                                <p className="mt-1 line-clamp-2 text-[10px] font-semibold leading-snug text-[#5E6C84]">{booking.serviceTitle}</p>
+                                <p className="mt-3 truncate text-sm font-black text-[#241D21]">{booking.customerName}</p>
+                                <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-snug text-[#6F6269]">{booking.serviceTitle}</p>
                                 {paradiseNote || canManageParadiseNotes ? (
                                   <div className="mt-2.5 border-t border-[#EBECF0] pt-2">
                                     {paradiseNote ? (
@@ -7339,6 +7362,7 @@ export function AppointmentsBrowser({
                                   </div>
                                 ) : null}
                                 <AppointmentNotePreviews notes={otherNotePreviews} compact />
+                              </div>
                               </div>
                             );
                           }) : (
