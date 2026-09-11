@@ -312,7 +312,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
   }
 
   return (
-    <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-[34px] bg-[#f5f5f5] p-4 pb-12 font-sans antialiased dark:bg-[#151518] sm:p-6 lg:p-8">
+    <div className="management-dashboard-liquid flex w-full max-w-none flex-col gap-5 rounded-none bg-[#f5f5f5] p-3 pb-12 font-sans antialiased dark:bg-[#151518] sm:rounded-[34px] sm:p-6 lg:p-8">
       <section className="order-1 rounded-[28px] border border-black/[0.05] bg-[#fafafa] p-4 shadow-[0_14px_40px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22] sm:p-6">
         <div className="flex flex-col gap-5 px-1 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -324,7 +324,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
             <RefreshCw size={15} aria-hidden="true" className={refreshing ? "animate-spin motion-reduce:animate-none" : ""} /> Aggiorna
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-5">
           <Metric label="Presenti ora" value={String(data.presentNow)} note={`${data.clockedToday.length} timbrature oggi`} icon={Users} tone="pink" featured active={personnelView === "PRESENT"} controls="personale-oggi" onClick={() => showPersonnelSection("PRESENT")} />
           <Metric label="Assenti" value={String(data.absentToday.length)} note="mancata timbratura o ritardo da confermare" icon={AlertTriangle} tone="red" active={personnelView === "ABSENT"} controls="personale-oggi" onClick={() => showPersonnelSection("ABSENT")} />
           <Metric label="In ferie" value={String(holidays.length)} note="assenze approvate" icon={Umbrella} tone="gold" active={personnelView === "HOLIDAYS"} controls="assenze-attive" onClick={() => showPersonnelSection("HOLIDAYS")} />
@@ -399,7 +399,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </section>
       ) : null}
 
-      <div className="order-4 grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(290px,0.7fr)]">
+      <div className="order-4 grid gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.7fr)]">
       <section className="min-w-0 overflow-hidden rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.055)] dark:border-white/10 dark:bg-[#1d1d22] lg:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -421,7 +421,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         </div>
       </section>
 
-      <aside className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
+      <aside className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
         <section className="rounded-[28px] border border-black/[0.06] bg-white p-5 shadow-[0_12px_35px_rgba(20,16,18,0.045)] dark:border-white/10 dark:bg-[#1d1d22]">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -571,7 +571,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
         )}
       </section>
 
-      <section className="order-2 overflow-hidden rounded-[28px] border border-black/10 bg-[#171719] text-white shadow-[0_12px_35px_rgba(20,16,18,0.08)]">
+      <section className="order-2 overflow-hidden rounded-[28px] border border-[#7e294f]/30 bg-[linear-gradient(145deg,#2b1722_0%,#431b30_52%,#642441_100%)] text-white shadow-[0_18px_45px_rgba(72,24,47,0.18)] dark:border-[#f080b7]/20 dark:bg-[linear-gradient(145deg,#171217_0%,#2a1822_55%,#451d31_100%)]">
         <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between lg:px-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#ee86b3]">Controllo economico</p>
@@ -581,7 +581,7 @@ export function ManagementDashboard({ data }: { data: ManagementDashboardData })
           <Link href="/cash" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.06] px-5 text-xs font-black uppercase transition hover:bg-white/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">Apri cassa <ChevronRight className="size-4" aria-hidden="true" /></Link>
         </div>
 
-        <div className="grid gap-6 p-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:p-7">
+        <div className="grid gap-5 p-5 md:grid-cols-[minmax(250px,0.8fr)_minmax(0,1.6fr)] lg:p-7">
           <Link href="/cash" aria-label={`Apri cassa. Disponibilità attuale ${money.format(data.availableCash)}`} className="group relative flex min-h-72 flex-col items-center justify-center overflow-hidden rounded-[22px] border border-white/15 bg-white/[0.055] p-6 transition duration-200 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0a0c3] motion-reduce:transition-none">
             <div
               className="relative grid size-48 place-items-center rounded-full p-4 shadow-[0_20px_50px_rgba(0,0,0,0.28)]"
