@@ -26,6 +26,7 @@ import pkg from "@/package.json";
 import { redirect } from "next/navigation";
 import { FORMER_EMPLOYEE_STATUS, formerEmployeeAccessDates } from "@/lib/former-employee";
 import { resolveSidebarLayout, type SidebarFolder } from "@/lib/sidebar-layout";
+import { WAREHOUSE_TEMPORARILY_DISABLED } from "@/lib/warehouse-availability";
 
 function getContrastYIQ(hexcolor: string) {
   const hex = hexcolor.replace("#", "");
@@ -40,7 +41,7 @@ function getContrastYIQ(hexcolor: string) {
 const nav = [
   // Section: Generale
   { href: "/dashboard", label: "Dashboard", iconName: "LayoutDashboard", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "MAGAZZINO", "DIPENDENTE"], section: "Generale" },
-  { href: "/magazzino", label: "Magazzino", iconName: "Boxes", roles: routePermissions["/magazzino"], section: "Planning & Saloni" },
+  { href: "/magazzino", label: "Magazzino", iconName: "Boxes", roles: WAREHOUSE_TEMPORARILY_DISABLED ? [] : routePermissions["/magazzino"], section: "Planning & Saloni" },
   { href: "/my-shifts", label: "I miei turni", iconName: "CalendarDays", roles: ["ZERO", "SUPER_ADMIN", "ADMIN", "RESPONSABILE", "DIPENDENTE"], section: "Generale" },
   { href: "/responsabile-di-turno", label: "Responsabile di turno", iconName: "UserRound", roles: routePermissions["/responsabile-di-turno"], section: "Generale" },
   { href: "/programmazione-responsabile-di-turno", label: "Turni responsabili", iconName: "CalendarDays", roles: routePermissions["/programmazione-responsabile-di-turno"], section: "Generale" },

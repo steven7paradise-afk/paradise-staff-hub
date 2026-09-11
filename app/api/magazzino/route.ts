@@ -15,6 +15,7 @@ import {
 import { inventoryManagementRoles, inventoryOperationRoles, normalizeInventoryCode } from "@/lib/inventory-rules";
 import { prisma } from "@/lib/prisma";
 import { canAccessForUser } from "@/lib/roles";
+import { WAREHOUSE_TEMPORARILY_DISABLED } from "@/lib/warehouse-availability";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ function apiError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
+  if (WAREHOUSE_TEMPORARILY_DISABLED) return NextResponse.json({ error: "Magazzino temporaneamente non disponibile" }, { status: 503 });
   const user = await currentInventoryUser();
   if (!user) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   try {
@@ -61,6 +63,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (WAREHOUSE_TEMPORARILY_DISABLED) return NextResponse.json({ error: "Magazzino temporaneamente non disponibile" }, { status: 503 });
   const user = await currentInventoryUser();
   if (!user) return NextResponse.json({ error: "Non autorizzato" }, { status: 403 });
   try {
